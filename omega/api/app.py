@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from omega.api.middleware.error_handler import ErrorHandlerMiddleware
 from omega.api.routes import analysis, chat, health
 from omega.api.session.manager import SessionManager
+from omega.research.agent.orchestrator import Orchestrator, OrchestratorConfig
 
 app = FastAPI(
     title="Omega",
@@ -36,6 +37,10 @@ app.add_middleware(
 _redis_url = os.getenv("REDIS_URL")
 session_manager = SessionManager(redis_url=_redis_url)
 chat.set_session_manager(session_manager)
+
+# --- Orchestrator ---
+orchestrator = Orchestrator(OrchestratorConfig())
+chat.set_orchestrator(orchestrator)
 
 # --- Routes ---
 app.include_router(health.router)

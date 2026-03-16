@@ -1,18 +1,14 @@
 """
 Chat endpoint with Server-Sent Events (SSE) streaming.
 
-This is the conversational interface. It:
-1. Receives a user message
-2. Manages session state
-3. Streams back stage updates, partial text, structured data, and done events
-4. The actual LLM orchestration is delegated to the research layer (future)
-
-For now, this is a working skeleton that echoes back with a placeholder response.
+Wires the research orchestrator into the SSE transport layer.
+Each user message flows through:
+    intent → strategy → planning → gathering → quality gate →
+    execution → composition → streaming response
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import AsyncGenerator
@@ -22,18 +18,24 @@ from sse_starlette.sse import EventSourceResponse
 
 from omega.api.schemas import ChatRequest, ChatStreamEvent
 from omega.api.session.manager import SessionManager
+from omega.research.agent.orchestrator import Orchestrator
 
 logger = logging.getLogger("omega.api.chat")
 
 router = APIRouter(tags=["chat"])
 
-# Session manager is initialized at app startup (see app.py)
 _session_manager: SessionManager | None = None
+_orchestrator: Orchestrator | None = None
 
 
 def set_session_manager(sm: SessionManager) -> None:
     global _session_manager
     _session_manager = sm
+
+
+def set_orchestrator(orch: Orchestrator) -> None:
+    global _orchestrator
+    _orchestrator = orch
 
 
 def _get_session_manager() -> SessionManager:
@@ -42,57 +44,33 @@ def _get_session_manager() -> SessionManager:
     return _session_manager
 
 
+def _get_orchestrator() -> Orchestrator:
+    if _orchestrator is None:
+        # Lazy init with defaults if not explicitly set
+        from omega.research.agent.orchestrator import Orchestrator, OrchestratorConfig
+        return Orchestrator(OrchestratorConfig())
+    return _orchestrator
+
+
 async def _stream_response(
     session_id: str,
     user_message: str,
+    history: list | None = None,
 ) -> AsyncGenerator[dict, None]:
-    """Generate SSE events for a chat response.
+    """Stream orchestrator events as SSE."""
+    orch = _get_orchestrator()
 
-    This is the integration point for the research/agent layer.
-    Currently returns a placeholder. Phase 3 will wire in the
-    LLM orchestrator here.
-    """
-    # Stage 1: acknowledge
-    yield {
-        "event": "stage_update",
-        "data": json.dumps(
-            ChatStreamEvent(
-                event_type="stage_update",
-                data={"stage": "received", "message": "Processing your request..."},
-                session_id=session_id,
-            ).model_dump()
-        ),
-    }
-
-    await asyncio.sleep(0.05)  # simulate processing
-
-    # Stage 2: partial text (placeholder — will be replaced by LLM stream)
-    response_text = (
-        f"[Omega v0.1 — research layer not yet connected] "
-        f"Received: \"{user_message[:100]}\""
-    )
-    yield {
-        "event": "partial_text",
-        "data": json.dumps(
-            ChatStreamEvent(
-                event_type="partial_text",
-                data=response_text,
-                session_id=session_id,
-            ).model_dump()
-        ),
-    }
-
-    # Stage 3: done
-    yield {
-        "event": "done",
-        "data": json.dumps(
-            ChatStreamEvent(
-                event_type="done",
-                data={"final_text": response_text},
-                session_id=session_id,
-            ).model_dump()
-        ),
-    }
+    async for event in orch.handle_query_stream(user_message, history):
+        yield {
+            "event": event["event_type"],
+            "data": json.dumps(
+                ChatStreamEvent(
+                    event_type=event["event_type"],
+                    data=event.get("data"),
+                    session_id=session_id,
+                ).model_dump()
+            ),
+        }
 
 
 @router.post("/chat")
@@ -105,19 +83,24 @@ async def chat_endpoint(req: ChatRequest, request: Request):
     session.add_message("user", req.message)
     sm.save_session(session)
 
+    # Build history for orchestrator context
+    history = session.messages[:-1]  # exclude current message
+
     async def event_generator():
         final_text = ""
-        async for event in _stream_response(session.session_id, req.message):
+        async for event in _stream_response(
+            session.session_id, req.message, history,
+        ):
             yield event
-            # Capture final text for session history
             if event.get("event") == "done":
                 try:
                     payload = json.loads(event["data"])
-                    final_text = payload.get("data", {}).get("final_text", "")
+                    data = payload.get("data", {})
+                    if isinstance(data, dict):
+                        final_text = data.get("final_text", "")
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-        # Record assistant response in session
         if final_text:
             session.add_message("assistant", final_text)
             sm.save_session(session)
