@@ -1,0 +1,307 @@
+KB-A1: Context an Agent Must Gather per Sport Before Calling OmegaSportsAgent
+Purpose:
+Tell an LLM exactly what data to collect (via web search/APIs) for different sports and markets before calling OmegaSportsAgent (e.g., find_daily_edges, /analyze/game, /analyze/prop).
+
+OmegaSportsAgent expects clean, structured game + context JSON. The agent’s job is to assemble that.
+
+1. Common game-level context (all sports)
+For any full-game market (sides/totals):
+
+Per game:
+
+Basic identifiers:
+
+date, league, teams (canonical names if possible)
+
+home/away flags
+
+Market data:
+
+main spread line and odds (home and away)
+
+main total line and odds (over/under)
+
+moneyline odds if available
+
+Team recent form:
+
+last N games record (e.g., 10 games):
+
+wins/losses
+
+average margin
+
+key trend notes (e.g., “8–2 last 10”, “4 straight unders”)
+
+Injuries / absences:
+
+list of out/questionable players
+
+simple label of impact (e.g., “star”, “rotation”, “bench”)
+
+Venue context:
+
+home/away
+
+travel/road trip indicators
+
+rest days for each team
+
+The agent should always try to populate these, regardless of sport.
+
+2. NBA / Basketball – game markets
+Use with: Markov or possession-based Monte Carlo.
+
+Per team (for today’s game):
+
+Team strength:
+
+offensive rating (points per 100 possessions)
+
+defensive rating
+
+net rating
+
+pace (possessions per 48 minutes)
+
+recent versions (last 10 games) of those metrics if available
+
+Shooting / scoring profile:
+
+3P attempt rate
+
+3P accuracy
+
+FT rate
+
+Context:
+
+home/road splits
+
+injuries for high-usage players
+
+back-to-back / 3-in-4 situations
+
+These support:
+
+expected pace,
+
+expected per-possession scoring (KB-S1),
+
+context adjustments.
+
+3. NBA – points props (per KB-P2)
+For each player:
+
+Scoring and minutes:
+
+season PPG, last 10 and last 5 PPG
+
+minutes per game (season, last 5/10)
+
+Role:
+
+usage rate
+
+starter vs bench, expected lineup
+
+Game context:
+
+expected pace for the game
+
+opponent defensive rating
+
+opponent rank vs scoring at player’s position if available
+
+Market:
+
+points line (L)
+
+odds for over/under
+
+Derived:
+
+baseline λ (expected points),
+
+λ adjusted for minutes/pace/matchup,
+
+P_over, P_under (see KB-P2).
+
+4. NFL – game markets (sides/totals)
+Use with: Markov chain or drive-based model.
+
+Per team:
+
+Team strength:
+
+offensive efficiency (points per drive, EPA/play)
+
+defensive efficiency (points allowed per drive, EPA/play)
+
+red zone efficiency (off + def)
+
+Tempo:
+
+plays per game
+
+pass/run ratio
+
+Context:
+
+injuries to QB, OL, primary weapons
+
+weather for outdoor games (wind, precipitation)
+
+home/road, rest days
+
+Market:
+
+spread, total, moneyline, odds.
+
+This supports:
+
+expected drives and scoring chances,
+
+drive outcome probabilities,
+
+totals model (multi-mode or possession-like).
+
+5. NFL – player props (examples)
+For a specific prop type:
+
+Rushing yards / attempts:
+
+carries per game (season, last 5)
+
+yards per carry
+
+snap share / route share
+
+opponent run defense metrics
+
+Receiving yards / receptions:
+
+targets per game
+
+target share
+
+yards per target
+
+opponent pass defense metrics
+
+General:
+
+player role (starter, committee)
+
+game script projections (spread, total)
+
+line & odds
+
+Derived:
+
+λ (expected attempts/targets or yards),
+
+count/yardage model probabilities (Poisson-ish or Gaussian-ish).
+
+6. Soccer / Hockey – game markets
+Use with: multi-mode Poisson.
+
+Per team:
+
+Goals:
+
+goals for per game
+
+goals against per game
+
+home/away splits
+
+Attack/defense:
+
+expected goals (xG for/against) if available
+
+Mode splits (if available):
+
+set-piece goals, open-play goals, penalties
+
+Context:
+
+injuries/suspensions for key attackers/defenders
+
+schedule congestion (fatigue)
+
+home/away
+
+Market:
+
+1X2 odds (home/draw/away)
+
+total goals line and odds
+
+Derived:
+
+λ_home, λ_away (or λ per mode),
+
+win/draw/loss probabilities,
+
+totals probabilities.
+
+7. Generic player prop context (other sports)
+For any prop that is a count or rate (shots, goals, receptions, etc.):
+
+Baseline rate:
+
+stat per game (season, last 5/10)
+
+time on ice / snaps / minutes
+
+Role:
+
+usage/share (share of volume)
+
+line/role (e.g., first line, WR1)
+
+Opponent:
+
+defensive metrics vs that stat
+
+Game-level:
+
+expected tempo / volume
+
+spread/total (game script)
+
+This feeds a generic Poisson-style or overdispersed count model.
+
+8. Practical instructions for the LLM agent
+For each analysis request:
+
+Identify sport and market type (game side/total vs player prop).
+
+Use this KB to enumerate required context fields.
+
+Use tools (search, HTTP, scraping, APIs) to fill as many as possible, prioritizing:
+
+team-level ratings and pace (for games),
+
+player rates and minutes (for props),
+
+market lines and odds (always).
+
+Compute derived parameters:
+
+for games: expected pace, offensive/defensive efficiency, λs for scoring,
+
+for props: λ for counts, adjusted for minutes/pace/role.
+
+Construct a clean JSON payload matching OmegaSportsAgent’s contracts:
+
+game-level data for find_daily_edges / /analyze/game,
+
+prop-level data for prop endpoints.
+
+Call OmegaSportsAgent, then:
+
+interpret edges and staking recommendations,
+
+optionally log predictions for calibration.

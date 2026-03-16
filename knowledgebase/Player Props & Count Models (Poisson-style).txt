@@ -1,0 +1,284 @@
+KB-P1: Player Props & Count Models (Poisson-style)
+Purpose:
+Guide an LLM on how to think about player props (e.g., points, assists, 3PM) using simple count models aligned with sports-analytics practice.
+
+1. When to use count models
+Player props often track discrete counts:
+
+NBA: points (continuous-ish but sum of scoring events), rebounds, assists, 3PM, turnovers.
+
+NFL: carries, receptions, targets, tackles, etc.
+
+A simple starting point:
+
+Poisson model for counts when events are relatively independent and low-ish rate.
+​
+​
+
+More sophisticated models (negative binomial, mixtures) are possible, but start with Poisson or Poisson-like.
+
+2. Core ingredients per player prop
+The agent needs:
+
+Player usage and role:
+
+minutes per game (recent 5–10 games),
+
+usage rate (for scoring),
+
+involvement (target share, rebound chance, etc. depending on stat).
+
+Team/pace context:
+
+expected pace (NBA) or play volume (NFL),
+
+offensive/defensive matchups.
+
+Recent performance:
+
+rolling average and variance of the stat (e.g., last 10 games points).
+
+Market line:
+
+prop line L (e.g., 24.5 points),
+
+odds for over/under.
+
+Sources:
+
+Stats APIs (NBA.com, STATMUSE, BBRef),
+
+Team/player card pages,
+
+Play-by-play-derived metrics.
+
+3. Simple Poisson-style model
+Let X = stat in question (e.g., points). Naive model:
+
+Estimate 
+λ
+λ (average per game):
+
+\lambda = \text{rolling_mean}(X)
+
+optionally adjusted by pace/usage context for matchup.
+
+Under Poisson:
+
+P
+(
+X
+=
+k
+)
+=
+e
+−
+λ
+λ
+k
+k
+!
+P(X=k)=e 
+−λ
+  
+k!
+λ 
+k
+ 
+ 
+
+Derived probabilities:
+
+For “over L.5” (e.g., 24.5 points), define threshold T = ceil(L+0.001) (here, 25):
+
+P
+(
+over
+)
+=
+P
+(
+X
+≥
+T
+)
+=
+1
+−
+∑
+k
+=
+0
+T
+−
+1
+P
+(
+X
+=
+k
+)
+P(over)=P(X≥T)=1−∑ 
+k=0
+T−1
+ P(X=k)
+
+For “under L.5”:
+
+P
+(
+under
+)
+=
+1
+−
+P
+(
+over
+)
+P(under)=1−P(over)
+
+LLM should know:
+
+Poisson is often too narrow (underestimates variance).
+
+It’s a baseline to get approximate probabilities; calibration can correct some bias.
+
+4. Adjusting λ for context
+The agent should adjust λ given:
+
+Minutes expectation:
+
+scale by expected minutes vs baseline minutes:
+
+λ
+′
+=
+λ
+×
+expected_minutes
+baseline_minutes
+λ 
+′
+ =λ× 
+baseline_minutes
+expected_minutes
+ 
+
+Pace:
+
+If the matchup is faster/slower than average, scale by pace ratio:
+
+λ
+′
+′
+=
+λ
+′
+×
+pace_game
+pace_team_avg
+λ 
+′′
+ =λ 
+′
+ × 
+pace_team_avg
+pace_game
+ 
+
+Matchup defense:
+
+If facing top defense vs the stat (e.g., team allows few points in paint), optionally tweak λ down slightly (few percent).
+
+Keep adjustments modest unless strong data supports big changes.
+
+5. Handling overdispersion
+If empirical variance of the stat is much larger than mean:
+
+Poisson assumption (Var = λ) breaks.
+
+Options:
+
+Use a negative binomial approximation (requires more parameters).
+​
+
+Or fudge: inflate λ’s variance by mixing in game-to-game random effect:
+
+sample λ_game ~ lognormal(mean=log(λ), sigma>0)
+
+then sample X ~ Poisson(λ_game)
+
+For an LLM-driven agent, it’s enough to know:
+
+Straight Poisson often underestimates tail probabilities.
+
+A simple mixture or calibration step can partially fix this.
+
+6. From probabilities to edge
+Given model P_over and market odds o_over:
+
+Convert odds to implied probability q_over.
+
+Edge_over_pct = (P_over − q_over) * 100
+
+EV_over = P_over * (d_over − 1) − (1 − P_over)
+
+Same for under.
+
+Typical pattern:
+
+Compare edges on over and under.
+
+Only consider bets above edge threshold (e.g., > 3–5 percentage points) and after calibration.
+
+7. Integration with OmegaSportsAgent
+Agent responsibilities:
+
+For each player prop:
+
+gather raw stats (minutes, per-game stat, usage),
+
+compute rolling λ (with context adjustments),
+
+compute P_over and P_under,
+
+pass to OmegaSportsAgent prop analysis endpoint or treat as the “true_prob” input to Kelly / edge calc.
+
+Engine responsibilities:
+
+Given true_prob and odds, compute:
+
+implied_prob,
+
+edge_pct,
+
+EV%,
+
+Kelly stake.
+
+If OmegaSportsAgent eventually has a dedicated prop simulation module (e.g., correlated with game totals), the Poisson-style λ becomes its parameter.
+
+8. Output schema per prop
+Per player prop:
+
+player_name
+
+team
+
+prop_type (e.g., POINTS, REBOUNDS, 3PM)
+
+line (L)
+
+odds_over, odds_under
+
+λ_base (rolling mean)
+
+λ_adjusted (after minutes/pace/matchup)
+
+P_over, P_under
+
+edge_over_pct, edge_under_pct (optional; or computed by engine)
+
+notes/context (e.g., “minutes spike last 3 games”, “back-to

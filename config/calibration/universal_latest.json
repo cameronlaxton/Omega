@@ -1,0 +1,213 @@
+{
+  "version": "universal_v1.0",
+  "description": "Universal calibration defaults with per-league overrides. Used when league-specific packs are absent.",
+  "updated_at": "2026-01-10",
+  "edge_thresholds": {
+    "default": 0.03,
+    "moneyline": 0.03,
+    "spread": 0.03,
+    "total": 0.03,
+    "player_prop_default": 0.05
+  },
+  "kelly_fraction": 0.25,
+  "kelly_policy": "quarter_kelly",
+  "kelly_staking": {
+    "method": "fractional",
+    "fraction": 0.25,
+    "max_stake": 0.05,
+    "min_stake": 0.01,
+    "tier_multipliers": {
+      "high_confidence": 1.0,
+      "medium_confidence": 0.5,
+      "low_confidence": 0.25
+    }
+  },
+  "probability_transforms": {
+    "default": [
+      {
+        "type": "shrink",
+        "params": {
+          "factor": 0.65
+        }
+      }
+    ]
+  },
+  "variance_scalars": {
+    "global": 1.0,
+    "NBA": {
+      "default": 0.45,
+      "pts": 0.50,
+      "reb": 0.40,
+      "ast": 0.45,
+      "score": 0.35
+    },
+    "NFL": {
+      "default": 0.60,
+      "pass_yds": 0.65,
+      "rush_yds": 0.55,
+      "rec_yds": 0.60,
+      "td": 0.80,
+      "score": 0.50
+    },
+    "MLB": {
+      "default": 0.50,
+      "score": 0.40,
+      "home_runs": 0.85
+    },
+    "NHL": {
+      "default": 0.55,
+      "goals": 0.70,
+      "score": 0.45,
+      "shots": 0.35
+    },
+    "NCAAB": {
+      "default": 0.55,
+      "score": 0.45
+    },
+    "NCAAF": {
+      "default": 0.60,
+      "score": 0.50
+    }
+  },
+  "leagues": {
+    "NBA": {
+      "edge_thresholds": {
+        "moneyline": 0.03,
+        "spread": 0.095,
+        "total": 0.01,
+        "player_prop_points": 0.03,
+        "player_prop_rebounds": 0.03,
+        "player_prop_assists": 0.03,
+        "default": 0.03
+      },
+      "kelly_fraction": 0.25,
+      "kelly_policy": "fractional",
+      "kelly_staking": {
+        "method": "fractional",
+        "fraction": 0.25,
+        "max_stake": 0.05,
+        "min_stake": 0.01,
+        "tier_multipliers": {
+          "high_confidence": 1.0,
+          "medium_confidence": 0.5,
+          "low_confidence": 0.25
+        }
+      },
+      "probability_transforms": {
+        "default": [
+          {
+            "type": "platt",
+            "params": {
+              "a": 0.47147183749459864,
+              "b": 0.011427550415523187
+            }
+          },
+          {
+            "type": "shrink",
+            "params": {
+              "factor": 0.25
+            }
+          }
+        ],
+        "moneyline": [
+          {
+            "type": "platt",
+            "params": {
+              "a": 0.47147183749459864,
+              "b": 0.011427550415523187
+            }
+          },
+          {
+            "type": "shrink",
+            "params": {
+              "factor": 0.25
+            }
+          }
+        ],
+        "spread": [
+          {
+            "type": "platt",
+            "params": {
+              "a": -0.04183747817960846,
+              "b": 0.20826603472690028
+            }
+          },
+          {
+            "type": "shrink",
+            "params": {
+              "factor": 0.1
+            }
+          }
+        ],
+        "total": [
+          {
+            "type": "platt",
+            "params": {
+              "a": 0.6712940825330339,
+              "b": -0.08330411236872515
+            }
+          },
+          {
+            "type": "shrink",
+            "params": {
+              "factor": 0.05
+            }
+          }
+        ],
+        "player_prop_points": [
+          {
+            "type": "platt",
+            "params": {
+              "a": 0.47147183749459864,
+              "b": 0.011427550415523187
+            }
+          },
+          {
+            "type": "shrink",
+            "params": {
+              "factor": 0.25
+            }
+          }
+        ],
+        "player_prop_rebounds": [
+          {
+            "type": "platt",
+            "params": {
+              "a": 0.47147183749459864,
+              "b": 0.011427550415523187
+            }
+          },
+          {
+            "type": "shrink",
+            "params": {
+              "factor": 0.25
+            }
+          }
+        ],
+        "player_prop_assists": [
+          {
+            "type": "platt",
+            "params": {
+              "a": 0.47147183749459864,
+              "b": 0.011427550415523187
+            }
+          },
+          {
+            "type": "shrink",
+            "params": {
+              "factor": 0.25
+            }
+          }
+        ]
+      },
+      "variance_scalars": {
+        "default": 0.45,
+        "pts": 0.50,
+        "reb": 0.40,
+        "ast": 0.45,
+        "score": 0.35
+      }
+    }
+  }
+}
+

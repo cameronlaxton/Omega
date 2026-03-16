@@ -1,0 +1,368 @@
+KB-S1: NBA Full-Game Modeling
+Purpose:
+Give an LLM enough structure to request, derive, and use sensible inputs for NBA full-game sides/totals using OmegaSimulationEngine.
+
+1. Conceptual model
+Game modeled as a series of possessions with:
+
+pace (possessions per game per team),
+
+efficiency (points per possession),
+
+variability in scoring (distribution of points per possession).
+
+Primary outputs per sim:
+
+final home and away scores,
+
+resulting spread and total,
+
+home win indicator.
+
+Aggregate over many runs 
+N
+N (e.g., 5,000–20,000) to estimate:
+
+home win probability,
+
+distribution of margin,
+
+distribution of total points.
+
+2. Core stats the agent should gather
+For each matchup (Home vs Away):
+
+Team-level season/rolling stats:
+
+Offensive rating (points per 100 possessions).
+
+Defensive rating (points allowed per 100 possessions).
+
+Pace (possessions per 48 minutes).
+
+Recent form (last ~10 games) versions of those three.
+
+Home/away splits if available.
+
+Contextual factors:
+
+Injuries / likely rotations (which starters/key bench are out, minutes impact).
+
+Rest (back-to-back, 3-in-4 nights).
+
+Travel (home/road, long travel, international).
+
+Estimated closing line (market spread/total if available).
+
+Derived parameters:
+
+Expected pace for this game:
+
+e.g., harmonic or average of both teams’ pace, adjusted for matchup.
+
+Expected offensive efficiency for each team:
+
+combine team offense and opponent defense:
+
+base_off_eff_home ≈ f(home_off_rating, away_def_rating)
+
+base_off_eff_away ≈ f(away_off_rating, home_def_rating)
+
+The LLM should either:
+
+call a stats API that already exposes these, or
+
+scrape box-score and team-advanced pages, then compute rolling ratings.
+
+3. Simple parametric model
+For each simulated game:
+
+Steps per run:
+
+Sample game-specific pace:
+
+pace_game
+∼
+N
+(
+μ
+pace
+,
+σ
+pace
+)
+pace_game∼N(μ 
+pace
+ ,σ 
+pace
+ )
+
+Convert to possessions:
+
+possessions
+=
+pace_game
+possessions=pace_game
+
+For each team:
+
+sample points-per-possession with noise:
+
+p
+p
+p
+home
+∼
+N
+(
+μ
+p
+p
+p
+,
+h
+o
+m
+e
+,
+σ
+p
+p
+p
+)
+ppp 
+home
+ ∼N(μ 
+ppp,home
+ ,σ 
+ppp
+ )
+
+p
+p
+p
+away
+∼
+N
+(
+μ
+p
+p
+p
+,
+a
+w
+a
+y
+,
+σ
+p
+p
+p
+)
+ppp 
+away
+ ∼N(μ 
+ppp,away
+ ,σ 
+ppp
+ )
+
+compute scores:
+
+score_home
+=
+p
+p
+p
+home
+×
+possessions
+score_home=ppp 
+home
+ ×possessions
+
+score_away
+=
+p
+p
+p
+away
+×
+possessions
+score_away=ppp 
+away
+ ×possessions
+
+Round scores to integers as needed.
+
+From scores:
+
+margin = score_home − score_away
+
+total = score_home + score_away
+
+home_win = 1 if margin > 0 else 0
+
+4. Probabilities from Monte Carlo
+Given N simulations:
+
+Home win prob:
+
+P
+(
+home win
+)
+=
+1
+N
+∑
+I
+(
+margin
+i
+>
+0
+)
+P(home win)= 
+N
+1
+ ∑I(margin 
+i
+ >0)
+
+Distributional stats:
+
+predicted spread = mean(margin)
+
+predicted total = mean(total)
+
+percentiles of margin/total if needed (for alt lines).
+
+LLM usage:
+
+The agent should choose N based on latency vs stability (e.g., 3,000–10,000).
+
+If speed is critical, use fewer runs but acknowledge higher variance in edge estimates.
+
+5. Linking to sides and totals
+Given a market spread 
+s
+s and price 
+o
+o (e.g., -110):
+
+Compute probability that home covers:
+
+For spread bet home −s:
+
+cover_home = I(margin − s > 0)
+
+P
+(
+cover
+)
+=
+1
+N
+∑
+I
+(
+m
+a
+r
+g
+i
+n
+i
+>
+s
+)
+P(cover)= 
+N
+1
+ ∑I(margin 
+i
+ >s)
+
+For totals:
+
+For over bet on total line 
+t
+t:
+
+P
+(
+over
+)
+=
+1
+N
+∑
+I
+(
+t
+o
+t
+a
+l
+i
+>
+t
+)
+P(over)= 
+N
+1
+ ∑I(total 
+i
+ >t)
+
+The agent should pass:
+
+simulated home_win_prob, predicted_spread, predicted_total, or
+
+raw simulated scores to OmegaSportsAgent if it expects to compute these internally.
+
+6. Adjustments for context
+The LLM should adjust inputs based on:
+
+Injuries:
+
+remove or reduce impact of star players; adjust offensive/defensive ratings accordingly (e.g., via on/off data or heuristics: -3 points per 100 possessions for missing star).
+
+Rest:
+
+slightly lower offensive efficiency for tired teams.
+
+Matchup:
+
+pace can be adjusted by style (fast vs slow teams) and coaching tendencies.
+
+The KB for these transforms should be separate, but the rule of thumb:
+
+never apply huge context adjustments without justification,
+
+keep adjustments small (1–5% tweaks) unless strong data supports more.
+
+7. Outputs the engine/LLM should produce per NBA game
+Standard full-game output object:
+
+matchup (string)
+
+league = "NBA"
+
+predicted_home_score, predicted_away_score
+
+predicted_spread, predicted_total
+
+home_win_prob (0–1)
+
+spread_cover_prob_home, spread_cover_prob_away
+
+total_over_prob, total_under_prob
+
+number of simulations (N)
+
+key assumptions summary (pace, offensive/defensive ratings used, major injuries)
+
+This structured output feeds edge, EV, and staking modules.

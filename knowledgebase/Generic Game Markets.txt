@@ -1,0 +1,130 @@
+KB-G1: Generic Game Markets (Sides & Totals) Across Sports
+Purpose:
+Give an LLM a sport-agnostic template for turning simulation outputs (scores, distributions) into game market metrics (win prob, cover prob, total prob, edges).
+
+1. Inputs from any simulation core
+Regardless of whether the underlying engine is:
+
+possession Monte Carlo,
+
+Markov chain, or
+
+multi-mode Poisson,
+
+the LLM should expect per-sport simulation to output, for each of N runs:
+
+score_home_i, score_away_i
+
+optional: other stats, but these two are enough for game markets.
+
+2. Derived per-sim variables
+For each run i:
+
+margin_i = score_home_i − score_away_i
+
+total_i = score_home_i + score_away_i
+
+3. Basic market probabilities
+Let N = number of simulations.
+
+Win probabilities:
+
+P_home_win = count(margin_i > 0) / N
+
+P_away_win = count(margin_i < 0) / N
+
+P_draw = count(margin_i == 0) / N (if sport allows draws)
+
+Spread probabilities (for spread s from home perspective):
+
+P_home_cover = count(margin_i > s) / N
+
+P_away_cover = count(margin_i < s) / N
+(if push handling needed, treat margin_i == s as push)
+
+Total probabilities (for total t):
+
+P_over = count(total_i > t) / N
+
+P_under = count(total_i < t) / N
+
+4. Predicted spread and total
+Predicted spread:
+
+predicted_spread = mean(margin_i)
+
+Predicted total:
+
+predicted_total = mean(total_i)
+
+Optional:
+
+quantiles of margin and total (e.g., 10th, 50th, 90th) for alt line intuition.
+
+5. Edge calculation
+For any event with:
+
+model probability p,
+
+market odds o (American or decimal),
+
+compute:
+
+implied_prob q from odds,
+
+edge_pct = (p − q) * 100,
+
+EV per unit, and then Kelly as in KB-B1.
+
+This is identical across sports: the LLM just needs to plug in the correct p for the market (P_home_cover, P_over, etc.).
+
+6. Standard output schema per game
+The engine/agent should aim to produce a standardized “game market summary” JSON per matchup:
+
+ids:
+
+league, sport, game_id, matchup
+
+simulations:
+
+iterations
+
+predicted_home_score, predicted_away_score
+
+predicted_spread, predicted_total
+
+probabilities:
+
+home_win_prob, away_win_prob, optionally draw_prob
+
+for each key spread (e.g., market spread):
+
+spread_line
+
+home_cover_prob, away_cover_prob
+
+for each key total:
+
+total_line
+
+over_prob, under_prob
+
+market/edge:
+
+market_spread, spread_odds_home, spread_odds_away
+
+market_total, total_odds_over, total_odds_under
+
+computed edge_pct and EV for each side/total
+
+meta:
+
+sport_archetype (e.g., “markov_possession”, “poisson_goals”)
+
+model_version, calibration_profile
+
+This schema lets the LLM:
+
+apply the same reasoning rules across sports,
+
+only swap out the underlying simulation core and market inputs.

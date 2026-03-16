@@ -1,0 +1,298 @@
+KB-C1: Probability Calibration & Predict–Grade–Tune
+Purpose:
+Teach an LLM how OmegaSportsAgent’s calibration concepts work so it can reason about bias, calibration, and the Predict–Grade–Tune loop.
+
+1. What “calibration” means
+A model is calibrated if probabilities match long-run frequencies.
+
+Example:
+
+Of all bets the model tags at 60% win probability, about 60% should actually win.
+
+We care about:
+
+Sharpness: probabilities are away from 50% when there is real edge.
+
+Calibration: those probabilities are statistically consistent with outcomes.
+
+2. Key metrics
+Brier Score:
+
+For binary outcome 
+y
+i
+∈
+{
+0
+,
+1
+}
+y 
+i
+ ∈{0,1} and predicted prob 
+p
+i
+p 
+i
+ :
+
+Brier
+=
+1
+N
+∑
+(
+p
+i
+−
+y
+i
+)
+2
+Brier= 
+N
+1
+ ∑(p 
+i
+ −y 
+i
+ ) 
+2
+ 
+Lower is better.
+​
+
+Expected Calibration Error (ECE):
+
+Bin predictions into probability ranges (e.g., 0.0–0.1, …, 0.9–1.0).
+
+For each bin:
+
+acc_bin = fraction of positives,
+
+conf_bin = average predicted probability.
+
+ECE = weighted average of |acc_bin − conf_bin|.
+
+Lower ECE = better calibration.
+​
+
+Reliability curves:
+
+Plot conf_bin (x-axis) vs acc_bin (y-axis).
+
+Perfect calibration = points on 45° line.
+
+OmegaSportsAgent’s calibration code computes Brier/ECE and similar. The agent doesn’t need to reimplement it, but must understand what those metrics represent.
+
+3. Calibration transforms
+Common transforms (aligned with OmegaSportsAgent):
+
+Shrinkage towards 50%:
+
+Reduce extreme probabilities:
+
+p
+′
+=
+0.5
++
+λ
+(
+p
+−
+0.5
+)
+p 
+′
+ =0.5+λ(p−0.5), 
+0
+<
+λ
+<
+1
+0<λ<1.
+
+Example: λ = 0.7 shrinks 90% to 79%, 10% to 21%.
+
+Caps:
+
+Clamp probabilities:
+
+p
+′
+=
+min
+⁡
+(
+max
+⁡
+(
+p
+,
+p
+m
+i
+n
+)
+,
+p
+m
+a
+x
+)
+p 
+′
+ =min(max(p,p 
+min
+ ),p 
+max
+ )
+
+e.g., p_min = 0.1, p_max = 0.9.
+
+Isotonic regression:
+
+Learn a monotonic mapping from raw probabilities → calibrated probabilities based on historical outcomes.
+
+This is often used when raw model is monotonic but miscalibrated.
+​
+
+OmegaSportsAgent’s probability_calibration.py combines:
+
+shrinkage,
+
+capping,
+
+optional calibration map (e.g., isotonic-like mapping from bins to adjusted probabilities).
+
+4. Predict–Grade–Tune loop
+Conceptual 3-step cycle:
+
+Predict:
+
+For each game/market, the engine produces probabilities (e.g., home_win_prob, spread_cover_prob), edges, and staking recommendations.
+
+The agent or service surfaces these as bets to the user.
+
+Grade:
+
+After event settles, record:
+
+predicted probability 
+p
+p,
+
+realized outcome 
+y
+y (1 if bet wins, 0 if loses),
+
+market odds and stake.
+
+Store them in PredictionAudit (DB) or similar.
+
+Tune:
+
+Periodically run the calibration engine on the stored history:
+
+compute Brier/ECE,
+
+learn calibration maps or adjust shrinkage/cap parameters,
+
+recommend updates per league/market.
+
+Apply these updates to calibration config (e.g., league_calibrations.yaml) so future predictions use better-calibrated probabilities.
+
+Right now, your codebase has (2) and (3) infrastructure but isn’t doing the writes in (2).
+
+5. What the agent should do
+To help close this loop, an LLM agent should:
+
+At prediction time:
+
+For each recommended bet:
+
+record:
+
+model probability p,
+
+odds,
+
+stake,
+
+identifiers for league, market, and game,
+
+timestamp.
+
+call a “log_prediction” service or write directly to PredictionAudit.
+
+At grading time:
+
+Once final scores are available:
+
+fetch final outcomes via web tools (ESPN box scores, final lines).
+
+determine:
+
+whether each logged bet won or lost,
+
+closing lines if relevant.
+
+update PredictionAudit rows with outcome y and any realized CLV-like metrics.
+
+At tuning time:
+
+Trigger calibration run (could be manual or scheduled):
+
+call a calibration endpoint or run a job that:
+
+queries PredictionAudit over a window (e.g., last 500–5000 bets),
+
+computes Brier/ECE by league + market type,
+
+derives calibration maps or updated shrink/cap parameters,
+
+writes new parameters into config.
+
+The agent doesn’t have to do the math; it should:
+
+know when to trigger each phase,
+
+pass sufficient data to OmegaSportsAgent’s calibration engine,
+
+store the outputs in the right config files/DB tables.
+
+6. Minimal data fields per logged prediction
+The agent or service should log for each bet:
+
+prediction_id (UUID)
+
+timestamp_predicted
+
+league, sport
+
+game_id (or matchup + date)
+
+market_type (spread, total, ML, prop)
+
+side (e.g., HOME_SPREAD_-3.5, OVER_225.5)
+
+true_prob (p)
+
+odds (American and/or decimal)
+
+stake_units
+
+model_version/calibration_version
+
+later, at grading:
+
+timestamp_settled
+
+outcome (win/lose/push)
+
+closing_line / closing_odds if tracked
+
+profit_loss_units
+
+This gives the calibration engine enough to compute Brier, ECE, EV, CLV, etc.

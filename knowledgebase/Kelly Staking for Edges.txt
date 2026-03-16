@@ -1,0 +1,241 @@
+KB-B1: Kelly Staking for Edges
+Purpose:
+Tell an LLM how to compute and interpret Kelly stakes given OmegaSportsAgent’s edge outputs.
+
+1. Inputs needed per bet
+For each candidate bet:
+
+true_prob: model-estimated probability that the bet wins (0–1).
+
+odds: market odds, usually American format (e.g., -110, +130).
+
+bankroll: current bankroll size (in units or currency).
+
+fraction (optional): Kelly fraction (1.0 = full Kelly, 0.5 = half Kelly, etc.).
+
+constraints: min/max unit size, overall exposure limits.
+
+OmegaSportsAgent already computes true_prob and uses example odds; the agent is expected to supply real odds.
+
+2. Convert American odds to decimal and implied probability
+Let o be American odds:
+
+If o > 0 (e.g., +130):
+
+decimal_odds = 1 + o/100
+
+If o < 0 (e.g., -110):
+
+decimal_odds = 1 + 100/|o|
+
+Implied probability (from odds):
+
+If o > 0:
+
+p
+i
+m
+p
+l
+i
+e
+d
+=
+100
+o
++
+100
+p 
+implied
+ = 
+o+100
+100
+ 
+
+If o < 0:
+
+p
+i
+m
+p
+l
+i
+e
+d
+=
+∣
+o
+∣
+∣
+o
+∣
++
+100
+p 
+implied
+ = 
+∣o∣+100
+∣o∣
+ 
+
+This is consistent with typical odds_eval logic.
+
+3. Edge and expected value
+Given true_prob = 
+p
+p and implied_prob = 
+q
+q:
+
+Edge (percentage points):
+
+edge_pct = (p − q) * 100
+
+Given decimal odds d:
+
+Net profit if win = d − 1 (per 1 unit stake).
+
+Expected value per unit:
+
+EV = p * (d − 1) − (1 − p)
+
+Positive EV > 0 means the bet is +EV; Kelly is only meaningful if EV > 0.
+
+4. Kelly fraction formula
+Full Kelly fraction 
+f
+∗
+f 
+∗
+  for fraction of bankroll to stake:
+
+Let:
+
+b = decimal_odds − 1 (net win per unit).
+
+p = true_prob,
+
+q = 1 − p.
+
+Kelly:
+
+f
+∗
+=
+b
+p
+−
+q
+b
+f 
+∗
+ = 
+b
+bp−q
+ 
+Properties:
+
+If f* <= 0: no bet (or bet minimum tiny size).
+
+If f* is large (e.g., > 0.25), it may be too aggressive in practice.
+
+LLM should:
+
+clamp f* into [0, f_max] (e.g., 0.0–0.1 or 0.2) to reduce risk,
+
+then apply a fractional Kelly factor (e.g., 0.5).
+
+5. Practical fraction and stake units
+Let:
+
+f_kelly = f* clamped to [0, f_max].
+
+fraction = fractional Kelly multiplier (e.g., 0.25, 0.5, 1.0).
+
+effective_fraction = f_kelly * fraction.
+
+Then:
+
+stake = effective_fraction * bankroll
+
+If you define bankroll in “units” instead of dollars, stake comes out in units.
+
+Typical recommendations:
+
+Full Kelly (fraction=1.0) is mathematically optimal for log utility but can give large drawdowns.
+
+Half or quarter Kelly (fraction=0.5 or 0.25) is common in practice.
+
+6. Confidence tiers
+OmegaSportsAgent already uses tiers (e.g., A, B, C) based on:
+
+number of simulations,
+
+calibration confidence,
+
+edge magnitude.
+
+An LLM can apply different fractional Kelly per tier:
+
+Tier A: fraction = 0.5 (half Kelly),
+
+Tier B: fraction = 0.25,
+
+Tier C: fraction = 0.1 or 0.0 (pass except exceptional edges).
+
+Mapping should be configurable per sport and risk appetite.
+
+7. Portfolio and drawdown considerations
+If multiple bets are placed in a slate:
+
+Avoid simply summing Kelly stakes as if bets are independent.
+
+Simple conservative heuristic:
+
+cap total staked per day to some % of bankroll (e.g., 5–10%),
+
+cap per-game stake (e.g., 2–3% max on any single game),
+
+cap per-edge: never exceed f_max (e.g., 2% per bet) even if Kelly says more.
+
+To approximate risk:
+
+Use Monte Carlo on sequences of bets with given edge distribution to estimate:
+
+probability of large drawdown (e.g., 30%, 50%),
+
+expected time to recovery.
+​
+
+8. Output schema per bet
+For each suggested bet, standardize:
+
+team / selection
+
+bet_type (spread, total, ML, prop)
+
+odds (American and decimal)
+
+true_prob
+
+implied_prob
+
+edge_pct
+
+kelly_fraction_raw (unclamped f*)
+
+kelly_fraction_effective (after clamp and tier fraction)
+
+recommended_stake_units
+
+confidence_tier
+
+notes (e.g., “edge small but consistent across sims”, “probability uncertain due to low games sample”)
+
+An agent can then:
+
+display this in tables,
+
+graph recommended stakes vs edge,
+
+or decide to downweight based on risk preferences.

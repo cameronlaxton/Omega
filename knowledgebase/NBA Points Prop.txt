@@ -1,0 +1,297 @@
+KB-P2: NBA Player Points Props
+Purpose:
+Guide an LLM agent to estimate fair probabilities for NBA points props (Over/Under) and produce inputs for OmegaSportsAgent (true_prob, context) using web data + simple math.
+
+1. Target output per prop
+For each NBA points prop (player + line):
+
+The agent should produce a JSON-like object:
+
+player_name
+
+team
+
+opponent
+
+line_points (e.g., 24.5)
+
+odds_over, odds_under (American)
+
+lambda_base (baseline expected points)
+
+lambda_adjusted (after minutes/pace/matchup)
+
+p_over, p_under (model probabilities)
+
+optional:
+
+notes (injury/usage/matchup context)
+
+OmegaSportsAgent (or a wrapper) can then compute edge, EV, and Kelly stakes.
+
+2. Data the agent should gather
+For a given player and game:
+
+Player usage:
+
+season_ppg
+
+last_10_ppg
+
+last_5_ppg
+
+season_minutes_per_game
+
+last_5_minutes_per_game
+
+Role/usage:
+
+usage rate (if available)
+
+primary/secondary scorer flag (text or rating)
+
+Team/game context:
+
+expected pace for this game:
+
+team pace (possessions/48) for both teams
+
+simple average or matchup-adjusted pace
+
+implied total for game (from market) if available
+
+Opponent defense:
+
+defensive rating (points allowed per 100 possessions)
+
+opponent rank vs points to position (if any public stat)
+
+Game context:
+
+home/away
+
+back-to-back / rest days
+
+injury info for player and key teammates (esp. usage-creating injuries)
+
+The agent can get these from NBA.com, BBRef, Statmuse-like APIs, or scraped box-score and advanced stats pages.
+
+3. Baseline λ (expected points)
+Define a baseline expected points value lambda_base. Good simple default:
+
+Start from recent form but blend with season:
+
+lambda_recent = last_5_ppg (or last_10)
+
+lambda_season = season_ppg
+
+lambda_base = 0.6 * lambda_recent + 0.4 * lambda_season
+
+Rationale:
+
+Recent form matters, but full-season stabilizes noise.
+
+If only limited games, weight season more.
+
+4. Adjustments for minutes
+If expected minutes differ from recent baseline, scale:
+
+baseline_minutes = last_5_minutes_per_game (or season if no data)
+
+expected_minutes:
+
+inferred from injury/news context:
+
+if a key teammate is out, bump minutes,
+
+if blowout risk or minutes cap noted, reduce.
+
+Adjust:
+
+lambda_minutes = lambda_base * (expected_minutes / baseline_minutes)
+
+This is a first-order adjustment: more time on court, more chances to score.
+
+5. Adjustments for pace and matchup
+Let:
+
+pace_team_avg = team’s season pace
+
+pace_opp_avg = opponent pace
+
+pace_league_avg ~ 100 possessions/48 (rough typical NBA value; update if your data says otherwise)
+
+pace_game = average(pace_team_avg, pace_opp_avg)
+
+Pace factor:
+
+pace_factor = pace_game / pace_team_avg
+
+lambda_pace = lambda_minutes * pace_factor
+
+(If you’d rather calibrate to league base, adjust vs league average instead.)
+
+Matchup defense:
+
+If opponent has a very strong defense vs scoring (e.g., top 5 in fewest points allowed per 100 possessions, or specific stat “fewest points to guards”), slightly reduce:
+
+defense_factor ~ in [0.95, 1.05]:
+
+0.95: very tough matchup
+
+1.00: neutral
+
+1.05: very soft matchup
+
+lambda_matchup = lambda_pace * defense_factor
+
+Keep these matchup tweaks small unless you have robust stats.
+
+Final:
+
+lambda_adjusted = lambda_matchup
+
+6. From λ to Over/Under probabilities
+Treat points as a count-like variable with mean lambda_adjusted.
+
+Simplest approximation: discretize and use Poisson-like approach (even though points are not strictly Poisson):
+
+Choose a maximum K to sum to (e.g., K_max = floor(lambda_adjusted + 8*sqrt(lambda_adjusted)) or a reasonable ceiling like 80).
+
+For k = 0..K_max, approximate:
+
+P
+(
+X
+=
+k
+)
+=
+e
+−
+λ
+λ
+k
+/
+k
+!
+P(X=k)=e 
+−λ
+ λ 
+k
+ /k!
+
+Where λ = lambda_adjusted.
+
+Let the market line be L (e.g., 24.5). Define:
+
+T_over = ceil(L + 1e-6) (for 24.5 → 25)
+
+P_over = sum_{k=T_over..K_max} P(X = k)
+
+P_under = 1 - P_over
+
+This will under-estimate tails somewhat; calibration can later correct systematic bias.
+
+If you want more spread in outcomes, emulate overdispersion by:
+
+sampling λ_game from a lognormal around lambda_adjusted per simulation and averaging results, instead of pure Poisson; but the core KB can start with naive Poisson.
+
+7. Using odds and edge
+Given:
+
+P_over, P_under
+
+odds_over, odds_under (American)
+
+The agent or OmegaSportsAgent should:
+
+convert odds to implied probabilities,
+
+compute edge:
+
+edge_over_pct = (P_over − implied_over) * 100
+
+same for under,
+
+pass true_prob and odds into Kelly staking.
+
+Example mapping for agent:
+
+If edge_over_pct > 3 and P_over > 0.55:
+
+candidate Over bet.
+
+If edge_under_pct > 3 and P_under > 0.55:
+
+candidate Under bet.
+
+Thresholds should be configurable.
+
+8. Calibration & limitations
+The agent should understand:
+
+Poisson-based modeling for points is approximate:
+
+variable shot mix (3s vs 2s), free throws, foul trouble, blowouts all break pure Poisson.
+
+Internal calibration (Predict–Grade–Tune) should:
+
+measure how well P_over matches reality over hundreds of props,
+
+apply correction maps (e.g., shrink P_over closer to 50% or adjust based on line height).
+
+So:
+
+Treat P_over / P_under as raw model probabilities.
+
+Let OmegaSportsAgent’s calibration layer adjust them before final staking.
+
+9. Summary recipe for the agent
+For each NBA points prop:
+
+Gather:
+
+player PPG (season, last 10, last 5),
+
+minutes per game (season, recent),
+
+expected minutes (from injuries/news/rotations),
+
+team and opponent pace,
+
+opponent defensive strength,
+
+market line L and odds for O/U.
+
+Compute:
+
+lambda_base (blend season+recent),
+
+lambda_minutes (scale by minutes),
+
+lambda_pace (scale by pace),
+
+lambda_adjusted (apply small matchup factor).
+
+Approximate:
+
+P_over and P_under via Poisson-like model around lambda_adjusted.
+
+Output JSON including:
+
+player, team, opponent,
+
+line_points, odds_over, odds_under,
+
+lambda_base, lambda_adjusted,
+
+p_over, p_under,
+
+context notes.
+
+Let OmegaSportsAgent:
+
+compute edges and Kelly stakes,
+
+log predictions for calibration.

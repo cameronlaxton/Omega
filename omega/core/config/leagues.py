@@ -1,0 +1,431 @@
+"""
+League-specific configuration.
+
+Contains sport-specific parameters for simulation, scoring rules,
+and display formatting. Each league maps to a sport archetype
+(see src/simulation/sport_archetypes.py) and carries league-specific
+numeric baselines.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict
+
+
+_LEAGUE_CONFIGS: Dict[str, Dict[str, Any]] = {
+    # ── Basketball ─────────────────────────────────────────────
+    "NBA": {
+        "sport": "basketball",
+        "archetype": "basketball",
+        "periods": 4,
+        "period_length_min": 12,
+        "scoring": "points",
+        "avg_total": 224.0,
+        "avg_pace": 100.0,
+        "distribution": "normal",
+        "home_advantage": 3.0,
+        "std": 12.0,
+    },
+    "WNBA": {
+        "sport": "basketball",
+        "archetype": "basketball",
+        "periods": 4,
+        "period_length_min": 10,
+        "scoring": "points",
+        "avg_total": 160.0,
+        "avg_pace": 80.0,
+        "distribution": "normal",
+        "home_advantage": 2.5,
+        "std": 10.0,
+    },
+    "NCAAB": {
+        "sport": "basketball",
+        "archetype": "basketball",
+        "periods": 2,
+        "period_length_min": 20,
+        "scoring": "points",
+        "avg_total": 140.0,
+        "avg_pace": 68.0,
+        "distribution": "normal",
+        "home_advantage": 3.5,
+        "std": 10.0,
+    },
+    "EUROLEAGUE": {
+        "sport": "basketball",
+        "archetype": "basketball",
+        "periods": 4,
+        "period_length_min": 10,
+        "scoring": "points",
+        "avg_total": 158.0,
+        "avg_pace": 72.0,
+        "distribution": "normal",
+        "home_advantage": 3.0,
+        "std": 10.0,
+    },
+    "FIBA": {
+        "sport": "basketball",
+        "archetype": "basketball",
+        "periods": 4,
+        "period_length_min": 10,
+        "scoring": "points",
+        "avg_total": 155.0,
+        "avg_pace": 70.0,
+        "distribution": "normal",
+        "home_advantage": 2.5,
+        "std": 10.0,
+    },
+    # ── American Football ──────────────────────────────────────
+    "NFL": {
+        "sport": "football",
+        "archetype": "american_football",
+        "periods": 4,
+        "period_length_min": 15,
+        "scoring": "points",
+        "avg_total": 45.0,
+        "avg_pace": 130.0,
+        "distribution": "normal",
+        "home_advantage": 2.5,
+        "std": 10.0,
+    },
+    "NCAAF": {
+        "sport": "football",
+        "archetype": "american_football",
+        "periods": 4,
+        "period_length_min": 15,
+        "scoring": "points",
+        "avg_total": 52.0,
+        "avg_pace": 140.0,
+        "distribution": "normal",
+        "home_advantage": 3.0,
+        "std": 12.0,
+    },
+    "CFL": {
+        "sport": "football",
+        "archetype": "american_football",
+        "periods": 4,
+        "period_length_min": 15,
+        "scoring": "points",
+        "avg_total": 50.0,
+        "avg_pace": 135.0,
+        "distribution": "normal",
+        "home_advantage": 2.0,
+        "std": 11.0,
+    },
+    "XFL": {
+        "sport": "football",
+        "archetype": "american_football",
+        "periods": 4,
+        "period_length_min": 12,
+        "scoring": "points",
+        "avg_total": 42.0,
+        "avg_pace": 120.0,
+        "distribution": "normal",
+        "home_advantage": 2.0,
+        "std": 10.0,
+    },
+    # ── Baseball ───────────────────────────────────────────────
+    "MLB": {
+        "sport": "baseball",
+        "archetype": "baseball",
+        "periods": 9,
+        "scoring": "runs",
+        "avg_total": 8.5,
+        "distribution": "poisson",
+        "home_advantage": 0.3,
+        "std": 3.0,
+    },
+    "NPB": {
+        "sport": "baseball",
+        "archetype": "baseball",
+        "periods": 9,
+        "scoring": "runs",
+        "avg_total": 7.5,
+        "distribution": "poisson",
+        "home_advantage": 0.3,
+        "std": 2.8,
+    },
+    "KBO": {
+        "sport": "baseball",
+        "archetype": "baseball",
+        "periods": 9,
+        "scoring": "runs",
+        "avg_total": 9.5,
+        "distribution": "poisson",
+        "home_advantage": 0.3,
+        "std": 3.2,
+    },
+    # ── Hockey ─────────────────────────────────────────────────
+    "NHL": {
+        "sport": "hockey",
+        "archetype": "hockey",
+        "periods": 3,
+        "period_length_min": 20,
+        "scoring": "goals",
+        "avg_total": 6.0,
+        "distribution": "poisson",
+        "home_advantage": 0.2,
+        "std": 2.0,
+        "has_regulation_draw": True,
+    },
+    "KHL": {
+        "sport": "hockey",
+        "archetype": "hockey",
+        "periods": 3,
+        "period_length_min": 20,
+        "scoring": "goals",
+        "avg_total": 5.0,
+        "distribution": "poisson",
+        "home_advantage": 0.25,
+        "std": 1.8,
+        "has_regulation_draw": True,
+    },
+    # ── Soccer ─────────────────────────────────────────────────
+    "MLS": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 2.8,
+        "distribution": "poisson",
+        "home_advantage": 0.35,
+        "std": 1.3,
+    },
+    "EPL": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 2.7,
+        "distribution": "poisson",
+        "home_advantage": 0.3,
+        "std": 1.3,
+    },
+    "LA_LIGA": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 2.5,
+        "distribution": "poisson",
+        "home_advantage": 0.3,
+        "std": 1.2,
+    },
+    "BUNDESLIGA": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 3.1,
+        "distribution": "poisson",
+        "home_advantage": 0.25,
+        "std": 1.4,
+    },
+    "SERIE_A": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 2.6,
+        "distribution": "poisson",
+        "home_advantage": 0.3,
+        "std": 1.3,
+    },
+    "LIGUE_1": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 2.6,
+        "distribution": "poisson",
+        "home_advantage": 0.25,
+        "std": 1.2,
+    },
+    "CHAMPIONS_LEAGUE": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 2.8,
+        "distribution": "poisson",
+        "home_advantage": 0.25,
+        "std": 1.3,
+    },
+    "LIGA_MX": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 2.5,
+        "distribution": "poisson",
+        "home_advantage": 0.35,
+        "std": 1.2,
+    },
+    # ── Tennis ─────────────────────────────────────────────────
+    "ATP": {
+        "sport": "tennis",
+        "archetype": "tennis",
+        "scoring": "sets",
+        "best_of": 3,
+        "avg_total_games": 22.0,
+        "distribution": "bernoulli",
+    },
+    "WTA": {
+        "sport": "tennis",
+        "archetype": "tennis",
+        "scoring": "sets",
+        "best_of": 3,
+        "avg_total_games": 20.0,
+        "distribution": "bernoulli",
+    },
+    "GRAND_SLAM": {
+        "sport": "tennis",
+        "archetype": "tennis",
+        "scoring": "sets",
+        "best_of": 5,
+        "avg_total_games": 35.0,
+        "distribution": "bernoulli",
+    },
+    # ── Golf ───────────────────────────────────────────────────
+    "PGA": {
+        "sport": "golf",
+        "archetype": "golf",
+        "scoring": "strokes",
+        "rounds": 4,
+        "avg_field_size": 144,
+        "avg_winning_score": -14.0,
+        "round_std": 3.0,
+        "distribution": "normal",
+    },
+    "LPGA": {
+        "sport": "golf",
+        "archetype": "golf",
+        "scoring": "strokes",
+        "rounds": 4,
+        "avg_field_size": 120,
+        "avg_winning_score": -12.0,
+        "round_std": 3.2,
+        "distribution": "normal",
+    },
+    "LIV": {
+        "sport": "golf",
+        "archetype": "golf",
+        "scoring": "strokes",
+        "rounds": 3,
+        "avg_field_size": 48,
+        "avg_winning_score": -10.0,
+        "round_std": 2.8,
+        "distribution": "normal",
+    },
+    # ── Fighting ───────────────────────────────────────────────
+    "UFC": {
+        "sport": "fighting",
+        "archetype": "fighting",
+        "scoring": "rounds",
+        "default_rounds": 3,
+        "championship_rounds": 5,
+        "round_length_min": 5,
+        "distribution": "bernoulli",
+    },
+    "BOXING": {
+        "sport": "fighting",
+        "archetype": "fighting",
+        "scoring": "rounds",
+        "default_rounds": 12,
+        "round_length_min": 3,
+        "distribution": "bernoulli",
+    },
+    "BELLATOR": {
+        "sport": "fighting",
+        "archetype": "fighting",
+        "scoring": "rounds",
+        "default_rounds": 3,
+        "championship_rounds": 5,
+        "round_length_min": 5,
+        "distribution": "bernoulli",
+    },
+    "PFL": {
+        "sport": "fighting",
+        "archetype": "fighting",
+        "scoring": "rounds",
+        "default_rounds": 3,
+        "championship_rounds": 5,
+        "round_length_min": 5,
+        "distribution": "bernoulli",
+    },
+    # ── Esports ────────────────────────────────────────────────
+    "CS2": {
+        "sport": "esports",
+        "archetype": "esports",
+        "scoring": "maps",
+        "best_of": 3,
+        "rounds_per_map": 24,
+        "distribution": "bernoulli",
+    },
+    "LOL": {
+        "sport": "esports",
+        "archetype": "esports",
+        "scoring": "maps",
+        "best_of": 3,
+        "distribution": "bernoulli",
+    },
+    "DOTA2": {
+        "sport": "esports",
+        "archetype": "esports",
+        "scoring": "maps",
+        "best_of": 3,
+        "distribution": "bernoulli",
+    },
+    "VALORANT": {
+        "sport": "esports",
+        "archetype": "esports",
+        "scoring": "maps",
+        "best_of": 3,
+        "rounds_per_map": 24,
+        "distribution": "bernoulli",
+    },
+    "COD": {
+        "sport": "esports",
+        "archetype": "esports",
+        "scoring": "maps",
+        "best_of": 5,
+        "distribution": "bernoulli",
+    },
+}
+
+_DEFAULT_CONFIG: Dict[str, Any] = {
+    "sport": "unknown",
+    "archetype": None,
+    "periods": 4,
+    "scoring": "points",
+    "avg_total": 100.0,
+    "distribution": "normal",
+}
+
+
+def get_league_config(league: str) -> Dict[str, Any]:
+    """Return configuration for a given league.
+
+    Falls back to a generic default if the league is unrecognized.
+    """
+    return _LEAGUE_CONFIGS.get(league.upper(), {**_DEFAULT_CONFIG, "league": league})
+
+
+def get_all_leagues() -> list[str]:
+    """Return all configured league codes."""
+    return list(_LEAGUE_CONFIGS.keys())
+
+
+def get_leagues_for_archetype(archetype: str) -> list[str]:
+    """Return all league codes that use a given archetype."""
+    return [
+        league for league, cfg in _LEAGUE_CONFIGS.items()
+        if cfg.get("archetype") == archetype
+    ]

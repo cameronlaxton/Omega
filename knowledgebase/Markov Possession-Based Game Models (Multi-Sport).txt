@@ -1,0 +1,159 @@
+KB-M1: Markov / Possession-Based Game Models (Multi-Sport)
+Purpose:
+Give an LLM a generic template for using Markov chains to simulate possession-by-possession games (basketball, football, hockey, similar) using an existing engine like markov_engine.py.
+
+1. Core idea
+Model a game as a Markov chain over states:
+
+state includes: which team has possession, location/field position, score differential, time remaining, maybe down & distance (NFL) or man advantage (hockey).
+
+At each step:
+
+transition between states with probabilities learned/estimated from historical data or heuristics.
+
+accumulate points.
+
+Simulate many sequences to get a distribution over final scores and outcomes.
+​
+
+2. Generic state structure
+A minimal state representation:
+
+t = time remaining (or elapsed)
+
+possession_team ∈ {HOME, AWAY}
+
+score_home, score_away
+
+sport-specific fields, e.g.:
+
+NBA: maybe possession count instead of time.
+
+NFL:
+
+down (1–4)
+
+yards_to_go
+
+yardline (0–100)
+
+Hockey/Soccer:
+
+zone or “possession zone” (offensive/neutral/defensive).
+
+The Markov engine in OmegaSportsAgent already picks a sport-specific state encoding; the LLM just needs to know that each state transition generates either:
+
+a scoring event, or
+
+a change of possession/field position, or
+
+time/possession advance without scoring.
+
+3. Transition probabilities
+For each sport, you define a transition matrix or policy:
+
+For each state, define probabilities of:
+
+scoring events of different sizes,
+
+turnover, punt, missed shot, etc.,
+
+clock/possession progression.
+
+Examples:
+
+Basketball (possession-level):
+
+On offense:
+
+P(3pt made), P(2pt made), P(FT trip), P(turnover), P(missed shot + rebound outcome).
+
+After event:
+
+if score, possession flips or stays based on rules,
+
+clock decreases by average possession duration.
+
+NFL (down & distance):
+
+From (down, distance, yardline):
+
+P(score TD), P(score FG), P(first down gain), P(turnover), P(punt), etc.
+
+The LLM is not expected to estimate these from scratch; it should:
+
+rely on existing parameters in markov_engine.py (if present), or
+
+use external stats (e.g., average points per possession, drive outcomes) to calibrate approximate transitions.
+
+4. Using the Markov engine
+For each simulated game:
+
+Initialize state:
+
+time = full game length,
+
+possession = coin flip or team with ball first,
+
+scores = 0–0,
+
+sport-specific starting details.
+
+While time > 0:
+
+sample a transition based on current state and transition probabilities,
+
+update scores, possession, field position, time.
+
+At end:
+
+record final scores and any additional outputs (lead changes, number of scoring events).
+
+Repeat many times to estimate:
+
+distribution of final scores,
+
+win probabilities,
+
+spread/total distributions.
+
+5. When to favor Markov over simpler Monte Carlo
+Use Markov when:
+
+You care about intra-game dynamics:
+
+come-from-behind odds,
+
+in-play betting,
+
+sequences like “if the underdog starts hot, what happens?”.
+
+You want to capture:
+
+effect of field position (NFL),
+
+power plays (hockey),
+
+specific play types (threes vs twos vs FTs in basketball).
+
+You can still use a simpler possession-level Monte Carlo when:
+
+You only need pre-game win probability and distribution of margin/total, and
+
+You don’t have detailed transition data.
+
+6. Cross-sport mapping
+Basketball / NCAA:
+
+states primarily revolve around possession & shot type.
+
+NFL:
+
+states revolve around down & distance / yardline and drive outcomes.
+
+Hockey / Soccer:
+
+states revolve around possession zone and scoring chance quality.
+
+OmegaSportsAgent can support multiple “sport archetypes” by having different transition matrices but exposing a common interface: simulate full game and return final scores + misc metrics.
+
