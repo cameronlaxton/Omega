@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omega</title>
+  <link rel="stylesheet" href="static/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>&#937;</text></svg>">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <h1 class="logo">&Omega; Omega</h1>
+        <button id="new-chat-btn" class="btn btn-primary btn-sm" title="New chat">+ New</button>
+      </div>
+      <div id="session-list" class="session-list"></div>
+      <div class="sidebar-footer">
+        <div class="status-indicator" id="api-status">
+          <span class="status-dot"></span>
+          <span class="status-text">Connecting...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main id="main-content" class="main-content">
+      <!-- Welcome screen (shown when no messages) -->
+      <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-inner">
+          <h2 class="welcome-title">&Omega;</h2>
+          <p class="welcome-subtitle">Quantitative Sports Analytics</p>
+          <div class="welcome-examples">
+            <button class="example-btn" data-prompt="Analyze Lakers vs Celtics tonight">Analyze Lakers vs Celtics tonight</button>
+            <button class="example-btn" data-prompt="What are the best NBA bets today?">What are the best NBA bets today?</button>
+            <button class="example-btn" data-prompt="Player prop analysis for LeBron James">Player prop analysis for LeBron James</button>
+            <button class="example-btn" data-prompt="Compare the spread value on Cowboys vs Eagles">Compare the spread value on Cowboys vs Eagles</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat messages -->
+      <div id="chat-container" class="chat-container hidden">
+        <div id="messages" class="messages"></div>
+      </div>
+
+      <!-- Stage progress bar -->
+      <div id="stage-bar" class="stage-bar hidden">
+        <div class="stage-progress">
+          <div class="stage-item" data-stage="understanding">Understanding</div>
+          <div class="stage-item" data-stage="planning">Planning</div>
+          <div class="stage-item" data-stage="gathering">Gathering Data</div>
+          <div class="stage-item" data-stage="analyzing">Analyzing</div>
+          <div class="stage-item" data-stage="composing">Composing</div>
+        </div>
+      </div>
+
+      <!-- Input area -->
+      <div class="input-area">
+        <form id="chat-form" class="chat-form">
+          <div class="input-wrapper">
+            <textarea
+              id="user-input"
+              class="chat-input"
+              placeholder="Ask about any game, player, or betting line..."
+              rows="1"
+              maxlength="2000"
+            ></textarea>
+            <button type="submit" id="send-btn" class="send-btn" title="Send">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+              </svg>
+            </button>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="static/app.js"></script>
+</body>
+</html>

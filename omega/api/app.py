@@ -1,16 +1,19 @@
 """
 Omega FastAPI application.
 
-Single entry point. Wire routes, middleware, and session manager.
+Single entry point. Wire routes, middleware, session manager, and frontend.
 Run with: uvicorn omega.api.app:app --reload
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from omega.api.middleware.error_handler import ErrorHandlerMiddleware
 from omega.api.routes import analysis, chat, health
@@ -27,7 +30,7 @@ app = FastAPI(
 app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,7 +45,17 @@ chat.set_session_manager(session_manager)
 orchestrator = Orchestrator(OrchestratorConfig())
 chat.set_orchestrator(orchestrator)
 
-# --- Routes ---
+# --- API Routes ---
 app.include_router(health.router)
 app.include_router(analysis.router)
 app.include_router(chat.router)
+
+# --- Frontend static files ---
+_frontend_dir = Path(__file__).resolve().parent.parent.parent / "frontend"
+if _frontend_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_frontend_dir / "static")), name="static")
+
+    @app.get("/")
+    async def serve_frontend():
+        """Serve the frontend SPA."""
+        return FileResponse(str(_frontend_dir / "index.html"))
