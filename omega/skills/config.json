@@ -1,0 +1,9 @@
+{
+  "enabled": {
+    "writing-style": false,
+    "evolution-tracker": false,
+    "evidence-quality-scorer": false
+  },
+  "retention_days": 30,
+  "log_path": "omega/skills/logs/"
+}

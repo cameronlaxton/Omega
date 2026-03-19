@@ -1,0 +1,239 @@
+# Omega — CoWork Handoff Package
+
+## Project Identity
+
+**Omega** is a sports analytics platform with a Monte Carlo simulation engine (9 sports), LLM-powered reasoning layer, evidence collection pipeline, strategy/backtest system, and FastAPI backend with SSE streaming. The repo follows a "bounded autonomy" operating model: the LLM controls reasoning, planning, arbitration, and explanation; the deterministic engine owns simulation, calibration, backtesting, and staking.
+
+**Repo root:** `C:\Users\camer\OneDrive\Desktop\Omega`
+**Test command:** `python -m pytest tests/ -v` (295 tests, ~10s, no API keys needed)
+
+---
+
+## Architecture (5 Layers)
+
+| Layer | Module | Purpose |
+|-------|--------|---------|
+| Conversation | `omega/api/` | FastAPI, sessions, SSE streaming |
+| Reasoning | `omega/reasoning/` | Intent → route → plan → gather → evaluate → orchestrate |
+| Evidence | `omega/evidence/` | 7 collectors, entity resolution, validation, fusion |
+| Execution | `omega/core/` | Monte Carlo sim, archetypes, calibration, contracts, Kelly staking |
+| Synthesis | `omega/synthesis/` | Response composition (11 output package types) |
+
+---
+
+## Completed Phases
+
+### Phase 0: Cleanup
+Removed empty infra stubs, dead code.
+
+### Phase 1: Architecture Boundary Fixes
+Established 5-layer architecture. Moved modules to correct layers. Updated all imports.
+
+### Phase 2: Data Collection Redesign
+- `Collector` protocol + `CollectorResult` model
+- 7 collectors: ESPN (T1), OddsAPI (T1), TeamForm (T2), Context (T2), Injury (T3), NewsSignal (T3), FallbackSearch (T3)
+- `CollectorRegistry` with trust-tier dispatch
+- `EntityResolver` with 6-tier resolution (120+ teams, 4 sports)
+- Registry-based retrieval pipeline replacing hardcoded chain
+
+### Phase 2.5: Evidence Hardening
+- `validate_sim_context()` — type/bounds/strip before Monte Carlo
+- `validate_collector_numeric_fields()` — at collector output
+- FallbackSearch confidence capped at 0.30 when <2 numeric values
+- Hardened data path: `Collector → validate_collector → cache → orchestrator → validate_sim_context → engine`
+
+### Phase 3A: Reasoning Pipeline Hardening
+- All 11 OutputPackage types handled in composer (6 were silently dropped)
+- Vacuous truth bugs fixed in evaluator + gatherer
+- Planner slot consolidation: one slot per (entity, data_type)
+- Intent football ambiguity fixed (sorted by keyword length)
+
+### Phase 3B: LLM-Enhanced Routing
+- COMPARE without betting intent → RESEARCH (not NATIVE_SIM)
+- LLM arbitration for 2 ambiguity patterns
+- Player name extraction, query focus detection (player/aspect/temporal)
+- `focus_hint` field on GatherSlot
+
+### Phase 5: Production Hardening
+- ExecutionTrace: full 7-stage provenance chain (identity, timing, predictions, odds_snapshot, recommendations)
+- Deterministic sim seeding: `sha256(prompt:date)` → reproducible results
+- Strict validation mode: collects all violations, min 2 valid keys
+- Downgrade tracking: `dropped_bet_card`, `native_sim_to_mixed`, `ultra_low_data`, etc.
+- Audit trail: `handle_query() → create trace → populate per-stage → include in response["trace"]`
+
+---
+
+## Current State (as of 2026-03-19)
+
+**Branch:** main (uncommitted changes on 11 files — Phase 5 work ready to commit)
+
+**Uncommitted changes:**
+- `omega/core/models.py` — ExecutionTrace fields
+- `omega/core/simulation/engine.py` — seed parameter
+- `omega/core/simulation/validation.py` — strict mode
+- `omega/core/contracts/schemas.py` — request schema updates
+- `omega/core/contracts/service.py` — service updates
+- `omega/reasoning/orchestrator.py` — full trace population + streaming
+- `omega/reasoning/evaluator.py` — downgrade tracking
+- `tests/core/test_sim_validation.py` — test updates
+- `tests/reasoning/test_production_hardening.py` — new test file (22 tests)
+
+**Test status:** 295 passing
+
+---
+
+## Phase 6: Design Decisions Made
+
+### Goal
+Backtesting & Calibration — trace persistence, historical replay, calibration pipeline. Build all three incrementally: trace persistence → backtest integration → calibration learning.
+
+### Storage Decision
+**SQLite** for trace persistence.
+
+### Two-Plane Backtest Architecture (User-Proposed, Pending Red-Team)
+
+The user proposed a two-plane design that needs to be critically evaluated before implementation:
+
+#### Plane 1: Quant Backtest
+- **Input:** Frozen `HistoricalGame` + frozen derived features, market odds, context artifacts
+- **Path:** normalize → project → simulate → calibrate → edge → score
+- **Measures:** Model forecast quality, calibration quality, EV quality, staking quality
+- **Requirements:** Deterministic seeds, typed artifacts, fast batch execution, reproducible outputs
+- **Engine:** Existing `omega/strategy/backtest/engine.py` (already built, 47 tests)
+
+#### Plane 2: Agent Replay
+- **Input:** Historical "knowable at the time" evidence snapshots
+- **Path:** Full orchestrator replay
+- **Measures:** Routing quality, evidence gathering quality, downgrade behavior, refusal discipline, trace completeness
+- **Requirements:** Trace capture, mode flags, replay fixtures, slower end-to-end execution
+
+#### User's Hypothesis
+- Standalone backtest engine stays as primary benchmark path
+- Upgraded to consume frozen artifacts produced from orchestrator-side data model
+- Per-run trace metadata stored with backtest outputs
+- Separate orchestrator replay harness for sampled audits, not default benchmark path
+
+### Red-Team Questions (UNANSWERED — work starts here)
+
+These questions were posed and need rigorous answers before implementation:
+
+1. **For vs against:** What are the strongest arguments for and against each option (two-plane vs unified orchestrator replay)?
+2. **Failure modes:** What blind spots does the two-plane design introduce?
+3. **Drift risk:** Where could the standalone engine drift away from the real production path?
+4. **Freezing scope:** What exactly must be frozen to make either path historically valid and reproducible?
+5. **Source of truth:** Which path is source of truth for model quality vs agent quality, and why?
+6. **Concrete plan:** What Phase 6 implementation do you recommend after considering both options?
+
+---
+
+## Key Files for Phase 6
+
+| File | Role | Phase 6 Relevance |
+|------|------|-------------------|
+| `omega/core/models.py` | ExecutionTrace schema | Add `actual_outcome`, `created_at`, storage helpers |
+| `omega/core/calibration/probability.py` | Calibration logic (shrinkage, cap, isotonic) | Add isotonic learning from backtest outcomes |
+| `omega/core/simulation/engine.py` | Monte Carlo + seed param | Seed is already wired; no changes expected |
+| `omega/core/contracts/service.py` | `analyze_game()` entry point | Calibration method parameterization |
+| `omega/reasoning/orchestrator.py` | Full pipeline + trace population | Add trace persistence hook; replay mode |
+| `omega/strategy/backtest/engine.py` | Standalone backtest | Upgrade to consume frozen artifacts |
+| `omega/strategy/models.py` | StrategyEntry, BacktestResult, HistoricalGame | Add frozen artifact models |
+| `omega/strategy/versioning/registry.py` | Strategy versioning + promotion | Add calibration version tracking |
+
+---
+
+## Existing Strategy/Backtest System (Already Built)
+
+The backtest infrastructure in `omega/strategy/` is substantial:
+
+- **`models.py`**: `StrategyEntry` (versioned config), `BacktestResult` (ROI, win_rate, max_drawdown, CLV, Brier), `PromotionRecord`, `HistoricalGame`
+- **`backtest/engine.py`**: Outcome-blind simulation → edge calc → strategy filters → grade. Computes win rate, ROI, net units, max drawdown, avg edge, CLV, Brier. Pass/fail: min 20 bets, ROI > -5%, win_rate > 40%, drawdown < 15, CLV > -2
+- **`versioning/registry.py`**: In-memory + JSON file storage. CANDIDATE → STAGING → PRODUCTION promotion. One production version per strategy_id.
+- **47 existing tests** in `tests/strategy/test_strategy.py`
+
+### Current Gap
+- Backtest engine is disconnected from orchestrator (doesn't go through intent/plan/gather)
+- Traces are created but not persisted
+- Calibration parameters are static (hard-coded shrink_factor, cap ranges)
+- No mechanism to learn calibration from outcomes
+- No historical data ingestion pipeline
+
+---
+
+## Constraints
+
+### Anti-Overengineering (Hard Rule)
+> "Does this directly prevent bad sim inputs, bad recommendations, or bad backtests? If no, defer."
+
+Deliberately deferred items:
+- Typed evidence models per data type
+- BaseEvidence inheritance hierarchy
+- Field-level provenance tracking
+- Collector-internal schema enforcement
+- Dead model cleanup in evidence/models.py
+
+### Vision Constraint
+LLM grows in control/planning/arbitration/explanation layers only. Deterministic engine owns simulation, calibration, backtesting, staking. Never replace the engine with LLM reasoning.
+
+---
+
+## Skills Concept (CoWork skills)
+
+Purpose: define lightweight, opt-in extensions that observe and augment the assistant/agent behavior (examples: `writing-style`, `evolution-tracker`). Skills are modular, enabled/disabled per deployment/user, and must not change core engine responsibilities.
+
+Where to place them: create a dedicated package under the main Python module so skills can import internal APIs with minimal coupling. Recommended path: `omega/skills/` (package). This keeps skills versioned with the repo and available to the orchestrator while preserving a clear separation from core logic.
+
+Minimal layout (suggested):
+
+- `omega/skills/__init__.py` — skill registry and enable/disable helpers
+- `omega/skills/config.yaml` — feature flags, retention, opt-in lists
+- `omega/skills/logger.py` — small event logger that writes JSONL to `omega/skills/logs/` or to configured storage
+- `omega/skills/writing_style.py` — example skill (profile + rewrite suggestions)
+- `omega/skills/evolution_tracker.py` — meta skill that consumes event logs and emits summaries
+
+Design constraints:
+
+- Opt-in / consent: skills must be opt-in at user or project level. Default: disabled.
+- Minimal surface area: skills read events and produce summaries/suggestions. They do not alter simulation/calibration outputs directly.
+- Privacy: redact PII before persisting. Configurable retention and deletion APIs.
+- Non-blocking: skill execution should be asynchronous or run in background jobs so orchestration latency is not impacted.
+
+Data model (minimal): event JSONL entries produced by a small logger middleware that the orchestrator calls when it emits suggestions or receives user edits.
+
+Example event fields: `ts`, `session_id`, `actor`, `event_type`, `id`, `content_before`, `content_after`, `action`, `rationale`, `tags`, `confidence`.
+
+Do you need a separate `skills/` directory? Best practice is to add `omega/skills/` (inside existing Python package) rather than top-level `skills/` so imports use the same packaging and tests can access internals. A top-level `skills/` is acceptable for out-of-process skill adapters, but for initial integration `omega/skills/` is recommended.
+
+Quick phased implementation (minimal, low-risk):
+
+1. Phase 0 — Skeleton
+   - Add `omega/skills/` package with `__init__`, `registry.py`, `config.yaml` (flags default false), and `logs/` directory.
+   - Add a no-op logger that writes JSONL when enabled.
+
+2. Phase 1 — MVP skill: `writing-style`
+   - Heuristics + small examples to produce a compact `style_profile` and provide rewrite suggestions.
+   - Integrate with composer to surface suggested rewrites (opt-in only).
+
+3. Phase 2 — `evolution-tracker`
+   - Async job that ingests logs, clusters edits, and emits a periodic `evolution_summary.json` (timeline of major changes, common compromise patterns, acceptance rates).
+
+4. Phase 3 — Optional: embeddings + personalization loop
+   - Store anonymized embeddings in a vector store; use for deeper personalization and similarity queries.
+
+Testing & governance:
+
+- Add unit tests for registry and logger; integration test that enables a skill and asserts an event is written.
+- Add config-driven toggles in `omega/api/session/manager.py` or orchestrator hook so skills are consulted only when enabled.
+- Add doc section describing opt-in, retention, and redaction rules.
+
+This keeps skills lightweight, auditable, and reversible while allowing rapid experimentation with features such as writing-style and behavior-tracking.
+
+---
+
+## First Task in CoWork
+
+**Red-team the two-plane backtest architecture** (questions listed above), then design the concrete Phase 6 implementation plan with:
+1. Trace persistence (SQLite schema, persistence hook, outcome grading)
+2. Backtest integration (frozen artifact format, trace-to-backtest linkage)
+3. Calibration learning (isotonic fit from outcomes, promotion workflow)
+
+Each step should include: files to create/modify, models, tests, and dependency order.
