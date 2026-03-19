@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from omega.api.middleware.error_handler import ErrorHandlerMiddleware
 from omega.api.routes import analysis, chat, health
 from omega.api.session.manager import SessionManager
-from omega.research.agent.orchestrator import Orchestrator, OrchestratorConfig
+from omega.reasoning.orchestrator import Orchestrator, OrchestratorConfig
 
 app = FastAPI(
     title="Omega",

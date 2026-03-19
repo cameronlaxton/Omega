@@ -11,7 +11,7 @@ All models are Pydantic v2 for validation and serialization.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -182,6 +182,7 @@ class GatherSlot(BaseModel):
     importance: InputImportance = InputImportance.IMPORTANT
     freshness_max: float = 86400.0     # seconds; default 24h
     providers: List[str] = Field(default_factory=list)  # preferred provider names
+    focus_hint: Optional[str] = None   # e.g. "defense", "rushing" — signals query focus for composition
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +200,7 @@ class ProviderResult(BaseModel):
     source_url: Optional[str] = None   # attribution URL
     fetched_at: datetime = Field(default_factory=datetime.utcnow)
     confidence: float = 1.0            # 1.0 = primary API, 0.5 = LLM-extracted, 0.3 = stale cache
+    method: str = "unknown"            # "structured_api", "llm_extraction", "web_scrape", "cache_hit"
 
 
 # ---------------------------------------------------------------------------
@@ -247,3 +249,53 @@ FRESHNESS_RULES: Dict[str, float] = {
     "schedule": 3600.0,         # 1 hour
     "environment": 14400.0,     # 4 hours
 }
+
+
+# ---------------------------------------------------------------------------
+# Execution Trace — end-to-end provenance for a single query
+# ---------------------------------------------------------------------------
+
+class ExecutionTrace(BaseModel):
+    """Full provenance chain from prompt to output.
+
+    Captures every decision point in the pipeline so that any query
+    result can be inspected, audited, or replayed.
+    """
+
+    trace_id: UUID = Field(default_factory=uuid4)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    prompt: str
+    session_id: Optional[str] = None
+
+    # Stage 1: Intent
+    understanding: Optional[Dict[str, Any]] = None
+
+    # Stage 2: Strategy
+    answer_plan: Optional[Dict[str, Any]] = None
+
+    # Stage 3: Requirements
+    gather_slots: List[Dict[str, Any]] = Field(default_factory=list)
+
+    # Stage 4: Evidence collection
+    gathered_facts: List[Dict[str, Any]] = Field(default_factory=list)
+    aggregate_quality: float = 0.0
+
+    # Stage 5: Quality gate
+    revised_plan: Optional[Dict[str, Any]] = None
+    downgrades: List[str] = Field(default_factory=list)
+
+    # Stage 6: Execution
+    execution_mode: Optional[str] = None
+    simulation_seed: Optional[int] = None
+    execution_result: Optional[Dict[str, Any]] = None
+
+    # Stage 7: Composition
+    output_packages: List[str] = Field(default_factory=list)
+    narrative_length: int = 0
+
+    # Timing
+    stage_timings: Dict[str, float] = Field(default_factory=dict)  # stage → seconds
+    total_duration_ms: float = 0.0
+
+    # Errors
+    error: Optional[str] = None

@@ -18,7 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from omega.api.schemas import ChatRequest, ChatStreamEvent
 from omega.api.session.manager import SessionManager
-from omega.research.agent.orchestrator import Orchestrator
+from omega.reasoning.orchestrator import Orchestrator
 
 logger = logging.getLogger("omega.api.chat")
 
@@ -47,8 +47,8 @@ def _get_session_manager() -> SessionManager:
 def _get_orchestrator() -> Orchestrator:
     if _orchestrator is None:
         # Lazy init with defaults if not explicitly set
-        from omega.research.agent.orchestrator import Orchestrator, OrchestratorConfig
-        return Orchestrator(OrchestratorConfig())
+        from omega.reasoning.orchestrator import Orchestrator as _Orch, OrchestratorConfig
+        return _Orch(OrchestratorConfig())
     return _orchestrator
 
 
