@@ -17,8 +17,10 @@ optional conversation history, and returns a structured response.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
@@ -26,6 +28,7 @@ from omega.core.models import (
     AnswerPlan,
     ExecutionMode,
     ExecutionResult,
+    ExecutionTrace,
     GatheredFact,
     OutputPackage,
     QueryUnderstanding,
@@ -59,10 +62,12 @@ class OrchestratorConfig:
         llm_provider: str = "anthropic",
         llm_model: str = "claude-sonnet-4-20250514",
         llm_api_key: Optional[str] = None,
+        strict: bool = False,
     ) -> None:
         self.llm_provider = llm_provider
         self.llm_model = llm_model
         self.llm_api_key = llm_api_key or os.getenv("ANTHROPIC_API_KEY", "")
+        self.strict = strict
 
 
 class Orchestrator:
@@ -91,8 +96,12 @@ class Orchestrator:
         prompt: str,
         history: Optional[List[Dict[str, Any]]] = None,
         progress_callback: Optional[Callable[[str, Any], None]] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Process a user query end-to-end. Returns structured response dict."""
+        pipeline_start = time.monotonic()
+        trace = ExecutionTrace(prompt=prompt, session_id=session_id)
+
         def emit(stage: str, data: Any = None) -> None:
             if progress_callback:
                 progress_callback(stage, data)
@@ -100,7 +109,11 @@ class Orchestrator:
         try:
             # 1. Intent understanding
             emit("understanding", {"message": "Analyzing your question..."})
+            t0 = time.monotonic()
             understanding = understand(prompt, self.llm)
+            trace.stage_timings["understanding"] = time.monotonic() - t0
+            trace.understanding = understanding.model_dump()
+            trace.league = understanding.league
             logger.info(
                 "Intent: subjects=%s league=%s goal=%s betting=%s",
                 [s.value for s in understanding.subjects],
@@ -111,7 +124,10 @@ class Orchestrator:
 
             # 2. Answer strategy
             emit("strategy", {"message": "Planning analysis approach..."})
+            t0 = time.monotonic()
             plan = build_answer_plan(understanding, self.llm)
+            trace.stage_timings["strategy"] = time.monotonic() - t0
+            trace.answer_plan = plan.model_dump()
 
             if plan.clarification_needed:
                 return self._clarification_response(
@@ -121,35 +137,92 @@ class Orchestrator:
 
             # 3. Requirement planning
             emit("planning", {"message": "Determining data requirements..."})
+            t0 = time.monotonic()
             slots = build_gather_list(understanding, plan, self.llm)
+            trace.stage_timings["planning"] = time.monotonic() - t0
+            trace.gather_slots = [s.model_dump() for s in slots]
 
             # 4. Fact gathering
             emit("gathering", {
                 "message": f"Gathering data ({len(slots)} requirements)...",
                 "slot_count": len(slots),
             })
+            t0 = time.monotonic()
             facts = gather_facts(slots)
+            trace.stage_timings["gathering"] = time.monotonic() - t0
+            trace.gathered_facts = [f.model_dump() for f in facts]
+            trace.aggregate_quality = compute_aggregate_quality(facts)
+            filled_facts = [f for f in facts if f.filled]
+            sources_used = list({f.result.source for f in filled_facts if f.result})
+            trace.facts_summary = {
+                "total_slots": len(slots),
+                "filled": len(filled_facts),
+                "critical_filled": critical_inputs_filled(facts),
+                "sources_used": sources_used,
+            }
 
             # 5. Quality gate
             emit("quality_gate", {"message": "Evaluating data quality..."})
+            t0 = time.monotonic()
             revised_plan = apply_quality_gate(plan, facts)
+            trace.stage_timings["quality_gate"] = time.monotonic() - t0
+            trace.revised_plan = revised_plan.model_dump()
+            trace.downgrades = revised_plan.downgrades
 
             # 6. Execution
             emit("executing", {"message": "Running analysis..."})
-            execution = self._execute(understanding, revised_plan, facts)
+            t0 = time.monotonic()
+            execution = self._execute(understanding, revised_plan, facts, trace)
+            trace.stage_timings["execution"] = time.monotonic() - t0
+            trace.execution_mode = execution.mode.value
+            trace.execution_result = execution.model_dump()
+
+            # Populate backtest-ready fields from execution
+            if execution.simulation:
+                trace.predictions = {
+                    "home_win_prob": execution.simulation.get("home_win_prob"),
+                    "away_win_prob": execution.simulation.get("away_win_prob"),
+                    "predicted_spread": execution.simulation.get("predicted_spread"),
+                    "predicted_total": execution.simulation.get("predicted_total"),
+                }
+            if execution.best_bet:
+                trace.recommendations = [execution.best_bet]
+            if execution.edges:
+                trace.recommendations = execution.edges
+            # Build matchup string
+            home_name = away_name = ""
+            for entity in understanding.entities:
+                if entity.role.value == "home":
+                    home_name = entity.name
+                elif entity.role.value == "away":
+                    away_name = entity.name
+            if home_name or away_name:
+                trace.matchup = f"{away_name} @ {home_name}"
 
             # 7. Response composition
             emit("composing", {"message": "Composing response..."})
+            t0 = time.monotonic()
             response = compose_response(
                 understanding, revised_plan, facts, execution,
             )
+            trace.stage_timings["composition"] = time.monotonic() - t0
+            trace.output_packages = [p.value for p in revised_plan.output_packages]
+            trace.narrative_length = len(response.get("narrative", ""))
+
+            # Finalize trace
+            trace.total_duration_ms = (time.monotonic() - pipeline_start) * 1000
+            response["trace"] = trace.model_dump(mode="json")
 
             emit("done", None)
             return response
 
         except Exception as e:
             logger.error("Orchestrator error: %s", e, exc_info=True)
-            return self._error_response(str(e))
+            trace.error = str(e)
+            trace.total_duration_ms = (time.monotonic() - pipeline_start) * 1000
+            resp = self._error_response(str(e))
+            resp["trace"] = trace.model_dump(mode="json")
+            return resp
 
     # ------------------------------------------------------------------
     # Async streaming entry point (for SSE)
@@ -201,6 +274,13 @@ class Orchestrator:
             "data": response.get("narrative", response.get("text", "")),
         }
 
+        # Yield trace if present
+        if response.get("trace"):
+            yield {
+                "event_type": "trace",
+                "data": response["trace"],
+            }
+
         # Done
         yield {
             "event_type": "done",
@@ -219,6 +299,7 @@ class Orchestrator:
         understanding: QueryUnderstanding,
         plan: AnswerPlan,
         facts: List[GatheredFact],
+        trace: Optional[ExecutionTrace] = None,
     ) -> ExecutionResult:
         """Execute the analysis plan against gathered data."""
         mode = plan.execution_modes[0] if plan.execution_modes else ExecutionMode.RESEARCH
@@ -226,7 +307,7 @@ class Orchestrator:
         completeness = build_data_completeness(facts)
 
         if mode == ExecutionMode.NATIVE_SIM:
-            return self._execute_simulation(understanding, facts, quality, completeness)
+            return self._execute_simulation(understanding, facts, quality, completeness, trace)
         else:
             return ExecutionResult(
                 mode=mode,
@@ -244,6 +325,7 @@ class Orchestrator:
         facts: List[GatheredFact],
         quality: float,
         completeness: Dict[str, str],
+        trace: Optional[ExecutionTrace] = None,
     ) -> ExecutionResult:
         """Build team contexts from facts and run simulation."""
         home_ctx: Dict[str, Any] = {}
@@ -276,8 +358,8 @@ class Orchestrator:
         league = understanding.league or "NBA"
 
         # Validate contexts before they enter the simulation engine
-        home_ctx = validate_sim_context(home_ctx, league, "home")
-        away_ctx = validate_sim_context(away_ctx, league, "away")
+        home_ctx = validate_sim_context(home_ctx, league, "home", strict=self.config.strict)
+        away_ctx = validate_sim_context(away_ctx, league, "away", strict=self.config.strict)
 
         odds_input = None
         if odds_data:
@@ -288,6 +370,13 @@ class Orchestrator:
                 over_under=odds_data.get("over_under"),
             )
 
+        # Deterministic seed for reproducibility
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        seed = int(hashlib.sha256(f"{understanding.raw_prompt}:{today}".encode()).hexdigest(), 16) % (2**31)
+        if trace:
+            trace.simulation_seed = seed
+            trace.odds_snapshot = odds_data or None
+
         try:
             req = GameAnalysisRequest(
                 home_team=home_team,
@@ -296,6 +385,7 @@ class Orchestrator:
                 odds=odds_input,
                 home_context=home_ctx or None,
                 away_context=away_ctx or None,
+                seed=seed,
             )
             result = analyze_game(req)
             result_dict = result.model_dump() if hasattr(result, "model_dump") else result

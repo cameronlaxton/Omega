@@ -57,6 +57,7 @@ def apply_quality_gate(
     sim_required = plan.simulation_required
     betting_included = plan.betting_recommendations_included
     thresholds = dict(plan.quality_thresholds)
+    downgrades: list[str] = []
 
     # -----------------------------------------------------------------
     # Gate 1: Check bet_card threshold
@@ -70,6 +71,7 @@ def apply_quality_gate(
             )
             packages = [p for p in packages if p != OutputPackage.BET_CARD]
             betting_included = False
+            downgrades.append("dropped_bet_card")
 
             # Also drop alternative_bets if bet_card is gone
             packages = [p for p in packages if p != OutputPackage.ALTERNATIVE_BETS]
@@ -91,6 +93,7 @@ def apply_quality_gate(
             # Keep game_breakdown but mark sim as not required —
             # the response composer will produce narrative analysis instead
             sim_required = False
+            downgrades.append("game_breakdown_narrative_only")
 
     # -----------------------------------------------------------------
     # Gate 3: Native sim mode feasibility
@@ -112,6 +115,7 @@ def apply_quality_gate(
                 betting_included = False
                 # Drop bet_card if still present
                 packages = [p for p in packages if p != OutputPackage.BET_CARD]
+                downgrades.append("native_sim_to_mixed")
             else:
                 # Not enough data for any simulation
                 logger.info("Quality gate: downgrading native_sim to research (fill_rate=%.2f)", fill_rate)
@@ -121,6 +125,7 @@ def apply_quality_gate(
                 packages = [p for p in packages if p != OutputPackage.BET_CARD]
                 if OutputPackage.RESEARCH_REPORT not in packages:
                     packages.append(OutputPackage.RESEARCH_REPORT)
+                downgrades.append("native_sim_to_research")
 
         elif not has_important:
             # Critical inputs present but some important missing — sim runs
@@ -140,6 +145,7 @@ def apply_quality_gate(
                      for m in modes]
         sim_required = False
         betting_included = False
+        downgrades.append("ultra_low_data")
 
     # -----------------------------------------------------------------
     # Build the revised plan
@@ -152,6 +158,7 @@ def apply_quality_gate(
         quality_thresholds=thresholds,
         clarification_needed=plan.clarification_needed,
         clarification_question=plan.clarification_question,
+        downgrades=downgrades,
     )
 
     if revised != plan:

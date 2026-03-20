@@ -139,6 +139,7 @@ def analyze_game(
             n_iterations=request.n_iterations,
             home_context=request.home_context,
             away_context=request.away_context,
+            seed=request.seed,
         )
     except Exception as exc:
         logger.warning("Simulation error for %s: %s", matchup, exc)

@@ -162,6 +162,7 @@ class AnswerPlan(BaseModel):
 
     clarification_needed: bool = False
     clarification_question: Optional[str] = None
+    downgrades: List[str] = Field(default_factory=list)  # e.g. ["dropped_bet_card", "native_sim_to_mixed"]
 
 
 # ---------------------------------------------------------------------------
@@ -260,12 +261,18 @@ class ExecutionTrace(BaseModel):
 
     Captures every decision point in the pipeline so that any query
     result can be inspected, audited, or replayed.
+
+    Designed for easy persistence into a backtest/calibration ledger.
+    The trace shape is flat enough to serialize as a single JSON row.
     """
 
+    # --- Identity ---
     trace_id: UUID = Field(default_factory=uuid4)
+    run_id: str = Field(default_factory=lambda: uuid4().hex[:12])  # short, human-friendly
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     prompt: str
     session_id: Optional[str] = None
+    model_version: str = "omega-v0"  # tracks engine/model iteration for backtest comparison
 
     # Stage 1: Intent
     understanding: Optional[Dict[str, Any]] = None
@@ -279,6 +286,7 @@ class ExecutionTrace(BaseModel):
     # Stage 4: Evidence collection
     gathered_facts: List[Dict[str, Any]] = Field(default_factory=list)
     aggregate_quality: float = 0.0
+    facts_summary: Optional[Dict[str, Any]] = None  # {total_slots, filled, critical_filled, sources_used}
 
     # Stage 5: Quality gate
     revised_plan: Optional[Dict[str, Any]] = None
@@ -292,6 +300,14 @@ class ExecutionTrace(BaseModel):
     # Stage 7: Composition
     output_packages: List[str] = Field(default_factory=list)
     narrative_length: int = 0
+
+    # --- Backtest-ready fields ---
+    # Final predictions (what the system recommended)
+    predictions: Optional[Dict[str, Any]] = None  # {home_win_prob, away_win_prob, predicted_spread, predicted_total}
+    recommendations: List[Dict[str, Any]] = Field(default_factory=list)  # [{side, edge_pct, confidence_tier, units}]
+    odds_snapshot: Optional[Dict[str, Any]] = None  # {moneyline_home, moneyline_away, spread_home, over_under}
+    league: Optional[str] = None
+    matchup: Optional[str] = None  # "Away @ Home"
 
     # Timing
     stage_timings: Dict[str, float] = Field(default_factory=dict)  # stage → seconds

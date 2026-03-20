@@ -3,7 +3,10 @@
     "allow": [
       "Bash(xargs grep:*)",
       "Bash(xargs ls:*)",
-      "Bash(python -m pytest tests/ -x -q)"
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(ls -la /c/Users/camer/OneDrive/Desktop/Omega/omega/*/)",
+      "Bash(python -m pytest tests/ --collect-only -q)",
+      "Bash(find /c/Users/camer/OneDrive/Desktop/Omega/omega/strategy -name *.py -type f)"
     ]
   }
 }

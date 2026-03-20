@@ -65,6 +65,7 @@ class GameAnalysisRequest(BaseModel):
     n_iterations: int = Field(default=1000, ge=100, le=100000, description="Simulation iterations")
     home_context: Optional[Dict[str, Any]] = Field(default=None, description="Pre-fetched home team/player A stats")
     away_context: Optional[Dict[str, Any]] = Field(default=None, description="Pre-fetched away team/player B stats")
+    seed: Optional[int] = Field(default=None, description="RNG seed for reproducible simulations")
 
 
 class SlateAnalysisRequest(BaseModel):

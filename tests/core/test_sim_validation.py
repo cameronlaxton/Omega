@@ -202,10 +202,10 @@ class TestEdgeCases:
         assert result == {"off_rating": 112.0, "def_rating": 108.0}
 
     def test_strict_param_accepted(self):
-        # strict=True shouldn't change behavior yet, but shouldn't error
-        ctx = {"off_rating": 112.0}
+        # strict=True with sufficient valid data passes without error
+        ctx = {"off_rating": 112.0, "def_rating": 108.0}
         result = validate_sim_context(ctx, "NBA", "home", strict=True)
-        assert result == {"off_rating": 112.0}
+        assert result == {"off_rating": 112.0, "def_rating": 108.0}
 
 
 # ---------------------------------------------------------------------------

@@ -93,11 +93,30 @@ Collector → [validate_collector_numeric_fields] → cache → orchestrator
 - **Tests:** 28 new tests covering comparison routing, ambiguity detection, LLM arbitration (mocked), player entity extraction, focus detection, adaptive slots, and integration regressions.
 - **Total:** 273 tests passing. 6 files modified, 1 new test file.
 
+### Phase 5: Production Hardening (Done)
+- **ExecutionTrace population** (`omega/reasoning/orchestrator.py`): Full 7-stage provenance chain populated in `handle_query()`. Each stage records its output and timing via `time.monotonic()`. Trace includes identity fields (`trace_id`, `run_id`, `model_version`), all stage outputs, and backtest-ready fields (`predictions`, `recommendations`, `odds_snapshot`, `league`, `matchup`). Trace included in response dict under `"trace"` key and yielded as SSE event in streaming mode. Error paths also capture trace with `error` field populated.
+- **Deterministic simulation seeding** (`omega/core/simulation/engine.py`, `omega/core/contracts/service.py`): `seed` parameter added to `run_fast_game_simulation()` and `analyze_game()`. Seeds both `random.seed()` and `np.random.seed()`. Orchestrator generates deterministic seed from `sha256(prompt:date)` for reproducibility. Seed stored in trace.
+- **Strict validation mode** (`omega/core/simulation/validation.py`): `strict=True` collects all violations (non-numeric, NaN/Inf, out-of-bounds) and raises a single `ValueError` listing them all. Minimum data threshold: fewer than 2 valid keys raises. `OrchestratorConfig.strict` passes through to `validate_sim_context()` calls.
+- **Downgrade tracking** (`omega/reasoning/evaluator.py`): `apply_quality_gate()` populates `plan.downgrades` list with specific strings: `"dropped_bet_card"`, `"game_breakdown_narrative_only"`, `"native_sim_to_mixed"`, `"native_sim_to_research"`, `"ultra_low_data"`. Captured in trace.
+- **Tests:** 22 new tests covering trace identity/serialization, seed reproducibility, strict validation (7 cases), downgrade tracking (5 cases), and orchestrator trace integration (5 cases with mocked pipeline).
+- **Total:** 295 tests passing. 8 files modified, 1 new test file.
+
+**The hardened audit trail:**
+```
+handle_query() → create ExecutionTrace → populate per-stage → include in response["trace"]
+  Stage 1: understanding (model_dump + timing)
+  Stage 4: facts_summary {total_slots, filled, critical_filled, sources_used}
+  Stage 5: downgrades list
+  Stage 6: simulation_seed, predictions, odds_snapshot
+  Stage 7: output_packages, narrative_length
+  Final: total_duration_ms, stage_timings
+```
+
 ## What Comes Next
 
 | Phase | Description | Status |
 |---|---|---|
-| Phase 5 | Production Hardening — execution traces, reproducibility, audit trail, strict validation mode | Ready |
+| Phase 6 | Backtesting & Calibration — trace persistence, historical replay, calibration pipeline | Ready |
 | Phase 4 | Research Sandbox — exploratory mode, model comparison, what-if scenarios | Lowest priority |
 
 ## Anti-Overengineering Constraint (User-Imposed)
@@ -112,8 +131,7 @@ Deliberately deferred:
 - `completeness` field on ProviderResult
 - Dead model cleanup in `evidence/models.py`
 - Odds-specific typed validation (OddsInput already exists and is typed)
-- Research vs production mode wiring
 
 ## Test Status
 
-273 tests passing (137 original + 32 Phase 2 + 47 Phase 2.5 + 29 Phase 3A + 28 Phase 3B). Test suite runs in ~3s.
+295 tests passing (137 original + 32 Phase 2 + 47 Phase 2.5 + 29 Phase 3A + 28 Phase 3B + 22 Phase 5). Test suite runs in ~10s.

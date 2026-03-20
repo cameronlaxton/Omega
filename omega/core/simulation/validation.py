@@ -126,16 +126,25 @@ def validate_sim_context(
     - Drops values that are non-numeric, NaN, Inf, or out of sanity bounds
     - Returns a clean dict (never mutates the input)
 
+    When strict=True:
+    - Collects all violations and raises ValueError listing them all
+    - Requires at least 2 valid keys to survive (prevents near-empty contexts)
+
     Args:
         context: Raw context dict (may be None or empty).
         league: League code (e.g. "NBA", "NFL").
         side: "home" or "away" (for logging).
-        strict: Reserved for future research/production mode split.
+        strict: When True, raises ValueError on any invalid data instead of dropping.
 
     Returns:
         Sanitized dict with only valid numeric values for known keys.
+
+    Raises:
+        ValueError: In strict mode, if any values are invalid or insufficient data remains.
     """
     if not context:
+        if strict:
+            raise ValueError(f"{side}: no context data provided")
         return {}
 
     archetype = get_archetype(league)
@@ -150,6 +159,7 @@ def validate_sim_context(
     )
 
     cleaned: Dict[str, Any] = {}
+    violations: list[str] = []
 
     for key, value in context.items():
         if key not in known_keys:
@@ -157,27 +167,44 @@ def validate_sim_context(
 
         numeric = _coerce_numeric(value)
         if numeric is None:
-            logger.warning(
-                "Dropped %s.%s: non-numeric value %r", side, key, value,
-            )
+            msg = f"{side}.{key}: non-numeric value {value!r}"
+            if strict:
+                violations.append(msg)
+            else:
+                logger.warning("Dropped %s", msg)
             continue
 
         if math.isnan(numeric) or math.isinf(numeric):
-            logger.warning(
-                "Dropped %s.%s: NaN/Inf value", side, key,
-            )
+            msg = f"{side}.{key}: NaN/Inf value"
+            if strict:
+                violations.append(msg)
+            else:
+                logger.warning("Dropped %s", msg)
             continue
 
         bounds = SIM_INPUT_BOUNDS.get(key)
         if bounds is not None:
             lo, hi = bounds
             if numeric < lo or numeric > hi:
-                logger.warning(
-                    "Dropped %s.%s: value %.4f outside bounds [%.4f, %.4f]",
-                    side, key, numeric, lo, hi,
-                )
+                msg = f"{side}.{key}: value {numeric:.4f} outside bounds [{lo:.4f}, {hi:.4f}]"
+                if strict:
+                    violations.append(msg)
+                else:
+                    logger.warning("Dropped %s", msg)
                 continue
 
         cleaned[key] = numeric
+
+    if strict:
+        if violations:
+            raise ValueError(
+                f"Strict validation failed for {side} ({len(violations)} violation(s)): "
+                + "; ".join(violations)
+            )
+        if len(cleaned) < 2:
+            raise ValueError(
+                f"Strict validation: insufficient valid data for {side} "
+                f"(only {len(cleaned)} key(s) survived, minimum 2 required)"
+            )
 
     return cleaned

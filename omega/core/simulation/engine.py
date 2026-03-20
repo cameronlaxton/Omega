@@ -828,6 +828,7 @@ class OmegaSimulationEngine:
         n_iterations: int = 100,
         home_context: Optional[Dict] = None,
         away_context: Optional[Dict] = None,
+        seed: Optional[int] = None,
     ) -> Dict:
         """
         Run a fast game simulation using team stats dispatched by sport archetype.
@@ -839,10 +840,16 @@ class OmegaSimulationEngine:
             n_iterations: Number of simulation iterations
             home_context: Pre-fetched home team / player A context dict
             away_context: Pre-fetched away team / player B context dict
+            seed: Optional RNG seed for reproducible results
 
         Returns:
             Dict with score distributions, win probabilities, and missing_requirements
         """
+        if seed is not None:
+            random.seed(seed)
+            if np is not None:
+                np.random.seed(seed)
+
         league = league.upper()
         archetype = get_archetype(league)
         archetype_name = get_archetype_name(league)
