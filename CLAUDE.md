@@ -20,7 +20,15 @@ The deterministic engine owns:
 - backtesting
 - grading
 
-Do not move deterministic responsibilities into LLM logic.
+Do not move deterministic responsibilities into LLM logic. This restriction applies to formal Omega outputs only:
+- Bet Cards
+- model probabilities
+- calibrated probabilities
+- EV / edge calculations
+- Kelly / staking recommendations
+- confidence tiers
+
+It does NOT prevent the LLM from doing a best-effort exploratory market scan using public web data. When inputs are incomplete, the LLM should still produce a clearly labeled research-only shortlist, watchlist, or estimated lean set, as long as it does not present those items as Omega model output.
 
 ## Phase 6 objective
 
