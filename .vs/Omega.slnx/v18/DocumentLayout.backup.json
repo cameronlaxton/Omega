@@ -42,12 +42,8 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 2,
+          "SelectedChildIndex": 1,
           "Children": [
-            {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
-            },
             {
               "$type": "Document",
               "DocumentIndex": 7,
@@ -58,8 +54,7 @@
               "RelativeToolTip": "omega\\skills\\logs\\.gitkeep",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2026-03-19T15:42:50.967Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-03-19T15:42:50.967Z"
             },
             {
               "$type": "Document",
@@ -83,9 +78,8 @@
               "ToolTip": "C:\\Users\\camer\\OneDrive\\Desktop\\Omega\\omega\\skills\\evolution_tracker.py",
               "RelativeToolTip": "omega\\skills\\evolution_tracker.py",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAB0AAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2026-03-19T15:42:47.188Z",
-              "EditorCaption": ""
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-03-19T15:42:47.188Z"
             },
             {
               "$type": "Document",
@@ -96,9 +90,8 @@
               "ToolTip": "C:\\Users\\camer\\OneDrive\\Desktop\\Omega\\omega\\skills\\writing_style.py",
               "RelativeToolTip": "omega\\skills\\writing_style.py",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAC8AAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2026-03-19T15:42:42.819Z",
-              "EditorCaption": ""
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-03-19T15:42:42.819Z"
             },
             {
               "$type": "Document",
@@ -109,9 +102,8 @@
               "ToolTip": "C:\\Users\\camer\\OneDrive\\Desktop\\Omega\\omega\\skills\\logger.py",
               "RelativeToolTip": "omega\\skills\\logger.py",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABgAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2026-03-19T15:42:37.268Z",
-              "EditorCaption": ""
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-03-19T15:42:37.268Z"
             },
             {
               "$type": "Document",
@@ -123,8 +115,7 @@
               "RelativeToolTip": "omega\\skills\\config.json",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
-              "WhenOpened": "2026-03-19T15:42:32.817Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-03-19T15:42:32.817Z"
             },
             {
               "$type": "Document",
@@ -135,9 +126,8 @@
               "ToolTip": "C:\\Users\\camer\\OneDrive\\Desktop\\Omega\\omega\\skills\\__init__.py",
               "RelativeToolTip": "omega\\skills\\__init__.py",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAC4AAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2026-03-19T15:42:25.827Z",
-              "EditorCaption": ""
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-03-19T15:42:25.827Z"
             },
             {
               "$type": "Document",
@@ -149,8 +139,11 @@
               "RelativeToolTip": "COWORK_HANDOFF.md",
               "ViewState": "AgIAAO4AAAAAAAAAAABBwAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2026-03-19T15:40:17.366Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-03-19T15:40:17.366Z"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
             },
             {
               "$type": "Bookmark",

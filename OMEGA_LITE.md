@@ -25,7 +25,7 @@ The package is what powers **Mode A — sandbox** in the Project instructions. I
 
 ## What it is NOT
 
-- **No collectors.** Network is unavailable in most LLM sandboxes. The caller (you, or the LLM with its web tool) must supply all inputs in the request payload.
+- **No collectors.** Network is unavailable inside omega_lite itself. The caller must supply all inputs in the request payload. If the surrounding LLM has web browsing, it should actively gather public raw inputs when the user asks for an analysis, then run omega_lite only for candidates with sufficient normalized inputs. Candidates that cannot be normalized should still be surfaced as research-only leans or missing-data watchlist items.
 - **No FastAPI / SSE / sessions.** This is the math layer, not the conversation layer.
 - **No markov_engine.** The canonical repo plans a possession-level Markov simulator; until it lands, `omega_lite` uses the same archetype-aware Poisson/Normal sampler the canonical service uses for player props.
 - **Not a long-term replacement for a hosted Omega API.** When you're ready, deploy the FastAPI service and have the Project call it via MCP / custom action.
@@ -58,6 +58,12 @@ The intended user flow inside a Claude.ai Project or ChatGPT Project:
 1. **One-time setup.** Upload `omega_lite-v1.zip` to the Project's knowledge panel along with the other docs (`CLAUDE.md`, `OMEGA_HANDBOOK.md`, etc.).
 2. **At session start**, the Project LLM extracts the zip in its analysis tool and imports `omega_lite`. The Project instructions explicitly direct it to do this.
 3. **For a game analysis**, the user pastes raw stats + odds, or asks the LLM to fetch them via its web browsing tool. The LLM normalizes into a `GameAnalysisRequest` dict.
+ 3a. For broad slate questions, the LLM should not wait for the user to enumerate every game unless scope is truly impossible. It should:
+   - infer a reasonable default scope from the user’s standing preferences,
+   - browse for schedules, odds, team/player context, and injury/news context,
+   - normalize any complete candidates into omega_lite requests,
+   - label incomplete candidates as research-only,
+   - and explain which markets were excluded due to missing inputs.
 4. **The LLM runs**:
    ```python
    from omega_lite import analyze
@@ -101,7 +107,7 @@ For a 2-leg anchor parlay, the LLM calls `analyze(...)` once per leg with the sa
 
 ## Limitations to disclose in every Mode A-sandbox response
 
-1. **No live data.** Inputs came from the user or LLM web browsing — flag the source for each numeric input.
+1. **No native live collectors.** omega_lite itself does not fetch live data. Inputs may come from the user, public web browsing, screenshots, or pasted sportsbook lines. Flag the source and freshness for each numeric input. Lack of native live data should not block an exploratory answer; it only limits whether a formal omega_lite Bet Card can be produced.
 2. **No `ExecutionTrace` ledger persistence.** The `trace_id` is per-call and not stored anywhere. If you want backtest reproducibility, run the canonical pipeline locally and feed Mode A-local instead.
 3. **Player prop simulator is archetype-default Poisson/Normal.** When canonical `markov_engine` ships, sandbox numbers may diverge from canonical numbers for props until omega_lite is rebuilt.
 

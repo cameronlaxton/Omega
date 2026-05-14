@@ -30,6 +30,12 @@ Defined in `FRESHNESS_RULES`:
 
 When the LLM consumer is asked for stale data, surface the freshness window so the user knows the cache horizon.
 
+Freshness windows govern formal Omega confidence and Bet Card eligibility. They do not prohibit research-only or exploratory answers. If a source is outside the freshness window, the LLM should:
+- label it stale or freshness-unknown,
+- avoid formal Bet Card / Kelly / staking output,
+- still use it for directional screening when appropriate,
+- and tell the user what fresh input would upgrade the candidate.
+
 ## Web search domain priority
 
 `FallbackSearchCollector` prioritizes these domains when prompting Perplexity / web_search:
