@@ -8,6 +8,7 @@ Results are ordered by trust tier (ascending = most trusted first).
 from __future__ import annotations
 
 import logging
+import os
 from typing import List, Optional
 
 from omega.evidence.collectors.base import Collector
@@ -72,7 +73,12 @@ _default_registry: Optional[CollectorRegistry] = None
 
 
 def build_default_registry() -> CollectorRegistry:
-    """Wire up all built-in collectors in priority order."""
+    """Wire up all built-in collectors in priority order.
+
+    ESPN and Odds API are registered as optional tier-1 accelerators
+    only when available. The LLM-powered web search collector is the
+    primary data path (tier 2 for structured results, tier 3 for prose).
+    """
     from omega.evidence.collectors.context import ContextCollector
     from omega.evidence.collectors.espn import EspnCollector
     from omega.evidence.collectors.injury import InjuryCollector
@@ -83,9 +89,22 @@ def build_default_registry() -> CollectorRegistry:
 
     registry = CollectorRegistry()
 
-    # Tier 1: Direct structured APIs
+    # Tier 1 (optional accelerators): Only registered when available.
+    # The system works fully without these — web search covers all types.
     registry.register(EspnCollector())
-    registry.register(OddsApiCollector())
+
+    has_odds_key = bool(
+        os.environ.get("ODDS_API_KEY") or os.environ.get("THE_ODDS_API_KEY")
+    )
+    if has_odds_key:
+        registry.register(OddsApiCollector())
+    else:
+        logger.info("Odds API key not set — odds will be served via web search")
+
+    # Tier 2: LLM-powered web search (primary data path)
+    # Structured JSON results with sufficient numeric fields get tier 2;
+    # raw prose falls back to tier 3 within the collector itself.
+    registry.register(FallbackSearchCollector())
 
     # Tier 2: Derived / computed from structured data
     registry.register(TeamFormCollector())
@@ -94,9 +113,6 @@ def build_default_registry() -> CollectorRegistry:
     # Tier 3: Dedicated web-sourced collectors
     registry.register(InjuryCollector())
     registry.register(NewsSignalCollector())
-
-    # Tier 3 (last resort): Catch-all web search
-    registry.register(FallbackSearchCollector())
 
     return registry
 

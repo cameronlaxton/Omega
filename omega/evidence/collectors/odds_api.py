@@ -287,6 +287,88 @@ def extract_consensus_odds(games: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return consensus
 
 
+def get_player_prop_odds(
+    game_id: str,
+    league: str,
+) -> List[Dict[str, Any]]:
+    """Get structured player prop odds for a specific game.
+
+    Fetches props from The Odds API and normalizes into a list of player
+    prop entries with stat_key, line (threshold), and over/under odds.
+
+    Args:
+        game_id: The Odds API event ID.
+        league: League code.
+
+    Returns:
+        List of dicts: {player, stat_key, line, odds_over, odds_under, bookmaker}
+    """
+    sport_key = _get_sport_key(league)
+    if not sport_key:
+        return []
+
+    # Map Odds API market keys to our stat keys
+    market_to_stat: Dict[str, str] = {
+        "player_points": "pts",
+        "player_rebounds": "reb",
+        "player_assists": "ast",
+        "player_threes": "3pm",
+        "player_steals": "stl",
+        "player_blocks": "blk",
+        "player_points_rebounds_assists": "pra",
+        "player_points_rebounds": "pts_reb",
+        "player_points_assists": "pts_ast",
+        "player_rebounds_assists": "reb_ast",
+    }
+
+    all_props: List[Dict[str, Any]] = []
+
+    for market_key, stat_key in market_to_stat.items():
+        data = _make_request(
+            f"sports/{sport_key}/events/{game_id}/odds",
+            params={
+                "regions": "us",
+                "markets": market_key,
+                "oddsFormat": "american",
+            },
+        )
+
+        if not data or not isinstance(data, dict):
+            continue
+
+        for bookmaker in data.get("bookmakers", []):
+            book_name = bookmaker.get("title", "")
+            for mkt in bookmaker.get("markets", []):
+                outcomes = mkt.get("outcomes", [])
+                # Group outcomes by player (Over/Under pairs)
+                player_outcomes: Dict[str, Dict[str, Any]] = {}
+                for outcome in outcomes:
+                    player = outcome.get("description", outcome.get("name", ""))
+                    side = outcome.get("name", "").lower()  # "Over" or "Under"
+                    if player not in player_outcomes:
+                        player_outcomes[player] = {"player": player}
+                    if "over" in side:
+                        player_outcomes[player]["odds_over"] = outcome.get("price")
+                        player_outcomes[player]["line"] = outcome.get("point")
+                    elif "under" in side:
+                        player_outcomes[player]["odds_under"] = outcome.get("price")
+                        if "line" not in player_outcomes[player]:
+                            player_outcomes[player]["line"] = outcome.get("point")
+
+                for entry in player_outcomes.values():
+                    if entry.get("line") is not None:
+                        all_props.append({
+                            "player": entry["player"],
+                            "stat_key": stat_key,
+                            "line": entry.get("line"),
+                            "odds_over": entry.get("odds_over"),
+                            "odds_under": entry.get("odds_under"),
+                            "bookmaker": book_name,
+                        })
+
+    return all_props
+
+
 def check_api_status() -> Dict[str, Any]:
     """Check Odds API status and remaining requests."""
     api_key = _get_api_key()

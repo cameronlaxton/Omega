@@ -180,7 +180,7 @@ class TestCollectorProtocol:
         c = FallbackSearchCollector()
         assert isinstance(c, Collector)
         assert "team_stat" in c.evidence_types
-        assert c.trust_tier == 3
+        assert c.trust_tier == 2
 
     def test_team_form_implements_protocol(self):
         from omega.evidence.collectors.base import Collector
@@ -199,15 +199,17 @@ class TestCollectorRegistry:
         from omega.evidence.registry import build_default_registry
 
         registry = build_default_registry()
-        assert len(registry.all_collectors) >= 7  # All our registered collectors
+        # At least 6 collectors (7 when ODDS_API_KEY is set)
+        assert len(registry.all_collectors) >= 6
 
     def test_odds_dispatch_order(self):
         from omega.evidence.registry import build_default_registry
 
         registry = build_default_registry()
         collectors = registry.get_collectors_for("odds", "NBA")
-        assert len(collectors) >= 2  # OddsApiCollector + FallbackSearch
-        # First should be tier 1 (OddsApi)
+        # At least FallbackSearch; OddsApiCollector only when key is set
+        assert len(collectors) >= 1
+        # Collectors must be ordered by trust tier (ascending)
         assert collectors[0].trust_tier <= collectors[-1].trust_tier
 
     def test_schedule_dispatch_order(self):

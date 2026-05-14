@@ -27,6 +27,7 @@ class Subject(str, Enum):
     GAME = "game"
     PLAYER_PROP = "player_prop"
     SLATE = "slate"
+    PARLAY_SCAN = "parlay_scan"
     COMPARISON = "comparison"
     BANKROLL = "bankroll"
     NEWS_CONTEXT = "news_context"
@@ -77,6 +78,7 @@ class OutputPackage(str, Enum):
     PLAIN_EXPLANATION = "plain_explanation"
     COMPACT_SUMMARY = "compact_summary"
     LIMITED_CONTEXT_ANSWER = "limited_context_answer"  # ultra-low-data fallback
+    ANCHOR_PARLAYS = "anchor_parlays"                  # ranked anchor parlay recommendations
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +237,7 @@ class ExecutionResult(BaseModel):
     research_facts: List[GatheredFact] = Field(default_factory=list)
     data_quality_score: float = 0.0
     data_completeness: Dict[str, str] = Field(default_factory=dict)  # key → "real" | "defaulted" | "missing"
+    extra: Dict[str, Any] = Field(default_factory=dict, description="Mode-specific output (e.g., parlay scan results)")
 
 
 # ---------------------------------------------------------------------------

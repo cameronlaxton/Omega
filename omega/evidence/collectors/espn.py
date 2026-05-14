@@ -403,10 +403,178 @@ def check_api_status() -> Dict[str, Any]:
 # Collector-protocol wrapper
 # ---------------------------------------------------------------------------
 
+def get_player_game_log(
+    player_name: str,
+    league: str,
+    last_n: int = 10,
+) -> Optional[Dict[str, Any]]:
+    """Fetch recent game log for a player via ESPN.
+
+    Uses ESPN's athlete search + game log endpoints.
+
+    Args:
+        player_name: Player's display name (e.g. "Shai Gilgeous-Alexander").
+        league: League code (e.g. "NBA").
+        last_n: Number of recent games to return.
+
+    Returns:
+        Dict with ``player_id``, ``name``, and ``games`` list, or None.
+        Each game has keys: date, pts, reb, ast, stl, blk, three_pm, min, etc.
+    """
+    league_path = _get_league_path(league)
+    if not league_path:
+        return None
+
+    # Step 1: Search for the player to get their ESPN athlete ID
+    athlete_id = _search_athlete(player_name, league_path)
+    if not athlete_id:
+        logger.debug("Could not find ESPN athlete ID for %s", player_name)
+        return None
+
+    # Step 2: Fetch game log
+    data = _make_request(
+        f"{league_path}/athletes/{athlete_id}/gamelog",
+    )
+    if not data:
+        return None
+
+    return _parse_player_game_log(data, player_name, athlete_id, last_n)
+
+
+def _search_athlete(name: str, league_path: str) -> Optional[str]:
+    """Search ESPN for a player and return their athlete ID."""
+    # ESPN athletes search endpoint
+    data = _make_request(
+        f"{league_path}/athletes",
+        params={"search": name, "limit": 5},
+    )
+    if not data:
+        return None
+
+    athletes = data.get("athletes", data.get("items", []))
+    if not athletes:
+        return None
+
+    name_lower = name.lower()
+    # Try exact match first, then partial
+    for athlete in athletes:
+        full_name = athlete.get("fullName", athlete.get("displayName", "")).lower()
+        if full_name == name_lower:
+            return str(athlete.get("id", ""))
+
+    # Fallback to first result
+    if athletes:
+        return str(athletes[0].get("id", ""))
+    return None
+
+
+def _parse_player_game_log(
+    data: Dict[str, Any],
+    player_name: str,
+    athlete_id: str,
+    last_n: int,
+) -> Optional[Dict[str, Any]]:
+    """Parse ESPN game log response into structured stat lines."""
+    # ESPN game log structure varies; handle common formats
+    categories = data.get("categories", [])
+    events = data.get("events", {})
+    season_types = data.get("seasonTypes", [])
+
+    games: List[Dict[str, Any]] = []
+
+    # Try the seasonTypes -> categories -> events structure (common for NBA)
+    for season_type in season_types:
+        for category in season_type.get("categories", []):
+            cat_events = category.get("events", [])
+            stat_labels = [
+                h.get("abbreviation", "").lower()
+                for h in category.get("headers", [])
+            ]
+
+            for event in cat_events:
+                stats_values = event.get("stats", [])
+                if not stats_values or not stat_labels:
+                    continue
+
+                game_entry: Dict[str, Any] = {
+                    "date": event.get("eventDate", ""),
+                    "opponent": event.get("opponent", {}).get("displayName", ""),
+                    "result": event.get("gameResult", ""),
+                }
+
+                # Map stat labels to values
+                for label, value in zip(stat_labels, stats_values):
+                    try:
+                        game_entry[label] = float(value) if value != "--" else 0.0
+                    except (ValueError, TypeError):
+                        game_entry[label] = value
+
+                # Normalize common stat key names
+                _normalize_stat_keys(game_entry)
+                games.append(game_entry)
+
+    # Also try flat categories structure
+    if not games and categories:
+        for category in categories:
+            stat_labels = [
+                h.get("abbreviation", "").lower()
+                for h in category.get("headers", [])
+            ]
+            for event in category.get("events", []):
+                stats_values = event.get("stats", [])
+                if not stats_values:
+                    continue
+                game_entry = {"date": event.get("eventDate", "")}
+                for label, value in zip(stat_labels, stats_values):
+                    try:
+                        game_entry[label] = float(value) if value != "--" else 0.0
+                    except (ValueError, TypeError):
+                        game_entry[label] = value
+                _normalize_stat_keys(game_entry)
+                games.append(game_entry)
+
+    if not games:
+        return None
+
+    # Most recent first, limit to last_n
+    games = games[:last_n]
+
+    return {
+        "player_id": athlete_id,
+        "name": player_name,
+        "games": games,
+    }
+
+
+def _normalize_stat_keys(game: Dict[str, Any]) -> None:
+    """Normalize ESPN stat abbreviations to Omega stat keys in-place."""
+    key_map = {
+        "pts": "pts",
+        "reb": "reb",
+        "ast": "ast",
+        "stl": "stl",
+        "blk": "blk",
+        "3pm": "3pm",
+        "3pt": "3pm",
+        "min": "min",
+        "fgm": "fgm",
+        "fga": "fga",
+        "ftm": "ftm",
+        "fta": "fta",
+        "oreb": "oreb",
+        "dreb": "dreb",
+        "to": "to",
+        "pf": "pf",
+    }
+    for old_key, new_key in key_map.items():
+        if old_key in game and new_key != old_key:
+            game[new_key] = game.pop(old_key)
+
+
 class EspnCollector:
     """Evidence-class collector backed by the ESPN public API.
 
-    Serves ``schedule`` and ``team_stat`` (via standings) evidence types.
+    Serves ``schedule``, ``team_stat``, and ``player_game_log`` evidence types.
     Implements the :class:`~omega.evidence.collectors.base.Collector` protocol.
     """
 
@@ -416,7 +584,7 @@ class EspnCollector:
 
     @property
     def evidence_types(self) -> set[str]:
-        return {"schedule", "team_stat"}
+        return {"schedule", "team_stat", "player_game_log"}
 
     @property
     def supported_leagues(self) -> set[str]:
@@ -449,6 +617,8 @@ class EspnCollector:
                 return self._collect_schedule(entity, league_upper)
             if data_type == "team_stat":
                 return self._collect_team_stats(entity, league_upper)
+            if data_type == "player_game_log":
+                return self._collect_player_game_log(entity, league_upper)
         except Exception as exc:
             logger.debug("EspnCollector.collect failed: %s", exc)
         return None
@@ -501,5 +671,21 @@ class EspnCollector:
             method="structured_api",
             trust_tier=1,
             confidence=0.85,
+            entity_matched=entity,
+        )
+
+    def _collect_player_game_log(self, entity: str, league: str):
+        from omega.evidence.collectors.base import CollectorResult
+
+        game_log = get_player_game_log(entity, league)
+        if not game_log:
+            return None
+
+        return CollectorResult(
+            data=game_log,
+            source="espn",
+            method="structured_api",
+            trust_tier=1,
+            confidence=0.90,
             entity_matched=entity,
         )

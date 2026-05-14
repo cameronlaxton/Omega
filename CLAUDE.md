@@ -1,66 +1,217 @@
 # Omega — Project Guidelines
 
+## Omega operating model
+
+Omega is a sports analytics system with bounded autonomy.
+
+The LLM may control:
+- reasoning
+- planning
+- routing
+- evidence arbitration
+- explanation
+- downgrade decisions
+
+The deterministic engine owns:
+- simulation
+- probability calibration
+- edge calculation
+- staking
+- backtesting
+- grading
+
+Do not move deterministic responsibilities into LLM logic.
+
+## Phase 6 objective
+
+Phase 6 delivers:
+1. trace persistence
+2. historical replay
+3. calibration learning
+
+Implement these incrementally, with minimal drift from the current architecture.
+
+## Source-of-truth evaluation model
+
+Omega has two evaluation planes.
+
+### Quant plane
+Purpose:
+- forecast quality
+- calibration quality
+- edge quality
+- staking quality
+
+This is the benchmark source of truth.
+
+Inputs:
+- frozen historical artifacts
+- frozen odds snapshots
+- frozen normalized contexts
+- known actual outcomes
+
+Path:
+- normalize
+- simulate
+- calibrate
+- edge
+- stake
+- grade
+
+### Replay plane
+Purpose:
+- routing quality
+- evidence selection quality
+- downgrade discipline
+- trace completeness
+- refusal discipline
+
+This is sampled audit only. It is not the default benchmark path.
+
+Inputs:
+- historical knowable-at-the-time evidence bundles
+
+Path:
+- orchestrator replay with live fetching disabled
+
+## Hard rules
+
+- Do not duplicate edge, calibration, staking, or grading logic in a second path
+- Do not make orchestrator replay the default benchmark path
+- Do not add network calls to backtest or replay fixtures
+- Do not invent new top-level architecture unless current modules cannot support the requirement
+- Prefer extending existing packages over introducing parallel systems
+- Every persistence format must be versioned
+- Every replay path must be reproducible
+- Every calibration fit must be attributable to a specific dataset and profile version
+- Do not invent progress, files, integrations, benchmarks, or capabilities that do not exist
+- Ground recommendations in the actual repo state before proposing structural change
+
+## Anti-overengineering rule
+
+Before adding a model, service, abstraction, or package, ask:
+
+Does this directly prevent bad sim inputs, bad recommendations, bad replay, or bad backtests?
+
+If no, defer it.
+
+## Required invariants
+
+- the same frozen quant artifact must always produce the same simulation seed
+- backtest and production paths must share the same calibration selection policy
+- traces must be persistable without depending on request/response wrapper objects
+- outcome attachment must happen after initial trace persistence, not by mutating source records ad hoc
+- replay mode must never hit live data providers
+- historical artifacts must exclude post-outcome information from pre-decision inputs
+- deterministic claims must be backed by rerun-safe tests
+
+## Preferred ownership boundaries
+
+- `omega/reasoning/*` owns orchestration and replay-mode hooks
+- `omega/trace/*` owns trace persistence and retrieval
+- `omega/strategy/*` owns backtest artifacts, historical grading, and benchmark execution
+- `omega/core/calibration/*` owns calibration fit logic, profiles, and selection policy
+- `docs/phase6/*` owns phase-specific design specifications
+
+Prefer responsibility-based architecture over file-based sprawl.
+
+Do not preserve weak structure just because it already exists. If the current layout creates hidden coupling, fake abstractions, or parallel pipelines, flag it explicitly and propose a better boundary with migration steps.
+
+## Expected implementation style
+
+- small typed models
+- explicit schema versions
+- deterministic seed derivation
+- contract-first design
+- phased, testable changes
+- unit tests first for converters, policies, and grading
+- integration tests for end-to-end persistence and replay
+- minimal hidden behavior
+- explicit rollback path for major changes
+
+## Working mode
+
 You are acting as a coordinated software design and implementation partner for this project.
 
-Operate through specialized subagent roles when useful, but keep one unified architectural worldview. Do not invent progress, files, capabilities, or integrations that do not exist. Ground all recommendations in the actual repo state and clearly separate:
-1. current truth
-2. proposed design
-3. implementation steps
-4. risks and tradeoffs
+Use specialized subagent roles when useful, but maintain one unified architectural worldview. Subagents are execution lenses, not separate product brains.
 
-Available subagent roles you may adopt when relevant:
-- Product Architect
+Available roles:
+- System Architect
 - Repo Auditor
 - Refactor Planner
 - Data Pipeline Designer
 - Simulation Engineer
 - Evaluation Engineer
 - API/Contract Designer
-- Frontend/Product UX Agent
+- Frontend/Product UX Agent (future phases)
 - Prompt/Agent Systems Designer
 - QA/Red Team Reviewer
 - DevOps/Runtime Agent
 - Documentation Steward
 
-## Rules:
-- Prefer responsibility-based architecture over file-based sprawl
-- Do not overfit to the current repo if the structure is weak
-- Flag dead code, parallel pipelines, hidden coupling, and fake abstractions
-- Prefer contract-first, testable, phased changes
-- Every major recommendation must include failure modes, verification, and rollback thoughts
-- When uncertain, say so explicitly
-- Keep recommendations aligned to long-term maintainability, auditability, and reproducibility
+Choose only the roles that materially improve the task. Do not force role theater when one role is enough.
 
-For each substantial task, return:
+## Review standards
+
+Always distinguish clearly between:
+1. current truth
+2. proposed design
+3. implementation steps
+4. risks and tradeoffs
+
+Flag explicitly:
+- dead code
+- parallel pipelines
+- hidden coupling
+- fake abstractions
+- nondeterministic behavior
+- unverified assumptions
+
+When uncertain, say so explicitly.
+
+Keep recommendations aligned to:
+- long-term maintainability
+- auditability
+- reproducibility
+- contract clarity
+- low operational surprise
+
+## Required response shape for substantial tasks
+
+For each substantial design or implementation task, return:
+
 - Role(s) used
 - Current-state findings
 - Recommendation
 - Why this is better
-- Risks
+- Risks and failure modes
+- Verification
+- Rollback thoughts
 - Next implementation steps
 
-## End-State Vision
+## Implementation discipline
 
-Keep Omega's end-state in mind as you design and review the system:
+Prefer:
+- modifying existing domains over creating new ones
+- shared policy paths over duplicated logic
+- explicit adapters over hidden cross-layer coupling
+- stable contracts over convenience dicts
+- artifact-driven evaluation over ad hoc replay inputs
 
-Omega is not meant to become just a sports model app with some LLM features bolted on. The target is a reasoning-led quality agent sitting on top of a deterministic quantitative engine. Its job is to understand the user's real intent, judge whether the available evidence is sufficient and trustworthy, choose the right analysis path, decide when simulation is appropriate, downgrade or refuse when quality is weak, and explain outputs clearly and honestly. The LLM should grow primarily in the control, planning, arbitration, and explanation layers; not replace the deterministic engine of record for simulation, calibration, backtesting, and staking. Build toward an Omega that feels adaptive and intelligent at the decision-quality layer, while remaining disciplined, auditable, and reproducible at the execution layer.
+Avoid:
+- broad rewrites without migration sequencing
+- mixing online and historical evaluation concerns
+- silent fallback behavior in benchmark code
+- policy decisions embedded in multiple call sites
 
-## Anti-Overengineering Constraint
+If proposing a change to an existing flow, name the current files and current seam first.
 
-Before adding anything, ask: "Does this directly prevent bad sim inputs, bad recommendations, or bad backtests?" If the answer is no, it should probably be deferred.
-
-## Architecture (5 layers)
-
-1. **Conversation** (`omega/api/`) — FastAPI, sessions, SSE streaming
-2. **Reasoning** (`omega/reasoning/`) — intent, routing, planning, quality gate, orchestration, LLM client
-3. **Evidence** (`omega/evidence/`) — collectors, entity resolution, validation, fusion, pipeline
-4. **Execution** (`omega/core/`) — Monte Carlo simulation, archetypes, calibration, contracts, staking
-5. **Synthesis** (`omega/synthesis/`) — response composition across 11 output package types
-
-## Testing
-
-```bash
-python -m pytest tests/ -v
-```
-
-295 tests, ~10s. All tests run without API keys (heuristic/deterministic paths).
+For each substantial task, return:
+- Roles used
+- Current repo truth
+- Design recommendation
+- Files to create or modify
+- Failure modes and risks
+- Verification plan
+- Rollback plan
+- Ordered implementation steps

@@ -234,3 +234,28 @@ class TestCalibration:
         result = calibrate_probability(0.85, method="shrinkage")
         assert isinstance(result, dict)
         assert 0 < result["calibrated"] < 1
+
+    def test_apply_calibration_shared_policy(self):
+        """apply_calibration is the single source of truth for both paths."""
+        from omega.core.calibration.probability import apply_calibration
+
+        # Extreme probability should be calibrated
+        cal = apply_calibration(0.95)
+        assert 0.5 < cal < 0.95, "Extreme prob must be shrunk"
+
+        # Mild probability (within gate) should pass through unchanged
+        cal_mild = apply_calibration(0.65)
+        assert cal_mild == 0.65, "Mild prob must not be touched by gate"
+
+    def test_calibration_parity_service_and_backtest(self):
+        """Production service and backtest engine use the same calibration."""
+        from omega.core.calibration.probability import apply_calibration
+        from omega.core.contracts.service import _calibrate
+
+        test_probs = [0.05, 0.15, 0.50, 0.65, 0.85, 0.92, 0.99]
+        for p in test_probs:
+            assert apply_calibration(p) == _calibrate(p), (
+                f"Parity violation at raw_prob={p}: "
+                f"apply_calibration={apply_calibration(p)}, "
+                f"_calibrate={_calibrate(p)}"
+            )

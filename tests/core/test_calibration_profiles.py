@@ -1,0 +1,411 @@
+"""
+Tests for Phase 6c: Calibration profiles, registry, fitter, and selection.
+
+All tests are deterministic — no network calls, no LLM.
+"""
+
+import json
+import os
+import tempfile
+
+import pytest
+
+
+# -----------------------------------------------------------------------
+# Fixtures
+# -----------------------------------------------------------------------
+
+def _make_profile(**overrides):
+    """Create a CalibrationProfile with sensible defaults."""
+    from omega.core.calibration.profiles import CalibrationProfile
+    defaults = {
+        "profile_id": "test_nba_v1",
+        "version": 1,
+        "method": "shrinkage",
+        "league": "NBA",
+        "params": {"shrink_factor": 0.6},
+        "training_window": "2025-01-01/2025-06-30",
+        "sample_size": 200,
+        "dataset_hash": "abc123def456",
+        "metrics": {"brier_score": 0.22, "calibration_error": 0.04, "log_loss": 0.65},
+    }
+    defaults.update(overrides)
+    return CalibrationProfile(**defaults)
+
+
+def _make_graded_traces(n=50, bias=0.0):
+    """Synthetic graded traces matching TraceStore.get_graded_traces() shape.
+
+    Creates traces where home_win_prob correlates with actual outcomes,
+    with optional bias to create overconfidence.
+    """
+    import random
+    random.seed(42)
+    traces = []
+    for i in range(n):
+        raw_prob = random.uniform(0.3, 0.8) + bias
+        raw_prob = max(0.1, min(0.95, raw_prob))
+        # Outcome correlates with probability
+        actual_home_win = random.random() < (raw_prob * 0.9)  # slightly less than predicted
+        traces.append({
+            "trace_id": f"trace-{i:04d}",
+            "league": "NBA",
+            "predictions": {"home_win_prob": raw_prob * 100},  # stored as percentage
+            "_outcome": {
+                "outcome_id": f"out-{i:04d}",
+                "home_score": 110 if actual_home_win else 95,
+                "away_score": 95 if actual_home_win else 110,
+                "result": "home_win" if actual_home_win else "away_win",
+            },
+        })
+    return traces
+
+
+# -----------------------------------------------------------------------
+# CalibrationProfile model tests
+# -----------------------------------------------------------------------
+
+class TestCalibrationProfile:
+
+    def test_create_valid(self):
+        profile = _make_profile()
+        assert profile.profile_id == "test_nba_v1"
+        assert profile.method == "shrinkage"
+        assert profile.league == "NBA"
+        assert profile.schema_version == 1
+
+    def test_round_trip(self):
+        from omega.core.calibration.profiles import CalibrationProfile
+        profile = _make_profile(method="isotonic", params={"calibration_map": {0.5: 0.48}})
+        dumped = profile.model_dump()
+        restored = CalibrationProfile(**dumped)
+        assert restored == profile
+
+    def test_json_round_trip(self):
+        from omega.core.calibration.profiles import CalibrationProfile
+        profile = _make_profile()
+        json_str = profile.model_dump_json()
+        restored = CalibrationProfile.model_validate_json(json_str)
+        assert restored == profile
+
+    def test_default_status_is_candidate(self):
+        from omega.core.calibration.profiles import ProfileStatus
+        profile = _make_profile()
+        assert profile.status == ProfileStatus.CANDIDATE
+
+
+# -----------------------------------------------------------------------
+# CalibrationRegistry tests
+# -----------------------------------------------------------------------
+
+class TestCalibrationRegistry:
+
+    def test_register_and_list(self):
+        from omega.core.calibration.registry import CalibrationRegistry
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            os.unlink(path)  # start with no file
+            reg = CalibrationRegistry(path=path)
+            profile = _make_profile()
+            reg.register(profile)
+            listed = reg.list_profiles()
+            assert len(listed) == 1
+            assert listed[0].profile_id == "test_nba_v1"
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_get_production_none(self):
+        from omega.core.calibration.registry import CalibrationRegistry
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            os.unlink(path)
+            reg = CalibrationRegistry(path=path)
+            profile = _make_profile()
+            reg.register(profile)
+            assert reg.get_production("NBA") is None  # still candidate
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_promote_workflow(self):
+        from omega.core.calibration.profiles import ProfileStatus
+        from omega.core.calibration.registry import CalibrationRegistry
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            os.unlink(path)
+            reg = CalibrationRegistry(path=path)
+
+            p1 = _make_profile(profile_id="nba_v1")
+            p2 = _make_profile(profile_id="nba_v2", version=2)
+            reg.register(p1)
+            reg.register(p2)
+
+            # Promote p1
+            reg.promote("nba_v1")
+            prod = reg.get_production("NBA")
+            assert prod is not None
+            assert prod.profile_id == "nba_v1"
+
+            # Promote p2 — p1 should be archived
+            reg.promote("nba_v2")
+            prod = reg.get_production("NBA")
+            assert prod.profile_id == "nba_v2"
+
+            archived = reg.get_profile("nba_v1")
+            assert archived.status == ProfileStatus.ARCHIVED
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_reject(self):
+        from omega.core.calibration.profiles import ProfileStatus
+        from omega.core.calibration.registry import CalibrationRegistry
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            os.unlink(path)
+            reg = CalibrationRegistry(path=path)
+            reg.register(_make_profile())
+            reg.reject("test_nba_v1", "Brier score degraded")
+            p = reg.get_profile("test_nba_v1")
+            assert p.status == ProfileStatus.REJECTED
+            assert p.reject_reason == "Brier score degraded"
+            assert reg.get_production("NBA") is None
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_empty_file(self):
+        from omega.core.calibration.registry import CalibrationRegistry
+        reg = CalibrationRegistry(path="/tmp/nonexistent_profiles_12345.json")
+        assert reg.get_production("NBA") is None
+        assert reg.list_profiles() == []
+
+    def test_duplicate_id_raises(self):
+        from omega.core.calibration.registry import CalibrationRegistry
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            os.unlink(path)
+            reg = CalibrationRegistry(path=path)
+            reg.register(_make_profile())
+            with pytest.raises(ValueError, match="already exists"):
+                reg.register(_make_profile())
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+
+# -----------------------------------------------------------------------
+# CalibrationFitter tests
+# -----------------------------------------------------------------------
+
+class TestCalibrationFitter:
+
+    def test_extract_pairs(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = _make_graded_traces(n=50)
+        fitter = CalibrationFitter()
+        preds, outs = fitter.extract_pairs(traces)
+        assert len(preds) == 50
+        assert len(outs) == 50
+        assert all(0.0 <= p <= 1.0 for p in preds)
+        assert all(o in (0, 1) for o in outs)
+
+    def test_extract_pairs_skips_incomplete(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = [
+            {"predictions": None, "_outcome": {"result": "home_win"}},
+            {"predictions": {"home_win_prob": 60}, "_outcome": None},
+            {"predictions": {"home_win_prob": 65}, "_outcome": {"result": "home_win"}},
+        ]
+        fitter = CalibrationFitter()
+        preds, outs = fitter.extract_pairs(traces)
+        assert len(preds) == 1
+        assert preds[0] == pytest.approx(0.65, abs=0.01)
+        assert outs[0] == 1
+
+    def test_fit_isotonic_reproducible(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = _make_graded_traces(n=100)
+        fitter = CalibrationFitter()
+        preds, outs = fitter.extract_pairs(traces)
+
+        p1 = fitter.fit_isotonic(preds, outs, "NBA")
+        p2 = fitter.fit_isotonic(preds, outs, "NBA")
+
+        assert p1.params == p2.params
+        assert p1.dataset_hash == p2.dataset_hash
+
+    def test_fit_isotonic_monotonic(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = _make_graded_traces(n=100)
+        fitter = CalibrationFitter()
+        preds, outs = fitter.extract_pairs(traces)
+        profile = fitter.fit_isotonic(preds, outs, "NBA")
+
+        cal_map = profile.params["calibration_map"]
+        sorted_keys = sorted(cal_map.keys())
+        values = [cal_map[k] for k in sorted_keys]
+        for i in range(len(values) - 1):
+            assert values[i] <= values[i + 1] + 1e-9, (
+                f"Monotonicity violation at index {i}: {values[i]} > {values[i+1]}"
+            )
+
+    def test_fit_shrinkage(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        # Create overconfident traces (bias predictions upward)
+        traces = _make_graded_traces(n=100, bias=0.1)
+        fitter = CalibrationFitter()
+        preds, outs = fitter.extract_pairs(traces)
+        profile = fitter.fit_shrinkage(preds, outs, "NBA")
+
+        assert profile.method == "shrinkage"
+        assert 0.3 <= profile.params["shrink_factor"] <= 1.0
+
+    def test_fit_too_few_samples(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        fitter = CalibrationFitter()
+        with pytest.raises(ValueError, match="at least"):
+            fitter.fit_isotonic([0.5] * 10, [1] * 10, "NBA")
+
+    def test_evaluate_metrics(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = _make_graded_traces(n=100)
+        fitter = CalibrationFitter()
+        preds, outs = fitter.extract_pairs(traces)
+        profile = fitter.fit_isotonic(preds, outs, "NBA")
+        metrics = fitter.evaluate(profile, preds, outs)
+
+        assert "brier_score" in metrics
+        assert "calibration_error" in metrics
+        assert "log_loss" in metrics
+        assert metrics["n_eval"] == 100
+        assert 0.0 <= metrics["brier_score"] <= 1.0
+        assert 0.0 <= metrics["calibration_error"] <= 1.0
+        assert metrics["log_loss"] >= 0.0
+
+    def test_compare_recommend(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = _make_graded_traces(n=100)
+        fitter = CalibrationFitter()
+        preds, outs = fitter.extract_pairs(traces)
+
+        candidate = fitter.fit_isotonic(preds, outs, "NBA")
+
+        # Make a deliberately worse incumbent (extreme shrinkage)
+        incumbent = _make_profile(
+            profile_id="incumbent",
+            method="shrinkage",
+            params={"shrink_factor": 0.3},  # Over-shrinks toward 0.5
+        )
+
+        result = fitter.compare(candidate, incumbent, preds, outs)
+        assert "candidate_metrics" in result
+        assert "incumbent_metrics" in result
+        assert "recommend_promote" in result
+        assert isinstance(result["recommend_promote"], bool)
+
+
+# -----------------------------------------------------------------------
+# apply_calibration backward compatibility + profile selection
+# -----------------------------------------------------------------------
+
+class TestApplyCalibration:
+
+    def test_backward_compat_no_league(self):
+        """apply_calibration(p) without league must match pre-Phase-6c behavior."""
+        from omega.core.calibration.probability import apply_calibration
+
+        # Mild probs pass through (gate check)
+        assert apply_calibration(0.65) == 0.65
+        assert apply_calibration(0.50) == 0.50
+
+        # Extreme probs get calibrated
+        cal_95 = apply_calibration(0.95)
+        assert cal_95 < 0.95  # shrunk
+        assert cal_95 > 0.50  # still above midpoint
+
+    def test_with_league_no_profile_uses_static(self):
+        """apply_calibration(p, league='XYZ') with no profile falls back to static."""
+        from omega.core.calibration.probability import apply_calibration
+
+        # No production profile for a made-up league
+        static = apply_calibration(0.95)
+        with_league = apply_calibration(0.95, league="NONEXISTENT_LEAGUE")
+        assert static == with_league
+
+    def test_with_league_and_profile(self):
+        """When a production profile exists, apply_calibration uses it."""
+        from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus
+        from omega.core.calibration.registry import CalibrationRegistry
+        from omega.core.calibration.probability import apply_calibration
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            os.unlink(path)
+            reg = CalibrationRegistry(path=path)
+
+            # Register and promote an isotonic profile for NBA
+            profile = CalibrationProfile(
+                profile_id="test_iso_nba",
+                version=1,
+                method="isotonic",
+                league="NBA",
+                params={"calibration_map": {
+                    0.0: 0.10, 0.2: 0.18, 0.4: 0.38,
+                    0.5: 0.48, 0.6: 0.55, 0.8: 0.72, 1.0: 0.85,
+                }},
+                training_window="2025-01-01/2025-06-30",
+                sample_size=200,
+                dataset_hash="testhash",
+                metrics={"brier_score": 0.20},
+            )
+            reg.register(profile)
+            reg.promote("test_iso_nba")
+
+            # Monkeypatch _get_active_profile to use our temp registry
+            import omega.core.calibration.probability as prob_mod
+            original = prob_mod._get_active_profile
+
+            def _patched_get(league):
+                r = CalibrationRegistry(path=path)
+                return r.get_production(league)
+
+            prob_mod._get_active_profile = _patched_get
+            try:
+                # With profile: should use isotonic map (0.65 → interpolated)
+                result_nba = apply_calibration(0.65, league="NBA")
+                # Without profile: static fallback
+                result_static = apply_calibration(0.65)
+
+                # The isotonic profile maps 0.65 differently than static
+                # Static: 0.65 passes through gate (returns 0.65)
+                # Isotonic: 0.65 interpolates between 0.6→0.55 and 0.8→0.72
+                assert result_static == 0.65  # gate check passes through
+                assert result_nba != 0.65  # profile changes it
+                assert 0.0 < result_nba < 1.0  # sanity
+            finally:
+                prob_mod._get_active_profile = original
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_parity_service_and_backtest_with_league(self):
+        """_calibrate(p, league) must equal apply_calibration(p, league)."""
+        from omega.core.calibration.probability import apply_calibration
+        from omega.core.contracts.service import _calibrate
+
+        test_probs = [0.05, 0.15, 0.50, 0.65, 0.85, 0.92, 0.99]
+        for p in test_probs:
+            # Without league (existing parity)
+            assert apply_calibration(p) == _calibrate(p), f"Parity fail at {p}"
+            # With league (new parity)
+            assert apply_calibration(p, league="NBA") == _calibrate(p, league="NBA"), (
+                f"League parity fail at {p}"
+            )

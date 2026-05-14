@@ -508,9 +508,11 @@ class TestRetrievalOrchestrator:
         assert facts[0].result.source == "espn"
 
     def test_retrieve_facts_with_mocked_odds(self):
-        """Odds API direct returns odds data."""
+        """Odds API direct returns odds data when API key is available."""
+        import os
         from omega.core.models import GatherSlot
         from omega.evidence.pipeline.retrieval import retrieve_facts
+        import omega.evidence.registry as reg_mod
 
         mock_games = [{
             "game_id": "abc",
@@ -533,8 +535,20 @@ class TestRetrievalOrchestrator:
 
         slot = GatherSlot(key="odds_lakers", data_type="odds", entity="Lakers", league="NBA")
 
-        with patch("omega.evidence.collectors.odds_api.get_upcoming_odds", return_value=mock_games):
-            facts = retrieve_facts([slot])
+        # Ensure OddsApiCollector is registered by setting the env var
+        old_key = os.environ.get("ODDS_API_KEY")
+        old_registry = reg_mod._default_registry
+        try:
+            os.environ["ODDS_API_KEY"] = "test-key"
+            reg_mod._default_registry = None  # force rebuild
+            with patch("omega.evidence.collectors.odds_api.get_upcoming_odds", return_value=mock_games):
+                facts = retrieve_facts([slot])
+        finally:
+            if old_key is None:
+                os.environ.pop("ODDS_API_KEY", None)
+            else:
+                os.environ["ODDS_API_KEY"] = old_key
+            reg_mod._default_registry = old_registry
 
         assert len(facts) == 1
         assert facts[0].filled is True

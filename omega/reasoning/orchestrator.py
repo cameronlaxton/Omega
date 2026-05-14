@@ -50,6 +50,7 @@ from omega.reasoning.gatherer import (
 from omega.reasoning.evaluator import apply_quality_gate
 from omega.reasoning.llm.client import LLMClient
 from omega.synthesis.composer import compose_response
+from omega.skills import get_skill
 
 logger = logging.getLogger("omega.reasoning.orchestrator")
 
@@ -160,6 +161,7 @@ class Orchestrator:
                 "critical_filled": critical_inputs_filled(facts),
                 "sources_used": sources_used,
             }
+            self._emit_skill("evidence-validator", facts=facts)
 
             # 5. Quality gate
             emit("quality_gate", {"message": "Evaluating data quality..."})
@@ -168,6 +170,12 @@ class Orchestrator:
             trace.stage_timings["quality_gate"] = time.monotonic() - t0
             trace.revised_plan = revised_plan.model_dump()
             trace.downgrades = revised_plan.downgrades
+            self._emit_skill(
+                "data-quality-grader",
+                facts=facts,
+                quality=trace.aggregate_quality,
+                revised_plan=revised_plan,
+            )
 
             # 6. Execution
             emit("executing", {"message": "Running analysis..."})
@@ -211,7 +219,9 @@ class Orchestrator:
 
             # Finalize trace
             trace.total_duration_ms = (time.monotonic() - pipeline_start) * 1000
-            response["trace"] = trace.model_dump(mode="json")
+            trace_dict = trace.model_dump(mode="json")
+            self._emit_skill("trace-recorder", trace=trace_dict)
+            response["trace"] = trace_dict
 
             emit("done", None)
             return response
@@ -305,6 +315,10 @@ class Orchestrator:
         mode = plan.execution_modes[0] if plan.execution_modes else ExecutionMode.RESEARCH
         quality = compute_aggregate_quality(facts)
         completeness = build_data_completeness(facts)
+
+        # Anchor parlay scan — bypass normal simulation path
+        if Subject.PARLAY_SCAN in understanding.subjects:
+            return self._execute_parlay_scan(understanding, facts, quality, completeness)
 
         if mode == ExecutionMode.NATIVE_SIM:
             return self._execute_simulation(understanding, facts, quality, completeness, trace)
@@ -411,9 +425,78 @@ class Orchestrator:
                 data_completeness=completeness,
             )
 
+    def _execute_parlay_scan(
+        self,
+        understanding: QueryUnderstanding,
+        facts: List[GatheredFact],
+        quality: float,
+        completeness: Dict[str, str],
+    ) -> ExecutionResult:
+        """Execute anchor parlay scan using gathered evidence."""
+        from omega.strategy.anchor.gather import gather_slate_data
+        from omega.strategy.anchor.scanner import AnchorParlayConfig, scan_slate
+        from omega.strategy.anchor.formatter import format_scan_result
+
+        league = understanding.league or "NBA"
+
+        try:
+            # Gather game data (schedule + game logs + prop odds)
+            games_data = gather_slate_data(league)
+
+            # Run the scanner
+            config = AnchorParlayConfig(league=league)
+            scan_result = scan_slate(games_data, config)
+
+            # Format for response
+            formatted = format_scan_result(scan_result)
+
+            return ExecutionResult(
+                mode=ExecutionMode.RESEARCH,
+                simulation=None,
+                edges=[],
+                best_bet=None,
+                research_facts=[f for f in facts if f.filled],
+                data_quality_score=quality,
+                data_completeness=completeness,
+                extra={"parlay_scan": {
+                    "formatted": formatted,
+                    "parlays_found": scan_result.parlays_built,
+                    "games_scanned": scan_result.games_scanned,
+                    "anchors_found": scan_result.anchors_found,
+                }},
+            )
+        except Exception as e:
+            logger.warning("Parlay scan failed: %s", e)
+            return ExecutionResult(
+                mode=ExecutionMode.RESEARCH,
+                simulation=None,
+                edges=[],
+                best_bet=None,
+                research_facts=[f for f in facts if f.filled],
+                data_quality_score=quality,
+                data_completeness=completeness,
+            )
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _emit_skill(self, name: str, **kwargs: Any) -> None:
+        """Call a skill observer if enabled. Never raises; errors are logged."""
+        try:
+            skill = get_skill(name)
+            if skill is None:
+                return
+            obs = skill.observe(**kwargs)
+            if not obs.ok:
+                logger.debug(
+                    "Skill %r findings at stage %r: %s",
+                    name, obs.stage, obs.findings,
+                )
+            from omega.skills.logger import write_event
+            write_event(obs.to_dict())
+        except Exception as exc:
+            logger.warning("_emit_skill(%r) failed: %s", name, exc)
 
     def _clarification_response(
         self, question: str, understanding: QueryUnderstanding,

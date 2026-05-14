@@ -91,6 +91,8 @@ def _auto_generate_queries(slot: GatherSlot) -> List[str]:
         queries.append(f"{entity} {league} player stats current season")
     elif data_type == "player_game_log":
         queries.append(f"{entity} {league} recent game log last 10 games")
+    elif data_type == "player_prop_odds":
+        queries.append(f"{entity} {league} player props points rebounds assists odds today")
     elif data_type == "injury":
         queries.append(f"{entity} {league} injury report today")
     elif data_type == "schedule":
@@ -106,11 +108,18 @@ def _execute_search(query: str, slot: Optional[GatherSlot] = None) -> List[Searc
 
     Priority:
     1. Perplexity Sonar structured (returns JSON matching extractor schema)
-    2. Anthropic web_search tool (fallback, returns prose)
+    2. OpenAI GPT-4o-mini with web search (Bing-based, different index)
+    3. Anthropic web_search tool (fallback, returns prose)
     """
     perplexity_key = os.environ.get("PERPLEXITY_API_KEY")
     if perplexity_key and slot is not None:
         results = _search_perplexity_structured(query, perplexity_key, slot)
+        if results:
+            return results
+
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if openai_key:
+        results = _search_openai(query, openai_key)
         if results:
             return results
 
@@ -120,7 +129,7 @@ def _execute_search(query: str, slot: Optional[GatherSlot] = None) -> List[Searc
         if results:
             return results
 
-    logger.warning("No search backend configured (set PERPLEXITY_API_KEY or ANTHROPIC_API_KEY)")
+    logger.warning("No search backend configured (set PERPLEXITY_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY)")
     return []
 
 
@@ -148,7 +157,14 @@ _TYPE_INSTRUCTIONS: Dict[str, str] = {
     ),
     "player_game_log": (
         "Search for recent game logs for {entity} in {league}. "
-        "Find the last 5-10 games with points, rebounds, assists, and minutes."
+        "Find the last 5-10 games with points, rebounds, assists, steals, blocks, "
+        "three-pointers made, and minutes played per game."
+    ),
+    "player_prop_odds": (
+        "Search for today's player prop betting lines for {entity} in {league}. "
+        "Find over/under lines and American odds for points, rebounds, assists, "
+        "and three-pointers made from major sportsbooks (DraftKings, FanDuel, BetMGM). "
+        "Include the threshold line (e.g., 20.5 points) and the over/under odds."
     ),
     "injury": (
         "Search for the current {league} injury report for {entity}. "
@@ -261,7 +277,64 @@ def _search_perplexity_structured(
 
 
 # ---------------------------------------------------------------------------
-# Anthropic web_search tool (fallback)
+# OpenAI web search (secondary fallback — Bing-based, different search index)
+# ---------------------------------------------------------------------------
+
+def _search_openai(query: str, api_key: str) -> List[SearchResult]:
+    """Search using OpenAI's GPT-4o-mini with web search tool."""
+    from openai import OpenAI
+
+    try:
+        client = OpenAI(api_key=api_key)
+        response = client.responses.create(
+            model="gpt-4o-mini",
+            tools=[{"type": "web_search_preview"}],
+            input=(
+                "You are a sports data research assistant. "
+                "Return factual, current sports statistics, odds, and betting lines. "
+                "Include specific numbers (spreads, moneylines, totals, stats). "
+                "Be precise and data-focused.\n\n"
+                f"Search query: {query}"
+            ),
+        )
+
+        results: List[SearchResult] = []
+
+        for item in response.output:
+            if item.type == "message":
+                for content in item.content:
+                    if content.type == "output_text":
+                        text = content.text
+                        if text.strip():
+                            results.append(SearchResult(
+                                url="openai://web_search",
+                                title=f"OpenAI Web Search: {query[:80]}",
+                                snippet=text,
+                                domain="openai.web_search",
+                            ))
+                        # Extract annotations/citations if present
+                        annotations = getattr(content, "annotations", []) or []
+                        for ann in annotations:
+                            url = getattr(ann, "url", None)
+                            if url:
+                                domain = _extract_domain(url)
+                                results.append(SearchResult(
+                                    url=url,
+                                    title=f"Source: {domain}",
+                                    snippet="",
+                                    domain=domain,
+                                ))
+
+        logger.info("OpenAI web search returned %d results for: %s", len(results), query[:60])
+        return results
+
+    except Exception as exc:
+        logger.warning("OpenAI web search failed: %s", exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Anthropic web_search tool (tertiary fallback)
 # ---------------------------------------------------------------------------
 
 def _search_anthropic(query: str, api_key: str) -> List[SearchResult]:
@@ -403,7 +476,8 @@ class FallbackSearchCollector:
 
     _ALL_TYPES = {
         "schedule", "odds", "team_stat", "player_stat",
-        "player_game_log", "injury", "environment", "news_signal",
+        "player_game_log", "player_prop_odds", "injury",
+        "environment", "news_signal",
     }
 
     @property
@@ -424,7 +498,9 @@ class FallbackSearchCollector:
 
     @property
     def trust_tier(self) -> int:
-        return 3
+        # Default tier for registry ordering; actual results may be
+        # promoted to tier 2 when structured data has sufficient numeric fields.
+        return 2
 
     def collect(
         self,
@@ -473,20 +549,28 @@ class FallbackSearchCollector:
             if raw_snippets:
                 data["_raw_text"] = "\n\n".join(raw_snippets)
 
-            # Count surviving numeric values; cap confidence if too few
+            # Count surviving numeric values; promote tier if structured
             numeric_count = sum(
                 1 for v in data.values()
                 if isinstance(v, (int, float)) and not isinstance(v, bool)
             )
-            confidence = min(0.75, 0.70)
-            if numeric_count < 2:
-                confidence = min(confidence, 0.30)
+
+            # Structured JSON with >= 3 numeric fields → tier 2, up to 0.85
+            # Raw prose or sparse data → tier 3, capped at 0.75
+            if structured_data and numeric_count >= 3:
+                trust_tier = 2
+                confidence = min(0.85, 0.50 + numeric_count * 0.05)
+            else:
+                trust_tier = 3
+                confidence = 0.70
+                if numeric_count < 2:
+                    confidence = 0.30
 
             return CollectorResult(
                 data=data,
                 source="web_search",
                 method="llm_extraction",
-                trust_tier=max(self.trust_tier, 3),
+                trust_tier=trust_tier,
                 confidence=confidence,
                 entity_matched=entity,
             )

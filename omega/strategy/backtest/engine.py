@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from omega.core.simulation.engine import OmegaSimulationEngine
 from omega.core.betting.odds import (
@@ -29,7 +29,8 @@ from omega.core.betting.odds import (
     implied_probability,
 )
 from omega.core.betting.kelly import recommend_stake
-from omega.core.calibration.probability import calibrate_probability
+from omega.core.calibration.probability import apply_calibration
+from omega.strategy.artifacts import FrozenArtifact, compat_dict_to_artifact
 from omega.strategy.models import BacktestResult, StrategyEntry
 
 logger = logging.getLogger("omega.strategy.backtest")
@@ -67,9 +68,12 @@ class BacktestEngine:
     def run(
         self,
         strategy: StrategyEntry,
-        games: List[HistoricalGame],
+        games: Union[List[FrozenArtifact], List[HistoricalGame], List[Dict[str, Any]]],
     ) -> BacktestResult:
         """Run a full backtest.
+
+        Accepts FrozenArtifact objects (preferred) or legacy HistoricalGame dicts.
+        Legacy dicts are auto-converted via compat_dict_to_artifact().
 
         For each game:
         1. Simulate (outcome-blind)
@@ -81,16 +85,23 @@ class BacktestEngine:
         run_id = f"bt-{uuid.uuid4().hex[:8]}"
         started_at = datetime.now(timezone.utc).isoformat()
 
+        # Normalize inputs to FrozenArtifact
+        artifacts = self._normalize_inputs(games)
+
         bets: List[Dict[str, Any]] = []
         by_league: Dict[str, Dict[str, Any]] = {}
         by_market: Dict[str, Dict[str, Any]] = {}
+        trace_ids: List[str] = []
 
-        for game in games:
-            game_bets = self._process_game(strategy, game)
+        for artifact in artifacts:
+            game_bets = self._process_artifact(strategy, artifact)
             bets.extend(game_bets)
 
+            if artifact.source_trace_id:
+                trace_ids.append(artifact.source_trace_id)
+
             # Track by league
-            league = game.get("league", "UNKNOWN")
+            league = artifact.league or "UNKNOWN"
             if league not in by_league:
                 by_league[league] = {"bets": 0, "wins": 0, "units": 0.0}
             for bet in game_bets:
@@ -164,7 +175,7 @@ class BacktestEngine:
             run_id=run_id,
             started_at=started_at,
             completed_at=datetime.now(timezone.utc).isoformat(),
-            total_games=len(games),
+            total_games=len(artifacts),
             games_with_edge=sum(1 for b in bets if b["edge_pct"] > 0),
             total_bets_placed=len(bets),
             win_count=wins,
@@ -181,24 +192,45 @@ class BacktestEngine:
             brier_score=round(brier_score, 4) if brier_score is not None else None,
             results_by_league=by_league,
             results_by_market=by_market,
+            trace_ids=trace_ids,
             passed=passed,
             rejection_reasons=rejection_reasons,
         )
+
+    @staticmethod
+    def _normalize_inputs(
+        games: Union[List[FrozenArtifact], List[Dict[str, Any]]],
+    ) -> List[FrozenArtifact]:
+        """Convert mixed inputs to a uniform list of FrozenArtifacts."""
+        if not games:
+            return []
+        if isinstance(games[0], FrozenArtifact):
+            return games  # type: ignore[return-value]
+        return [compat_dict_to_artifact(g) for g in games]
 
     def _process_game(
         self,
         strategy: StrategyEntry,
         game: HistoricalGame,
     ) -> List[Dict[str, Any]]:
-        """Process one game: simulate, evaluate, decide, grade."""
-        home_team = game.get("home_team", "Home")
-        away_team = game.get("away_team", "Away")
-        league = game.get("league", "NBA")
-        home_ctx = game.get("home_context", {})
-        away_ctx = game.get("away_context", {})
-        odds = game.get("odds", {})
-        outcome = game.get("outcome", {})
-        closing = game.get("closing_odds", odds)
+        """Legacy entry point — delegates to _process_artifact via shim."""
+        artifact = compat_dict_to_artifact(game)
+        return self._process_artifact(strategy, artifact)
+
+    def _process_artifact(
+        self,
+        strategy: StrategyEntry,
+        artifact: FrozenArtifact,
+    ) -> List[Dict[str, Any]]:
+        """Process one artifact: simulate, evaluate, decide, grade."""
+        home_team = artifact.home_team
+        away_team = artifact.away_team
+        league = artifact.league
+        home_ctx = artifact.home_context
+        away_ctx = artifact.away_context
+        odds = artifact.odds
+        outcome = artifact.outcome or {}
+        closing = artifact.closing_odds or odds
 
         # Check league filter
         if strategy.leagues and league.upper() not in [l.upper() for l in strategy.leagues]:
@@ -225,13 +257,9 @@ class BacktestEngine:
         home_prob = sim_result["home_win_prob"] / 100.0
         away_prob = sim_result["away_win_prob"] / 100.0
 
-        # Calibrate
-        cal_home = calibrate_probability(home_prob)
-        cal_away = calibrate_probability(away_prob)
-        if isinstance(cal_home, dict):
-            cal_home = cal_home.get("calibrated", home_prob)
-        if isinstance(cal_away, dict):
-            cal_away = cal_away.get("calibrated", away_prob)
+        # Calibrate via shared policy (must match production path)
+        cal_home = apply_calibration(home_prob, league=league)
+        cal_away = apply_calibration(away_prob, league=league)
 
         # Home ML
         if ml_home is not None:

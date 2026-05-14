@@ -35,6 +35,7 @@ class StrategyType(str, Enum):
     PLAYER_PROP = "player_prop"       # Player prop over/under
     SLATE_FILTER = "slate_filter"     # Full-slate edge scanning
     CORRELATION = "correlation"       # Correlated multi-leg
+    ANCHOR_PARLAY = "anchor_parlay"   # High-probability prop parlays
     CUSTOM = "custom"                 # User-defined
 
 
@@ -76,6 +77,11 @@ class BacktestResult(BaseModel):
     # Breakdown
     results_by_league: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     results_by_market: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+    # Phase 6b: Trace linkage
+    artifact_schema_version: int = Field(default=1, description="FrozenArtifact schema version used")
+    calibration_policy: str = Field(default="static_v1", description="Calibration policy applied")
+    trace_ids: List[str] = Field(default_factory=list, description="Source trace IDs from artifacts")
 
     # Verdict
     passed: bool = False

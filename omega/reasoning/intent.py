@@ -89,6 +89,11 @@ GOAL_SIGNALS = {
 SUBJECT_SIGNALS_BANKROLL = {"bankroll", "aggressive", "conservative", "risk", "sizing", "how much", "units"}
 SUBJECT_SIGNALS_PROP = {"over", "under", "points", "rebounds", "assists", "yards", "prop", "o/u"}
 SUBJECT_SIGNALS_SLATE = {"slate", "all games", "tonight's games", "today's games", "full card", "board"}
+SUBJECT_SIGNALS_PARLAY_SCAN = {
+    "anchor parlay", "anchor bet", "anchor scan", "parlay scan",
+    "find anchors", "scan anchors", "prop scan", "scan props",
+    "scan for parlays", "find parlays",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +155,12 @@ def _detect_subjects(prompt_lower: str, home: Optional[str], away: Optional[str]
 
     if has_bankroll_signals:
         subjects.append(Subject.BANKROLL)
+
+    # Check for parlay scan before prop signals (parlay scan is more specific)
+    has_parlay_scan_signals = any(s in prompt_lower for s in SUBJECT_SIGNALS_PARLAY_SCAN)
+    if has_parlay_scan_signals:
+        subjects.append(Subject.PARLAY_SCAN)
+        return subjects  # parlay scan is the primary intent
 
     if has_prop_signals:
         subjects.append(Subject.PLAYER_PROP)
