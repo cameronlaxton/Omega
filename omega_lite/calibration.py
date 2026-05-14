@@ -5,7 +5,10 @@ Calibrates model probabilities to fix unrealistic extremes (>90% or <10% too fre
 """
 
 from __future__ import annotations
-from typing import Dict, Optional
+import logging
+from typing import Any, Dict, Optional
+
+logger = logging.getLogger("omega.core.calibration.probability")
 
 
 def shrinkage_calibration(raw_prob: float, shrink_factor: float = 0.7) -> float:
@@ -126,7 +129,11 @@ def calibrate_probability(
     elif method == "cap":
         calibrated = cap_calibration(raw_prob, cap_max, cap_min)
     elif method == "isotonic":
-        calibrated = isotonic_calibration(raw_prob, calibration_map or {})
+        # Ensure calibration_map keys are floats (JSON round-trip makes them strings)
+        cmap = calibration_map or {}
+        if cmap and isinstance(next(iter(cmap)), str):
+            cmap = {float(k): v for k, v in cmap.items()}
+        calibrated = isotonic_calibration(raw_prob, cmap)
     elif method == "combined":
         shrunk = shrinkage_calibration(raw_prob, shrink_factor)
         calibrated = cap_calibration(shrunk, cap_max, cap_min)
@@ -144,11 +151,11 @@ def calibrate_probability(
 def should_apply_calibration(raw_prob: float, strict_cap: bool = False) -> bool:
     """
     Determines if calibration should be applied based on raw probability.
-    
+
     Args:
         raw_prob: Raw model probability
         strict_cap: If True, always apply calibration if outside [0.15, 0.85]
-    
+
     Returns:
         True if calibration should be applied
     """
@@ -156,3 +163,71 @@ def should_apply_calibration(raw_prob: float, strict_cap: bool = False) -> bool:
         return raw_prob > 0.85 or raw_prob < 0.15
     else:
         return raw_prob > 0.90 or raw_prob < 0.10
+
+
+# ---------------------------------------------------------------------------
+# Shared calibration policy — single source of truth
+# ---------------------------------------------------------------------------
+# INVARIANT: Both production (service.py) and backtest (engine.py) MUST call
+# apply_calibration(). Do not duplicate these parameters in other call sites.
+# Phase 6 will replace this with profile-driven selection; until then this
+# function is the canonical policy.
+# ---------------------------------------------------------------------------
+
+_POLICY_METHOD = "combined"
+_POLICY_SHRINK_FACTOR = 0.7
+_POLICY_CAP_MAX = 0.90
+_POLICY_CAP_MIN = 0.10
+
+
+def apply_calibration(raw_prob: float, league: Optional[str] = None) -> float:
+    """Apply the canonical calibration policy. Used by both service and backtest.
+
+    When a league is provided, attempts to use a learned production profile
+    for that league. Falls back to the static policy when no profile exists
+    or when league is None.
+
+    Args:
+        raw_prob: Raw model probability (0.0 to 1.0)
+        league: Optional league code (e.g. "NBA"). When provided, enables
+                profile-driven calibration.
+
+    Returns:
+        Calibrated probability as a float.
+    """
+    raw_prob = max(0.0, min(1.0, raw_prob))
+
+    # Profile-driven path (when league is provided)
+    if league is not None:
+        profile = _get_active_profile(league)
+        if profile is not None:
+            result = calibrate_probability(
+                raw_prob, method=profile.method, **profile.params
+            )
+            return result["calibrated"]
+
+    # Static fallback (current behavior, unchanged)
+    if not should_apply_calibration(raw_prob, strict_cap=False):
+        return raw_prob
+    result = calibrate_probability(
+        raw_prob,
+        method=_POLICY_METHOD,
+        shrink_factor=_POLICY_SHRINK_FACTOR,
+        cap_max=_POLICY_CAP_MAX,
+        cap_min=_POLICY_CAP_MIN,
+    )
+    return result["calibrated"]
+
+
+def _get_active_profile(league: str):
+    """Look up the production calibration profile for a league.
+
+    Returns None on any failure (missing file, import error, etc.)
+    so that callers always fall back to the static policy gracefully.
+    """
+    try:
+        from omega.core.calibration.registry import CalibrationRegistry
+        registry = CalibrationRegistry()
+        return registry.get_production(league)
+    except Exception:
+        return None

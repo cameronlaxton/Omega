@@ -19,7 +19,15 @@
       "Bash(python -m pytest tests/ -v --timeout=60)",
       "Bash(python -m pytest tests/strategy/test_artifacts.py -v)",
       "Bash(python -m pytest tests/strategy/test_parlay_math.py tests/strategy/test_anchor_detector.py -v)",
-      "Bash(python -m pytest tests/strategy/test_anchor_scanner.py -v)"
+      "Bash(python -m pytest tests/strategy/test_anchor_scanner.py -v)",
+      "Bash(python scripts/build_omega_lite.py --single-file)",
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest tests/omega_lite/test_standalone_parity.py -v)",
+      "Bash(python -m pytest tests/omega_lite/ -v)",
+      "Bash(rm -rf omega/api omega/evidence omega/reasoning/llm tests/api tests/evidence tests/research)",
+      "Bash(rm -f omega/reasoning/orchestrator.py omega/reasoning/intent.py omega/reasoning/router.py omega/reasoning/planner.py omega/strategy/anchor/gather.py tests/reasoning/test_llm_routing.py tests/reasoning/test_production_hardening.py omega_lite-v1.zip)",
+      "Bash(python -m pytest tests/ -x --ignore=tests/omega_lite)",
+      "Bash(python -m pytest tests/)"
     ]
   }
 }

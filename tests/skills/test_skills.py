@@ -124,52 +124,9 @@ class TestSkillBase:
         assert d["error"] is None
 
 
-class TestOrchestratorSkillIntegration:
-    """Prove that _emit_skill never breaks the orchestrator pipeline."""
-
-    def test_emit_skill_continues_on_skill_crash(self):
-        """If get_skill returns a skill that crashes, orchestrator logs and continues."""
-        from omega.reasoning.orchestrator import Orchestrator, OrchestratorConfig
-
-        orch = Orchestrator(OrchestratorConfig())
-
-        class ExplodingSkill(SkillBase):
-            name = "exploding"
-            stage = "test"
-            def _run(self, **kwargs):
-                raise Exception("BOOM")
-
-        # Patch get_skill to return our exploding skill
-        with patch("omega.reasoning.orchestrator.get_skill", return_value=ExplodingSkill()):
-            # Must not raise
-            orch._emit_skill("exploding", trace={"test": True})
-
-    def test_emit_skill_continues_when_disabled(self):
-        """If the skill is disabled (get_skill returns None), no error."""
-        from omega.reasoning.orchestrator import Orchestrator, OrchestratorConfig
-
-        orch = Orchestrator(OrchestratorConfig())
-
-        with patch("omega.reasoning.orchestrator.get_skill", return_value=None):
-            # Must not raise
-            orch._emit_skill("disabled-skill", trace={"test": True})
-
-    def test_emit_skill_continues_on_logger_crash(self):
-        """Even if the event logger crashes, orchestrator continues."""
-        from omega.reasoning.orchestrator import Orchestrator, OrchestratorConfig
-
-        orch = Orchestrator(OrchestratorConfig())
-
-        class OkSkill(SkillBase):
-            name = "ok-skill"
-            stage = "test"
-            def _run(self, **kwargs):
-                return SkillObservation(skill=self.name, stage=self.stage, ok=True)
-
-        with patch("omega.reasoning.orchestrator.get_skill", return_value=OkSkill()):
-            with patch("omega.skills.logger.write_event", side_effect=IOError("disk full")):
-                # Must not raise even if write_event crashes
-                orch._emit_skill("ok-skill", trace={"test": True})
+# Orchestrator-skill integration tests removed: the orchestrator was retired
+# along with the FastAPI service. Skills are now invoked directly by callers,
+# not from a long-lived orchestrator pipeline.
 
 
 # ---------------------------------------------------------------------------

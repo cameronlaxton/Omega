@@ -29,14 +29,16 @@ Used by `QueryUnderstanding.goal`: `decide`, `analyze`, `compare`, `explain`, `d
 Defined as `ExecutionMode`:
 
 - **NATIVE_SIM** — full Monte Carlo + calibration + edges. Requires critical inputs filled.
-- **RESEARCH** — fact gathering + LLM synthesis. No formal Omega edges, EV, Kelly, staking, or confidence tiers. May include ranked research leans, market-watch candidates, and “needs-input” flags when the user asks for betting value but critical inputs are incomplete.- **BANKROLL_CALC** — Kelly/staking math only. No simulation. Requires user-supplied bankroll.
-- **MIXED** — simulation for directional context, narrative for the rest. Used when data is mid-quality.
-- **NARRATIVE** — pure explanation/discussion. No numbers claimed as model output- **EXPLORATORY_MARKET_SCAN** — broad public-web scan for possible betting value when the user asks a wide slate question such as “best values today,” “today vs tomorrow,” or “what looks good.” The LLM should gather public odds/stat/news context, rank candidates, and label each item as:
-  1. Omega-ready,
-  2. research lean,
-  3. estimated lean, or
-  4. missing-data watchlist.
-  This mode must not produce a formal Bet Card unless the candidate is later run through Omega or omega_lite.
+- **RESEARCH** — fact gathering + LLM synthesis. **Zero** numbers tagged as Omega output: no edges, no EV, no Kelly, no staking, no confidence tiers, no `trace_id`. May include ranked research leans and missing-data watchlist candidates when the user asks for betting value but critical inputs are incomplete — labeled in plain language only.
+- **BANKROLL_CALC** — Kelly/staking math only. No simulation. Requires user-supplied bankroll. Math runs in Python; the LLM does not compute Kelly via text.
+- **MIXED** — simulation for directional context, narrative for the rest. Used when data is mid-quality. No formal edges or BetSlip.
+- **NARRATIVE** — pure explanation/discussion. No numbers claimed as model output.
+- **EXPLORATORY_MARKET_SCAN** — broad public-web scan for possible betting value when the user asks a wide slate question such as "best values today," "today vs tomorrow," or "what looks good." The LLM gathers public odds/stat/news context, ranks candidates, and labels each item as:
+  1. **Omega-ready** — has all critical inputs; eligible to be run through `omega_lite_standalone.analyze(...)` for a formal Bet Card.
+  2. **Research lean** — qualitative judgement only; no edge / EV / Kelly fields.
+  3. **Missing-data watchlist** — would be Omega-ready if specific named inputs were sourced.
+
+  This mode must NOT produce a formal Bet Card unless the candidate is later run through Omega or omega_lite. The previous "estimated lean" label is retired — there is no estimation tier.
 
 ## The 11 output packages
 
@@ -108,13 +110,14 @@ When you render a Bet Card from a real Omega run, mirror these fields exactly. D
 
 ## Provenance — `ExecutionTrace`
 
-Every run produces an `ExecutionTrace` with `trace_id`, `run_id`, `model_version`, per-stage timings, downgrades, gathered-facts summary, and the final predictions and recommendations. Cite the `trace_id` when rendering a real Omega run; if absent, the response is not a "real Omega run." 
-A response may include a separate section titled “Research-only leans” or “Exploratory candidates” without a trace_id. These are not Bet Cards and must not use the canonical BetSlip table unless every row is sourced from Omega, omega_lite, or explicitly marked [ESTIMATED]. Research-only sections should use plain language fields such as:
+Every run produces an `ExecutionTrace` with `trace_id`, `run_id`, `model_version`, per-stage timings, downgrades, gathered-facts summary, and the final predictions and recommendations. Cite the `trace_id` when rendering a real Omega run; if absent, the response is not a "real Omega run."
+
+A response may include a separate section titled "Research-only leans" or "Exploratory candidates" without a `trace_id`. These are not Bet Cards and must NEVER use the canonical BetSlip table — every BetSlip row must be sourced from a real Omega or omega_lite_standalone run with a `trace_id`. The previous `[ESTIMATED]` marker is retired; there is no LLM-generated numeric output. Research-only sections use plain-language fields only:
 - market
-- available line/odds
+- available line/odds (with sportsbook source and timestamp)
 - reason for interest
 - source freshness
-- missing inputs
+- missing inputs (named explicitly, so the user can backfill and re-run)
 - next action
 
 ## What Omega does NOT do
