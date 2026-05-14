@@ -11,14 +11,14 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from omega.core.betting.odds import (
+from omega_lite.odds import (
     american_to_decimal,
     edge_percentage,
     expected_value_percent,
     implied_probability,
 )
-from omega.core.betting.kelly import recommend_stake
-from omega.core.contracts.schemas import (
+from omega_lite.kelly import recommend_stake
+from omega_lite.schemas import (
     AnalysisMetadata,
     BetSlip,
     EdgeDetail,
@@ -31,22 +31,36 @@ from omega.core.contracts.schemas import (
     SlateAnalysisRequest,
     SlateAnalysisResponse,
 )
-from omega.core.simulation.engine import OmegaSimulationEngine, run_player_simulation
-from omega.core.simulation.archetypes import get_archetype, get_archetype_name
-from omega.core.calibration.probability import apply_calibration
+from omega_lite.engine import OmegaSimulationEngine, run_player_simulation
+from omega_lite.archetypes import get_archetype, get_archetype_name
+from omega_lite.calibration import (
+    calibrate_probability,
+    should_apply_calibration,
+)
 
-logger = logging.getLogger("omega.service")
+logger = logging.getLogger("omega_lite.service")
 
 _engine = OmegaSimulationEngine()
 
 
-def _calibrate(raw_prob: float, league: str | None = None) -> float:
-    """Apply probability calibration via shared policy.
-
-    Delegates to apply_calibration() — the single source of truth for
-    calibration parameters. Do not add local overrides here.
-    """
-    return apply_calibration(raw_prob, league=league)
+def _calibrate(
+    raw_prob: float,
+    method: str = "combined",
+    shrink_factor: float = 0.7,
+    cap_max: float = 0.9,
+    cap_min: float = 0.1,
+) -> float:
+    """Apply probability calibration, returning the adjusted value."""
+    if not should_apply_calibration(raw_prob, strict_cap=False):
+        return raw_prob
+    result = calibrate_probability(
+        raw_prob,
+        method=method,
+        shrink_factor=shrink_factor,
+        cap_max=cap_max,
+        cap_min=cap_min,
+    )
+    return result["calibrated"]
 
 
 def _build_edge(
@@ -178,8 +192,8 @@ def analyze_game(
             away_prob /= total_prob
             draw_prob_raw /= total_prob
 
-        cal_home = _calibrate(home_prob, league=request.league)
-        cal_away = _calibrate(away_prob, league=request.league)
+        cal_home = _calibrate(home_prob)
+        cal_away = _calibrate(away_prob)
 
         # Use spread price if available, else moneyline
         home_odds = request.odds.spread_home_price or request.odds.moneyline_home
@@ -196,7 +210,7 @@ def analyze_game(
 
         # 3-way moneyline (hockey regulation, soccer)
         if request.odds.moneyline_draw is not None and draw_prob_raw > 0:
-            cal_draw = _calibrate(draw_prob_raw, league=request.league)
+            cal_draw = _calibrate(draw_prob_raw)
             edges.append(
                 _build_edge("draw", "Draw", draw_prob_raw, cal_draw, request.odds.moneyline_draw, bankroll, request.n_iterations)
             )
@@ -302,12 +316,12 @@ def analyze_player_prop(
 
     if request.odds_over is not None:
         market_over = implied_probability(request.odds_over)
-        cal_over = _calibrate(over_prob, league=request.league)
+        cal_over = _calibrate(over_prob)
         edge_over = round(edge_percentage(cal_over, market_over), 2)
 
     if request.odds_under is not None:
         market_under = implied_probability(request.odds_under)
-        cal_under = _calibrate(under_prob, league=request.league)
+        cal_under = _calibrate(under_prob)
         edge_under = round(edge_percentage(cal_under, market_under), 2)
 
     if edge_over is not None and edge_under is not None:
