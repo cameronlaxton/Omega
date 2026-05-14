@@ -24,13 +24,14 @@ from omega.core.contracts.schemas import (
     EdgeDetail,
     GameAnalysisRequest,
     GameAnalysisResponse,
+    OddsInput,
     PlayerPropRequest,
     PlayerPropResponse,
     SimulationResult,
     SlateAnalysisRequest,
     SlateAnalysisResponse,
 )
-from omega.core.simulation.engine import OmegaSimulationEngine
+from omega.core.simulation.engine import OmegaSimulationEngine, run_player_simulation
 from omega.core.simulation.archetypes import get_archetype, get_archetype_name
 from omega.core.calibration.probability import (
     calibrate_probability,
@@ -240,18 +241,57 @@ def analyze_player_prop(
     request: PlayerPropRequest,
     bankroll: float = 1000.0,
 ) -> PlayerPropResponse:
-    """Analyze a single player prop. Never raises."""
-    try:
-        sim_result = _engine.run_player_prop_simulation(
+    """Analyze a single player prop. Never raises.
+
+    Uses run_player_simulation: archetype-aware Poisson/Normal sampling over
+    a player rolling-stat distribution (mean, std) against the prop line.
+    Caller must supply player_context with `{stat}_mean` and optionally
+    `{stat}_std` keys (e.g. for pts: pts_mean=24.3, pts_std=6.1).
+    """
+    player_ctx = request.player_context or {}
+    stat_key = request.prop_type
+    mean_key = f"{stat_key}_mean"
+    std_key = f"{stat_key}_std"
+
+    mean = player_ctx.get(mean_key)
+    if mean is None:
+        return PlayerPropResponse(
             player_name=request.player_name,
-            team="",
-            opponent="",
             league=request.league,
             prop_type=request.prop_type,
             line=request.line,
-            n_iterations=request.n_iterations,
-            game_context=request.game_context,
-            player_context=request.player_context,
+            status="skipped",
+            skip_reason=f"Missing required input player_context.{mean_key}",
+            missing_requirements=[f"player_context.{mean_key}"],
+        )
+
+    std_val = player_ctx.get(std_key, max(1.0, float(mean) * 0.25))
+    try:
+        mean_f = float(mean)
+        std_f = float(std_val)
+    except (TypeError, ValueError) as exc:
+        return PlayerPropResponse(
+            player_name=request.player_name,
+            league=request.league,
+            prop_type=request.prop_type,
+            line=request.line,
+            status="error",
+            skip_reason=f"Non-numeric player_context values: {exc}",
+        )
+
+    player_proj = {
+        "league": request.league,
+        "stat_key": stat_key,
+        "mean": mean_f,
+        "variance": std_f ** 2,
+        "market_line": request.line,
+    }
+
+    try:
+        sim_result = run_player_simulation(
+            player_proj,
+            n_iter=request.n_iterations,
+            seed=request.seed,
         )
     except Exception as exc:
         logger.warning("Prop simulation error for %s: %s", request.player_name, exc)
@@ -264,19 +304,9 @@ def analyze_player_prop(
             skip_reason=f"Simulation error: {exc}",
         )
 
-    if not sim_result.get("success"):
-        return PlayerPropResponse(
-            player_name=request.player_name,
-            league=request.league,
-            prop_type=request.prop_type,
-            line=request.line,
-            status="skipped",
-            skip_reason=sim_result.get("skip_reason", "Unknown skip"),
-            missing_requirements=sim_result.get("missing_requirements"),
-        )
-
-    over_prob = sim_result.get("over_prob", 0) / 100.0
-    under_prob = sim_result.get("under_prob", 0) / 100.0
+    # run_player_simulation returns probabilities as decimals (0-1)
+    over_prob = sim_result.get("over_prob", 0.0)
+    under_prob = sim_result.get("under_prob", 0.0)
 
     # Compute edges if odds provided
     edge_over = None
@@ -340,8 +370,6 @@ def analyze_slate(
         away = _extract_team(game, "away_team") or _extract_team(game, "away")
         if not home or not away:
             continue
-
-        from src.contracts.schemas import OddsInput
 
         odds_dict = game.get("odds") or game.get("markets") or {}
         odds_input = None

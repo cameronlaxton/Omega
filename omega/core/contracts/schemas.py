@@ -91,6 +91,7 @@ class PlayerPropRequest(BaseModel):
     player_context: Optional[Dict[str, Any]] = Field(default=None, description="Player statistical context")
     game_context: Optional[Dict[str, Any]] = Field(default=None, description="Game-level context (opponent, pace, etc.)")
     n_iterations: int = Field(default=5000, ge=100, le=100000)
+    seed: Optional[int] = Field(default=None, description="RNG seed for reproducible simulations")
 
 
 # -- Response Sub-Models -----------------------------------------------------
