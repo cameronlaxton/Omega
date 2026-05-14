@@ -11,14 +11,14 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from omega.core.betting.odds import (
+from omega_lite.odds import (
     american_to_decimal,
     edge_percentage,
     expected_value_percent,
     implied_probability,
 )
-from omega.core.betting.kelly import recommend_stake
-from omega.core.contracts.schemas import (
+from omega_lite.kelly import recommend_stake
+from omega_lite.schemas import (
     AnalysisMetadata,
     BetSlip,
     EdgeDetail,
@@ -31,14 +31,14 @@ from omega.core.contracts.schemas import (
     SlateAnalysisRequest,
     SlateAnalysisResponse,
 )
-from omega.core.simulation.engine import OmegaSimulationEngine, run_player_simulation
-from omega.core.simulation.archetypes import get_archetype, get_archetype_name
-from omega.core.calibration.probability import (
+from omega_lite.engine import OmegaSimulationEngine, run_player_simulation
+from omega_lite.archetypes import get_archetype, get_archetype_name
+from omega_lite.calibration import (
     calibrate_probability,
     should_apply_calibration,
 )
 
-logger = logging.getLogger("omega.service")
+logger = logging.getLogger("omega_lite.service")
 
 _engine = OmegaSimulationEngine()
 
