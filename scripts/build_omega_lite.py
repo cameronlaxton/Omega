@@ -53,7 +53,10 @@ VERBATIM_COPIES = [
 ]
 
 # Where engine.py should be cut off — keep up to and including run_fast_game_simulation.
-ENGINE_KEEP_LINES = 899
+# Marker: the next method after run_fast_game_simulation is run_game_simulation
+# (Markov-based, depends on omega.markov which isn't shipped to the sandbox).
+# We truncate immediately before its `def run_game_simulation(` line.
+ENGINE_TRUNCATE_MARKER = "    def run_game_simulation("
 
 
 def _rewrite_omega_imports(text: str) -> str:
@@ -85,11 +88,27 @@ def _rewrite_omega_imports(text: str) -> str:
 
 
 def _copy_engine() -> None:
-    """Copy engine.py, rewrite imports, truncate to fast-path-only."""
+    """Copy engine.py, rewrite imports, truncate to fast-path-only.
+
+    Truncation is marker-based: we slice off everything from the
+    ENGINE_TRUNCATE_MARKER line onward, so the cutoff survives
+    additions/removals above run_game_simulation without manual line-count
+    bookkeeping. Falls back to a hard error if the marker is missing.
+    """
     text = (SRC / "core" / "simulation" / "engine.py").read_text(encoding="utf-8")
     text = _rewrite_omega_imports(text)
     lines = text.splitlines(keepends=True)
-    truncated = "".join(lines[:ENGINE_KEEP_LINES])
+    cut_idx: int | None = None
+    for i, line in enumerate(lines):
+        if line.startswith(ENGINE_TRUNCATE_MARKER):
+            cut_idx = i
+            break
+    if cut_idx is None:
+        raise RuntimeError(
+            f"_copy_engine: truncation marker {ENGINE_TRUNCATE_MARKER!r} not found "
+            "in engine.py. Update ENGINE_TRUNCATE_MARKER in scripts/build_omega_lite.py."
+        )
+    truncated = "".join(lines[:cut_idx])
     (DST / "engine.py").write_text(truncated, encoding="utf-8")
 
 

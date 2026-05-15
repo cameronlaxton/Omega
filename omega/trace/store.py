@@ -20,7 +20,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from omega.trace.bet_record import BetRecord
-from omega.trace.schema import CURRENT_VERSION, SCHEMA_V1, SCHEMA_V2, SCHEMA_V3
+from omega.trace.schema import (
+    CURRENT_VERSION,
+    SCHEMA_V1,
+    SCHEMA_V2,
+    SCHEMA_V3,
+    apply_v4_migration,
+)
 
 logger = logging.getLogger("omega.trace.store")
 
@@ -67,6 +73,10 @@ class TraceStore:
         self.conn.executescript(SCHEMA_V3)
         self._record_version(3, "Phase 6e: closing_lines table for CLV computation")
 
+        # V4: traces.session_id (groups traces by Claude Project chat session)
+        apply_v4_migration(self.conn)
+        self._record_version(4, "Phase 6f: traces.session_id column")
+
     def _record_version(self, version: int, description: str) -> None:
         """Idempotently stamp a schema version into schema_versions."""
         existing = self.conn.execute(
@@ -108,13 +118,17 @@ class TraceStore:
 
         full_trace = json.dumps(trace, default=str)
 
+        session_id = trace.get("session_id")
+        if session_id is not None:
+            session_id = str(session_id) or None
+
         self.conn.execute(
             """INSERT OR IGNORE INTO traces
                (trace_id, run_id, timestamp, prompt, league, matchup,
                 execution_mode, simulation_seed, aggregate_quality,
                 predictions, recommendations, odds_snapshot, downgrades,
-                full_trace, schema_version)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                full_trace, schema_version, session_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 trace_id,
                 run_id,
@@ -134,6 +148,7 @@ class TraceStore:
                 json.dumps(trace.get("downgrades", []), default=str),
                 full_trace,
                 CURRENT_VERSION,
+                session_id,
             ),
         )
         self.conn.commit()
@@ -418,6 +433,39 @@ class TraceStore:
         Each returned dict has a '_outcome' key with the attached outcome.
         """
         return self.query_traces(league=league, has_outcome=True, limit=limit)
+
+    def get_session_summary(
+        self, league: Optional[str] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """Aggregate trace counts grouped by session_id. NULL session_ids excluded.
+
+        Used by report_calibration.py to surface per-session metrics.
+        """
+        clauses = ["t.session_id IS NOT NULL"]
+        params: list[Any] = []
+        if league:
+            clauses.append("t.league = ?")
+            params.append(league)
+        where = " WHERE " + " AND ".join(clauses)
+        params.append(limit)
+
+        rows = self.conn.execute(
+            f"""
+            SELECT t.session_id,
+                   COUNT(*) AS trace_count,
+                   SUM(CASE WHEN o.outcome_id IS NOT NULL THEN 1 ELSE 0 END) AS graded_count,
+                   MIN(t.timestamp) AS first_ts,
+                   MAX(t.timestamp) AS last_ts
+            FROM traces t
+            LEFT JOIN outcomes o ON t.trace_id = o.trace_id
+            {where}
+            GROUP BY t.session_id
+            ORDER BY last_ts DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     # ------------------------------------------------------------------
     # Metadata

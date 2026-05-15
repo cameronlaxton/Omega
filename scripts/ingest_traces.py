@@ -91,6 +91,7 @@ def _adapt_sandbox_trace(analyze_out: Dict[str, Any]) -> Dict[str, Any]:
         "recommendations": recommendations,
         "odds_snapshot": odds_snapshot,
         "downgrades": downgrades,
+        "session_id": analyze_out.get("session_id"),
         # Preserve the raw analyze output for downstream consumers
         "model_version": analyze_out.get("model_version"),
         "kind": kind,
@@ -158,6 +159,11 @@ def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> Tuple[s
     """Ingest one file. Returns (trace_id, bet_id or None). Raises on error."""
     payload = _load_payload(path)
     analyze_out = payload["trace"]
+
+    # session_id may live on the trace object (preferred) or at the export-block
+    # top level (fallback). Trace-level value wins if both are present.
+    if not analyze_out.get("session_id") and payload.get("session_id"):
+        analyze_out = {**analyze_out, "session_id": payload["session_id"]}
 
     adapted = _adapt_sandbox_trace(analyze_out)
     if not adapted["trace_id"]:

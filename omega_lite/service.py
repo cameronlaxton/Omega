@@ -31,7 +31,7 @@ from omega_lite.schemas import (
     SlateAnalysisRequest,
     SlateAnalysisResponse,
 )
-from omega_lite.engine import OmegaSimulationEngine, run_player_simulation
+from omega_lite.engine import OmegaSimulationEngine, run_player_simulation, select_distribution
 from omega_lite.archetypes import get_archetype, get_archetype_name
 from omega_lite.calibration import apply_calibration
 
@@ -265,12 +265,18 @@ def analyze_player_prop(
             skip_reason=f"Non-numeric player_context values: {exc}",
         )
 
+    # B1: surface optional distribution override from caller. select_distribution()
+    # also auto-routes low-mean basketball count stats (blk/stl/3pm/oreb/dreb/to
+    # with mean < 3.0) to Poisson where Normal would understate right-tail mass.
+    distribution_override = player_ctx.get("distribution")
+
     player_proj = {
         "league": request.league,
         "stat_key": stat_key,
         "mean": mean_f,
         "variance": std_f ** 2,
         "market_line": request.line,
+        "distribution": distribution_override,
     }
 
     try:
@@ -294,21 +300,53 @@ def analyze_player_prop(
     over_prob = sim_result.get("over_prob", 0.0)
     under_prob = sim_result.get("under_prob", 0.0)
 
-    # Compute edges if odds provided
-    edge_over = None
-    edge_under = None
+    notes: List[str] = []
+    resolved_dist = select_distribution(
+        stat_key, request.league, mean=mean_f, override=distribution_override,
+    )
+    if distribution_override in {"normal", "poisson"}:
+        notes.append(f"distribution_override:{resolved_dist}")
+
+    # B2: imputation provenance — LLM declares which observation slots are
+    # imputed and (ideally) the underlying sample size. We cap tiers based on
+    # the imputed fraction so a 4-of-5-imputed std cannot ride an A-tier edge.
+    raw_imputed = player_ctx.get("imputed_keys") or []
+    imputed_keys = [str(k) for k in raw_imputed if k is not None]
+    sample_size_raw = player_ctx.get("sample_size")
+    try:
+        sample_size = int(sample_size_raw) if sample_size_raw is not None else None
+    except (TypeError, ValueError):
+        sample_size = None
+
+    imputed_fraction: Optional[float]
+    if imputed_keys and (sample_size is None or sample_size <= 0):
+        imputed_fraction = 1.0
+        notes.append("imputed_keys_provided_without_sample_size")
+    elif imputed_keys:
+        imputed_fraction = min(1.0, len(imputed_keys) / float(sample_size))
+    else:
+        imputed_fraction = 0.0
+
+    # B4: single-side odds — "implied opposite" is forbidden. If only one
+    # side is sourced, compute that side's edge only and annotate the other.
+    edge_over: Optional[float] = None
+    edge_under: Optional[float] = None
     recommendation = "pass"
-    tier = None
+    tier: Optional[str] = None
 
     if request.odds_over is not None:
         market_over = implied_probability(request.odds_over)
         cal_over = _calibrate(over_prob, league=request.league)
         edge_over = round(edge_percentage(cal_over, market_over), 2)
+    else:
+        notes.append("odds_unsourced_over")
 
     if request.odds_under is not None:
         market_under = implied_probability(request.odds_under)
         cal_under = _calibrate(under_prob, league=request.league)
         edge_under = round(edge_percentage(cal_under, market_under), 2)
+    else:
+        notes.append("odds_unsourced_under")
 
     if edge_over is not None and edge_under is not None:
         if edge_over > 3.0 and edge_over > edge_under:
@@ -317,6 +355,21 @@ def analyze_player_prop(
         elif edge_under > 3.0:
             recommendation = "under"
             tier = "A" if request.n_iterations >= 1000 else "B"
+    elif edge_over is not None and edge_over > 3.0:
+        recommendation = "over"
+        tier = "A" if request.n_iterations >= 1000 else "B"
+    elif edge_under is not None and edge_under > 3.0:
+        recommendation = "under"
+        tier = "A" if request.n_iterations >= 1000 else "B"
+
+    # B2 cap: imputation discipline supersedes engine tier
+    if imputed_fraction is not None and imputed_fraction > 0.4:
+        tier = None
+        recommendation = "pass"
+        notes.append("insufficient_real_observations")
+    elif imputed_fraction is not None and imputed_fraction > 0.2 and tier == "A":
+        tier = "B"
+        notes.append("tier_capped_imputation")
 
     return PlayerPropResponse(
         player_name=request.player_name,
@@ -331,6 +384,8 @@ def analyze_player_prop(
         recommendation=recommendation,
         confidence_tier=tier,
         missing_requirements=[],
+        notes=notes,
+        imputed_fraction=imputed_fraction,
     )
 
 

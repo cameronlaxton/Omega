@@ -34,7 +34,25 @@
       "Bash(python scripts/ingest_traces.py)",
       "Bash(python -m pytest tests/ -q)",
       "Bash(python scripts/fetch_outcomes_nba.py --help)",
-      "Bash(python scripts/fetch_closing_lines_nba.py --help)"
+      "Bash(python scripts/fetch_closing_lines_nba.py --help)",
+      "Bash(python -c \"from omega.integrations.odds_api import OddsApiClient; c = OddsApiClient\\(api_key='dummy'\\); print\\('odds_api imports OK'\\); print\\('budget:', c.remaining_budget\\(\\)\\)\")",
+      "Bash(python scripts/fetch_closing_lines.py --help)",
+      "Bash(python -m pytest tests/trace/test_trace_store.py -x -q)",
+      "Bash(python -m pytest -x -q)",
+      "Bash(python -m pytest tests/scripts/test_ingest_closing_lines.py -x -q)",
+      "Bash(python scripts/run_action_plan.py /nonexistent)",
+      "Bash(python scripts/promote_profile.py --list-candidates)",
+      "Bash(python scripts/report_calibration.py --league NBA --out reports/_smoke.md)",
+      "Bash(python scripts/fit_calibration.py --league NBA)",
+      "Bash(python -c \"import json; open\\('/tmp/plan.json','w'\\).write\\(json.dumps\\({'session_id':'sess-test','actions':[{'type':'report_calibration','args':{'league':'NBA','window_days':30}}]}\\)\\)\")",
+      "Bash(python scripts/run_action_plan.py /tmp/plan.json --dry-run)",
+      "Bash(python -c \"import json,os; os.makedirs\\('.tmp',exist_ok=True\\); open\\('.tmp/plan.json','w'\\).write\\(json.dumps\\({'session_id':'sess-test','actions':[{'type':'report_calibration','args':{'league':'NBA','window_days':30}}]}\\)\\); open\\('.tmp/plan_bad.json','w'\\).write\\(json.dumps\\({'actions':[{'type':'inject_shrink_factor','args':{'value':0.7}}]}\\)\\)\")",
+      "Bash(python scripts/run_action_plan.py .tmp/plan.json --dry-run)",
+      "Bash(python scripts/run_action_plan.py .tmp/plan_bad.json --dry-run)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(echo \"rc=$?\")",
+      "Bash(python scripts/build_omega_lite.py)",
+      "Bash(python -m pytest -q)"
     ]
   }
 }

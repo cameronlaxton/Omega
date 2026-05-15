@@ -16,15 +16,20 @@ Schema version 3 (additive):
   Used for CLV computation by comparing odds_taken to closing_odds. One row per
   (trace_id, market, selection_descriptor) — same key as bet_records so they line up.
 
+Schema version 4 (additive):
+- traces.session_id (nullable TEXT): groups traces produced in one Claude Project
+  chat session. Legacy traces stay NULL. Session metadata lives in a JSON sidecar
+  under inbox/sessions/<session_id>.json — no separate sessions table.
+
 Design rules:
 - Full trace stored as JSON blob to decouple trace evolution from SQLite schema
 - Denormalized columns exist for querying only — the blob is source of truth
 - Outcomes are a separate table, never mutated into the trace record
-- Schema migrations are forward-additive (CREATE TABLE IF NOT EXISTS)
+- Schema migrations are forward-additive (CREATE TABLE IF NOT EXISTS, ALTER ADD COLUMN)
 """
 from __future__ import annotations
 
-CURRENT_VERSION = 3
+CURRENT_VERSION = 4
 
 SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS traces (
@@ -106,3 +111,23 @@ CREATE TABLE IF NOT EXISTS closing_lines (
 
 CREATE INDEX IF NOT EXISTS idx_closing_lines_trace_id ON closing_lines(trace_id);
 """
+
+# V4 cannot be expressed as a single executescript() because ALTER TABLE ADD
+# COLUMN is non-idempotent in SQLite (errors if the column already exists).
+# Apply via the V4 migration helper below.
+
+V4_ADD_COLUMN_SQL = "ALTER TABLE traces ADD COLUMN session_id TEXT"
+V4_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_traces_session_id ON traces(session_id)"
+
+
+def apply_v4_migration(conn) -> None:
+    """Idempotently apply V4: add traces.session_id and its index.
+
+    SQLite has no `ADD COLUMN IF NOT EXISTS`; we probe PRAGMA table_info first
+    so re-running this on a V4 DB is a no-op.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(traces)").fetchall()}
+    if "session_id" not in cols:
+        conn.execute(V4_ADD_COLUMN_SQL)
+    conn.execute(V4_INDEX_SQL)
+    conn.commit()

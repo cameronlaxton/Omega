@@ -1804,6 +1804,19 @@ class PlayerPropResponse(BaseModel):
     edge_under: Optional[float] = Field(default=None, description="Edge on Under in pct points")
     recommendation: Optional[str] = Field(default=None, description="'over', 'under', or 'pass'")
     confidence_tier: Optional[str] = None
+    notes: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Machine-readable annotations: 'odds_unsourced_over', "
+            "'odds_unsourced_under', 'tier_capped_imputation', "
+            "'insufficient_real_observations', 'imputed_keys_provided_without_sample_size', "
+            "'distribution_override:<family>'."
+        ),
+    )
+    imputed_fraction: Optional[float] = Field(
+        default=None,
+        description="Fraction of observations marked as imputed (0..1); None when not reported.",
+    )
 
 
 class ErrorResponse(BaseModel):
@@ -2051,10 +2064,27 @@ except ImportError:
 # Distribution samplers
 # ---------------------------------------------------------------------------
 
-def select_distribution(metric_key: str, league: str) -> str:
+def select_distribution(
+    metric_key: str,
+    league: str,
+    mean: Optional[float] = None,
+    override: Optional[str] = None,
+) -> str:
     """
     Selects appropriate distribution (Normal vs Poisson) based on metric and league.
+
+    Args:
+        metric_key: stat key (e.g. "pts", "blk", "kills")
+        league: league code (e.g. "NBA", "MLB")
+        mean: optional expected mean; used to route low-mean basketball count stats
+            (blk/stl/3pm/oreb/dreb/to) to Poisson where Normal would understate
+            right-tail mass.
+        override: optional caller override ("normal" or "poisson"). When supplied
+            and valid, it short-circuits all routing logic.
     """
+    if override in {"normal", "poisson"}:
+        return override
+
     league = league.upper()
     metric_key = metric_key.lower()
 
@@ -2068,6 +2098,14 @@ def select_distribution(metric_key: str, league: str) -> str:
                       "aces", "double_faults", "kills", "deaths", "assists_esport",
                       "hrs", "stolen_bases", "saves"}
     if metric_key in discrete_stats:
+        return "poisson"
+
+    # Low-mean basketball count stats: Normal grossly understates right-tail mass
+    # at low lambda. A blk prop with line=1.5 and mean=0.6 under Normal yields
+    # under_prob ~ 0.95; under Poisson it correctly lands near 0.88.
+    low_count_basketball = {"blk", "stl", "3pm", "oreb", "dreb", "to", "blocks",
+                            "steals", "turnovers", "offensive_rebounds"}
+    if metric_key in low_count_basketball and (mean is None or mean < 3.0):
         return "poisson"
 
     return "normal"
@@ -2277,7 +2315,7 @@ def simulate_totals_auto(
         random.seed(seed)
         if np is not None:
             np.random.seed(seed)
-    dist = select_distribution(metric_key, league)
+    dist = select_distribution(metric_key, league, mean=mean)
     return simulate_totals(mean, variance, market_total, dist, n_iter)
 
 
@@ -2297,8 +2335,9 @@ def run_player_simulation(
     mean = player_proj.get("mean", 0.0)
     variance = player_proj.get("variance", 1.0)
     market_line = player_proj.get("market_line", mean)
+    distribution_override = player_proj.get("distribution")
 
-    dist = select_distribution(stat_key, league)
+    dist = select_distribution(stat_key, league, mean=mean, override=distribution_override)
     sigma = max(0.1, variance ** 0.5)
 
     if dist == "poisson":
@@ -3150,12 +3189,18 @@ def analyze_player_prop(
             skip_reason=f"Non-numeric player_context values: {exc}",
         )
 
+    # B1: surface optional distribution override from caller. select_distribution()
+    # also auto-routes low-mean basketball count stats (blk/stl/3pm/oreb/dreb/to
+    # with mean < 3.0) to Poisson where Normal would understate right-tail mass.
+    distribution_override = player_ctx.get("distribution")
+
     player_proj = {
         "league": request.league,
         "stat_key": stat_key,
         "mean": mean_f,
         "variance": std_f ** 2,
         "market_line": request.line,
+        "distribution": distribution_override,
     }
 
     try:
@@ -3179,21 +3224,53 @@ def analyze_player_prop(
     over_prob = sim_result.get("over_prob", 0.0)
     under_prob = sim_result.get("under_prob", 0.0)
 
-    # Compute edges if odds provided
-    edge_over = None
-    edge_under = None
+    notes: List[str] = []
+    resolved_dist = select_distribution(
+        stat_key, request.league, mean=mean_f, override=distribution_override,
+    )
+    if distribution_override in {"normal", "poisson"}:
+        notes.append(f"distribution_override:{resolved_dist}")
+
+    # B2: imputation provenance — LLM declares which observation slots are
+    # imputed and (ideally) the underlying sample size. We cap tiers based on
+    # the imputed fraction so a 4-of-5-imputed std cannot ride an A-tier edge.
+    raw_imputed = player_ctx.get("imputed_keys") or []
+    imputed_keys = [str(k) for k in raw_imputed if k is not None]
+    sample_size_raw = player_ctx.get("sample_size")
+    try:
+        sample_size = int(sample_size_raw) if sample_size_raw is not None else None
+    except (TypeError, ValueError):
+        sample_size = None
+
+    imputed_fraction: Optional[float]
+    if imputed_keys and (sample_size is None or sample_size <= 0):
+        imputed_fraction = 1.0
+        notes.append("imputed_keys_provided_without_sample_size")
+    elif imputed_keys:
+        imputed_fraction = min(1.0, len(imputed_keys) / float(sample_size))
+    else:
+        imputed_fraction = 0.0
+
+    # B4: single-side odds — "implied opposite" is forbidden. If only one
+    # side is sourced, compute that side's edge only and annotate the other.
+    edge_over: Optional[float] = None
+    edge_under: Optional[float] = None
     recommendation = "pass"
-    tier = None
+    tier: Optional[str] = None
 
     if request.odds_over is not None:
         market_over = implied_probability(request.odds_over)
         cal_over = _calibrate(over_prob, league=request.league)
         edge_over = round(edge_percentage(cal_over, market_over), 2)
+    else:
+        notes.append("odds_unsourced_over")
 
     if request.odds_under is not None:
         market_under = implied_probability(request.odds_under)
         cal_under = _calibrate(under_prob, league=request.league)
         edge_under = round(edge_percentage(cal_under, market_under), 2)
+    else:
+        notes.append("odds_unsourced_under")
 
     if edge_over is not None and edge_under is not None:
         if edge_over > 3.0 and edge_over > edge_under:
@@ -3202,6 +3279,21 @@ def analyze_player_prop(
         elif edge_under > 3.0:
             recommendation = "under"
             tier = "A" if request.n_iterations >= 1000 else "B"
+    elif edge_over is not None and edge_over > 3.0:
+        recommendation = "over"
+        tier = "A" if request.n_iterations >= 1000 else "B"
+    elif edge_under is not None and edge_under > 3.0:
+        recommendation = "under"
+        tier = "A" if request.n_iterations >= 1000 else "B"
+
+    # B2 cap: imputation discipline supersedes engine tier
+    if imputed_fraction is not None and imputed_fraction > 0.4:
+        tier = None
+        recommendation = "pass"
+        notes.append("insufficient_real_observations")
+    elif imputed_fraction is not None and imputed_fraction > 0.2 and tier == "A":
+        tier = "B"
+        notes.append("tier_capped_imputation")
 
     return PlayerPropResponse(
         player_name=request.player_name,
@@ -3216,6 +3308,8 @@ def analyze_player_prop(
         recommendation=recommendation,
         confidence_tier=tier,
         missing_requirements=[],
+        notes=notes,
+        imputed_fraction=imputed_fraction,
     )
 
 
@@ -3293,6 +3387,8 @@ def _extract_team(game: Dict[str, Any], key: str) -> Optional[str]:
 # Inlined from omega_lite/run.py
 # ========================================================================
 
+import hashlib
+import json as _json_for_trace_hash
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
@@ -3305,10 +3401,41 @@ MODEL_VERSION = "omega-lite-v1"
 # Trace
 # ---------------------------------------------------------------------------
 
-def _new_trace_id() -> str:
+_TRACE_HASH_EXCLUDE = {"odds_over", "odds_under"}
+
+
+def _input_hash(request: Any) -> Optional[str]:
+    """Stable 8-char content hash of a request, excluding volatile odds fields.
+
+    Returns None if the request cannot be serialized.
+    """
+    try:
+        if hasattr(request, "model_dump"):
+            payload = request.model_dump(exclude=_TRACE_HASH_EXCLUDE)
+        elif isinstance(request, dict):
+            payload = {k: v for k, v in request.items() if k not in _TRACE_HASH_EXCLUDE}
+        else:
+            return None
+        encoded = _json_for_trace_hash.dumps(payload, sort_keys=True, default=str)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:8]
+    except Exception:
+        return None
+
+
+def _new_trace_id(request: Any = None) -> str:
     """Sandbox-prefixed trace id. The 'sandbox-' prefix is the honesty signal:
     a consumer can tell at a glance this came from omega_lite, not the
-    canonical pipeline."""
+    canonical pipeline.
+
+    When a request is supplied, the id encodes a stable input hash so reruns
+    of identical inputs share the hash prefix: ``sandbox-<hash[:8]>-<nonce[:4]>``.
+    Odds fields are excluded from the hash because mid-flight juice changes
+    should not invalidate the underlying simulation context.
+    """
+    if request is not None:
+        h = _input_hash(request)
+        if h is not None:
+            return f"sandbox-{h}-{uuid.uuid4().hex[:4]}"
     return f"sandbox-{uuid.uuid4().hex[:12]}"
 
 
@@ -3398,11 +3525,34 @@ def _synth_facts_from_game_request(req: GameAnalysisRequest) -> List[GatheredFac
 
 def _synth_facts_from_prop_request(req: PlayerPropRequest) -> List[GatheredFact]:
     """Same idea for prop requests. The single CRITICAL slot is
-    player_context.{stat}_mean — without it analyze_player_prop refuses."""
+    player_context.{stat}_mean — without it analyze_player_prop refuses.
+
+    B2: when the caller declares ``imputed_keys`` in player_context, the
+    mean and std are derived from a partially-imputed sample. Decay their
+    quality_score and mark the provider method as ``imputed``.
+    """
     ctx = req.player_context or {}
     stat = req.prop_type
     mean_key = f"{stat}_mean"
     std_key = f"{stat}_std"
+
+    raw_imputed = ctx.get("imputed_keys") or []
+    imputed_keys = [str(k) for k in raw_imputed if k is not None]
+    sample_size_raw = ctx.get("sample_size")
+    try:
+        sample_size = int(sample_size_raw) if sample_size_raw is not None else None
+    except (TypeError, ValueError):
+        sample_size = None
+
+    if imputed_keys and sample_size and sample_size > 0:
+        imputed_fraction = min(1.0, len(imputed_keys) / float(sample_size))
+    elif imputed_keys:
+        imputed_fraction = 1.0
+    else:
+        imputed_fraction = 0.0
+
+    quality_when_filled = max(0.5, 1.0 - 0.5 * imputed_fraction)
+    method_label = "imputed" if imputed_fraction > 0.0 else "user_input"
 
     facts: List[GatheredFact] = []
 
@@ -3419,11 +3569,11 @@ def _synth_facts_from_prop_request(req: PlayerPropRequest) -> List[GatheredFact]
         result=ProviderResult(
             data={mean_key: ctx[mean_key]},
             source="user_supplied",
-            method="user_input",
-            confidence=1.0,
+            method=method_label,
+            confidence=quality_when_filled,
         ) if mean_filled else None,
         filled=mean_filled,
-        quality_score=1.0 if mean_filled else 0.0,
+        quality_score=quality_when_filled if mean_filled else 0.0,
     ))
 
     std_slot = GatherSlot(
@@ -3434,16 +3584,19 @@ def _synth_facts_from_prop_request(req: PlayerPropRequest) -> List[GatheredFact]
         importance=InputImportance.IMPORTANT,
     )
     std_filled = isinstance(ctx.get(std_key), (int, float))
+    # std is more sensitive to imputation than mean (median imputation
+    # systematically compresses std), so decay it harder.
+    std_quality = max(0.3, 1.0 - 0.7 * imputed_fraction) if std_filled else 0.0
     facts.append(GatheredFact(
         slot=std_slot,
         result=ProviderResult(
             data={std_key: ctx.get(std_key)},
             source="user_supplied",
-            method="user_input",
-            confidence=1.0,
+            method=method_label,
+            confidence=std_quality,
         ) if std_filled else None,
         filled=std_filled,
-        quality_score=1.0 if std_filled else 0.0,
+        quality_score=std_quality,
     ))
 
     odds_slot = GatherSlot(
@@ -3501,7 +3654,7 @@ def analyze(
     # Coerce dicts into typed requests
     typed_req = _coerce_request(request)
 
-    trace_id = _new_trace_id()
+    trace_id = _new_trace_id(typed_req)
     ran_at = datetime.now(timezone.utc).isoformat()
 
     if isinstance(typed_req, GameAnalysisRequest):

@@ -287,3 +287,105 @@ class TestGradedTraces:
         store.persist(_make_trace())
         assert store.get_graded_traces() == []
         store.close()
+
+
+# ---------------------------------------------------------------------------
+# Schema V4 — session_id column
+# ---------------------------------------------------------------------------
+
+class TestSchemaV4SessionId:
+    def test_session_id_column_present(self):
+        store = _tmp_store()
+        cols = {row[1] for row in store.conn.execute("PRAGMA table_info(traces)").fetchall()}
+        assert "session_id" in cols
+        store.close()
+
+    def test_session_id_index_present(self):
+        store = _tmp_store()
+        idx_names = {
+            row[0]
+            for row in store.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='traces'"
+            ).fetchall()
+        }
+        assert "idx_traces_session_id" in idx_names
+        store.close()
+
+    def test_persist_with_session_id(self):
+        store = _tmp_store()
+        trace = _make_trace(trace_id="t-sess-1", session_id="sess-20260515-abc")
+        store.persist(trace)
+        row = store.conn.execute(
+            "SELECT session_id FROM traces WHERE trace_id = ?",
+            ("t-sess-1",),
+        ).fetchone()
+        assert row["session_id"] == "sess-20260515-abc"
+        store.close()
+
+    def test_persist_without_session_id_is_null(self):
+        store = _tmp_store()
+        store.persist(_make_trace(trace_id="t-no-sess"))
+        row = store.conn.execute(
+            "SELECT session_id FROM traces WHERE trace_id = ?", ("t-no-sess",)
+        ).fetchone()
+        assert row["session_id"] is None
+        store.close()
+
+    def test_v3_to_v4_migration_idempotent(self):
+        """Simulate an existing V3 DB (no session_id column), then run V4 migration
+        twice and confirm: column exists, legacy rows have NULL session_id, second
+        run is a no-op."""
+        import sqlite3
+        import tempfile
+
+        from omega.trace.schema import (
+            SCHEMA_V1,
+            SCHEMA_V2,
+            SCHEMA_V3,
+            apply_v4_migration,
+        )
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        tmp.close()
+        conn = sqlite3.connect(tmp.name)
+        conn.row_factory = sqlite3.Row
+        conn.executescript(SCHEMA_V1)
+        conn.executescript(SCHEMA_V2)
+        conn.executescript(SCHEMA_V3)
+        # Insert a legacy V3 row (no session_id column yet)
+        conn.execute(
+            """INSERT INTO traces (trace_id, run_id, timestamp, prompt, full_trace)
+               VALUES (?, ?, ?, ?, ?)""",
+            ("legacy-1", "run-legacy", "2026-01-01T00:00:00Z", "legacy", "{}"),
+        )
+        conn.commit()
+        cols_before = {r[1] for r in conn.execute("PRAGMA table_info(traces)").fetchall()}
+        assert "session_id" not in cols_before
+
+        apply_v4_migration(conn)
+        cols_after = {r[1] for r in conn.execute("PRAGMA table_info(traces)").fetchall()}
+        assert "session_id" in cols_after
+
+        # Legacy row carries NULL session_id
+        row = conn.execute(
+            "SELECT session_id FROM traces WHERE trace_id = ?", ("legacy-1",)
+        ).fetchone()
+        assert row["session_id"] is None
+
+        # Re-running is a no-op (no error)
+        apply_v4_migration(conn)
+        conn.close()
+
+    def test_get_session_summary(self):
+        store = _tmp_store()
+        store.persist(_make_trace(trace_id="t-a", session_id="sess-1"))
+        store.persist(_make_trace(trace_id="t-b", session_id="sess-1"))
+        store.persist(_make_trace(trace_id="t-c", session_id="sess-2"))
+        store.persist(_make_trace(trace_id="t-d"))  # no session_id, excluded
+
+        summary = store.get_session_summary()
+        by_sess = {row["session_id"]: row for row in summary}
+        assert set(by_sess) == {"sess-1", "sess-2"}
+        assert by_sess["sess-1"]["trace_count"] == 2
+        assert by_sess["sess-2"]["trace_count"] == 1
+        store.close()

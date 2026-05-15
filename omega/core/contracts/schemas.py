@@ -195,6 +195,19 @@ class PlayerPropResponse(BaseModel):
     edge_under: Optional[float] = Field(default=None, description="Edge on Under in pct points")
     recommendation: Optional[str] = Field(default=None, description="'over', 'under', or 'pass'")
     confidence_tier: Optional[str] = None
+    notes: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Machine-readable annotations: 'odds_unsourced_over', "
+            "'odds_unsourced_under', 'tier_capped_imputation', "
+            "'insufficient_real_observations', 'imputed_keys_provided_without_sample_size', "
+            "'distribution_override:<family>'."
+        ),
+    )
+    imputed_fraction: Optional[float] = Field(
+        default=None,
+        description="Fraction of observations marked as imputed (0..1); None when not reported.",
+    )
 
 
 class ErrorResponse(BaseModel):

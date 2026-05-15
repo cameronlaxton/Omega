@@ -1,17 +1,34 @@
 """
 omega.integrations.odds_api — the-odds-api.com thin client.
 
+DEPRECATED (Phase 6f) — pending removal after JIT ingest reaches steady state.
+=============================================================================
+Closing-line capture has moved to agent-driven JIT WebFetch + the file-based
+ingest path at `scripts/ingest_closing_lines.py`. This client and its sole
+consumer (`scripts/fetch_closing_lines.py`) are kept as a fallback for one
+release while the JIT protocol bakes. Do not add new call sites.
+
+POST-DECISION USE ONLY.
+======================
+This module is restricted to **closing-line capture for CLV computation**.
+Pre-decision sourcing (the lines / odds the LLM injects into analyze()) is
+done by the agent itself via WebFetch on direct sportsbook pages per
+prompts/system_prompt.txt §6.1.5. Do not add pre-decision call sites here;
+the player-props add-on the-odds-api charges for is **not in budget** and
+not required for sandbox operation.
+
+The single supported entry point is :meth:`OddsApiClient.fetch_nba_odds`,
+which returns one snapshot per call (h2h / spreads / totals across US books).
+Schedule the snapshot to run shortly before tip-off — that snapshot IS the
+"closing line" for CLV purposes on the free tier.
+
 Free tier = 500 requests/month. The client tracks usage in a local JSON file
 and refuses requests that would exceed a configured monthly budget.
 
-Endpoint reference:
-- Live odds:     GET /v4/sports/{sport}/odds
-- Scores:        GET /v4/sports/{sport}/scores
-- Historical:    GET /v4/historical/sports/{sport}/odds?date=ISO8601 (paid plan)
-
-NOTE: The free tier does NOT include historical endpoints. "Closing line" for
-free-tier users is the live snapshot taken right before tip-off, persisted
-through the closing-line scheduled task. Plan accordingly when scheduling fetches.
+Endpoint reference (kept for documentation only — only /odds is used today):
+- Live odds:     GET /v4/sports/{sport}/odds        (USED — closing snapshot)
+- Scores:        GET /v4/sports/{sport}/scores      (not used)
+- Historical:    GET /v4/historical/sports/...      (paid plan, not used)
 
 API key is read from the OMEGA_ODDS_API_KEY environment variable. The client
 is safe to instantiate without a key — fetch methods will raise
@@ -35,6 +52,36 @@ _BASE_URL = "https://api.the-odds-api.com/v4"
 _REQUEST_TIMEOUT_SECONDS = 15
 _DEFAULT_MONTHLY_BUDGET = 450  # leave headroom under the 500 free-tier ceiling
 _DEFAULT_BUDGET_FILE = "omega_odds_api_budget.json"
+
+
+# Omega league code -> the-odds-api sport key. Add a row when extending coverage.
+# Sport keys are documented at https://the-odds-api.com/sports-odds-data/sports-apis.html.
+SPORT_KEY_MAP: Dict[str, str] = {
+    "NBA":   "basketball_nba",
+    "WNBA":  "basketball_wnba",
+    "NCAAB": "basketball_ncaab",
+    "NCAAM": "basketball_ncaab",
+    "NFL":   "americanfootball_nfl",
+    "NCAAF": "americanfootball_ncaaf",
+    "MLB":   "baseball_mlb",
+    "NHL":   "icehockey_nhl",
+    "EPL":   "soccer_epl",
+    "MLS":   "soccer_usa_mls",
+    "LA_LIGA":          "soccer_spain_la_liga",
+    "BUNDESLIGA":       "soccer_germany_bundesliga",
+    "SERIE_A":          "soccer_italy_serie_a",
+    "LIGUE_1":          "soccer_france_ligue_one",
+    "CHAMPIONS_LEAGUE": "soccer_uefa_champs_league",
+    "UFC":   "mma_mixed_martial_arts",
+    "MMA":   "mma_mixed_martial_arts",
+}
+
+
+def sport_key_for(league: str) -> Optional[str]:
+    """Resolve an Omega league code to a the-odds-api sport key, or None."""
+    if not league:
+        return None
+    return SPORT_KEY_MAP.get(league.upper())
 
 
 class OddsApiKeyMissing(RuntimeError):
@@ -132,19 +179,37 @@ class OddsApiClient:
             return json.loads(resp.read().decode("utf-8"))
 
     # ------------------------------------------------------------------
-    # NBA convenience
+    # Event-odds fetch (sport-agnostic)
     # ------------------------------------------------------------------
 
-    def fetch_nba_odds(
+    def fetch_event_odds(
         self,
+        league: str,
         regions: str = "us",
         markets: str = "h2h,spreads,totals",
         bookmakers: Optional[str] = None,
     ) -> List[EventOdds]:
-        """Fetch current NBA odds for the given markets across US books.
+        """Fetch current event odds for a league across US books.
 
         One API request per call regardless of how many events return.
+
+        POST-DECISION USE ONLY (closing-line capture). Do not call this from
+        any pre-decision path; the agent sources lines via WebFetch on direct
+        sportsbook pages per system_prompt.txt §6.1.5.
+
+        ``markets`` is restricted to game markets (h2h / spreads / totals).
+        Player-prop markets are not enabled on the free tier and are not in
+        budget; passing a player-prop market key here will return an empty
+        list from the API rather than charging extra.
+
+        Raises ``ValueError`` if the league isn't in :data:`SPORT_KEY_MAP`.
         """
+        sport_key = sport_key_for(league)
+        if sport_key is None:
+            raise ValueError(
+                f"No the-odds-api sport key mapped for league={league!r}. "
+                "Add it to SPORT_KEY_MAP in omega.integrations.odds_api."
+            )
         params: Dict[str, Any] = {
             "regions": regions,
             "markets": markets,
@@ -153,8 +218,19 @@ class OddsApiClient:
         }
         if bookmakers:
             params["bookmakers"] = bookmakers
-        payload = self._get_json("/sports/basketball_nba/odds", params)
+        payload = self._get_json(f"/sports/{sport_key}/odds", params)
         return parse_events(payload)
+
+    def fetch_nba_odds(
+        self,
+        regions: str = "us",
+        markets: str = "h2h,spreads,totals",
+        bookmakers: Optional[str] = None,
+    ) -> List[EventOdds]:
+        """Back-compat shim. Delegates to :meth:`fetch_event_odds` with league='NBA'."""
+        return self.fetch_event_odds(
+            league="NBA", regions=regions, markets=markets, bookmakers=bookmakers,
+        )
 
 
 # ---------------------------------------------------------------------------

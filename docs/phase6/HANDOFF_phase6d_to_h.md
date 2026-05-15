@@ -50,10 +50,16 @@ needs to do. Read this first; the original plan lives at
   Accepts `--since today|yesterday|YYYY-MM-DD --until ...`. Searches game-date
   AND prior-day windows for decisions made the night before. Logs unmatched
   traces so the alias table can be extended.
-- `scripts/fetch_closing_lines_nba.py` — joins `bet_records` × `traces` × `closing_lines`
-  to find pending bets with no close. One the-odds-api call per run. Maps
-  `bet.market` (`moneyline|spread|total`) → the-odds-api keys
-  (`h2h|spreads|totals`). Skips `player_prop:*` markets (not in free-tier base).
+- `scripts/fetch_closing_lines.py` — sport-agnostic; joins `bet_records` × `traces`
+  × `closing_lines` to find pending bets with no close. Groups pending bets by
+  `trace.league` and issues one the-odds-api call per league via
+  `OddsApiClient.fetch_event_odds(league)` (which resolves through
+  `SPORT_KEY_MAP` in `omega/integrations/odds_api.py`). Maps `bet.market`
+  (`moneyline|spread|total`) → the-odds-api keys (`h2h|spreads|totals`). Skips
+  `player_prop:*` markets (not in free-tier base). Accepts `--league` to restrict
+  to one league; default iterates every league present in pending bets.
+  `scripts/fetch_closing_lines_nba.py` remains as a deprecation shim that
+  forwards to the generalized script with `--league NBA`.
 
 ### Tests ✅
 
@@ -214,7 +220,7 @@ Then:
 - `omega/integrations/odds_api.py`
 - `scripts/ingest_traces.py`
 - `scripts/fetch_outcomes_nba.py`
-- `scripts/fetch_closing_lines_nba.py`
+- `scripts/fetch_closing_lines_nba.py` (now a deprecation shim — see `scripts/fetch_closing_lines.py`)
 - `inbox/README.md`
 - `inbox/traces/.gitkeep` + `processed/.gitkeep` + `failed/.gitkeep`
 - `tests/scripts/__init__.py` + `tests/scripts/test_ingest_traces.py`

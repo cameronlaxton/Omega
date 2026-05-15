@@ -11,6 +11,8 @@ Wraps service-layer analyzers with:
 
 from __future__ import annotations
 
+import hashlib
+import json as _json_for_trace_hash
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
@@ -54,10 +56,41 @@ MODEL_VERSION = "omega-lite-v1"
 # Trace
 # ---------------------------------------------------------------------------
 
-def _new_trace_id() -> str:
+_TRACE_HASH_EXCLUDE = {"odds_over", "odds_under"}
+
+
+def _input_hash(request: Any) -> Optional[str]:
+    """Stable 8-char content hash of a request, excluding volatile odds fields.
+
+    Returns None if the request cannot be serialized.
+    """
+    try:
+        if hasattr(request, "model_dump"):
+            payload = request.model_dump(exclude=_TRACE_HASH_EXCLUDE)
+        elif isinstance(request, dict):
+            payload = {k: v for k, v in request.items() if k not in _TRACE_HASH_EXCLUDE}
+        else:
+            return None
+        encoded = _json_for_trace_hash.dumps(payload, sort_keys=True, default=str)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:8]
+    except Exception:
+        return None
+
+
+def _new_trace_id(request: Any = None) -> str:
     """Sandbox-prefixed trace id. The 'sandbox-' prefix is the honesty signal:
     a consumer can tell at a glance this came from omega_lite, not the
-    canonical pipeline."""
+    canonical pipeline.
+
+    When a request is supplied, the id encodes a stable input hash so reruns
+    of identical inputs share the hash prefix: ``sandbox-<hash[:8]>-<nonce[:4]>``.
+    Odds fields are excluded from the hash because mid-flight juice changes
+    should not invalidate the underlying simulation context.
+    """
+    if request is not None:
+        h = _input_hash(request)
+        if h is not None:
+            return f"sandbox-{h}-{uuid.uuid4().hex[:4]}"
     return f"sandbox-{uuid.uuid4().hex[:12]}"
 
 
@@ -147,11 +180,34 @@ def _synth_facts_from_game_request(req: GameAnalysisRequest) -> List[GatheredFac
 
 def _synth_facts_from_prop_request(req: PlayerPropRequest) -> List[GatheredFact]:
     """Same idea for prop requests. The single CRITICAL slot is
-    player_context.{stat}_mean — without it analyze_player_prop refuses."""
+    player_context.{stat}_mean — without it analyze_player_prop refuses.
+
+    B2: when the caller declares ``imputed_keys`` in player_context, the
+    mean and std are derived from a partially-imputed sample. Decay their
+    quality_score and mark the provider method as ``imputed``.
+    """
     ctx = req.player_context or {}
     stat = req.prop_type
     mean_key = f"{stat}_mean"
     std_key = f"{stat}_std"
+
+    raw_imputed = ctx.get("imputed_keys") or []
+    imputed_keys = [str(k) for k in raw_imputed if k is not None]
+    sample_size_raw = ctx.get("sample_size")
+    try:
+        sample_size = int(sample_size_raw) if sample_size_raw is not None else None
+    except (TypeError, ValueError):
+        sample_size = None
+
+    if imputed_keys and sample_size and sample_size > 0:
+        imputed_fraction = min(1.0, len(imputed_keys) / float(sample_size))
+    elif imputed_keys:
+        imputed_fraction = 1.0
+    else:
+        imputed_fraction = 0.0
+
+    quality_when_filled = max(0.5, 1.0 - 0.5 * imputed_fraction)
+    method_label = "imputed" if imputed_fraction > 0.0 else "user_input"
 
     facts: List[GatheredFact] = []
 
@@ -168,11 +224,11 @@ def _synth_facts_from_prop_request(req: PlayerPropRequest) -> List[GatheredFact]
         result=ProviderResult(
             data={mean_key: ctx[mean_key]},
             source="user_supplied",
-            method="user_input",
-            confidence=1.0,
+            method=method_label,
+            confidence=quality_when_filled,
         ) if mean_filled else None,
         filled=mean_filled,
-        quality_score=1.0 if mean_filled else 0.0,
+        quality_score=quality_when_filled if mean_filled else 0.0,
     ))
 
     std_slot = GatherSlot(
@@ -183,16 +239,19 @@ def _synth_facts_from_prop_request(req: PlayerPropRequest) -> List[GatheredFact]
         importance=InputImportance.IMPORTANT,
     )
     std_filled = isinstance(ctx.get(std_key), (int, float))
+    # std is more sensitive to imputation than mean (median imputation
+    # systematically compresses std), so decay it harder.
+    std_quality = max(0.3, 1.0 - 0.7 * imputed_fraction) if std_filled else 0.0
     facts.append(GatheredFact(
         slot=std_slot,
         result=ProviderResult(
             data={std_key: ctx.get(std_key)},
             source="user_supplied",
-            method="user_input",
-            confidence=1.0,
+            method=method_label,
+            confidence=std_quality,
         ) if std_filled else None,
         filled=std_filled,
-        quality_score=1.0 if std_filled else 0.0,
+        quality_score=std_quality,
     ))
 
     odds_slot = GatherSlot(
@@ -250,7 +309,7 @@ def analyze(
     # Coerce dicts into typed requests
     typed_req = _coerce_request(request)
 
-    trace_id = _new_trace_id()
+    trace_id = _new_trace_id(typed_req)
     ran_at = datetime.now(timezone.utc).isoformat()
 
     if isinstance(typed_req, GameAnalysisRequest):

@@ -42,10 +42,27 @@ from omega_lite.archetypes import (
 # Distribution samplers
 # ---------------------------------------------------------------------------
 
-def select_distribution(metric_key: str, league: str) -> str:
+def select_distribution(
+    metric_key: str,
+    league: str,
+    mean: Optional[float] = None,
+    override: Optional[str] = None,
+) -> str:
     """
     Selects appropriate distribution (Normal vs Poisson) based on metric and league.
+
+    Args:
+        metric_key: stat key (e.g. "pts", "blk", "kills")
+        league: league code (e.g. "NBA", "MLB")
+        mean: optional expected mean; used to route low-mean basketball count stats
+            (blk/stl/3pm/oreb/dreb/to) to Poisson where Normal would understate
+            right-tail mass.
+        override: optional caller override ("normal" or "poisson"). When supplied
+            and valid, it short-circuits all routing logic.
     """
+    if override in {"normal", "poisson"}:
+        return override
+
     league = league.upper()
     metric_key = metric_key.lower()
 
@@ -59,6 +76,14 @@ def select_distribution(metric_key: str, league: str) -> str:
                       "aces", "double_faults", "kills", "deaths", "assists_esport",
                       "hrs", "stolen_bases", "saves"}
     if metric_key in discrete_stats:
+        return "poisson"
+
+    # Low-mean basketball count stats: Normal grossly understates right-tail mass
+    # at low lambda. A blk prop with line=1.5 and mean=0.6 under Normal yields
+    # under_prob ~ 0.95; under Poisson it correctly lands near 0.88.
+    low_count_basketball = {"blk", "stl", "3pm", "oreb", "dreb", "to", "blocks",
+                            "steals", "turnovers", "offensive_rebounds"}
+    if metric_key in low_count_basketball and (mean is None or mean < 3.0):
         return "poisson"
 
     return "normal"
@@ -268,7 +293,7 @@ def simulate_totals_auto(
         random.seed(seed)
         if np is not None:
             np.random.seed(seed)
-    dist = select_distribution(metric_key, league)
+    dist = select_distribution(metric_key, league, mean=mean)
     return simulate_totals(mean, variance, market_total, dist, n_iter)
 
 
@@ -288,8 +313,9 @@ def run_player_simulation(
     mean = player_proj.get("mean", 0.0)
     variance = player_proj.get("variance", 1.0)
     market_line = player_proj.get("market_line", mean)
+    distribution_override = player_proj.get("distribution")
 
-    dist = select_distribution(stat_key, league)
+    dist = select_distribution(stat_key, league, mean=mean, override=distribution_override)
     sigma = max(0.1, variance ** 0.5)
 
     if dist == "poisson":
