@@ -27,7 +27,14 @@
       "Bash(rm -rf omega/api omega/evidence omega/reasoning/llm tests/api tests/evidence tests/research)",
       "Bash(rm -f omega/reasoning/orchestrator.py omega/reasoning/intent.py omega/reasoning/router.py omega/reasoning/planner.py omega/strategy/anchor/gather.py tests/reasoning/test_llm_routing.py tests/reasoning/test_production_hardening.py omega_lite-v1.zip)",
       "Bash(python -m pytest tests/ -x --ignore=tests/omega_lite)",
-      "Bash(python -m pytest tests/)"
+      "Bash(python -m pytest tests/)",
+      "Bash(python -m pytest tests/trace/test_trace_store.py tests/scripts/test_ingest_traces.py -x -q)",
+      "Bash(python -m pytest tests/trace tests/core tests/strategy tests/scripts -q)",
+      "Bash(python scripts/ingest_traces.py --dry-run --verbose)",
+      "Bash(python scripts/ingest_traces.py)",
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(python scripts/fetch_outcomes_nba.py --help)",
+      "Bash(python scripts/fetch_closing_lines_nba.py --help)"
     ]
   }
 }

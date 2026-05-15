@@ -6,14 +6,25 @@ Schema version 1:
 - outcomes table: attached after initial persistence, references traces(trace_id)
 - schema_versions table: tracks applied migrations
 
+Schema version 2 (additive):
+- bet_records table: user-confirmed wagers tied to a trace_id (book, line, odds, stake,
+  decision_timestamp). Required for CLV computation. One row per (trace_id, market,
+  selection_descriptor) — a trace may have multiple bets if a slate.
+
+Schema version 3 (additive):
+- closing_lines table: market close snapshots tied to a trace_id + market + selection.
+  Used for CLV computation by comparing odds_taken to closing_odds. One row per
+  (trace_id, market, selection_descriptor) — same key as bet_records so they line up.
+
 Design rules:
 - Full trace stored as JSON blob to decouple trace evolution from SQLite schema
 - Denormalized columns exist for querying only — the blob is source of truth
 - Outcomes are a separate table, never mutated into the trace record
+- Schema migrations are forward-additive (CREATE TABLE IF NOT EXISTS)
 """
 from __future__ import annotations
 
-CURRENT_VERSION = 1
+CURRENT_VERSION = 3
 
 SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS traces (
@@ -56,4 +67,42 @@ CREATE TABLE IF NOT EXISTS schema_versions (
     applied_at  TEXT NOT NULL DEFAULT (datetime('now')),
     description TEXT
 );
+"""
+
+SCHEMA_V2 = """
+CREATE TABLE IF NOT EXISTS bet_records (
+    bet_id              TEXT PRIMARY KEY,
+    trace_id            TEXT NOT NULL REFERENCES traces(trace_id),
+    book                TEXT NOT NULL,
+    market              TEXT NOT NULL,
+    selection           TEXT NOT NULL,
+    selection_descriptor TEXT NOT NULL,
+    line_taken          REAL,
+    odds_taken          REAL NOT NULL,
+    stake_units         REAL NOT NULL,
+    decision_timestamp  TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'pending',
+    recorded_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (trace_id, market, selection_descriptor)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bet_records_trace_id ON bet_records(trace_id);
+CREATE INDEX IF NOT EXISTS idx_bet_records_status ON bet_records(status);
+"""
+
+SCHEMA_V3 = """
+CREATE TABLE IF NOT EXISTS closing_lines (
+    closing_id            TEXT PRIMARY KEY,
+    trace_id              TEXT NOT NULL REFERENCES traces(trace_id),
+    market                TEXT NOT NULL,
+    selection_descriptor  TEXT NOT NULL,
+    closing_line          REAL,
+    closing_odds          REAL NOT NULL,
+    closing_timestamp     TEXT NOT NULL,
+    source                TEXT NOT NULL,
+    captured_at           TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (trace_id, market, selection_descriptor)
+);
+
+CREATE INDEX IF NOT EXISTS idx_closing_lines_trace_id ON closing_lines(trace_id);
 """

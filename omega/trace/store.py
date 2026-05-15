@@ -19,7 +19,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from omega.trace.schema import CURRENT_VERSION, SCHEMA_V1
+from omega.trace.bet_record import BetRecord
+from omega.trace.schema import CURRENT_VERSION, SCHEMA_V1, SCHEMA_V2, SCHEMA_V3
 
 logger = logging.getLogger("omega.trace.store")
 
@@ -48,17 +49,34 @@ class TraceStore:
         return self._conn
 
     def _ensure_schema(self) -> None:
-        """Create tables if they don't exist. Record schema version."""
+        """Create tables if they don't exist and record schema version stamps.
+
+        Migrations are forward-additive: each version's DDL uses CREATE TABLE IF
+        NOT EXISTS so a fresh DB and an old-version DB converge to CURRENT_VERSION
+        without an explicit migration step.
+        """
+        # V1: traces, outcomes, schema_versions
         self.conn.executescript(SCHEMA_V1)
-        # Record version if not already recorded
+        self._record_version(1, "Initial schema: traces, outcomes, schema_versions")
+
+        # V2: bet_records (user-confirmed wagers, for CLV resolution)
+        self.conn.executescript(SCHEMA_V2)
+        self._record_version(2, "Phase 6d: bet_records table for CLV tracking")
+
+        # V3: closing_lines (market close snapshots for CLV)
+        self.conn.executescript(SCHEMA_V3)
+        self._record_version(3, "Phase 6e: closing_lines table for CLV computation")
+
+    def _record_version(self, version: int, description: str) -> None:
+        """Idempotently stamp a schema version into schema_versions."""
         existing = self.conn.execute(
             "SELECT version FROM schema_versions WHERE version = ?",
-            (CURRENT_VERSION,),
+            (version,),
         ).fetchone()
         if not existing:
             self.conn.execute(
                 "INSERT INTO schema_versions (version, description) VALUES (?, ?)",
-                (CURRENT_VERSION, "Initial schema: traces, outcomes, schema_versions"),
+                (version, description),
             )
             self.conn.commit()
 
@@ -169,6 +187,146 @@ class TraceStore:
         )
         self.conn.commit()
         return outcome_id
+
+    # ------------------------------------------------------------------
+    # Bet records (Phase 6d — CLV substrate)
+    # ------------------------------------------------------------------
+
+    def record_bet(self, bet: BetRecord) -> str:
+        """Persist a user-confirmed wager. Idempotent on (trace_id, market, selection_descriptor).
+
+        Args:
+            bet: A populated BetRecord. trace_id must reference an existing trace.
+
+        Returns:
+            bet_id of the persisted row.
+
+        Raises:
+            ValueError: if the referenced trace does not exist.
+        """
+        row = self.conn.execute(
+            "SELECT trace_id FROM traces WHERE trace_id = ?", (bet.trace_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"No trace found with trace_id={bet.trace_id!r}")
+
+        self.conn.execute(
+            """INSERT OR IGNORE INTO bet_records
+               (bet_id, trace_id, book, market, selection, selection_descriptor,
+                line_taken, odds_taken, stake_units, decision_timestamp, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                bet.bet_id,
+                bet.trace_id,
+                bet.book,
+                bet.market,
+                bet.selection,
+                bet.selection_descriptor,
+                bet.line_taken,
+                bet.odds_taken,
+                bet.stake_units,
+                bet.decision_timestamp,
+                bet.status.value,
+            ),
+        )
+        self.conn.commit()
+        return bet.bet_id
+
+    def get_bet_records(self, trace_id: str) -> List[Dict[str, Any]]:
+        """Return all bet records attached to a trace (may be empty)."""
+        rows = self.conn.execute(
+            """SELECT bet_id, trace_id, book, market, selection, selection_descriptor,
+                      line_taken, odds_taken, stake_units, decision_timestamp,
+                      status, recorded_at
+               FROM bet_records WHERE trace_id = ? ORDER BY recorded_at""",
+            (trace_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_bet_status(self, bet_id: str, status: str) -> None:
+        """Mark a bet won/lost/void/push after outcome resolves."""
+        self.conn.execute(
+            "UPDATE bet_records SET status = ? WHERE bet_id = ?",
+            (status, bet_id),
+        )
+        self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Closing lines (Phase 6e — CLV resolution)
+    # ------------------------------------------------------------------
+
+    def attach_closing_line(
+        self,
+        trace_id: str,
+        market: str,
+        selection_descriptor: str,
+        closing_odds: float,
+        closing_line: Optional[float],
+        closing_timestamp: str,
+        source: str,
+    ) -> str:
+        """Attach a market-close snapshot to a trace + selection.
+
+        Idempotent on (trace_id, market, selection_descriptor): re-running with a
+        new source/timestamp leaves the first attached close in place. To force
+        an overwrite, delete the row explicitly. This protects against a
+        misconfigured cron clobbering a verified close.
+
+        Args:
+            trace_id: Must reference an existing trace.
+            market: e.g. "moneyline", "spread", "total", "player_prop:pts".
+            selection_descriptor: Canonical snake_case form (matches BetRecord).
+            closing_odds: American odds at close.
+            closing_line: Point/total at close; None for moneyline.
+            closing_timestamp: ISO 8601 of the close snapshot.
+            source: e.g. "the-odds-api:draftkings".
+
+        Returns:
+            closing_id of the row (existing or newly inserted).
+        """
+        row = self.conn.execute(
+            "SELECT trace_id FROM traces WHERE trace_id = ?", (trace_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"No trace found with trace_id={trace_id!r}")
+
+        existing = self.conn.execute(
+            """SELECT closing_id FROM closing_lines
+               WHERE trace_id = ? AND market = ? AND selection_descriptor = ?""",
+            (trace_id, market, selection_descriptor),
+        ).fetchone()
+        if existing:
+            return existing["closing_id"]
+
+        closing_id = uuid.uuid4().hex[:12]
+        self.conn.execute(
+            """INSERT INTO closing_lines
+               (closing_id, trace_id, market, selection_descriptor,
+                closing_line, closing_odds, closing_timestamp, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                closing_id,
+                trace_id,
+                market,
+                selection_descriptor,
+                closing_line,
+                closing_odds,
+                closing_timestamp,
+                source,
+            ),
+        )
+        self.conn.commit()
+        return closing_id
+
+    def get_closing_lines(self, trace_id: str) -> List[Dict[str, Any]]:
+        """Return all closing-line snapshots attached to a trace."""
+        rows = self.conn.execute(
+            """SELECT closing_id, trace_id, market, selection_descriptor,
+                      closing_line, closing_odds, closing_timestamp, source, captured_at
+               FROM closing_lines WHERE trace_id = ? ORDER BY captured_at""",
+            (trace_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     # ------------------------------------------------------------------
     # Retrieval

@@ -87,7 +87,7 @@ If BET_CARD is dropped, the downstream LLM should still provide one of:
 
 The LLM must label these outputs as non-Omega and must not include Kelly, units, official confidence tiers, or unverified model probabilities. 
 
-When the user asks a broad betting-value question, do not block solely because a formal Omega Bet Card cannot be produced. First perform a best-effort exploratory scan using public web data and/or user-provided lines. Return ranked candidates labeled as Omega Bet Card, research lean, estimated lean, or missing-data watchlist. Only withhold Bet Card-specific fields such as edge, EV, Kelly, units, and confidence tier when Omega/omega_lite inputs are incomplete.
+When the user asks a broad betting-value question, do not block solely because a formal Omega Bet Card cannot be produced. First perform a best-effort exploratory scan using public web data and/or user-provided lines. Return ranked candidates labeled as Omega Bet Card, research-only lean, or missing-data watchlist. Only the engine may produce Bet Card-specific fields such as edge, EV, Kelly, units, and confidence tier; research-only items carry none of those.
 
 ## The canonical Bet Card shape
 
