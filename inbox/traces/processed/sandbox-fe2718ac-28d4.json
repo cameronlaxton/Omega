@@ -1,0 +1,73 @@
+{
+  "trace": {
+    "trace_id": "sandbox-fe2718ac-28d4",
+    "session_id": "sess-20260515-g7d1",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-16T03:57:36.478632+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "player_name": "Jalen Duren",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 10.5,
+      "odds_over": -110,
+      "odds_under": -110,
+      "player_context": {
+        "pts_mean": 10.2,
+        "pts_std": 3.1,
+        "recent_games": [
+          11,
+          5,
+          9,
+          12,
+          8,
+          10
+        ],
+        "matchup_note": "15pts/11reb in G6 redemption game; benched G5 after poor G4; G7 starter"
+      },
+      "n_iterations": 10000,
+      "seed": 104
+    },
+    "result": {
+      "player_name": "Jalen Duren",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 10.5,
+      "status": "skipped",
+      "skip_reason": "Missing required input player_context.reb_mean",
+      "missing_requirements": [
+        "player_context.reb_mean"
+      ],
+      "over_prob": null,
+      "under_prob": null,
+      "edge_over": null,
+      "edge_under": null,
+      "recommendation": null,
+      "confidence_tier": null,
+      "notes": [],
+      "imputed_fraction": null
+    },
+    "quality_gate": {
+      "applied": true,
+      "aggregate_quality": 0.286,
+      "data_completeness": {
+        "player_context.reb_mean": "missing",
+        "player_context.reb_std": "missing",
+        "odds": "real"
+      },
+      "downgrades": [
+        "dropped_bet_card",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "final_packages": [
+        "limited_context_answer"
+      ],
+      "final_modes": [
+        "research"
+      ]
+    }
+  },
+  "bet_record": null,
+  "clv_capture_instructions": null
+}

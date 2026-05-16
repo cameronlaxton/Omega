@@ -1,0 +1,78 @@
+{
+  "trace": {
+    "trace_id": "sandbox-a93f3a51-83d2",
+    "session_id": "sess-20260515-g7d1",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-16T03:57:50.584487+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "player_name": "Cade Cunningham",
+      "league": "NBA",
+      "prop_type": "threes",
+      "line": 2.5,
+      "odds_over": -120,
+      "odds_under": 100,
+      "player_context": {
+        "threes_mean": 3.0,
+        "threes_std": 1.4
+      },
+      "n_iterations": 10000,
+      "seed": 102
+    },
+    "result": {
+      "player_name": "Cade Cunningham",
+      "league": "NBA",
+      "prop_type": "threes",
+      "line": 2.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.6448,
+      "under_prob": 0.3552,
+      "edge_over": 9.93,
+      "edge_under": -14.48,
+      "recommendation": "over",
+      "confidence_tier": "A",
+      "notes": [],
+      "imputed_fraction": 0.0
+    },
+    "quality_gate": {
+      "applied": true,
+      "aggregate_quality": 1.0,
+      "data_completeness": {
+        "player_context.threes_mean": "real",
+        "player_context.threes_std": "real",
+        "odds": "real"
+      },
+      "downgrades": [],
+      "final_packages": [
+        "bet_card",
+        "key_factors"
+      ],
+      "final_modes": [
+        "native_sim"
+      ]
+    }
+  },
+  "bet_record": {
+    "book": "theScore Bet",
+    "market": "player_prop:threes",
+    "selection": "Cade Cunningham Over 2.5 threes",
+    "selection_descriptor": "home_threes_over_2.5",
+    "line_taken": 2.5,
+    "odds_taken": -120,
+    "stake_units": 1.0,
+    "stake_dollars": 25.0,
+    "decision_timestamp": "2026-05-16T04:05:00Z"
+  },
+  "clv_capture_instructions": {
+    "league": "NBA",
+    "event_date": "2026-05-17",
+    "matchup": "Cleveland Cavaliers @ Detroit Pistons",
+    "market": "player_prop:threes",
+    "selection_descriptor": "home_threes_over_2.5",
+    "line_at_decision": 2.5,
+    "odds_at_decision": -120,
+    "book_at_decision": "theScore Bet"
+  }
+}

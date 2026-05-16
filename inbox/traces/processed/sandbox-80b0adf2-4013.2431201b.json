@@ -1,0 +1,88 @@
+{
+  "trace": {
+    "trace_id": "sandbox-80b0adf2-4013",
+    "session_id": "sess-20260515-g7d1",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-16T03:57:36.270049+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "player_name": "Cade Cunningham",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 27.5,
+      "odds_over": -115,
+      "odds_under": -105,
+      "player_context": {
+        "pts_mean": 24.5,
+        "pts_std": 8.2,
+        "home_away": "home",
+        "recent_games": [
+          39,
+          21,
+          28,
+          35,
+          22,
+          30
+        ],
+        "matchup_note": "Game 7 home, elimination game, usage spikes in must-win spots"
+      },
+      "n_iterations": 10000,
+      "seed": 101
+    },
+    "result": {
+      "player_name": "Cade Cunningham",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 27.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.3652,
+      "under_prob": 0.6348,
+      "edge_over": -16.97,
+      "edge_under": 12.26,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "notes": [],
+      "imputed_fraction": 0.0
+    },
+    "quality_gate": {
+      "applied": true,
+      "aggregate_quality": 1.0,
+      "data_completeness": {
+        "player_context.pts_mean": "real",
+        "player_context.pts_std": "real",
+        "odds": "real"
+      },
+      "downgrades": [],
+      "final_packages": [
+        "bet_card",
+        "key_factors"
+      ],
+      "final_modes": [
+        "native_sim"
+      ]
+    }
+  },
+  "bet_record": {
+    "book": "theScore Bet",
+    "market": "player_prop:pts",
+    "selection": "Cade Cunningham Under 27.5 pts",
+    "selection_descriptor": "home_pts_under_27.5",
+    "line_taken": 27.5,
+    "odds_taken": -105,
+    "stake_units": 1.0,
+    "stake_dollars": 25.0,
+    "decision_timestamp": "2026-05-16T04:05:00Z"
+  },
+  "clv_capture_instructions": {
+    "league": "NBA",
+    "event_date": "2026-05-17",
+    "matchup": "Cleveland Cavaliers @ Detroit Pistons",
+    "market": "player_prop:pts",
+    "selection_descriptor": "home_pts_under_27.5",
+    "line_at_decision": 27.5,
+    "odds_at_decision": -105,
+    "book_at_decision": "theScore Bet"
+  }
+}

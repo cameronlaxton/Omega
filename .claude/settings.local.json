@@ -52,7 +52,9 @@
       "Bash(echo \"exit=$?\")",
       "Bash(echo \"rc=$?\")",
       "Bash(python scripts/build_omega_lite.py)",
-      "Bash(python -m pytest -q)"
+      "Bash(python -m pytest -q)",
+      "Bash(awk '/^## §1 —/,/^## §3/' prompts/system_prompt.txt)",
+      "Bash(awk '/^## §10/,/^## §14/' prompts/system_prompt.txt)"
     ]
   }
 }

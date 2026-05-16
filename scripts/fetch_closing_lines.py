@@ -1,11 +1,11 @@
 """
 scripts/fetch_closing_lines.py — capture market close for bets needing CLV resolution.
 
-DEPRECATED (Phase 6f): The canonical closing-line ingest path is now
-`scripts/ingest_closing_lines.py`, which drains agent-emitted JIT snapshots from
-`inbox/closing_lines/*.json`. This script remains executable for one release as a
-fallback while the JIT WebFetch protocol bakes; do not extend it. The
-`omega.integrations.odds_api` module is on the same deprecation path.
+This is the live post-decision Odds API capture path. The canonical write path is
+still `scripts/ingest_closing_lines.py` for agent-emitted or manually reviewed
+snapshots, but Cowork automation may use this script when a current close is
+needed before tip-off. Paid historical backfill should use the historical
+methods on `omega.integrations.odds_api`.
 
 POST-DECISION ONLY. This is the **only** consumer of omega.integrations.odds_api.
 Pre-decision line sourcing happens inside the LLM via WebFetch on direct
@@ -30,6 +30,10 @@ not in budget on the free tier — CLV for prop bets is skipped today.
 Schedule this shortly before tip-off for each event so the snapshot truly
 represents the closing line (the free tier does not include historical
 endpoints).
+
+Phase 6g note: paid historical endpoints are now available through
+`OddsApiClient`; use them for missed-window backfill and reproducible replay
+artifacts instead of treating this live script as the only CLV source.
 
 Usage:
     OMEGA_ODDS_API_KEY=xxxxxxxx python scripts/fetch_closing_lines.py

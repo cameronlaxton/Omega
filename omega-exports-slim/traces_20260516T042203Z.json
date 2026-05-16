@@ -1,0 +1,1475 @@
+{
+  "export_schema_version": 1,
+  "exported_at": "2026-05-16T04:22:03.773460+00:00",
+  "trace_schema_version": 4,
+  "source_db": "/sessions/magical-lucid-franklin/mnt/Omega/omega_traces.db",
+  "trace_count": 47,
+  "filters": {
+    "league": null,
+    "since": null,
+    "until": null,
+    "limit": 500,
+    "include_full_trace": false
+  },
+  "traces": [
+    {
+      "trace_id": "sandbox-58ee2ffa-63a4",
+      "run_id": "sandbox-58ee2ffa-63a4",
+      "timestamp": "2026-05-16T03:57:50.853856+00:00",
+      "league": "NBA",
+      "matchup": "James Harden ast 6.5",
+      "execution_mode": "sandbox_prop",
+      "aggregate_quality": 1.0,
+      "session_id": "sess-20260515-g7d1",
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 1,
+        "by_tier": {
+          "C": 0,
+          "A": 1,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": 10.98,
+        "picks": [
+          {
+            "recommendation": "over",
+            "tier": "A",
+            "edge_pct": 10.98,
+            "market": "ast",
+            "status": "success"
+          }
+        ]
+      },
+      "outcome": null,
+      "bet_records": [
+        {
+          "bet_id": "f1f0bd8baf4f",
+          "trace_id": "sandbox-58ee2ffa-63a4",
+          "book": "theScore Bet",
+          "market": "player_prop:ast",
+          "selection": "James Harden Over 6.5 assists",
+          "selection_descriptor": "away_ast_over_6.5",
+          "line_taken": 6.5,
+          "odds_taken": -130.0,
+          "stake_units": 1.0,
+          "decision_timestamp": "2026-05-16T04:05:00Z",
+          "status": "pending",
+          "recorded_at": "2026-05-16 04:10:58"
+        }
+      ],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "sandbox-81536392-40be",
+      "run_id": "sandbox-81536392-40be",
+      "timestamp": "2026-05-16T03:57:50.820954+00:00",
+      "league": "NBA",
+      "matchup": "Jalen Duren reb 10.5",
+      "execution_mode": "sandbox_prop",
+      "aggregate_quality": 1.0,
+      "session_id": "sess-20260515-g7d1",
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 1,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": 1.22,
+        "picks": [
+          {
+            "recommendation": "pass",
+            "tier": null,
+            "edge_pct": 1.22,
+            "market": "reb",
+            "status": "success"
+          }
+        ]
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "sandbox-a93f3a51-83d2",
+      "run_id": "sandbox-a93f3a51-83d2",
+      "timestamp": "2026-05-16T03:57:50.584487+00:00",
+      "league": "NBA",
+      "matchup": "Cade Cunningham threes 2.5",
+      "execution_mode": "sandbox_prop",
+      "aggregate_quality": 1.0,
+      "session_id": "sess-20260515-g7d1",
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 1,
+        "by_tier": {
+          "C": 0,
+          "A": 1,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": 9.93,
+        "picks": [
+          {
+            "recommendation": "over",
+            "tier": "A",
+            "edge_pct": 9.93,
+            "market": "threes",
+            "status": "success"
+          }
+        ]
+      },
+      "outcome": null,
+      "bet_records": [
+        {
+          "bet_id": "01a8d9b54821",
+          "trace_id": "sandbox-a93f3a51-83d2",
+          "book": "theScore Bet",
+          "market": "player_prop:threes",
+          "selection": "Cade Cunningham Over 2.5 threes",
+          "selection_descriptor": "home_threes_over_2.5",
+          "line_taken": 2.5,
+          "odds_taken": -120.0,
+          "stake_units": 1.0,
+          "decision_timestamp": "2026-05-16T04:05:00Z",
+          "status": "pending",
+          "recorded_at": "2026-05-16 04:10:59"
+        }
+      ],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "sandbox-354c32cd-8778",
+      "run_id": "sandbox-354c32cd-8778",
+      "timestamp": "2026-05-16T03:57:36.539166+00:00",
+      "league": "NBA",
+      "matchup": "Evan Mobley pts 18.5",
+      "execution_mode": "sandbox_prop",
+      "aggregate_quality": 1.0,
+      "session_id": "sess-20260515-g7d1",
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 1,
+        "by_tier": {
+          "C": 0,
+          "A": 1,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": 4.77,
+        "picks": [
+          {
+            "recommendation": "over",
+            "tier": "A",
+            "edge_pct": 4.77,
+            "market": "pts",
+            "status": "success"
+          }
+        ]
+      },
+      "outcome": null,
+      "bet_records": [
+        {
+          "bet_id": "26f0b5f62fbd",
+          "trace_id": "sandbox-354c32cd-8778",
+          "book": "theScore Bet",
+          "market": "player_prop:pts",
+          "selection": "Evan Mobley Over 18.5 pts",
+          "selection_descriptor": "away_pts_over_18.5",
+          "line_taken": 18.5,
+          "odds_taken": -110.0,
+          "stake_units": 1.0,
+          "decision_timestamp": "2026-05-16T04:05:00Z",
+          "status": "pending",
+          "recorded_at": "2026-05-16 04:10:58"
+        }
+      ],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "sandbox-a8cb09ef-828f",
+      "run_id": "sandbox-a8cb09ef-828f",
+      "timestamp": "2026-05-16T03:57:36.522283+00:00",
+      "league": "NBA",
+      "matchup": "James Harden ast 6.5",
+      "execution_mode": "sandbox_prop",
+      "aggregate_quality": 0.286,
+      "session_id": "sess-20260515-g7d1",
+      "downgrades": [
+        "dropped_bet_card",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 1,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": [
+          {
+            "recommendation": null,
+            "tier": null,
+            "edge_pct": null,
+            "market": "ast",
+            "status": "skipped"
+          }
+        ]
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "sandbox-fe2718ac-28d4",
+      "run_id": "sandbox-fe2718ac-28d4",
+      "timestamp": "2026-05-16T03:57:36.478632+00:00",
+      "league": "NBA",
+      "matchup": "Jalen Duren reb 10.5",
+      "execution_mode": "sandbox_prop",
+      "aggregate_quality": 0.286,
+      "session_id": "sess-20260515-g7d1",
+      "downgrades": [
+        "dropped_bet_card",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 1,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": [
+          {
+            "recommendation": null,
+            "tier": null,
+            "edge_pct": null,
+            "market": "reb",
+            "status": "skipped"
+          }
+        ]
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "sandbox-4309e3f1-d43f",
+      "run_id": "sandbox-4309e3f1-d43f",
+      "timestamp": "2026-05-16T03:57:36.460435+00:00",
+      "league": "NBA",
+      "matchup": "Donovan Mitchell pts 26.5",
+      "execution_mode": "sandbox_prop",
+      "aggregate_quality": 1.0,
+      "session_id": "sess-20260515-g7d1",
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 1,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": 1.96,
+        "picks": [
+          {
+            "recommendation": "pass",
+            "tier": null,
+            "edge_pct": 1.96,
+            "market": "pts",
+            "status": "success"
+          }
+        ]
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "sandbox-2569e47d-dd94",
+      "run_id": "sandbox-2569e47d-dd94",
+      "timestamp": "2026-05-16T03:57:36.428241+00:00",
+      "league": "NBA",
+      "matchup": "Cade Cunningham threes 2.5",
+      "execution_mode": "sandbox_prop",
+      "aggregate_quality": 0.286,
+      "session_id": "sess-20260515-g7d1",
+      "downgrades": [
+        "dropped_bet_card",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 1,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": [
+          {
+            "recommendation": null,
+            "tier": null,
+            "edge_pct": null,
+            "market": "threes",
+            "status": "skipped"
+          }
+        ]
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "sandbox-80b0adf2-4013",
+      "run_id": "sandbox-80b0adf2-4013",
+      "timestamp": "2026-05-16T03:57:36.270049+00:00",
+      "league": "NBA",
+      "matchup": "Cade Cunningham pts 27.5",
+      "execution_mode": "sandbox_prop",
+      "aggregate_quality": 1.0,
+      "session_id": "sess-20260515-g7d1",
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 1,
+        "by_tier": {
+          "C": 0,
+          "A": 1,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": 12.26,
+        "picks": [
+          {
+            "recommendation": "under",
+            "tier": "A",
+            "edge_pct": 12.26,
+            "market": "pts",
+            "status": "success"
+          }
+        ]
+      },
+      "outcome": null,
+      "bet_records": [
+        {
+          "bet_id": "f183f7ba0c9b",
+          "trace_id": "sandbox-80b0adf2-4013",
+          "book": "theScore Bet",
+          "market": "player_prop:pts",
+          "selection": "Cade Cunningham Under 27.5 pts",
+          "selection_descriptor": "home_pts_under_27.5",
+          "line_taken": 27.5,
+          "odds_taken": -105.0,
+          "stake_units": 1.0,
+          "decision_timestamp": "2026-05-16T04:05:00Z",
+          "status": "pending",
+          "recorded_at": "2026-05-16 04:10:59"
+        }
+      ],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "81b28e77-6d78-4ba1-bedd-4e8518299aac",
+      "run_id": "12e636887a39",
+      "timestamp": "2026-04-09T16:12:18.540374Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "mixed",
+      "aggregate_quality": 0.4000000000000001,
+      "session_id": null,
+      "downgrades": [
+        "dropped_bet_card",
+        "game_breakdown_narrative_only",
+        "native_sim_to_mixed"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "f82597bd-fc63-4cb1-8aa6-b42c36568aec",
+      "run_id": "b4b0674f084f",
+      "timestamp": "2026-04-09T16:12:18.520822Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "dropped_bet_card",
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "93c44d13-6302-451e-b8da-98caaf5f771a",
+      "run_id": "45b44850b6b9",
+      "timestamp": "2026-04-09T16:12:18.491011Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "native_sim",
+      "aggregate_quality": 0.8000000000000002,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "391ba927-d106-4e38-94b6-90cd06f1253e",
+      "run_id": "eb9d3e842a65",
+      "timestamp": "2026-04-09T16:12:18.374905Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "native_sim",
+      "aggregate_quality": 0.8000000000000002,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "f4a54c4f-6cb8-4516-a03a-8ead48d74b4f",
+      "run_id": "1c840b441c4f",
+      "timestamp": "2026-03-26T19:35:03.762254Z",
+      "league": "NBA",
+      "matchup": "Analyze Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "18f21fdb-6dd3-403d-ad7d-2d556e3d518f",
+      "run_id": "dcb73ca651ed",
+      "timestamp": "2026-03-26T19:35:03.719184Z",
+      "league": "NBA",
+      "matchup": null,
+      "execution_mode": "narrative",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "04a4beb7-17b7-421e-ad94-f039d3513089",
+      "run_id": "467050df742e",
+      "timestamp": "2026-03-26T19:34:59.442128Z",
+      "league": "NBA",
+      "matchup": "Analyze Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "9a07f915-90c0-4517-86a7-7cc96b898484",
+      "run_id": "79189acb1f19",
+      "timestamp": "2026-03-26T19:34:59.039003Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "mixed",
+      "aggregate_quality": 0.4000000000000001,
+      "session_id": null,
+      "downgrades": [
+        "dropped_bet_card",
+        "game_breakdown_narrative_only",
+        "native_sim_to_mixed"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "8ea532a8-1c6a-4c2b-93a0-0f8e0a4badd4",
+      "run_id": "19a4613950be",
+      "timestamp": "2026-03-26T19:34:59.007998Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "dropped_bet_card",
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "abae73b0-4d9a-4d75-8360-0b3b9e9620e7",
+      "run_id": "6b8af946da46",
+      "timestamp": "2026-03-26T19:34:58.969981Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "native_sim",
+      "aggregate_quality": 0.8000000000000002,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "1988b1e9-5a22-4fb8-a5b6-951a75e9456c",
+      "run_id": "f7b84a14df84",
+      "timestamp": "2026-03-26T19:34:58.940782Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "native_sim",
+      "aggregate_quality": 0.8000000000000002,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "b8ce4a08-ff2e-4d34-8eab-d8d5701c7d58",
+      "run_id": "56a34efc1cc4",
+      "timestamp": "2026-03-26T19:34:58.085186Z",
+      "league": null,
+      "matchup": "Who should I bet on in Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "2c420c27-cb7e-4bc9-8a7d-0e0a4b54a264",
+      "run_id": "e09531540d3e",
+      "timestamp": "2026-03-25T05:13:39.118784Z",
+      "league": "NBA",
+      "matchup": "Analyze Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "ebee020f-612f-41f8-bad2-4495d872ef6c",
+      "run_id": "aa332056d337",
+      "timestamp": "2026-03-25T05:13:39.100457Z",
+      "league": "NBA",
+      "matchup": null,
+      "execution_mode": "narrative",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "3e6a6c4a-d30c-40dd-8747-88907b74de41",
+      "run_id": "36e1189a7944",
+      "timestamp": "2026-03-25T05:13:36.698790Z",
+      "league": "NBA",
+      "matchup": "Analyze Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "0047200a-b4d2-4465-b844-bc57168d6c6f",
+      "run_id": "a5bfdca91710",
+      "timestamp": "2026-03-25T05:13:36.616684Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "mixed",
+      "aggregate_quality": 0.4000000000000001,
+      "session_id": null,
+      "downgrades": [
+        "dropped_bet_card",
+        "game_breakdown_narrative_only",
+        "native_sim_to_mixed"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "c24709a8-2f21-4f10-b7b1-bcd303c44c1f",
+      "run_id": "63120431b286",
+      "timestamp": "2026-03-25T05:13:36.600240Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "dropped_bet_card",
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "108fd042-6dac-4f29-a947-b6041bc76605",
+      "run_id": "220610fda19a",
+      "timestamp": "2026-03-25T05:13:36.580047Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "native_sim",
+      "aggregate_quality": 0.8000000000000002,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "054513b4-834a-49dd-bf55-26c1ef0d032c",
+      "run_id": "2fa09e298347",
+      "timestamp": "2026-03-25T05:13:36.562382Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "native_sim",
+      "aggregate_quality": 0.8000000000000002,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "0222a0a7-ea41-4ad0-9fda-c52064b9ac6a",
+      "run_id": "0333ff907035",
+      "timestamp": "2026-03-25T05:13:36.429299Z",
+      "league": null,
+      "matchup": "Who should I bet on in Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "d7300dfa-6d8a-4183-b8ee-f06b9c60edac",
+      "run_id": "4f67c5fc6175",
+      "timestamp": "2026-03-25T05:12:04.153250Z",
+      "league": "NBA",
+      "matchup": "Analyze Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "b182df60-7f99-40a6-a32e-27f28d9f4a0e",
+      "run_id": "427e33558ee7",
+      "timestamp": "2026-03-25T05:12:04.134155Z",
+      "league": "NBA",
+      "matchup": null,
+      "execution_mode": "narrative",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "20be10d9-34e9-4723-b665-7eff40d9e8b4",
+      "run_id": "1c82dc4272fe",
+      "timestamp": "2026-03-25T05:12:02.761333Z",
+      "league": "NBA",
+      "matchup": "Analyze Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "04e35415-9556-42a3-9465-5a5749031d1e",
+      "run_id": "e246ee9563a5",
+      "timestamp": "2026-03-25T05:12:02.682642Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "mixed",
+      "aggregate_quality": 0.4000000000000001,
+      "session_id": null,
+      "downgrades": [
+        "dropped_bet_card",
+        "game_breakdown_narrative_only",
+        "native_sim_to_mixed"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "ed0315a2-fcf5-4538-a576-0f0ce9cc2ef7",
+      "run_id": "c2903987bc02",
+      "timestamp": "2026-03-25T05:12:02.665996Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "dropped_bet_card",
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "eed20329-26ca-43c5-bdbe-2c1838966263",
+      "run_id": "a9161bcf9c5d",
+      "timestamp": "2026-03-25T05:12:02.646994Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "native_sim",
+      "aggregate_quality": 0.8000000000000002,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "e11e6573-1a55-4d23-8ea6-8a86dbaaa537",
+      "run_id": "1a562065e232",
+      "timestamp": "2026-03-25T05:12:02.629057Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "native_sim",
+      "aggregate_quality": 0.8000000000000002,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "7fa528ce-feed-4568-8d10-42cd301cb8e3",
+      "run_id": "dad175d461ed",
+      "timestamp": "2026-03-25T05:12:02.302409Z",
+      "league": null,
+      "matchup": "Who should I bet on in Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "25256dc2-edb5-498a-960d-d95a9a5944ed",
+      "run_id": "e6f6b1cb1ad9",
+      "timestamp": "2026-03-24T23:42:16.060121Z",
+      "league": "NBA",
+      "matchup": "Analyze Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "ceaf73eb-5a81-4a51-a197-4dee4fc0c9c1",
+      "run_id": "992da2a5b9a2",
+      "timestamp": "2026-03-24T23:42:16.043056Z",
+      "league": "NBA",
+      "matchup": null,
+      "execution_mode": "narrative",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "0e68ec44-b3c5-423c-b82f-7dd14a3ddbe8",
+      "run_id": "f2f842f61b98",
+      "timestamp": "2026-03-24T23:42:12.786355Z",
+      "league": "NBA",
+      "matchup": "Analyze Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "811be49c-ce2b-4bed-ac91-40d24c4dd627",
+      "run_id": "b108584b1cb4",
+      "timestamp": "2026-03-24T23:42:12.549554Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "mixed",
+      "aggregate_quality": 0.4000000000000001,
+      "session_id": null,
+      "downgrades": [
+        "dropped_bet_card",
+        "game_breakdown_narrative_only",
+        "native_sim_to_mixed"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "32e1d744-c930-4b88-87f6-5411aea6be46",
+      "run_id": "ac93d0bfb53d",
+      "timestamp": "2026-03-24T23:42:12.528927Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "dropped_bet_card",
+        "game_breakdown_narrative_only",
+        "native_sim_to_research",
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "adffa5d0-9f31-4a7a-8e74-53697a7704c3",
+      "run_id": "af7a4fd84337",
+      "timestamp": "2026-03-24T23:42:12.476718Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "native_sim",
+      "aggregate_quality": 0.8000000000000002,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "de3e6393-5377-420f-b282-a57980e6cd95",
+      "run_id": "291e0104bfd4",
+      "timestamp": "2026-03-24T23:42:12.458303Z",
+      "league": "NBA",
+      "matchup": "Celtics @ Lakers",
+      "execution_mode": "native_sim",
+      "aggregate_quality": 0.8000000000000002,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "1d94dd1a-617c-4d78-9cf4-ce7c09c81aba",
+      "run_id": "d05fffbfc00f",
+      "timestamp": "2026-03-24T23:42:12.114937Z",
+      "league": null,
+      "matchup": "Who should I bet on in Lakers @ Celtics",
+      "execution_mode": "research",
+      "aggregate_quality": 0.0,
+      "session_id": null,
+      "downgrades": [
+        "ultra_low_data"
+      ],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "abc-456",
+      "run_id": "r-001",
+      "timestamp": "2026-03-21T00:00:00Z",
+      "league": null,
+      "matchup": null,
+      "execution_mode": null,
+      "aggregate_quality": 0.85,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    },
+    {
+      "trace_id": "abc-123",
+      "run_id": "r-001",
+      "timestamp": "2026-03-21T00:00:00Z",
+      "league": null,
+      "matchup": null,
+      "execution_mode": null,
+      "aggregate_quality": 0.85,
+      "session_id": null,
+      "downgrades": [],
+      "recommendation_summary": {
+        "total": 0,
+        "by_tier": {
+          "C": 0,
+          "A": 0,
+          "B": 0,
+          "Pass": 0
+        },
+        "max_edge_pct": null,
+        "picks": []
+      },
+      "outcome": null,
+      "bet_records": [],
+      "closing_lines": [],
+      "clv": []
+    }
+  ]
+}

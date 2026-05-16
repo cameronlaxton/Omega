@@ -1,10 +1,9 @@
 """
 scripts/ingest_closing_lines.py — drain `inbox/closing_lines/*.json` into omega_traces.db.
 
-This is the JIT replacement for the OddsApi-driven fetch path. The agent captures
-the closing line via WebFetch on a sportsbook page at ~T-5min before tip-off and
-emits a JSON file under inbox/closing_lines/<trace_id>.json. This script ingests
-those files into the closing_lines table.
+This is the stable file-to-DB bridge for closing-line snapshots. The snapshot may
+come from agent WebFetch, live Odds API capture, or paid historical Odds API
+backfill. This script ingests those files into the closing_lines table.
 
 No HTTP. No network calls. The agent is responsible for sourcing the data; this
 script is a pure file-to-DB bridge mirroring scripts/ingest_traces.py.

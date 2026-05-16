@@ -28,14 +28,14 @@ Do not move deterministic responsibilities into LLM logic. This restriction appl
 - confidence tiers (A / B / C / Pass)
 - trace_ids (always begin with `sandbox-` and are minted by the engine)
 
-**Hard rule (supersedes all prior fallback wording in OMEGA_RUN_RECIPE.md and OMEGA_HANDBOOK.md):** The LLM is forbidden from generating any of the above values via text. They must come from Python execution of `omega_lite_standalone.py` (sandbox) or the canonical FastAPI service (`omega/api/`). There is no "estimated", "rough", "ballpark", `[CLAUDE-ESTIMATED]`, or "estimated lean" mode for these fields. If the engine is unavailable, the response is qualitative-only: matchup narrative, news, recent form, listed sportsbook lines from a cited source — never a Bet Card with placeholder numbers.
+**Hard rule (supersedes all prior fallback wording in OMEGA_RUN_RECIPE.md and OMEGA_HANDBOOK.md):** The LLM is forbidden from generating any of the above values via text. They must come from Python execution of `omega_lite_standalone.py` (sandbox) or the canonical FastAPI service (`omega/api/`). There is no "estimated", "rough", "ballpark", `[Codex-ESTIMATED]`, or "estimated lean" mode for these fields. If the engine is unavailable, the response is qualitative-only: matchup narrative, news, recent form, listed sportsbook lines from a cited source — never a Bet Card with placeholder numbers.
 
 The LLM may still perform a best-effort exploratory market scan with public web data, but any candidate it surfaces is labeled as a **research-only lean** or **missing-data watchlist** item with NO edge%, EV%, Kelly, units, confidence tier, or trace_id. The previous "estimated lean" label is retired.
 
-The master runtime instruction for any LLM acting as the Omega agent (Claude.ai Project, ChatGPT Project, API agent) is [`prompts/system_prompt.txt`](prompts/system_prompt.txt). That file is authoritative for agent behavior; OMEGA_HANDBOOK.md and OMEGA_RUN_RECIPE.md are reference documents only.
+The master runtime instruction for any LLM acting as the Omega agent (Codex.ai Project, ChatGPT Project, API agent) is [`prompts/system_prompt.txt`](prompts/system_prompt.txt). That file is authoritative for agent behavior; OMEGA_HANDBOOK.md and OMEGA_RUN_RECIPE.md are reference documents only.
 
 **Deployment-specific instructions:** Use **one** instruction set based on deployment:
-- **Claude.ai Project / API agent (no local access)** → [`prompts/system_prompt.txt`](prompts/system_prompt.txt)
+- **Codex.ai Project / API agent (no local access)** → [`prompts/system_prompt.txt`](prompts/system_prompt.txt)
 - **Cowork Project (local repo access)** → [`OMEGA_COWORK.md`](OMEGA_COWORK.md)
 
 Do NOT combine both files into a single Project; they assume different execution contexts (sandbox vs. local VM, manual vs. automated pipelines).

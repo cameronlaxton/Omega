@@ -1,0 +1,87 @@
+{
+  "trace": {
+    "trace_id": "sandbox-354c32cd-8778",
+    "session_id": "sess-20260515-g7d1",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-16T03:57:36.539166+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "player_name": "Evan Mobley",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 18.5,
+      "odds_over": -110,
+      "odds_under": -110,
+      "player_context": {
+        "pts_mean": 19.5,
+        "pts_std": 5.8,
+        "recent_games": [
+          19,
+          19,
+          28,
+          12,
+          17,
+          15
+        ],
+        "matchup_note": "19pts in each of last 2 games; near-triple-double upside; key Cavs hub"
+      },
+      "n_iterations": 10000,
+      "seed": 106
+    },
+    "result": {
+      "player_name": "Evan Mobley",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 18.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.5715,
+      "under_prob": 0.4285,
+      "edge_over": 4.77,
+      "edge_under": -9.53,
+      "recommendation": "over",
+      "confidence_tier": "A",
+      "notes": [],
+      "imputed_fraction": 0.0
+    },
+    "quality_gate": {
+      "applied": true,
+      "aggregate_quality": 1.0,
+      "data_completeness": {
+        "player_context.pts_mean": "real",
+        "player_context.pts_std": "real",
+        "odds": "real"
+      },
+      "downgrades": [],
+      "final_packages": [
+        "bet_card",
+        "key_factors"
+      ],
+      "final_modes": [
+        "native_sim"
+      ]
+    }
+  },
+  "bet_record": {
+    "book": "theScore Bet",
+    "market": "player_prop:pts",
+    "selection": "Evan Mobley Over 18.5 pts",
+    "selection_descriptor": "away_pts_over_18.5",
+    "line_taken": 18.5,
+    "odds_taken": -110,
+    "stake_units": 1.0,
+    "stake_dollars": 25.0,
+    "decision_timestamp": "2026-05-16T04:05:00Z"
+  },
+  "clv_capture_instructions": {
+    "league": "NBA",
+    "event_date": "2026-05-17",
+    "matchup": "Cleveland Cavaliers @ Detroit Pistons",
+    "market": "player_prop:pts",
+    "selection_descriptor": "away_pts_over_18.5",
+    "line_at_decision": 18.5,
+    "odds_at_decision": -110,
+    "book_at_decision": "theScore Bet"
+  }
+}

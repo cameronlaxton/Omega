@@ -1,38 +1,22 @@
 """
-omega.integrations.odds_api — the-odds-api.com thin client.
-
-DEPRECATED (Phase 6f) — pending removal after JIT ingest reaches steady state.
-=============================================================================
-Closing-line capture has moved to agent-driven JIT WebFetch + the file-based
-ingest path at `scripts/ingest_closing_lines.py`. This client and its sole
-consumer (`scripts/fetch_closing_lines.py`) are kept as a fallback for one
-release while the JIT protocol bakes. Do not add new call sites.
+omega.integrations.odds_api - the-odds-api.com thin client.
 
 POST-DECISION USE ONLY.
 ======================
-This module is restricted to **closing-line capture for CLV computation**.
-Pre-decision sourcing (the lines / odds the LLM injects into analyze()) is
-done by the agent itself via WebFetch on direct sportsbook pages per
-prompts/system_prompt.txt §6.1.5. Do not add pre-decision call sites here;
-the player-props add-on the-odds-api charges for is **not in budget** and
-not required for sandbox operation.
+This module is restricted to closing-line capture for CLV computation and
+historical odds snapshots for replay/backtest artifacts. Pre-decision sourcing
+(the lines / odds the LLM injects into analyze()) stays in the agent's cited
+evidence flow; the API key should never be exposed in prompts, frontend code, or
+trace blobs.
 
-The single supported entry point is :meth:`OddsApiClient.fetch_nba_odds`,
-which returns one snapshot per call (h2h / spreads / totals across US books).
-Schedule the snapshot to run shortly before tip-off — that snapshot IS the
-"closing line" for CLV purposes on the free tier.
+Endpoint reference:
+- Live odds:              GET /v4/sports/{sport}/odds
+- Historical odds:        GET /v4/historical/sports/{sport}/odds
+- Historical events:      GET /v4/historical/sports/{sport}/events
+- Historical event odds:  GET /v4/historical/sports/{sport}/events/{eventId}/odds
 
-Free tier = 500 requests/month. The client tracks usage in a local JSON file
-and refuses requests that would exceed a configured monthly budget.
-
-Endpoint reference (kept for documentation only — only /odds is used today):
-- Live odds:     GET /v4/sports/{sport}/odds        (USED — closing snapshot)
-- Scores:        GET /v4/sports/{sport}/scores      (not used)
-- Historical:    GET /v4/historical/sports/...      (paid plan, not used)
-
-API key is read from the OMEGA_ODDS_API_KEY environment variable. The client
-is safe to instantiate without a key — fetch methods will raise
-`OddsApiKeyMissing` if you try to make a request.
+API key is read from OMEGA_ODDS_API_KEY. Fetch methods raise
+OddsApiKeyMissing if the key is absent.
 """
 from __future__ import annotations
 
@@ -50,35 +34,34 @@ logger = logging.getLogger("omega.integrations.odds_api")
 
 _BASE_URL = "https://api.the-odds-api.com/v4"
 _REQUEST_TIMEOUT_SECONDS = 15
-_DEFAULT_MONTHLY_BUDGET = 450  # leave headroom under the 500 free-tier ceiling
+_DEFAULT_MONTHLY_BUDGET = int(os.environ.get("OMEGA_ODDS_API_MONTHLY_BUDGET", "450"))
 _DEFAULT_BUDGET_FILE = "omega_odds_api_budget.json"
 
 
 # Omega league code -> the-odds-api sport key. Add a row when extending coverage.
-# Sport keys are documented at https://the-odds-api.com/sports-odds-data/sports-apis.html.
 SPORT_KEY_MAP: Dict[str, str] = {
-    "NBA":   "basketball_nba",
-    "WNBA":  "basketball_wnba",
+    "NBA": "basketball_nba",
+    "WNBA": "basketball_wnba",
     "NCAAB": "basketball_ncaab",
     "NCAAM": "basketball_ncaab",
-    "NFL":   "americanfootball_nfl",
+    "NFL": "americanfootball_nfl",
     "NCAAF": "americanfootball_ncaaf",
-    "MLB":   "baseball_mlb",
-    "NHL":   "icehockey_nhl",
-    "EPL":   "soccer_epl",
-    "MLS":   "soccer_usa_mls",
-    "LA_LIGA":          "soccer_spain_la_liga",
-    "BUNDESLIGA":       "soccer_germany_bundesliga",
-    "SERIE_A":          "soccer_italy_serie_a",
-    "LIGUE_1":          "soccer_france_ligue_one",
+    "MLB": "baseball_mlb",
+    "NHL": "icehockey_nhl",
+    "EPL": "soccer_epl",
+    "MLS": "soccer_usa_mls",
+    "LA_LIGA": "soccer_spain_la_liga",
+    "BUNDESLIGA": "soccer_germany_bundesliga",
+    "SERIE_A": "soccer_italy_serie_a",
+    "LIGUE_1": "soccer_france_ligue_one",
     "CHAMPIONS_LEAGUE": "soccer_uefa_champs_league",
-    "UFC":   "mma_mixed_martial_arts",
-    "MMA":   "mma_mixed_martial_arts",
+    "UFC": "mma_mixed_martial_arts",
+    "MMA": "mma_mixed_martial_arts",
 }
 
 
 def sport_key_for(league: str) -> Optional[str]:
-    """Resolve an Omega league code to a the-odds-api sport key, or None."""
+    """Resolve an Omega league code to the-odds-api sport key, or None."""
     if not league:
         return None
     return SPORT_KEY_MAP.get(league.upper())
@@ -95,27 +78,51 @@ class OddsApiBudgetExceeded(RuntimeError):
 @dataclass(frozen=True)
 class BookOdds:
     """One sportsbook's price for one selection."""
-    bookmaker: str           # e.g. "draftkings", "fanduel"
-    market: str              # e.g. "h2h", "spreads", "totals"
-    selection: str           # team name (h2h/spreads) or "Over"/"Under" (totals)
-    price: float             # American odds
-    point: Optional[float]   # line value (None for h2h)
-    last_update: str         # ISO 8601
+
+    bookmaker: str
+    market: str
+    selection: str
+    price: float
+    point: Optional[float]
+    last_update: str
+    description: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class EventOdds:
     """All books' odds for a single event."""
+
     event_id: str
     sport_key: str
-    commence_time: str       # ISO 8601
+    commence_time: str
     home_team: str
     away_team: str
     books: List[BookOdds]
 
 
+@dataclass(frozen=True)
+class HistoricalEvent:
+    """One event returned by the historical events endpoint."""
+
+    event_id: str
+    sport_key: str
+    commence_time: str
+    home_team: str
+    away_team: str
+
+
+@dataclass(frozen=True)
+class HistoricalSnapshot:
+    """Metadata wrapper around a historical odds snapshot."""
+
+    timestamp: str
+    previous_timestamp: Optional[str]
+    next_timestamp: Optional[str]
+    events: List[EventOdds]
+
+
 class OddsApiClient:
-    """Thin wrapper around the-odds-api with monthly budget tracking."""
+    """Thin wrapper around the-odds-api with local monthly budget tracking."""
 
     def __init__(
         self,
@@ -154,7 +161,8 @@ class OddsApiClient:
         used = data.get(key, 0)
         if used + n > self._monthly_budget:
             raise OddsApiBudgetExceeded(
-                f"Monthly budget exceeded for {key}: used={used}, requested={n}, cap={self._monthly_budget}"
+                f"Monthly budget exceeded for {key}: used={used}, requested={n}, "
+                f"cap={self._monthly_budget}"
             )
         data[key] = used + n
         self._write_budget(data)
@@ -167,10 +175,10 @@ class OddsApiClient:
     # HTTP
     # ------------------------------------------------------------------
 
-    def _get_json(self, path: str, params: Dict[str, Any]) -> Any:
+    def _get_json(self, path: str, params: Dict[str, Any], request_cost: int = 1) -> Any:
         if not self._api_key:
             raise OddsApiKeyMissing("OMEGA_ODDS_API_KEY not set")
-        self._consume_budget(1)
+        self._consume_budget(request_cost)
         query = dict(params)
         query["apiKey"] = self._api_key
         url = f"{_BASE_URL}{path}?{urllib.parse.urlencode(query)}"
@@ -179,7 +187,7 @@ class OddsApiClient:
             return json.loads(resp.read().decode("utf-8"))
 
     # ------------------------------------------------------------------
-    # Event-odds fetch (sport-agnostic)
+    # Current odds
     # ------------------------------------------------------------------
 
     def fetch_event_odds(
@@ -189,35 +197,9 @@ class OddsApiClient:
         markets: str = "h2h,spreads,totals",
         bookmakers: Optional[str] = None,
     ) -> List[EventOdds]:
-        """Fetch current event odds for a league across US books.
-
-        One API request per call regardless of how many events return.
-
-        POST-DECISION USE ONLY (closing-line capture). Do not call this from
-        any pre-decision path; the agent sources lines via WebFetch on direct
-        sportsbook pages per system_prompt.txt §6.1.5.
-
-        ``markets`` is restricted to game markets (h2h / spreads / totals).
-        Player-prop markets are not enabled on the free tier and are not in
-        budget; passing a player-prop market key here will return an empty
-        list from the API rather than charging extra.
-
-        Raises ``ValueError`` if the league isn't in :data:`SPORT_KEY_MAP`.
-        """
-        sport_key = sport_key_for(league)
-        if sport_key is None:
-            raise ValueError(
-                f"No the-odds-api sport key mapped for league={league!r}. "
-                "Add it to SPORT_KEY_MAP in omega.integrations.odds_api."
-            )
-        params: Dict[str, Any] = {
-            "regions": regions,
-            "markets": markets,
-            "oddsFormat": "american",
-            "dateFormat": "iso",
-        }
-        if bookmakers:
-            params["bookmakers"] = bookmakers
+        """Fetch current event odds for a league across books."""
+        sport_key = _require_sport_key(league)
+        params = _odds_params(regions=regions, markets=markets, bookmakers=bookmakers)
         payload = self._get_json(f"/sports/{sport_key}/odds", params)
         return parse_events(payload)
 
@@ -227,18 +209,120 @@ class OddsApiClient:
         markets: str = "h2h,spreads,totals",
         bookmakers: Optional[str] = None,
     ) -> List[EventOdds]:
-        """Back-compat shim. Delegates to :meth:`fetch_event_odds` with league='NBA'."""
+        """Back-compat shim. Delegates to fetch_event_odds(league='NBA')."""
         return self.fetch_event_odds(
-            league="NBA", regions=regions, markets=markets, bookmakers=bookmakers,
+            league="NBA", regions=regions, markets=markets, bookmakers=bookmakers
         )
+
+    # ------------------------------------------------------------------
+    # Historical odds (paid API plans)
+    # ------------------------------------------------------------------
+
+    def fetch_historical_odds(
+        self,
+        league: str,
+        date: str,
+        regions: str = "us",
+        markets: str = "h2h,spreads,totals",
+        bookmakers: Optional[str] = None,
+    ) -> HistoricalSnapshot:
+        """Fetch a sport-level historical featured-market snapshot.
+
+        The Odds API returns the closest snapshot equal to or earlier than
+        ``date``. This endpoint is the preferred CLV/backtest source for
+        featured markets because it covers every event in one call.
+        """
+        sport_key = _require_sport_key(league)
+        params = _odds_params(regions=regions, markets=markets, bookmakers=bookmakers)
+        params["date"] = date
+        payload = self._get_json(
+            f"/historical/sports/{sport_key}/odds",
+            params,
+            request_cost=_historical_cost(regions=regions, markets=markets),
+        )
+        return parse_historical_snapshot(payload)
+
+    def fetch_historical_events(
+        self,
+        league: str,
+        date: str,
+        commence_time_from: Optional[str] = None,
+        commence_time_to: Optional[str] = None,
+        event_ids: Optional[str] = None,
+    ) -> List[HistoricalEvent]:
+        """Fetch historical event metadata for resolving event IDs."""
+        sport_key = _require_sport_key(league)
+        params: Dict[str, Any] = {"date": date, "dateFormat": "iso"}
+        if commence_time_from:
+            params["commenceTimeFrom"] = commence_time_from
+        if commence_time_to:
+            params["commenceTimeTo"] = commence_time_to
+        if event_ids:
+            params["eventIds"] = event_ids
+        payload = self._get_json(f"/historical/sports/{sport_key}/events", params)
+        return parse_historical_events(payload)
+
+    def fetch_historical_event_odds(
+        self,
+        league: str,
+        event_id: str,
+        date: str,
+        regions: str = "us",
+        markets: str = "h2h,spreads,totals",
+        bookmakers: Optional[str] = None,
+    ) -> HistoricalSnapshot:
+        """Fetch historical odds for one event, including prop/additional markets."""
+        sport_key = _require_sport_key(league)
+        params = _odds_params(regions=regions, markets=markets, bookmakers=bookmakers)
+        params["date"] = date
+        payload = self._get_json(
+            f"/historical/sports/{sport_key}/events/{event_id}/odds",
+            params,
+            request_cost=_historical_cost(regions=regions, markets=markets),
+        )
+        return parse_historical_snapshot(payload)
+
+
+def _require_sport_key(league: str) -> str:
+    sport_key = sport_key_for(league)
+    if sport_key is None:
+        raise ValueError(
+            f"No the-odds-api sport key mapped for league={league!r}. "
+            "Add it to SPORT_KEY_MAP in omega.integrations.odds_api."
+        )
+    return sport_key
+
+
+def _odds_params(
+    regions: str,
+    markets: str,
+    bookmakers: Optional[str],
+) -> Dict[str, Any]:
+    params: Dict[str, Any] = {
+        "markets": markets,
+        "oddsFormat": "american",
+        "dateFormat": "iso",
+    }
+    if bookmakers:
+        params["bookmakers"] = bookmakers
+    else:
+        params["regions"] = regions
+    return params
+
+
+def _historical_cost(regions: str, markets: str) -> int:
+    region_count = max(1, len([r for r in regions.split(",") if r.strip()]))
+    market_count = max(1, len([m for m in markets.split(",") if m.strip()]))
+    return 10 * region_count * market_count
 
 
 # ---------------------------------------------------------------------------
 # Parsing (public for testability)
 # ---------------------------------------------------------------------------
 
+
 def parse_events(payload: Any) -> List[EventOdds]:
-    """Parse the-odds-api event list into our EventOdds dataclass."""
+    """Parse the-odds-api event list into EventOdds dataclasses."""
     events: List[EventOdds] = []
     if not isinstance(payload, list):
         return events
@@ -246,27 +330,69 @@ def parse_events(payload: Any) -> List[EventOdds]:
         books: List[BookOdds] = []
         for bm in evt.get("bookmakers") or []:
             bm_key = bm.get("key", "")
-            last_update = bm.get("last_update", "")
+            bm_last_update = bm.get("last_update", "")
             for market in bm.get("markets") or []:
                 m_key = market.get("key", "")
+                last_update = market.get("last_update") or bm_last_update
                 for outcome in market.get("outcomes") or []:
-                    books.append(BookOdds(
-                        bookmaker=bm_key,
-                        market=m_key,
-                        selection=outcome.get("name", ""),
-                        price=float(outcome.get("price", 0)),
-                        point=(
-                            float(outcome["point"])
-                            if outcome.get("point") is not None else None
-                        ),
-                        last_update=last_update,
-                    ))
-        events.append(EventOdds(
-            event_id=str(evt.get("id", "")),
-            sport_key=evt.get("sport_key", ""),
-            commence_time=evt.get("commence_time", ""),
-            home_team=evt.get("home_team", ""),
-            away_team=evt.get("away_team", ""),
-            books=books,
-        ))
+                    books.append(
+                        BookOdds(
+                            bookmaker=bm_key,
+                            market=m_key,
+                            selection=outcome.get("name", ""),
+                            price=float(outcome.get("price", 0)),
+                            point=(
+                                float(outcome["point"])
+                                if outcome.get("point") is not None
+                                else None
+                            ),
+                            last_update=last_update,
+                            description=outcome.get("description"),
+                        )
+                    )
+        events.append(
+            EventOdds(
+                event_id=str(evt.get("id", "")),
+                sport_key=evt.get("sport_key", ""),
+                commence_time=evt.get("commence_time", ""),
+                home_team=evt.get("home_team", ""),
+                away_team=evt.get("away_team", ""),
+                books=books,
+            )
+        )
+    return events
+
+
+def parse_historical_snapshot(payload: Any) -> HistoricalSnapshot:
+    """Parse a wrapped historical odds or historical event-odds response."""
+    if not isinstance(payload, dict):
+        return HistoricalSnapshot("", None, None, [])
+    data = payload.get("data")
+    event_payload = data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
+    return HistoricalSnapshot(
+        timestamp=str(payload.get("timestamp", "")),
+        previous_timestamp=payload.get("previous_timestamp"),
+        next_timestamp=payload.get("next_timestamp"),
+        events=parse_events(event_payload),
+    )
+
+
+def parse_historical_events(payload: Any) -> List[HistoricalEvent]:
+    """Parse a wrapped historical events response."""
+    if not isinstance(payload, dict):
+        return []
+    data = payload.get("data")
+    if not isinstance(data, list):
+        return []
+    events: List[HistoricalEvent] = []
+    for evt in data:
+        events.append(
+            HistoricalEvent(
+                event_id=str(evt.get("id", "")),
+                sport_key=evt.get("sport_key", ""),
+                commence_time=evt.get("commence_time", ""),
+                home_team=evt.get("home_team", ""),
+                away_team=evt.get("away_team", ""),
+            )
+        )
     return events
