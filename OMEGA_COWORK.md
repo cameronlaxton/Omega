@@ -372,6 +372,7 @@ All paths relative to the Omega repo root: `C:\Users\camer\OneDrive\Documents\Gi
 | `scripts/promote_profile.py` | Promotes a calibration candidate to production |
 | `scripts/fetch_outcomes_nba.py` | Attaches NBA outcomes from ESPN scoreboard |
 | `scripts/fetch_outcomes_mlb.py` | Attaches MLB outcomes from ESPN scoreboard |
+| `scripts/backfill_closing_lines.py` | Backfills missed close windows via historical Odds API |
 
 ---
 
