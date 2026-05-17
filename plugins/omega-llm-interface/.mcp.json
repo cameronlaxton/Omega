@@ -2,11 +2,7 @@
   "mcpServers": {
     "omega": {
       "command": "python",
-      "args": [
-        "-m",
-        "omega.mcp.server"
-      ],
-      "cwd": "../.."
+      "args": ["-m", "omega.mcp.server"]
     }
   }
 }

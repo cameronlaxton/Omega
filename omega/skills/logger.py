@@ -4,7 +4,7 @@ an async queue or external sink.
 """
 from pathlib import Path
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from . import config
 
 
@@ -16,7 +16,7 @@ def _ensure_log_dir():
 
 def write_event(event: dict):
     path = _ensure_log_dir()
-    ts = datetime.utcnow().isoformat() + "Z"
+    ts = datetime.now(timezone.utc).isoformat()
     event.setdefault("ts", ts)
     fname = path / "events.jsonl"
     with fname.open("a", encoding="utf-8") as f:

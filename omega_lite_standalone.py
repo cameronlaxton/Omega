@@ -32,7 +32,7 @@ when the enums or schemas change.
 """
 
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -120,7 +120,7 @@ class ProviderResult(BaseModel):
     data: Dict[str, Any]
     source: str
     source_url: Optional[str] = None
-    fetched_at: datetime = Field(default_factory=datetime.utcnow)
+    fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     confidence: float = 1.0
     method: str = "unknown"
 

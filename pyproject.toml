@@ -41,3 +41,8 @@ warn_unused_configs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+
+[tool.setuptools.packages.find]
+include = ["omega*", "omega_lite*"]
+exclude = ["tests*", "docs*", "inbox*", "reports*", "config*", "scripts*"]

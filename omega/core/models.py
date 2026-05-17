@@ -201,7 +201,7 @@ class ProviderResult(BaseModel):
     data: Dict[str, Any]
     source: str                        # provider name: "espn", "bbref", etc.
     source_url: Optional[str] = None   # attribution URL
-    fetched_at: datetime = Field(default_factory=datetime.utcnow)
+    fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     confidence: float = 1.0            # 1.0 = primary API, 0.5 = LLM-extracted, 0.3 = stale cache
     method: str = "unknown"            # "structured_api", "llm_extraction", "web_scrape", "cache_hit"
 

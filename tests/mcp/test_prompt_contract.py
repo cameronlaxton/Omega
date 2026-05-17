@@ -34,10 +34,43 @@ def test_llm_mcp_interface_documents_replay_as_audit_only():
     assert "standard text only" in text
 
 
-def test_plugin_config_points_to_current_repo_root_relatively():
+def test_plugin_mcp_config_uses_installed_package_not_relative_escape():
+    """No relative-escape cwd; Claude copies plugins to a cache where ../.. is invalid."""
+    import json
+
     text = (ROOT / "plugins" / "omega-llm-interface" / ".mcp.json").read_text(
         encoding="utf-8"
     )
+    config = json.loads(text)
 
-    assert '"cwd": "../.."' in text
+    assert '"cwd": "../"' not in text
+    assert '"cwd": "../.."' not in text
     assert "Desktop" not in text
+
+    omega_server = config["mcpServers"]["omega"]
+    assert omega_server["command"] == "python"
+    assert omega_server["args"] == ["-m", "omega.mcp.server"]
+
+
+def test_claude_plugin_manifest_exists_and_is_well_formed():
+    """Plugin must ship a .claude-plugin/plugin.json for Claude Code discovery."""
+    import json
+
+    manifest_path = (
+        ROOT / "plugins" / "omega-llm-interface" / ".claude-plugin" / "plugin.json"
+    )
+    assert manifest_path.exists(), f"missing {manifest_path}"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["name"] == "omega-llm-interface"
+    assert "version" in manifest
+
+
+def test_claude_marketplace_lists_omega_plugin():
+    """Repo-root marketplace must catalog the omega-llm-interface plugin."""
+    import json
+
+    market_path = ROOT / ".claude-plugin" / "marketplace.json"
+    assert market_path.exists(), f"missing {market_path}"
+    market = json.loads(market_path.read_text(encoding="utf-8"))
+    names = [p["name"] for p in market["plugins"]]
+    assert "omega-llm-interface" in names
