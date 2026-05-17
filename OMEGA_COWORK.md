@@ -106,6 +106,58 @@ Rules:
 
 ---
 
+## 3B. Local MCP Server
+
+The Omega MCP server (`omega/mcp/server.py`) wraps the same deterministic contracts as the direct import path. Prefer it when a MCP client (Claude Desktop, Claude Code) is connected; fall back to direct repo imports (§3) when no client is present.
+
+**Install the optional dependency (once per environment):**
+
+```bash
+cd "C:\Users\camer\OneDrive\Documents\GitHub\Omega"
+pip install -e .[mcp]
+```
+
+**Launch (stdio transport — compatible with Claude Desktop and Claude Code MCP configs):**
+
+```bash
+cd "C:\Users\camer\OneDrive\Documents\GitHub\Omega"
+python -m omega.mcp.server
+```
+
+The server runs until terminated. Keep it running in a background terminal for the session.
+
+**Verify the dependency is installed:**
+
+```bash
+python -c "from mcp.server.fastmcp import FastMCP; print('mcp ok')"
+```
+
+If this fails with `ModuleNotFoundError: No module named 'mcp'`, the optional group is not installed — run `pip install -e .[mcp]` first.
+
+**Tools exposed over MCP:**
+
+| Tool | Purpose |
+|------|---------|
+| `omega_analyze_game` | Game spread / moneyline / total analysis |
+| `omega_analyze_prop` | Player prop analysis (Poisson / Normal) |
+| `omega_analyze_slate` | Batch game analysis |
+| `omega_resolve_odds` | BetMGM-first odds resolution (replaces §3A script) |
+| `omega_trace_get` | Retrieve a single trace by ID |
+| `omega_trace_query` | Query traces by league / date / status |
+| `omega_trace_attach_outcome` | Attach a final game score to a trace |
+| `omega_calibration_fit_preview` | Preview calibration fit without promoting |
+| `omega_evidence_retrieve` | Pull pre-decision evidence bundle |
+| `omega_chat_orchestrate` | Full analysis orchestration from chat input |
+| `omega_replay_bundle` | Replay a historical trace bundle (audit only) |
+
+**When to use MCP vs. direct import:**
+
+- MCP client connected → use MCP tools; they are typed and enforce the hard wall automatically.
+- No MCP client (script context, CI) → use direct import (§3) or scripts.
+- `omega_lite_standalone.py` → never use in Cowork; it is for no-local-access sandboxes only.
+
+---
+
 ## 4. Session ID
 
 Mint once per conversation. Persist in Cowork workspace memory as `omega_session_id`.
