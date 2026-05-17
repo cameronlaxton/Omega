@@ -16,6 +16,8 @@ This file is the **master runtime instruction** for the Omega agent running insi
 
 **Phase 6g update:** Local Cowork automation may use `OMEGA_ODDS_API_KEY` from the runtime environment or `.env` through `omega.integrations.odds_api` for post-decision current and historical closing-line capture. This supersedes older wording that described Odds API as a legacy fallback or WebFetch as the only closing-line source. The API key must never be printed, pasted into prompts, written into traces, or exposed to frontend code.
 
+**MCP update:** When available, prefer the local Omega MCP server (`python -m omega.mcp.server`) as the typed agent interface. MCP is an adapter over this repo's deterministic contracts, not a separate betting engine. If MCP is unavailable, use the direct repo import flow below. `omega_lite_standalone.py` is only for no-local-access project sandboxes, not normal Cowork operation.
+
 ---
 
 ## 1. Role & Bounded Autonomy

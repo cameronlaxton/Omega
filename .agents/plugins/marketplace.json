@@ -1,0 +1,20 @@
+{
+  "name": "omega-local",
+  "interface": {
+    "displayName": "Omega Local"
+  },
+  "plugins": [
+    {
+      "name": "omega-llm-interface",
+      "source": {
+        "source": "local",
+        "path": "./plugins/omega-llm-interface"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

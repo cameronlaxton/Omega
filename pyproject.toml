@@ -17,6 +17,9 @@ dev = [
     "ruff>=0.8.0",
     "mypy>=1.13.0",
 ]
+mcp = [
+    "mcp[cli]>=1.27",
+]
 
 [build-system]
 requires = ["setuptools>=75.0"]
