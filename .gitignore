@@ -33,6 +33,7 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+.fuse_hidden*
 
 # Cache
 .omega_cache/
