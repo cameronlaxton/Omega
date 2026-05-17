@@ -429,15 +429,21 @@ def build_server():
     ):
         mcp.tool()(tool)
 
-    mcp.resource("omega://docs/llm-mcp-interface")(
-        lambda: _read_repo_file("docs/LLM_MCP_INTERFACE.md")
-    )
-    mcp.resource("omega://schemas/contracts")(
-        lambda: _read_repo_file("omega/core/contracts/schemas.py")
-    )
-    mcp.resource("omega://calibration/universal-latest")(
-        lambda: _read_repo_file("omega/core/calibration/profiles.json")
-    )
+    mcp.resource(
+        "omega://docs/llm-mcp-interface",
+        name="omega_llm_mcp_interface_doc",
+        description="Omega LLM/MCP interface design document.",
+    )(lambda: _read_repo_file("docs/LLM_MCP_INTERFACE.md"))
+    mcp.resource(
+        "omega://schemas/contracts",
+        name="omega_contracts_schemas",
+        description="Source of truth for Omega deterministic contract schemas.",
+    )(lambda: _read_repo_file("omega/core/contracts/schemas.py"))
+    mcp.resource(
+        "omega://calibration/universal-latest",
+        name="omega_calibration_universal_latest",
+        description="Currently active universal calibration profile.",
+    )(lambda: _read_repo_file("omega/core/calibration/profiles.json"))
 
     mcp.prompt()(omega_runtime_prompt)
     mcp.prompt()(omega_missing_input_repair)
