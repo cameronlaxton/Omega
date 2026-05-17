@@ -34,6 +34,7 @@ TOOL_NAMES = (
     "omega_trace_attach_outcome",
     "omega_calibration_fit_preview",
     "omega_evidence_retrieve",
+    "omega_resolve_odds",
 )
 
 RESOURCE_URIS = (
@@ -357,6 +358,47 @@ def omega_evidence_retrieve(slots: List[Dict[str, Any]]) -> Dict[str, Any]:
     )
 
 
+def omega_resolve_odds(
+    kind: str,
+    league: str,
+    home_team: Optional[str] = None,
+    away_team: Optional[str] = None,
+    player_name: Optional[str] = None,
+    prop_type: Optional[str] = None,
+    line: Optional[float] = None,
+    event_id: Optional[str] = None,
+    bookmaker: str = "betmgm",
+    line_shopping: bool = False,
+    all_books: bool = False,
+) -> Dict[str, Any]:
+    """Resolve BetMGM-first Odds API markets into engine-ready odds inputs.
+
+    This is an input-prep tool only. It does not compute protected Omega
+    outputs such as probability, edge, EV, Kelly, units, tiers, or trace IDs.
+    """
+    if kind not in {"game", "prop"}:
+        return _error("omega_resolve_odds", "invalid_request", "kind must be 'game' or 'prop'")
+    try:
+        from scripts.resolve_odds import resolve_odds
+
+        result = resolve_odds(
+            kind=kind,
+            league=league,
+            home_team=home_team,
+            away_team=away_team,
+            player_name=player_name,
+            prop_type=prop_type,
+            line=line,
+            event_id=event_id,
+            bookmaker=bookmaker,
+            line_shopping=line_shopping,
+            all_books=all_books,
+        )
+        return _ok("omega_resolve_odds", result=result)
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_resolve_odds", "odds_resolution_failed", str(exc))
+
+
 def build_server():
     """Build the optional FastMCP server.
 
@@ -383,6 +425,7 @@ def build_server():
         omega_trace_attach_outcome,
         omega_calibration_fit_preview,
         omega_evidence_retrieve,
+        omega_resolve_odds,
     ):
         mcp.tool()(tool)
 

@@ -29,6 +29,11 @@ class MarketQuote(BaseModel):
     player: Optional[str] = Field(default=None, description="Player name for player props")
     stat_key: Optional[str] = Field(default=None, description="Prop stat key, e.g. pts, pass_yds, aces, kills")
     bookmaker: Optional[str] = Field(default=None, description="Source sportsbook")
+    source: Optional[str] = Field(default=None, description="Provider/source label, e.g. the-odds-api:betmgm")
+    event_id: Optional[str] = Field(default=None, description="Provider event id")
+    provider_market_key: Optional[str] = Field(default=None, description="Provider-native market key")
+    last_update: Optional[str] = Field(default=None, description="Provider market last update timestamp")
+    snapshot_timestamp: Optional[str] = Field(default=None, description="Provider snapshot timestamp")
 
 
 class OddsInput(BaseModel):

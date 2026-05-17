@@ -29,7 +29,7 @@ Design rules:
 """
 from __future__ import annotations
 
-CURRENT_VERSION = 4
+CURRENT_VERSION = 5
 
 SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS traces (
@@ -118,6 +118,34 @@ CREATE INDEX IF NOT EXISTS idx_closing_lines_trace_id ON closing_lines(trace_id)
 
 V4_ADD_COLUMN_SQL = "ALTER TABLE traces ADD COLUMN session_id TEXT"
 V4_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_traces_session_id ON traces(session_id)"
+
+SCHEMA_V5 = """
+CREATE TABLE IF NOT EXISTS market_snapshots (
+    snapshot_id           TEXT PRIMARY KEY,
+    league                TEXT NOT NULL,
+    provider              TEXT NOT NULL,
+    provider_event_id     TEXT NOT NULL,
+    home_team             TEXT NOT NULL,
+    away_team             TEXT NOT NULL,
+    commence_time         TEXT,
+    bookmaker             TEXT NOT NULL,
+    market                TEXT NOT NULL,
+    selection             TEXT NOT NULL,
+    player                TEXT,
+    point                 REAL,
+    price                 REAL NOT NULL,
+    snapshot_timestamp    TEXT NOT NULL,
+    provider_last_update  TEXT,
+    source                TEXT NOT NULL,
+    schema_version        INTEGER NOT NULL DEFAULT 1,
+    captured_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_market_snapshots_event
+    ON market_snapshots(league, provider_event_id, market, bookmaker);
+CREATE INDEX IF NOT EXISTS idx_market_snapshots_movement
+    ON market_snapshots(provider_event_id, market, selection, bookmaker, snapshot_timestamp);
+"""
 
 
 def apply_v4_migration(conn) -> None:

@@ -13,7 +13,14 @@ agent:
     scrape_order: [NFL, NBA, NCAAB, NCAAF, MLB, NHL]
   bookmakers:
     enabled: [DraftKings, FanDuel, Caesars, BetMGM]
+    default_bookmaker: betmgm
+    line_shopping_requires_explicit_request: true
     retry_limit: 3
+
+odds_api:
+  default_bookmaker: betmgm
+  default_markets: [h2h, spreads, totals]
+  line_shopping_requires_explicit_request: true
 
 betting:
   global:

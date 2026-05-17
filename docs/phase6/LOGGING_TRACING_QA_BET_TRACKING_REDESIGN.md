@@ -3,6 +3,12 @@
 **Date:** 2026-05-16  
 **Status:** proposed operating contract, with adapter groundwork implemented
 
+**Phase 6g implementation update:** Current local odds resolution now uses
+The Odds API with BetMGM as the default bookmaker. Multi-book requests are
+explicit line-shopping/consensus/audit operations. `market_snapshots` store
+provider observations for line-movement audit; `closing_lines` remains the CLV
+join table for user-confirmed bets.
+
 ## Roles Used
 
 - System Architect
@@ -18,13 +24,14 @@ Omega already has the right high-level boundaries:
 - `omega/trace/*` owns durable trace, bet-record, closing-line, outcome, and CLV persistence primitives.
 - `scripts/ingest_traces.py` owns trace export ingestion from `inbox/traces/*.json`.
 - `scripts/ingest_closing_lines.py` owns file-to-DB closing-line ingestion.
+- `scripts/resolve_odds.py` owns BetMGM-default pre-decision odds resolution.
 - `scripts/fetch_closing_lines.py` owns post-decision current odds capture for pending bets.
 - `omega/integrations/odds_api.py` is the only Odds API client.
 - `omega/skills/*` contains older logging/QA helpers, but these are not currently wired as the source of truth for trace persistence or benchmark evaluation.
 - `prompts/system_prompt.txt` is correct for no-local-access agents, but it must not be treated as the Cowork automation contract.
 - `OMEGA_COWORK.md` is the correct place for local automation instructions.
 
-The main drift was conceptual: paid historical Odds API access was added, but the repo still described Odds API as a deprecated/free-tier fallback and treated WebFetch JIT captures as primary.
+The main drift was conceptual: paid historical Odds API access was added before the repo had a pre-decision market resolver. Phase 6g makes BetMGM via The Odds API the default local odds source while keeping WebFetch as the no-local fallback.
 
 ## Design Recommendation
 
@@ -37,10 +44,10 @@ The LLM can orchestrate and explain these ledgers, but it never computes the pro
 
 For odds sourcing:
 
-- **Current decision-time odds:** still sourced by the agent from cited public sportsbook pages unless/until a separate pre-decision market adapter is explicitly designed.
+- **Current decision-time odds:** sourced locally by `omega_resolve_odds` / `scripts/resolve_odds.py`, defaulting to BetMGM.
 - **Closing-line CLV:** Cowork should prefer `OMEGA_ODDS_API_KEY` through `omega.integrations.odds_api` over WebFetch.
 - **Historical replay/backfill:** paid historical Odds API endpoints should create frozen market snapshots for replay/backtests, not mutate original trace inputs.
-- **Manual WebFetch closing capture:** remains a fallback for no-local-access Project agents and for books/markets the API cannot resolve.
+- **Manual WebFetch capture:** remains a fallback for no-local-access Project agents and for books/markets the API cannot resolve.
 
 ## Files To Create Or Modify
 
@@ -106,9 +113,9 @@ Recommended next:
 ## Ordered Implementation Steps
 
 1. Keep the existing trace/bet/close/outcome schema as the canonical ledger.
-2. Promote Odds API from deprecated fallback to active post-decision market adapter.
-3. Add historical endpoint parsing and tests.
-4. Update Cowork instructions: automate local trace ingest and Odds API closing/backfill; use manual WebFetch only as fallback.
-5. Add `backfill_closing_lines.py` using historical Odds API snapshots.
+2. Promote Odds API to active BetMGM-default pre-decision and post-decision market adapter.
+3. Add current event, event-market, event-odds, and historical endpoint parsing/tests.
+4. Update Cowork instructions: use BetMGM by default; use multi-book requests only for line shopping/consensus/audit.
+5. Add market snapshots for line movement and historical backfill.
 6. Add versioned historical market artifacts for benchmark replay.
 7. Expand QA reports to include trace coverage, bet-record coverage, close coverage, CLV coverage, outcome coverage, and descriptor mismatch counts.

@@ -516,6 +516,8 @@ while attempts < 3:
 
 The single most common failure mode is sourcing "lines" from aggregator/projection sites instead of live sportsbook prop boards. **Direct books first. Aggregators are last resort. Projection sites NEVER substitute for current lines.**
 
+In local Cowork/Codex deployments, `OMEGA_COWORK.md` supersedes this section: use `omega_resolve_odds` or `scripts/resolve_odds.py`, which defaults to BetMGM via The Odds API. In this no-local deployment, you cannot read `.env` or call that resolver, so use the WebFetch/WebSearch recipe below or ask the user to run the local resolver.
+
 **TIER 1 — DIRECT SPORTSBOOK PROP PAGES (try first, every time)**
 
 | Book        | NBA props URL pattern                                                                         |
@@ -582,6 +584,7 @@ For any candidate you intend to ship as a Bet Card, fetch the same prop from a s
 For each `slot` in `missing_requirements`, identify what's missing and search accordingly:
 
 A. **Market odds missing** (slots like `odds`, `odds_over`, `odds_under`, `odds.markets`):
+   - If the user can run local Omega tooling, ask for `omega_resolve_odds` / `scripts/resolve_odds.py` output. That resolver uses BetMGM by default and only scans multiple books when explicitly requested for line shopping.
    - Apply the §6.1.5 ranked recipe — Tier 1 books first, stale-line check mandatory, block-listed sources never as line input.
    - WebSearch query template (when you don't already know the right book URL): `"{player_name} {prop_type} {line} prop odds DraftKings FanDuel today"` or for games `"{home_team} vs {away_team} odds {league} today site:sportsbookreview.com OR site:vegasinsider.com"`.
    - Record the source URL AND the access timestamp AND the displayed game tip-off time for every line you inject.

@@ -259,3 +259,74 @@ class TestCalibration:
                 f"apply_calibration={apply_calibration(p)}, "
                 f"_calibrate={_calibrate(p)}"
             )
+
+    def test_game_analysis_consumes_normalized_market_quotes(self):
+        from omega.core.contracts.schemas import GameAnalysisRequest, MarketQuote, OddsInput
+        from omega.core.contracts.service import analyze_game
+
+        req = GameAnalysisRequest(
+            home_team="Los Angeles Lakers",
+            away_team="Boston Celtics",
+            league="NBA",
+            n_iterations=1000,
+            seed=42,
+            home_context={"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+            away_context={"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+            odds=OddsInput(
+                markets=[
+                    MarketQuote(
+                        market_type="moneyline",
+                        selection="Los Angeles Lakers",
+                        price=-150,
+                        bookmaker="betmgm",
+                    ),
+                    MarketQuote(
+                        market_type="moneyline",
+                        selection="Boston Celtics",
+                        price=130,
+                        bookmaker="betmgm",
+                    ),
+                ]
+            ),
+        )
+
+        result = analyze_game(req)
+
+        assert result.status == "success"
+        assert [edge.market_odds for edge in result.edges] == [-150.0, 130.0]
+
+    def test_slate_analysis_preserves_normalized_markets(self):
+        from omega.core.contracts.schemas import SlateAnalysisRequest
+        from omega.core.contracts.service import analyze_slate
+
+        result = analyze_slate(
+            SlateAnalysisRequest(
+                league="NBA",
+                games=[
+                    {
+                        "home_team": "Los Angeles Lakers",
+                        "away_team": "Boston Celtics",
+                        "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+                        "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+                        "odds": {
+                            "markets": [
+                                {
+                                    "market_type": "moneyline",
+                                    "selection": "Los Angeles Lakers",
+                                    "price": -150,
+                                    "bookmaker": "betmgm",
+                                },
+                                {
+                                    "market_type": "moneyline",
+                                    "selection": "Boston Celtics",
+                                    "price": 130,
+                                    "bookmaker": "betmgm",
+                                },
+                            ]
+                        },
+                    }
+                ],
+            )
+        )
+
+        assert result.analyses[0].edges

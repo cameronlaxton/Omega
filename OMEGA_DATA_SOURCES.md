@@ -1,46 +1,54 @@
 # OMEGA_DATA_SOURCES
 
-How the Omega agent sources live and historical data. The full self-heal loop is specified in [prompts/system_prompt.txt](prompts/system_prompt.txt) Section 6; this document is the per-slot reference card.
+How Omega sources live and historical data. The full no-local self-heal loop is specified in [prompts/system_prompt.txt](prompts/system_prompt.txt) Section 6; this document is the per-slot reference card.
 
 ## Sourcing Model
 
-The sandbox engine (`omega_lite_standalone.py`) performs **no** network calls.
+The deterministic engines (`omega_lite_standalone.py`, `omega_lite.run`, and the MCP analyze tools) perform no network calls.
 
-Pre-decision live data is sourced by the **agent** using cited WebSearch/WebFetch evidence. Every numeric value injected into an engine request must be cited with a source URL and an access timestamp; the agent echoes both in its `Inputs used` section.
+In local Cowork/Codex operation, pre-decision current odds are resolved through The Odds API with BetMGM as the default bookmaker. Use `scripts/resolve_odds.py` or the `omega_resolve_odds` MCP tool. Multi-book requests are reserved for explicit line shopping, consensus checks, or audit/backfill work.
 
-Post-decision market tracking is local automation. Cowork may use `OMEGA_ODDS_API_KEY` through `omega.integrations.odds_api` to capture current and historical closing-line snapshots for CLV, replay, and backtest artifacts. The API key stays local in `.env` or the runtime environment and is never copied into prompts, traces, reports, or frontend code.
+No-local Project/API agents cannot read `.env` or call local tooling. They still use cited WebSearch/WebFetch evidence, or they ask the user to run the local resolver and paste/save the output.
 
-## Per-Slot Search Recipe
+The API key stays local in `.env` or the runtime environment and is never copied into prompts, traces, reports, or frontend code.
 
-| Missing slot | Search target | Preferred domains |
+## Per-Slot Recipe
+
+| Missing slot | Local Cowork/Codex source | No-local fallback |
 |---|---|---|
-| `odds_over` / `odds_under` / `odds.markets` | Today's prop or game line | `draftkings.com`, `fanduel.com`, `betmgm.com`, `caesars.com`, `espnbet.com`, `hardrock.bet` |
-| `player_context.{prop}_mean` | Player season + last-10-game rolling average for that stat | `basketball-reference.com`, `baseball-reference.com`, `pro-football-reference.com`, `hockey-reference.com`, `nba.com`, `mlb.com`, `nhl.com`, `nfl.com`, `espn.com` |
-| `player_context.{prop}_std` | Last 5-10 game logs; compute `statistics.stdev(values)` in Python | Same as above. Fallback: `std = 0.25 * mean`; disclose to the user. |
-| `home_context.off_rating` / `def_rating` | Team offensive/defensive efficiency rating | `basketball-reference.com`, `pro-football-reference.com`, `mlb.com`, `hockey-reference.com` |
-| `home_context.pace` | Team pace / possessions-per-48 | `basketball-reference.com`, `nba.com` |
-| `serve_win_pct` / `return_win_pct` | ATP/WTA player profile | `atptour.com`, `wtatennis.com` |
-| `strokes_gained_total` | Strokes Gained season totals | `datagolf.com`, `pgatour.com` |
-| `win_pct` / `finish_rate` | Fighter record + finish breakdown | `ufc.com`, `tapology.com`, `sherdog.com` |
-| `map_win_rate` | Team map win rate | `hltv.org`, `liquipedia.net` |
+| `odds_over` / `odds_under` / `odds.markets` | `omega_resolve_odds` / `scripts/resolve_odds.py` using BetMGM | Cited sportsbook WebFetch/WebSearch |
+| Line-shopping / consensus odds | `resolve_odds.py --line-shopping` or `all_books=true` | Cited multi-book search |
+| Closing line | `scripts/fetch_closing_lines.py` through The Odds API, then `scripts/ingest_closing_lines.py` | WebFetch closing snapshot block |
+| Historical odds / replay market artifact | The Odds API historical endpoints through `omega.integrations.odds_api` | Not available without local access |
+| `player_context.{prop}_mean` | Official/reference stats or local curated inputs | Same |
+| `player_context.{prop}_std` | Last 5-10 game logs; compute `statistics.stdev(values)` in Python | Same |
+| `home_context.off_rating` / `def_rating` | Official/reference team stats | Same |
+| Injury/schedule/environment | Official league/team/weather sources | Same |
 
-The sportsbook domains above are scraped only by the agent for pre-decision evidence. Omega's maintained HTTP odds client is the post-decision/historical The Odds API adapter in `omega/integrations/odds_api.py`.
+## Odds Defaults
+
+- Default bookmaker: `betmgm`.
+- Default game markets: `h2h`, `spreads`, `totals`.
+- Player props: event-level The Odds API markets mapped from Omega `prop_type` keys where available.
+- If BetMGM does not list an exact market, the resolver returns `status: "unavailable"` unless the caller explicitly requested line shopping or all-book comparison.
 
 ## Source-Credibility Hierarchy
 
-When two sources disagree:
+When sources disagree:
 
-1. Official league sites and `*-reference.com` - highest weight for player and team stats.
-2. Major sportsbooks - highest weight for current market lines.
-3. ESPN / CBSSports / TheAthletic - secondary stat and news sources.
-4. Aggregators such as VegasInsider, OddShark, and Action Network - useful for cross-book consensus but not first-choice.
-5. Twitter/X, Reddit, podcast clips - qualitative context only.
+1. Official league sites and `*-reference.com` for player and team stats.
+2. BetMGM via The Odds API for default current market lines.
+3. Explicit multi-book The Odds API line-shopping output for price comparison.
+4. Major sportsbook pages via WebFetch when local Odds API access is unavailable.
+5. ESPN / CBSSports / TheAthletic for secondary stat and news context.
+6. Aggregators such as VegasInsider, OddShark, and Action Network for supplementary context only.
+7. Twitter/X, Reddit, podcast clips for qualitative context only.
 
-If sources within the same tier disagree by <= 5 cents (American odds) or <= 5% (rate stats), use the median and flag the spread. Beyond that, surface both and pick the most recent or most authoritative.
+If line-shopping sources disagree, preserve each book's price instead of collapsing to a fabricated consensus. The engine should receive the selected book/line actually used for the analysis.
 
 ## Freshness Windows
 
-The engine and quality gate continue to consume freshness rules from `omega/core/models.py:FRESHNESS_RULES` for per-slot decay:
+The engine and quality gate continue to consume freshness rules from `omega/core/models.py:FRESHNESS_RULES`:
 
 - `team_stat`: 24 hours
 - `player_stat`: 24 hours
@@ -50,19 +58,19 @@ The engine and quality gate continue to consume freshness rules from `omega/core
 - `schedule`: 1 hour
 - `environment`: 4 hours
 
-When the agent injects a value older than its window, it labels it as `stale` in `Inputs used`.
+When an injected value is older than its window, label it as `stale` in `Inputs used`.
 
 ## Sources That Are Not Omega Data Sources
 
-- `dimers.com`, `rotowire.com`, `covers.com` - third-party analytics; cite at most as supplementary context, never as the authoritative input for a numeric slot.
-- Twitter/X, Reddit, sports talk podcasts - qualitative context only.
-- "Omega's X collector says..." - there are no general-purpose Omega collectors. Pre-decision values remain WebSearch citations. Post-decision/historical market snapshots may cite `the-odds-api` through the local adapter.
+- `dimers.com`, `rotowire.com`, `covers.com`: third-party analytics; cite at most as supplementary context, never as authoritative numeric input.
+- Twitter/X, Reddit, sports talk podcasts: qualitative context only.
+- LLM-generated odds, estimated leans, or ballpark prices: forbidden.
 
 ## Code Anchors
 
-- `omega/core/models.py:FRESHNESS_RULES` - per-type freshness windows still consumed by the quality gate.
-- `omega/core/simulation/archetypes.py` - `prop_stat_keys` and `required_team_keys` per archetype define which slots the agent must source per request.
-- `omega/integrations/odds_api.py` - post-decision and historical odds snapshots for CLV/replay/backtest artifacts.
-- `omega_lite_standalone.py` - the sandbox engine. No network code.
-
-The previous code anchors at `omega/evidence/collectors/*` have been deleted as part of retiring the general external-API surface.
+- `omega/integrations/odds_api.py`: The Odds API client.
+- `scripts/resolve_odds.py`: BetMGM-default pre-decision odds resolver.
+- `omega/mcp/server.py`: `omega_resolve_odds` MCP tool.
+- `omega/trace/market_snapshot.py`: line-movement snapshot model.
+- `omega/core/simulation/archetypes.py`: supported `prop_type` keys per sport archetype.
+- `omega_lite_standalone.py`: sandbox engine. No network code.

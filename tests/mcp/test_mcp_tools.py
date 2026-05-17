@@ -11,6 +11,7 @@ from omega.mcp.server import (
     omega_calibration_fit_preview,
     omega_chat_orchestrate,
     omega_replay_bundle,
+    omega_resolve_odds,
     omega_trace_attach_outcome,
     omega_trace_get,
     omega_trace_query,
@@ -39,6 +40,7 @@ def test_mcp_manifest_lists_expected_surface():
     assert "omega_analyze_game" in TOOL_NAMES
     assert "omega_replay_bundle" in TOOL_NAMES
     assert "omega_calibration_fit_preview" in TOOL_NAMES
+    assert "omega_resolve_odds" in TOOL_NAMES
     assert "omega://docs/llm-mcp-interface" in RESOURCE_URIS
     assert "omega_runtime_prompt" in PROMPT_NAMES
 
@@ -149,4 +151,19 @@ def test_calibration_preview_is_dry_run_when_insufficient_data(tmp_path):
     assert result["result"]["status"] == "skipped"
     assert result["result"]["dry_run"] is True
     assert result["result"]["sample_size"] == 0
+
+
+def test_resolve_odds_tool_returns_input_prep_result(monkeypatch):
+    import scripts.resolve_odds as resolver
+
+    def fake_resolve_odds(**kwargs):
+        assert kwargs["bookmaker"] == "betmgm"
+        return {"status": "unavailable", "request_patch": None, "skipped_reasons": ["fixture"]}
+
+    monkeypatch.setattr(resolver, "resolve_odds", fake_resolve_odds)
+
+    result = omega_resolve_odds(kind="game", league="NBA", event_id="evt-1")
+
+    assert result["status"] == "success"
+    assert result["result"]["status"] == "unavailable"
 

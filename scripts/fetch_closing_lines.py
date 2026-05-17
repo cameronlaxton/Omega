@@ -24,12 +24,11 @@ Workflow:
     4. For each bet, locate the matching event + bookmaker + market + selection
        in the snapshot. Persist via TraceStore.attach_closing_line().
 
-Markets captured: h2h, spreads, totals only. Player-prop closing capture is
-not in budget on the free tier — CLV for prop bets is skipped today.
+Markets captured: h2h, spreads, totals, and mapped event-level player props.
 
 Schedule this shortly before tip-off for each event so the snapshot truly
-represents the closing line (the free tier does not include historical
-endpoints).
+represents the closing line. Paid historical endpoints can backfill missed
+windows when coverage exists.
 
 Phase 6g note: paid historical endpoints are now available through
 `OddsApiClient`; use them for missed-window backfill and reproducible replay
@@ -64,6 +63,7 @@ from omega.integrations.odds_api import (  # noqa: E402
     sport_key_for,
 )
 from omega.trace.store import TraceStore  # noqa: E402
+from scripts.resolve_odds import provider_market_for_prop  # noqa: E402
 
 logger = logging.getLogger("fetch_closing_lines")
 
@@ -107,7 +107,7 @@ _MARKET_MAP = {
 
 
 def _is_supported_market(bet_market: str) -> bool:
-    return bet_market in _MARKET_MAP
+    return bet_market in _MARKET_MAP or bet_market.startswith("player_prop:")
 
 
 def _match_outcome(
@@ -169,6 +169,34 @@ def _match_outcome(
                 return b
         return None
 
+    return None
+
+
+def _match_prop_outcome(bet: Dict, books: List[BookOdds]) -> Optional[BookOdds]:
+    """Find the provider row for an exact player-prop close."""
+    stat_key = bet["market"].split(":", 1)[1]
+    provider_market = provider_market_for_prop(bet["league"], stat_key)
+    if not provider_market:
+        return None
+    desc = f"{bet.get('selection_descriptor', '')} {bet.get('selection', '')}".lower()
+    if "over" in desc:
+        side = "over"
+    elif "under" in desc:
+        side = "under"
+    else:
+        return None
+    selection = bet.get("selection") or ""
+    player_hint = selection.split(" Over ", 1)[0].split(" Under ", 1)[0]
+    for book in books:
+        if book.market != provider_market:
+            continue
+        if book.selection.lower() != side:
+            continue
+        if bet.get("line_taken") is not None and book.point != float(bet["line_taken"]):
+            continue
+        if player_hint and book.description and player_hint.lower() not in book.description.lower():
+            continue
+        return book
     return None
 
 
@@ -271,14 +299,33 @@ def _process_league(
             skipped.append(f"{bet['bet_id']} ({away} @ {home}: not in {league} snapshot)")
             continue
 
-        outcome = _match_outcome(
-            bet_market=bet["market"],
-            descriptor=bet["selection_descriptor"],
-            home=event.home_team,
-            away=event.away_team,
-            books=event.books,
-            book_preference=bet["book"],
-        )
+        if bet["market"].startswith("player_prop:"):
+            stat_key = bet["market"].split(":", 1)[1]
+            provider_market = provider_market_for_prop(league, stat_key)
+            if not provider_market:
+                skipped.append(f"{bet['bet_id']} (no provider prop mapping for {stat_key})")
+                continue
+            try:
+                event = client.fetch_current_event_odds(
+                    league,
+                    event.event_id,
+                    markets=provider_market,
+                    bookmakers=str(bet["book"]).lower(),
+                )
+            except Exception as exc:  # noqa: BLE001
+                skipped.append(f"{bet['bet_id']} (prop event odds fetch failed: {exc})")
+                continue
+            bet = {**bet, "league": league}
+            outcome = _match_prop_outcome(bet, event.books)
+        else:
+            outcome = _match_outcome(
+                bet_market=bet["market"],
+                descriptor=bet["selection_descriptor"],
+                home=event.home_team,
+                away=event.away_team,
+                books=event.books,
+                book_preference=bet["book"],
+            )
         if outcome is None:
             skipped.append(f"{bet['bet_id']} (no book matched market+descriptor)")
             continue

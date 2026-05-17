@@ -35,6 +35,10 @@ responsibilities to existing Omega modules.
   traces without writing profiles or promoting candidates.
 - `omega_evidence_retrieve`: returns a no-live-fetch skipped response in this
   adapter; use approved evidence channels outside replay when inputs are needed.
+- `omega_resolve_odds`: resolves current Odds API markets into engine-ready
+  input fields and provenance. It defaults to BetMGM and only performs
+  multi-book line-shopping when explicitly requested. It does not compute
+  probabilities, edge, EV, Kelly, staking, confidence tiers, or trace IDs.
 
 ## Resources And Prompts
 

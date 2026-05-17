@@ -1,8 +1,8 @@
 # OMEGA — Cowork Project Instructions
 
-**Version:** Phase 6f  
+**Version:** Phase 6g  
 **Repo:** `C:\Users\camer\OneDrive\Documents\GitHub\Omega`  
-**DB:** `omega_traces.db` (SQLite V4 — `traces`, `bet_records`, `closing_lines`, `outcomes`)
+**DB:** `omega_traces.db` (SQLite V5 — `traces`, `bet_records`, `closing_lines`, `outcomes`, `market_snapshots`)
 
 ⚠️ **DEPLOYMENT CONTEXT:** This is the specialized instruction set for **Claude running INSIDE Cowork** (local environment with full repo access and automation tooling).
 
@@ -14,7 +14,7 @@
 
 This file is the **master runtime instruction** for the Omega agent running inside a Cowork Project. It governs all agents and sub-agents spawned during execution. Paste its contents into the Cowork Project's custom instructions field. When these instructions conflict with anything else in the workspace, this file wins.
 
-**Phase 6g update:** Local Cowork automation may use `OMEGA_ODDS_API_KEY` from the runtime environment or `.env` through `omega.integrations.odds_api` for post-decision current and historical closing-line capture. This supersedes older wording that described Odds API as a legacy fallback or WebFetch as the only closing-line source. The API key must never be printed, pasted into prompts, written into traces, or exposed to frontend code.
+**Phase 6g update:** Local Cowork automation may use `OMEGA_ODDS_API_KEY` from the runtime environment or `.env` through `omega.integrations.odds_api` for pre-decision current odds, player props, post-decision closing-line capture, historical backfill, and line-movement snapshots. BetMGM (`betmgm`) is the default sportsbook. Fetch multiple books only when the user explicitly asks for line shopping, consensus, market comparison, or an audit. The API key must never be printed, pasted into prompts, written into traces, or exposed to frontend code.
 
 **MCP update:** When available, prefer the local Omega MCP server (`python -m omega.mcp.server`) as the typed agent interface. MCP is an adapter over this repo's deterministic contracts, not a separate betting engine. If MCP is unavailable, use the direct repo import flow below. `omega_lite_standalone.py` is only for no-local-access project sandboxes, not normal Cowork operation.
 
@@ -86,6 +86,23 @@ print(json.dumps(result, indent=2))
 ```
 
 Verify `result["trace_id"].startswith("sandbox-")` before using the result in any Bet Card.
+
+---
+
+## 3A. Current Odds Resolution
+
+For local Cowork runs, current odds should be resolved before the engine call with the typed MCP tool or script:
+
+```bash
+python scripts/resolve_odds.py --kind game --league NBA --home-team "Boston Celtics" --away-team "Indiana Pacers"
+```
+
+Rules:
+- Default bookmaker is BetMGM (`betmgm`).
+- Use `--line-shopping`, `--all-books`, or MCP `line_shopping=true` only when the user explicitly asks for line shopping, consensus, market comparison, or audit coverage.
+- If BetMGM does not list the exact market, treat it as unavailable unless the user requested multi-book fallback.
+- The resolver emits engine-ready odds plus provenance. It must never compute edge, EV, Kelly, units, confidence tiers, or trace IDs.
+- Preserve resolver provenance in `Inputs used`; do not paste or log `OMEGA_ODDS_API_KEY`.
 
 ---
 
@@ -227,6 +244,8 @@ client = OddsApiClient()  # reads OMEGA_ODDS_API_KEY from env or .env
 ```
 
 Rules:
+- BetMGM is the default source for normal current odds and closes.
+- Multi-book requests are explicit line-shopping/consensus/audit operations only.
 - Use current Odds API snapshots for live T-30 minute captures when available.
 - Use paid historical Odds API snapshots to backfill missed closes and to freeze replay/backtest market artifacts.
 - Store API-sourced closes in the existing `inbox/closing_lines/<trace_id>.json` shape, then run `python scripts/ingest_closing_lines.py`.
@@ -324,7 +343,7 @@ All paths relative to the Omega repo root: `C:\Users\camer\OneDrive\Documents\Gi
 | Path | Purpose |
 |---|---|
 | `omega_lite/run.py` | Engine entry point — `analyze(request_dict) → dict` |
-| `omega_traces.db` | SQLite V4 — DO NOT write directly |
+| `omega_traces.db` | SQLite V5 — DO NOT write directly |
 | `inbox/traces/` | Trace export files → `ingest_traces.py` |
 | `inbox/closing_lines/` | JIT closing-line snapshots → `ingest_closing_lines.py` |
 | `inbox/sessions/` | Session sidecars (no ingest script — read directly) |

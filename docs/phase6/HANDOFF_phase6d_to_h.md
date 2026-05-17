@@ -200,9 +200,10 @@ Then:
 2. **Holdout split window.** "Last 30 days = holdout" is reasonable for NBA's
    tempo, but for low-volume weeks (post-season, off-season) we may need a
    rolling-N approach instead of a calendar window. Decide on first real fit.
-3. **Player props in the closing-line path.** Skipped today. The-odds-api free
-   tier doesn't cover player props consistently. Need a sourcing decision before
-   props get a CLV signal — either upgrade the API tier or scrape a single book.
+3. **Player props in the closing-line path.** Phase 6g now uses mapped
+   event-level The Odds API prop markets where the paid plan/book coverage
+   supports them. BetMGM is the default book; multi-book prop scans are explicit
+   line-shopping or audit operations.
 4. **Auto-ingest of `inbox/traces/`.** Plan flagged this as a future enhancement
    (Claude Code `/loop` or scheduled task). Worth doing once Steps 4+5 land so
    you don't have to remember `python scripts/ingest_traces.py` after each

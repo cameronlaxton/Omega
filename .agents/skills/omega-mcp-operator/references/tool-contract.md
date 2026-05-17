@@ -15,6 +15,7 @@ importable even when the optional MCP package is not installed.
 - `omega_trace_attach_outcome(trace_id, home_score, away_score, source="mcp", db_path=None)`
 - `omega_calibration_fit_preview(db_path=None, league=None, method="isotonic", limit=1000)`
 - `omega_evidence_retrieve(slots)`
+- `omega_resolve_odds(kind, league, ..., bookmaker="betmgm", line_shopping=False, all_books=False)`
 
 ## Resources
 

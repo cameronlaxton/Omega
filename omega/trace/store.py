@@ -20,11 +20,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from omega.trace.bet_record import BetRecord
+from omega.trace.market_snapshot import MarketMovement, MarketSnapshot
 from omega.trace.schema import (
     CURRENT_VERSION,
     SCHEMA_V1,
     SCHEMA_V2,
     SCHEMA_V3,
+    SCHEMA_V5,
     apply_v4_migration,
 )
 
@@ -76,6 +78,10 @@ class TraceStore:
         # V4: traces.session_id (groups traces by Claude Project chat session)
         apply_v4_migration(self.conn)
         self._record_version(4, "Phase 6f: traces.session_id column")
+
+        # V5: market_snapshots (provider observations for line movement)
+        self.conn.executescript(SCHEMA_V5)
+        self._record_version(5, "Phase 6g: market_snapshots table for line movement")
 
     def _record_version(self, version: int, description: str) -> None:
         """Idempotently stamp a schema version into schema_versions."""
@@ -342,6 +348,110 @@ class TraceStore:
             (trace_id,),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    # ------------------------------------------------------------------
+    # Market snapshots (Phase 6g - line movement substrate)
+    # ------------------------------------------------------------------
+
+    def record_market_snapshot(self, snapshot: MarketSnapshot) -> str:
+        """Persist one provider market observation idempotently."""
+        snapshot_id = snapshot.stable_id()
+        self.conn.execute(
+            """INSERT OR IGNORE INTO market_snapshots
+               (snapshot_id, league, provider, provider_event_id, home_team,
+                away_team, commence_time, bookmaker, market, selection, player,
+                point, price, snapshot_timestamp, provider_last_update, source,
+                schema_version)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                snapshot_id,
+                snapshot.league.upper(),
+                snapshot.provider,
+                snapshot.provider_event_id,
+                snapshot.home_team,
+                snapshot.away_team,
+                snapshot.commence_time,
+                snapshot.bookmaker,
+                snapshot.market,
+                snapshot.selection,
+                snapshot.player,
+                snapshot.point,
+                snapshot.price,
+                snapshot.snapshot_timestamp,
+                snapshot.provider_last_update,
+                snapshot.source,
+                snapshot.schema_version,
+            ),
+        )
+        self.conn.commit()
+        return snapshot_id
+
+    def get_market_snapshots(
+        self,
+        provider_event_id: str,
+        market: Optional[str] = None,
+        bookmaker: Optional[str] = None,
+        selection: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return provider market observations for movement analysis."""
+        clauses = ["provider_event_id = ?"]
+        params: list[Any] = [provider_event_id]
+        if market:
+            clauses.append("market = ?")
+            params.append(market)
+        if bookmaker:
+            clauses.append("bookmaker = ?")
+            params.append(bookmaker)
+        if selection:
+            clauses.append("selection = ?")
+            params.append(selection)
+        rows = self.conn.execute(
+            f"""SELECT snapshot_id, league, provider, provider_event_id, home_team,
+                       away_team, commence_time, bookmaker, market, selection,
+                       player, point, price, snapshot_timestamp,
+                       provider_last_update, source, schema_version, captured_at
+                FROM market_snapshots
+                WHERE {" AND ".join(clauses)}
+                ORDER BY snapshot_timestamp""",
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def compute_market_movement(
+        self,
+        provider_event_id: str,
+        market: str,
+        selection: str,
+        bookmaker: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Compute simple first-to-last line movement for an exact market row."""
+        rows = self.get_market_snapshots(
+            provider_event_id=provider_event_id,
+            market=market,
+            bookmaker=bookmaker,
+            selection=selection,
+        )
+        if len(rows) < 2:
+            return None
+        first = rows[0]
+        last = rows[-1]
+        point_delta = None
+        if first["point"] is not None and last["point"] is not None:
+            point_delta = float(last["point"]) - float(first["point"])
+        movement = MarketMovement(
+            market=market,
+            selection=selection,
+            bookmaker=bookmaker,
+            first_timestamp=first["snapshot_timestamp"],
+            last_timestamp=last["snapshot_timestamp"],
+            first_point=first["point"],
+            last_point=last["point"],
+            first_price=float(first["price"]),
+            last_price=float(last["price"]),
+            point_delta=point_delta,
+            price_delta=float(last["price"]) - float(first["price"]),
+        )
+        return movement.model_dump()
 
     # ------------------------------------------------------------------
     # Retrieval

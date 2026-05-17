@@ -24,6 +24,7 @@ from omega_lite.schemas import (
     EdgeDetail,
     GameAnalysisRequest,
     GameAnalysisResponse,
+    MarketQuote,
     OddsInput,
     PlayerPropRequest,
     PlayerPropResponse,
@@ -94,6 +95,43 @@ def _pick_best_bet(
         bankroll=bankroll,
         confidence_tier=best.confidence_tier,
     )
+
+
+def _quote_matches_selection(quote: MarketQuote, *labels: str) -> bool:
+    selection = quote.selection.strip().casefold()
+    return any(selection == label.strip().casefold() for label in labels if label)
+
+
+def _market_quote(
+    odds: OddsInput,
+    market_type: str,
+    *labels: str,
+) -> Optional[MarketQuote]:
+    for quote in odds.markets or []:
+        if quote.market_type != market_type:
+            continue
+        if _quote_matches_selection(quote, *labels):
+            return quote
+    return None
+
+
+def _resolve_game_market_odds(
+    odds: OddsInput,
+    home_team: str,
+    away_team: str,
+) -> tuple[Optional[float], Optional[float]]:
+    """Resolve home/away odds from normalized markets first, legacy fields second."""
+    home_spread = _market_quote(odds, "spread", home_team, "Home")
+    home_ml = _market_quote(odds, "moneyline", home_team, "Home")
+    away_ml = _market_quote(odds, "moneyline", away_team, "Away")
+
+    home_odds = (
+        home_spread.price
+        if home_spread is not None
+        else (home_ml.price if home_ml is not None else (odds.spread_home_price or odds.moneyline_home))
+    )
+    away_odds = away_ml.price if away_ml is not None else odds.moneyline_away
+    return home_odds, away_odds
     return BetSlip(
         selection=f"{best.team} {best.side}",
         odds=best.market_odds,
@@ -181,9 +219,11 @@ def analyze_game(
         cal_home = _calibrate(home_prob, league=request.league)
         cal_away = _calibrate(away_prob, league=request.league)
 
-        # Use spread price if available, else moneyline
-        home_odds = request.odds.spread_home_price or request.odds.moneyline_home
-        away_odds = request.odds.moneyline_away
+        home_odds, away_odds = _resolve_game_market_odds(
+            request.odds,
+            request.home_team,
+            request.away_team,
+        )
 
         if home_odds is not None:
             edges.append(
@@ -422,6 +462,7 @@ def analyze_slate(
                 moneyline_away=odds_dict.get("moneyline_away"),
                 over_under=odds_dict.get("over_under"),
                 moneyline_draw=odds_dict.get("moneyline_draw"),
+                markets=odds_dict.get("markets"),
             )
 
         game_request = GameAnalysisRequest(

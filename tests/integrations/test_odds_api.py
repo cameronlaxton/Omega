@@ -6,9 +6,12 @@ from pathlib import Path
 
 from omega.integrations.odds_api import (
     OddsApiClient,
+    parse_event_markets,
     parse_events,
+    parse_events_metadata,
     parse_historical_events,
     parse_historical_snapshot,
+    parse_sports,
 )
 
 
@@ -109,6 +112,52 @@ def test_parse_historical_events_accepts_wrapped_data():
     assert events[0].home_team == "Los Angeles Lakers"
 
 
+def test_parse_sports_and_current_events_metadata():
+    sports = parse_sports(
+        [
+            {
+                "key": "basketball_nba",
+                "group": "Basketball",
+                "title": "NBA",
+                "description": "US Basketball",
+                "active": True,
+                "has_outrights": False,
+            }
+        ]
+    )
+    events = parse_events_metadata(
+        [
+            {
+                "id": "evt-1",
+                "sport_key": "basketball_nba",
+                "commence_time": "2026-05-16T23:00:00Z",
+                "home_team": "Los Angeles Lakers",
+                "away_team": "Boston Celtics",
+            }
+        ]
+    )
+
+    assert sports[0].key == "basketball_nba"
+    assert sports[0].active is True
+    assert events[0].event_id == "evt-1"
+
+
+def test_parse_event_markets_accepts_bookmaker_market_objects():
+    markets = parse_event_markets(
+        {
+            "bookmakers": [
+                {
+                    "key": "betmgm",
+                    "markets": [{"key": "player_points"}, {"key": "player_rebounds"}],
+                }
+            ]
+        }
+    )
+
+    assert markets[0].bookmaker == "betmgm"
+    assert markets[0].markets == ["player_points", "player_rebounds"]
+
+
 def test_fetch_historical_odds_builds_paid_endpoint_and_cost(tmp_path: Path):
     captured: dict = {}
     client = OddsApiClient(
@@ -134,3 +183,35 @@ def test_fetch_historical_odds_builds_paid_endpoint_and_cost(tmp_path: Path):
     assert "bookmakers=draftkings" in captured["url"]
     assert "apiKey=test-key" in captured["url"]
     assert client.remaining_budget() == 80
+
+
+def test_fetch_current_event_odds_builds_event_endpoint_with_betmgm(tmp_path: Path):
+    captured: dict = {}
+    client = OddsApiClient(
+        api_key="test-key",
+        monthly_budget=100,
+        budget_file=str(tmp_path / "budget.json"),
+        url_opener=_fake_opener(
+            captured,
+            {
+                "id": "evt-1",
+                "sport_key": "basketball_nba",
+                "commence_time": "2026-05-16T23:00:00Z",
+                "home_team": "Los Angeles Lakers",
+                "away_team": "Boston Celtics",
+                "bookmakers": [],
+            },
+        ),
+    )
+
+    event = client.fetch_current_event_odds(
+        "NBA",
+        "evt-1",
+        markets="player_points",
+        bookmakers="betmgm",
+    )
+
+    assert event.event_id == "evt-1"
+    assert "/v4/sports/basketball_nba/events/evt-1/odds" in captured["url"]
+    assert "markets=player_points" in captured["url"]
+    assert "bookmakers=betmgm" in captured["url"]

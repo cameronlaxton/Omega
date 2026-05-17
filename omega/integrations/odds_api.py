@@ -1,16 +1,19 @@
 """
 omega.integrations.odds_api - the-odds-api.com thin client.
 
-POST-DECISION USE ONLY.
-======================
-This module is restricted to closing-line capture for CLV computation and
-historical odds snapshots for replay/backtest artifacts. Pre-decision sourcing
-(the lines / odds the LLM injects into analyze()) stays in the agent's cited
-evidence flow; the API key should never be exposed in prompts, frontend code, or
-trace blobs.
+This module is the only maintained The Odds API client in Omega. It is allowed
+to resolve local Cowork pre-decision market inputs, closing-line captures, and
+historical market snapshots. It never computes recommendations and never owns
+simulation, calibration, edge, EV, Kelly, staking, grading, or trace IDs.
+
+Default current-odds resolution is BetMGM-first. Multi-book requests are
+explicit line-shopping/consensus operations, not the routine path.
 
 Endpoint reference:
 - Live odds:              GET /v4/sports/{sport}/odds
+- Events:                 GET /v4/sports/{sport}/events
+- Event odds:             GET /v4/sports/{sport}/events/{eventId}/odds
+- Event markets:          GET /v4/sports/{sport}/events/{eventId}/markets
 - Historical odds:        GET /v4/historical/sports/{sport}/odds
 - Historical events:      GET /v4/historical/sports/{sport}/events
 - Historical event odds:  GET /v4/historical/sports/{sport}/events/{eventId}/odds
@@ -25,7 +28,7 @@ import logging
 import os
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -36,6 +39,8 @@ _BASE_URL = "https://api.the-odds-api.com/v4"
 _REQUEST_TIMEOUT_SECONDS = 15
 _DEFAULT_MONTHLY_BUDGET = int(os.environ.get("OMEGA_ODDS_API_MONTHLY_BUDGET", "450"))
 _DEFAULT_BUDGET_FILE = "omega_odds_api_budget.json"
+DEFAULT_BOOKMAKER = "betmgm"
+DEFAULT_MARKETS = "h2h,spreads,totals"
 
 
 # Omega league code -> the-odds-api sport key. Add a row when extending coverage.
@@ -86,6 +91,11 @@ class BookOdds:
     point: Optional[float]
     last_update: str
     description: Optional[str] = None
+    event_id: Optional[str] = None
+    snapshot_timestamp: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -98,6 +108,16 @@ class EventOdds:
     home_team: str
     away_team: str
     books: List[BookOdds]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "sport_key": self.sport_key,
+            "commence_time": self.commence_time,
+            "home_team": self.home_team,
+            "away_team": self.away_team,
+            "books": [book.to_dict() for book in self.books],
+        }
 
 
 @dataclass(frozen=True)
@@ -112,6 +132,26 @@ class HistoricalEvent:
 
 
 @dataclass(frozen=True)
+class SportInfo:
+    """One sport returned by The Odds API sports endpoint."""
+
+    key: str
+    group: str
+    title: str
+    description: str
+    active: bool
+    has_outrights: bool
+
+
+@dataclass(frozen=True)
+class EventMarketAvailability:
+    """Recently seen market keys for one bookmaker on one event."""
+
+    bookmaker: str
+    markets: List[str]
+
+
+@dataclass(frozen=True)
 class HistoricalSnapshot:
     """Metadata wrapper around a historical odds snapshot."""
 
@@ -119,6 +159,14 @@ class HistoricalSnapshot:
     previous_timestamp: Optional[str]
     next_timestamp: Optional[str]
     events: List[EventOdds]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "timestamp": self.timestamp,
+            "previous_timestamp": self.previous_timestamp,
+            "next_timestamp": self.next_timestamp,
+            "events": [event.to_dict() for event in self.events],
+        }
 
 
 class OddsApiClient:
@@ -135,6 +183,7 @@ class OddsApiClient:
         self._monthly_budget = monthly_budget
         self._budget_file = Path(budget_file) if budget_file else Path.cwd() / _DEFAULT_BUDGET_FILE
         self._url_opener = url_opener
+        self.last_quota_headers: Dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Budget bookkeeping
@@ -184,7 +233,47 @@ class OddsApiClient:
         url = f"{_BASE_URL}{path}?{urllib.parse.urlencode(query)}"
         logger.debug("GET %s (params redacted)", path)
         with self._url_opener(url, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
+            self.last_quota_headers = _quota_headers(resp)
             return json.loads(resp.read().decode("utf-8"))
+
+    def fetch_sports(self, all_sports: bool = True) -> List[SportInfo]:
+        """Fetch supported sports metadata.
+
+        This is useful for coverage audits and does not perform any Omega
+        betting math.
+        """
+        params: Dict[str, Any] = {"all": str(bool(all_sports)).lower()}
+        payload = self._get_json("/sports", params)
+        return parse_sports(payload)
+
+    def fetch_events(
+        self,
+        league: str,
+        commence_time_from: Optional[str] = None,
+        commence_time_to: Optional[str] = None,
+    ) -> List[HistoricalEvent]:
+        """Fetch current/live event metadata for resolving event IDs."""
+        sport_key = _require_sport_key(league)
+        params: Dict[str, Any] = {"dateFormat": "iso"}
+        if commence_time_from:
+            params["commenceTimeFrom"] = commence_time_from
+        if commence_time_to:
+            params["commenceTimeTo"] = commence_time_to
+        payload = self._get_json(f"/sports/{sport_key}/events", params, request_cost=0)
+        return parse_events_metadata(payload)
+
+    def fetch_event_markets(
+        self,
+        league: str,
+        event_id: str,
+        regions: str = "us",
+        bookmakers: Optional[str] = None,
+    ) -> List[EventMarketAvailability]:
+        """Fetch recently seen market keys per bookmaker for one event."""
+        sport_key = _require_sport_key(league)
+        params = _event_params(regions=regions, bookmakers=bookmakers)
+        payload = self._get_json(f"/sports/{sport_key}/events/{event_id}/markets", params)
+        return parse_event_markets(payload)
 
     # ------------------------------------------------------------------
     # Current odds
@@ -202,6 +291,23 @@ class OddsApiClient:
         params = _odds_params(regions=regions, markets=markets, bookmakers=bookmakers)
         payload = self._get_json(f"/sports/{sport_key}/odds", params)
         return parse_events(payload)
+
+    def fetch_current_event_odds(
+        self,
+        league: str,
+        event_id: str,
+        regions: str = "us",
+        markets: str = DEFAULT_MARKETS,
+        bookmakers: Optional[str] = None,
+    ) -> EventOdds:
+        """Fetch current odds for one event, including props/additional markets."""
+        sport_key = _require_sport_key(league)
+        params = _odds_params(regions=regions, markets=markets, bookmakers=bookmakers)
+        payload = self._get_json(f"/sports/{sport_key}/events/{event_id}/odds", params)
+        events = parse_events([payload] if isinstance(payload, dict) else payload)
+        if not events:
+            return EventOdds("", sport_key, "", "", "", [])
+        return events[0]
 
     def fetch_nba_odds(
         self,
@@ -310,10 +416,34 @@ def _odds_params(
     return params
 
 
+def _event_params(regions: str, bookmakers: Optional[str]) -> Dict[str, Any]:
+    params: Dict[str, Any] = {"dateFormat": "iso"}
+    if bookmakers:
+        params["bookmakers"] = bookmakers
+    else:
+        params["regions"] = regions
+    return params
+
+
 def _historical_cost(regions: str, markets: str) -> int:
     region_count = max(1, len([r for r in regions.split(",") if r.strip()]))
     market_count = max(1, len([m for m in markets.split(",") if m.strip()]))
     return 10 * region_count * market_count
+
+
+def _quota_headers(resp: Any) -> Dict[str, str]:
+    headers = getattr(resp, "headers", None)
+    if not headers:
+        return {}
+    out: Dict[str, str] = {}
+    for key in ("x-requests-remaining", "x-requests-used", "x-requests-last"):
+        try:
+            value = headers.get(key)
+        except AttributeError:
+            value = None
+        if value is not None:
+            out[key] = str(value)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +478,7 @@ def parse_events(payload: Any) -> List[EventOdds]:
                             ),
                             last_update=last_update,
                             description=outcome.get("description"),
+                            event_id=str(evt.get("id", "")),
                         )
                     )
         events.append(
@@ -363,17 +494,123 @@ def parse_events(payload: Any) -> List[EventOdds]:
     return events
 
 
+def parse_sports(payload: Any) -> List[SportInfo]:
+    """Parse sports metadata from GET /sports."""
+    sports: List[SportInfo] = []
+    if not isinstance(payload, list):
+        return sports
+    for item in payload:
+        sports.append(
+            SportInfo(
+                key=str(item.get("key", "")),
+                group=str(item.get("group", "")),
+                title=str(item.get("title", "")),
+                description=str(item.get("description", "")),
+                active=bool(item.get("active", False)),
+                has_outrights=bool(item.get("has_outrights", False)),
+            )
+        )
+    return sports
+
+
+def parse_events_metadata(payload: Any) -> List[HistoricalEvent]:
+    """Parse current event metadata from GET /sports/{sport}/events."""
+    events: List[HistoricalEvent] = []
+    if not isinstance(payload, list):
+        return events
+    for evt in payload:
+        events.append(
+            HistoricalEvent(
+                event_id=str(evt.get("id", "")),
+                sport_key=evt.get("sport_key", ""),
+                commence_time=evt.get("commence_time", ""),
+                home_team=evt.get("home_team", ""),
+                away_team=evt.get("away_team", ""),
+            )
+        )
+    return events
+
+
+def parse_event_markets(payload: Any) -> List[EventMarketAvailability]:
+    """Parse event-market availability from GET /events/{eventId}/markets.
+
+    The provider shape is intentionally parsed tolerantly because market
+    availability may be returned either as bookmaker objects containing a
+    markets list or as a direct mapping in fixtures.
+    """
+    data = payload
+    if isinstance(payload, dict):
+        data = payload.get("bookmakers") or payload.get("data") or payload.get("markets") or []
+    if isinstance(data, dict):
+        data = [{"key": key, "markets": value} for key, value in data.items()]
+    out: List[EventMarketAvailability] = []
+    if not isinstance(data, list):
+        return out
+    for row in data:
+        if isinstance(row, str):
+            out.append(EventMarketAvailability(bookmaker="", markets=[row]))
+            continue
+        markets_raw = row.get("markets") or []
+        markets: List[str] = []
+        for item in markets_raw:
+            if isinstance(item, str):
+                markets.append(item)
+            elif isinstance(item, dict):
+                key = item.get("key")
+                if key:
+                    markets.append(str(key))
+        out.append(
+            EventMarketAvailability(
+                bookmaker=str(row.get("key") or row.get("bookmaker") or ""),
+                markets=markets,
+            )
+        )
+    return out
+
+
 def parse_historical_snapshot(payload: Any) -> HistoricalSnapshot:
     """Parse a wrapped historical odds or historical event-odds response."""
     if not isinstance(payload, dict):
         return HistoricalSnapshot("", None, None, [])
     data = payload.get("data")
     event_payload = data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
-    return HistoricalSnapshot(
+    snapshot = HistoricalSnapshot(
         timestamp=str(payload.get("timestamp", "")),
         previous_timestamp=payload.get("previous_timestamp"),
         next_timestamp=payload.get("next_timestamp"),
         events=parse_events(event_payload),
+    )
+    events: List[EventOdds] = []
+    for event in snapshot.events:
+        books = [
+            BookOdds(
+                bookmaker=book.bookmaker,
+                market=book.market,
+                selection=book.selection,
+                price=book.price,
+                point=book.point,
+                last_update=book.last_update,
+                description=book.description,
+                event_id=book.event_id,
+                snapshot_timestamp=snapshot.timestamp,
+            )
+            for book in event.books
+        ]
+        events.append(
+            EventOdds(
+                event_id=event.event_id,
+                sport_key=event.sport_key,
+                commence_time=event.commence_time,
+                home_team=event.home_team,
+                away_team=event.away_team,
+                books=books,
+            )
+        )
+    return HistoricalSnapshot(
+        timestamp=snapshot.timestamp,
+        previous_timestamp=snapshot.previous_timestamp,
+        next_timestamp=snapshot.next_timestamp,
+        events=events,
     )
 
 

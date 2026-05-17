@@ -34,6 +34,8 @@ grading.
   persistence and post-decision outcome attachment.
 - `omega_calibration_fit_preview`: dry-run calibration fitting only.
 - `omega_evidence_retrieve`: no-live-fetch placeholder for explicit slots.
+- `omega_resolve_odds`: BetMGM-default Odds API input resolver. Use
+  line-shopping/all-books only when explicitly requested.
 
 ## Workflow
 
@@ -43,7 +45,8 @@ grading.
 3. Call the narrowest Omega MCP tool that satisfies the task.
 4. If a result is skipped or gated, inspect `missing_requirements`,
    `skip_reason`, and quality-gate downgrades.
-5. Retrieve only missing pre-decision inputs; preserve source notes.
+5. Retrieve only missing pre-decision inputs; use `omega_resolve_odds` for
+   current odds when local API access is available and preserve source notes.
 6. Rerun the same deterministic tool.
 7. Render Bet Cards only from successful deterministic output.
 
