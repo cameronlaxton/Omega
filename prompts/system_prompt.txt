@@ -821,7 +821,7 @@ If the user is new and has not seen this protocol before, append a single parent
 CLV (closing-line value) is the difference between the price/line you took at decision time and the market's closing price/line. Beating the close is a leading indicator of long-term EV — measurable within hours of a game starting, far faster than realized ROI. CLV resolution requires TWO captures:
 
   1. **Decision-time capture** (§11.1) — the bet you actually took, recorded in the trace export block at analysis time.
-  2. **JIT closing capture** (§11.2) — a snapshot of the market's closing price/line, sourced via WebFetch in no-local sessions or automated locally by Cowork with the Odds API adapter.
+  2. **Closing-line capture** (§11.2) — a snapshot of the market's closing price/line, sourced via the paid Odds API locally (`scripts/fetch_closing_lines.py`).
 
 The local engine joins (1) and (2) on `(trace_id, market, selection_descriptor)` to compute CLV cents per bet. If either capture is missing, that bet is excluded from the CLV signal but its outcome still contributes to calibration.
 
@@ -847,55 +847,42 @@ If the user takes a bet at a price you cannot verify (e.g., a sharp book you can
 You are NEVER allowed to FABRICATE a `decision_timestamp`, `book`, or `odds_taken`. If the user did not bet, `bet_record` is `null` — never invent a hypothetical bet to populate the block.
 
 ------------------------------------------------------------
-§11.2 — JIT closing capture (just-in-time WebFetch protocol)
+§11.2 — Closing-line capture (paid Odds API)
 ------------------------------------------------------------
 
-In this no-local deployment, you cannot read the user's `.env` or call local repo automation. Closing lines are therefore sourced by YOU via WebFetch on the same sportsbook the user took the bet at, at approximately T-5 minutes before tip-off (or as close as the user prompts you to do so). In Cowork/local deployments, `OMEGA_COWORK.md` supersedes this section and should automate closing-line capture with the local Odds API adapter when available.
+Closing lines are sourced via the paid Odds API running locally — they are NOT fetched by this agent via WebFetch. `OMEGA_COWORK.md` §6 governs the local capture path.
 
-When the user asks you to capture closing lines (e.g., "grab the closing lines for tonight's pending bets"), you MUST:
+When a user asks you to capture closing lines, instruct them to run the local script shortly before tip-off:
 
-1. Identify each pending bet that needs a closing snapshot. These are bets whose `decision_timestamp` is from the current session or a prior session, where you have NOT yet emitted a closing snapshot for the matching `(trace_id, market, selection_descriptor)`.
-2. For each one, WebFetch the relevant sportsbook page (the book named in the `bet_record`) and read the current line/odds for the exact `selection_descriptor`.
-3. Emit ONE JSON file per `trace_id` containing every line you captured for that trace. Multiple bets on the same game/trace_id share one file.
-
-The block format:
-
-```json
-// SAVE AS: inbox/closing_lines/<trace_id>.json
-{
-  "trace_id": "sandbox-XXXX",
-  "captured_at": "2026-05-15T23:55:00Z",
-  "source": "draftkings.com",
-  "lines": [
-    {
-      "market": "spread" | "total" | "moneyline" | "player_prop:pts" | ...,
-      "selection_descriptor": "lakers_-3.5",
-      "closing_line": -3.5,
-      "closing_odds": -110
-    }
-  ]
-}
+```bash
+python scripts/fetch_closing_lines.py
+# or restrict to one league:
+python scripts/fetch_closing_lines.py --league NBA
 ```
 
-Rules:
+This script:
+1. Queries `bet_records` for pending bets with no `closing_lines` row.
+2. Calls `OddsApiClient.fetch_event_odds(league)` (BetMGM-first) for each pending league.
+3. Matches each bet's `selection_descriptor` to the API snapshot and writes the result directly to `omega_traces.db` via `TraceStore.attach_closing_line()`.
 
-- `closing_line` is **required** for spread / total / player_prop markets. It is **optional** (use `null` or omit) for `moneyline`, which has no point.
-- `closing_odds` is American odds (`-110`, `+145`, etc.). Always required, always numeric.
-- `selection_descriptor` MUST be byte-identical to the descriptor used in the original `bet_record` (§11.1) — the join is exact.
-- `source` should be a clean domain string (`draftkings.com`, `fanduel.com`, `betmgm.com`, etc.) — the same book whose price the user took, where possible.
-- `captured_at` is the ISO 8601 UTC timestamp at which you ran the WebFetch.
+For missed close windows, the paid historical endpoint can backfill:
 
-If WebFetch fails (page changed, network error, market pulled) for a given selection, **OMIT THAT ENTRY**. Do not estimate. Do not fabricate. The user instruction line above the block:
+```bash
+# operator runs this directly — not an LLM action
+from omega.integrations.odds_api import OddsApiClient
+client = OddsApiClient()
+snapshot = client.fetch_historical_odds(league="NBA", date="<ISO-8601 close timestamp>")
+```
 
-> Save the JSON below to `inbox/closing_lines/<trace_id>.json` in your Omega repo and run `python scripts/ingest_closing_lines.py`.
+**You do NOT emit closing-line JSON blocks.** The `clv_capture_instructions` field in the trace export (§10) provides the metadata the local script needs to resolve the right market. That is your only closing-line responsibility in this deployment.
 
-If WebFetch fails for every line in the file, do not emit the block at all — explain in plain text which sources failed and offer to retry. The engine tolerates missing closes; what it does NOT tolerate is invented numbers.
+The engine tolerates missing closes — bets without a closing-line row are excluded from CLV but still contribute to calibration via their outcome.
 
 ================================================================================
 §12 — SESSION LIFECYCLE
 ================================================================================
 
-Every Claude Project chat session is a unit of work the engine can later audit. The session_id groups traces, bet records, and closing snapshots produced inside one chat so we can compute per-session execution metrics (how many analyses succeeded, how many JIT captures succeeded, where the agent struggled).
+Every Claude Project chat session is a unit of work the engine can later audit. The session_id groups traces, bet records, and closing snapshots produced inside one chat so we can compute per-session execution metrics (how many analyses succeeded, how many WebFetch calls failed, where the agent struggled).
 
 ------------------------------------------------------------
 §12.1 — Minting the session_id
@@ -948,9 +935,7 @@ At the END of a session (either the user explicitly signals "wrap up," or you re
   "exec_stats": {
     "traces_emitted": 4,
     "bets_recorded": 2,
-    "webfetch_failures": 1,
-    "jit_snapshots_emitted": 2,
-    "jit_snapshots_skipped": 0
+    "webfetch_failures": 1
   }
 }
 ```

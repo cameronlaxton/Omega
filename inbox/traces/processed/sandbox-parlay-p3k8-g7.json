@@ -1,0 +1,58 @@
+{
+  "trace": {
+    "trace_id": "sandbox-parlay-p3k8-g7",
+    "session_id": "sess-20260517-p3k8",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-17T17:47:43.027639+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "type": "3-leg parlay",
+      "legs": [
+        {
+          "player": "Paul Reed Jr",
+          "prop": "pts",
+          "line": 7.5,
+          "selection": "over"
+        },
+        {
+          "player": "Jalen Duren",
+          "prop": "reb",
+          "line": 8.5,
+          "selection": "over"
+        },
+        {
+          "player": "Max Strus",
+          "prop": "reb",
+          "line": 3.5,
+          "selection": "over"
+        }
+      ],
+      "base_odds": 326,
+      "boosted_odds": 488,
+      "boost_applied": "50% profit boost",
+      "strus_note": "Parlay leg 3.5 differs from straight 4.5"
+    },
+    "result": {
+      "type": "parlay",
+      "recommendation": "user_placed",
+      "confidence_tier": null
+    },
+    "quality_gate": {
+      "aggregate_quality": 1.0,
+      "downgrades": []
+    }
+  },
+  "bet_record": {
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "Paul Reed Jr pts O7.5 / Jalen Duren reb O8.5 / Max Strus reb O3.5",
+    "selection_descriptor": "parlay_reed_pts_o7.5_duren_reb_o8.5_strus_reb_o3.5",
+    "line_taken": null,
+    "odds_taken": 488,
+    "stake_units": 20.17,
+    "decision_timestamp": "2026-05-17T13:44:00Z",
+    "external_bet_id": "nfYIh9q1anh2sXZNXkU2AfNAK/Y=",
+    "note": "base odds +326, 50% boost applied -> +488; potential payout $118.68"
+  },
+  "clv_capture_instructions": null
+}

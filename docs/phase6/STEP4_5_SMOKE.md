@@ -1,6 +1,6 @@
 # Phase 6 Step 4 & 5 — End-to-End Smoke Test
 
-This document walks the operator through a full session of the JIT closing-line +
+This document walks the operator through a full session of the closing-line +
 session-tracking + continuous-improvement loop introduced in Phase 6f. It is
 manual on purpose: the bridge between the Claude Project sandbox and the local
 DB is intentionally copy/paste (the sandbox cannot reach localhost).
@@ -50,29 +50,25 @@ sqlite3 omega_traces.db "SELECT trace_id, session_id, league FROM traces;"
 
 The `session_id` column must be populated.
 
-## 2. Sandbox: emit JIT closing-line capture
+## 2. Capture closing lines (paid Odds API)
 
-When the user is ready to capture closing lines (around T-5min before tip-off),
-ask the agent to do so. Per §11.2, it will WebFetch the sportsbook page and
-emit:
-
-```json
-// SAVE AS: inbox/closing_lines/sandbox-XXXX.json
-{
-  "trace_id": "sandbox-XXXX",
-  "captured_at": "2026-05-15T23:55:00Z",
-  "source": "draftkings.com",
-  "lines": [
-    { "market": "spread", "selection_descriptor": "lakers_-3.5",
-      "closing_line": -3.5, "closing_odds": -110 }
-  ]
-}
-```
-
-Save and ingest:
+Around T-30 minutes before tip-off, run the closing-line capture script locally:
 
 ```bash
-python scripts/ingest_closing_lines.py
+python scripts/fetch_closing_lines.py --league NBA
+# add --dry-run first to verify matches without writing
+```
+
+The script queries pending `bet_records`, calls the Odds API (BetMGM-first),
+and writes closing rows directly to `omega_traces.db` via
+`TraceStore.attach_closing_line()`. No inbox file is needed.
+
+For missed windows, use the paid historical endpoint:
+
+```python
+from omega.integrations.odds_api import OddsApiClient
+client = OddsApiClient()
+snapshot = client.fetch_historical_odds(league="NBA", date="<ISO-8601 close timestamp>")
 ```
 
 Verify:
@@ -82,7 +78,7 @@ sqlite3 omega_traces.db "SELECT trace_id, market, selection_descriptor, \
   closing_line, closing_odds, source FROM closing_lines;"
 ```
 
-Confirm the row matches the JIT capture. Re-running the ingest must be a no-op
+Re-running the capture is a no-op for rows already written
 (idempotent on `UNIQUE(trace_id, market, selection_descriptor)`).
 
 ## 3. Attach outcome
@@ -116,9 +112,7 @@ At the end of the session (or first message of the next), the agent emits per
   "exec_stats": {
     "traces_emitted": 1,
     "bets_recorded": 1,
-    "webfetch_failures": 0,
-    "jit_snapshots_emitted": 1,
-    "jit_snapshots_skipped": 0
+    "webfetch_failures": 0
   }
 }
 ```
@@ -207,8 +201,8 @@ violates a CLAUDE.md required invariant.
 ## What this does NOT cover
 
 - Multi-league rotations (NFL, MLB, NHL) — add per-league as data accumulates.
-- Player-prop CLV via the JIT path — supported by schema (`market="player_prop:pts"`)
-  but the agent's WebFetch recipe for prop pages is more brittle than h2h/spreads/totals.
+- Player-prop CLV via the Odds API path — supported by schema (`market="player_prop:pts"`)
+  but prop market coverage depends on the paid plan and bookmaker availability.
 - Automated promotion gates 4 (backtest-replay parity) and 5 (CLV non-regression).
   These currently require operator confirmation via `--confirm-*` flags.
   Full automation is a follow-up commit once enough graded data accumulates to

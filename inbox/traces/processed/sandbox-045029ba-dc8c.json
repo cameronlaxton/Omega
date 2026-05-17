@@ -1,0 +1,40 @@
+{
+  "trace": {
+    "trace_id": "sandbox-045029ba-dc8c",
+    "session_id": "sess-20260517-k9m2",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-17T17:50:53.888250+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "player_name": "Andre Pallante",
+      "league": "MLB",
+      "prop_type": "strikeouts",
+      "line": 3.5,
+      "odds_over": -130.0,
+      "odds_under": 106.0,
+      "player_context": {"strikeouts_mean": 4.1, "strikeouts_std": 2.0},
+      "n_iterations": 50000,
+      "seed": 42
+    },
+    "result": {
+      "player_name": "Andre Pallante",
+      "league": "MLB",
+      "prop_type": "strikeouts",
+      "line": 3.5,
+      "status": "success",
+      "over_prob": 0.5877,
+      "under_prob": 0.4123,
+      "edge_over": 2.25,
+      "edge_under": -7.32,
+      "recommendation": "pass",
+      "confidence_tier": null
+    },
+    "quality_gate": {
+      "applied": true,
+      "aggregate_quality": 1.0,
+      "downgrades": []
+    }
+  },
+  "bet_record": null,
+  "clv_capture_instructions": null
+}

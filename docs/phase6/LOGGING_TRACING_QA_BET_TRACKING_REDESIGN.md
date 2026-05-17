@@ -83,7 +83,7 @@ Recommended next:
 ## Why This Is Better
 
 - Avoids a parallel CLV pipeline: all close snapshots still enter `closing_lines`.
-- Lets paid historical odds repair missed JIT windows without inventing closes.
+- Lets paid historical odds repair missed close windows without inventing closes.
 - Keeps API-key use inside local repo automation, not LLM prompt output.
 - Preserves replay reproducibility by freezing historical snapshots as artifacts before they enter quant evaluation.
 - Keeps no-local Project agents usable via manual export/WebFetch fallback.

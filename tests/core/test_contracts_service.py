@@ -1,0 +1,313 @@
+"""
+Tests for omega.core.contracts.service — the primary LLM↔engine integration seam.
+
+Covers:
+  - _pick_best_bet(): always returns BetSlip (not None) for actionable edges
+  - analyze_game(): happy path, no-odds path, skipped path
+  - analyze_player_prop(): missing-mean skip, success path
+  - _resolve_game_market_odds(): normalized markets vs. legacy fields
+"""
+from __future__ import annotations
+
+import pytest
+
+from omega.core.contracts.schemas import (
+    BetSlip,
+    EdgeDetail,
+    GameAnalysisRequest,
+    MarketQuote,
+    OddsInput,
+    PlayerPropRequest,
+)
+from omega.core.contracts.service import (
+    _pick_best_bet,
+    _resolve_game_market_odds,
+    analyze_game,
+    analyze_player_prop,
+    analyze_slate,
+)
+from omega.core.contracts.schemas import SlateAnalysisRequest
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+def _edge(side="home", team="Lakers", edge_pct=8.0, ev_pct=5.0, tier="A", odds=-130.0):
+    return EdgeDetail(
+        side=side,
+        team=team,
+        true_prob=0.60,
+        calibrated_prob=0.58,
+        market_implied=0.45,
+        edge_pct=edge_pct,
+        ev_pct=ev_pct,
+        market_odds=odds,
+        confidence_tier=tier,
+    )
+
+
+_NBA_HOME_CTX = {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0}
+_NBA_AWAY_CTX = {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0}
+
+
+# ---------------------------------------------------------------------------
+# _pick_best_bet
+# ---------------------------------------------------------------------------
+
+class TestPickBestBet:
+    def test_returns_betslip_for_actionable_edge(self):
+        result = _pick_best_bet([_edge(tier="A")], bankroll=1000.0)
+        assert isinstance(result, BetSlip)
+
+    def test_returns_betslip_for_tier_b(self):
+        result = _pick_best_bet([_edge(tier="B")], bankroll=1000.0)
+        assert isinstance(result, BetSlip)
+
+    def test_returns_none_when_all_pass(self):
+        result = _pick_best_bet([_edge(tier="Pass"), _edge(tier="Pass", side="away")], bankroll=1000.0)
+        assert result is None
+
+    def test_returns_none_for_empty_edges(self):
+        assert _pick_best_bet([], bankroll=1000.0) is None
+
+    def test_selects_highest_absolute_edge(self):
+        weak = _edge(team="TeamA", edge_pct=4.0, tier="B")
+        strong = _edge(team="TeamB", edge_pct=15.0, tier="A", side="away")
+        result = _pick_best_bet([weak, strong], bankroll=1000.0)
+        assert result is not None
+        assert "TeamB" in result.selection
+
+    def test_betslip_fields_are_populated(self):
+        e = _edge(edge_pct=10.0, ev_pct=6.0, tier="A", odds=-120.0)
+        result = _pick_best_bet([e], bankroll=1000.0)
+        assert result is not None
+        assert result.edge_pct == pytest.approx(10.0)
+        assert result.ev_pct == pytest.approx(6.0)
+        assert result.confidence_tier == "A"
+        assert result.odds == pytest.approx(-120.0)
+        assert isinstance(result.recommended_units, float)
+        assert isinstance(result.kelly_fraction, float)
+        assert result.kelly_fraction >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# analyze_game
+# ---------------------------------------------------------------------------
+
+class TestAnalyzeGame:
+    def test_returns_success_with_valid_context(self):
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=100,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+        )
+        resp = analyze_game(req)
+        assert resp.status == "success"
+        assert resp.simulation is not None
+        assert 0 <= resp.simulation.home_win_prob <= 100
+        assert 0 <= resp.simulation.away_win_prob <= 100
+
+    def test_best_bet_is_none_without_odds(self):
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=100,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+        )
+        resp = analyze_game(req)
+        assert resp.best_bet is None
+        assert resp.edges == []
+
+    def test_best_bet_returned_when_large_market_edge(self):
+        # Supply only home moneyline so only one EdgeDetail is produced.
+        # Simulation puts home at ~56% while market implies ~25% (+300) —
+        # a ~31% edge that is guaranteed to produce an A-tier BetSlip.
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=1000,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+            odds=OddsInput(moneyline_home=300),
+        )
+        resp = analyze_game(req)
+        assert resp.status == "success"
+        assert resp.best_bet is not None
+        assert isinstance(resp.best_bet, BetSlip)
+        assert resp.best_bet.edge_pct > 3.0
+
+    def test_edges_populated_when_odds_supplied(self):
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=100,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+            odds=OddsInput(moneyline_home=-150, moneyline_away=130),
+        )
+        resp = analyze_game(req)
+        assert len(resp.edges) == 2
+        assert all(isinstance(e, EdgeDetail) for e in resp.edges)
+
+    def test_skipped_when_missing_required_context(self):
+        req = GameAnalysisRequest(
+            home_team="Team A",
+            away_team="Team B",
+            league="NBA",
+            n_iterations=100,
+        )
+        resp = analyze_game(req)
+        assert resp.status == "skipped"
+        assert resp.best_bet is None
+        assert resp.simulation is None
+
+    def test_never_raises(self):
+        # Garbage input should return error/skipped, not raise
+        req = GameAnalysisRequest(
+            home_team="",
+            away_team="",
+            league="NBA",
+            n_iterations=100,
+        )
+        resp = analyze_game(req)
+        assert resp.status in ("success", "skipped", "error")
+
+    def test_response_matchup_format(self):
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=100,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+        )
+        resp = analyze_game(req)
+        assert resp.matchup == "Indiana Pacers @ Boston Celtics"
+        assert resp.league == "NBA"
+
+
+# ---------------------------------------------------------------------------
+# analyze_player_prop
+# ---------------------------------------------------------------------------
+
+class TestAnalyzePlayerProp:
+    def test_skipped_when_missing_mean(self):
+        req = PlayerPropRequest(
+            player_name="LeBron James",
+            league="NBA",
+            prop_type="pts",
+            line=25.5,
+            player_context={},
+        )
+        resp = analyze_player_prop(req)
+        assert resp.status == "skipped"
+        assert "pts_mean" in (resp.skip_reason or "")
+        assert resp.missing_requirements is not None
+
+    def test_success_with_valid_context(self):
+        req = PlayerPropRequest(
+            player_name="LeBron James",
+            league="NBA",
+            prop_type="pts",
+            line=25.5,
+            odds_over=-110,
+            odds_under=-110,
+            n_iterations=500,
+            seed=42,
+            player_context={"pts_mean": 27.0, "pts_std": 5.5},
+        )
+        resp = analyze_player_prop(req)
+        assert resp.status == "success"
+        assert 0 < resp.over_prob < 1
+        assert 0 < resp.under_prob < 1
+        assert resp.over_prob + resp.under_prob == pytest.approx(1.0, abs=0.01)
+
+    def test_never_raises_on_bad_context(self):
+        req = PlayerPropRequest(
+            player_name="Test Player",
+            league="NBA",
+            prop_type="pts",
+            line=20.0,
+            player_context={"pts_mean": "not_a_number"},
+        )
+        resp = analyze_player_prop(req)
+        assert resp.status in ("error", "skipped")
+
+    def test_imputation_caps_tier(self):
+        req = PlayerPropRequest(
+            player_name="Test Player",
+            league="NBA",
+            prop_type="pts",
+            line=20.0,
+            odds_over=-110,
+            odds_under=-110,
+            n_iterations=1000,
+            seed=42,
+            player_context={
+                "pts_mean": 25.0,
+                "pts_std": 5.0,
+                "imputed_keys": ["pts_mean", "pts_std", "sample_size"],
+                "sample_size": 5,
+            },
+        )
+        resp = analyze_player_prop(req)
+        assert resp.status == "success"
+        assert resp.confidence_tier is None
+        assert resp.recommendation == "pass"
+        assert "insufficient_real_observations" in (resp.notes or [])
+
+
+# ---------------------------------------------------------------------------
+# _resolve_game_market_odds
+# ---------------------------------------------------------------------------
+
+class TestResolveGameMarketOdds:
+    def test_uses_normalized_markets_over_legacy(self):
+        odds = OddsInput(
+            moneyline_home=-200,  # legacy (should be ignored when markets present)
+            moneyline_away=170,
+            markets=[
+                MarketQuote(market_type="moneyline", selection="Home", price=-150),
+                MarketQuote(market_type="moneyline", selection="Away", price=130),
+            ],
+        )
+        home_odds, away_odds = _resolve_game_market_odds(odds, "Home Team", "Away Team")
+        assert home_odds == pytest.approx(-150)
+        assert away_odds == pytest.approx(130)
+
+    def test_falls_back_to_legacy_moneyline(self):
+        odds = OddsInput(moneyline_home=-160, moneyline_away=140)
+        home_odds, away_odds = _resolve_game_market_odds(odds, "Home Team", "Away Team")
+        assert home_odds == pytest.approx(-160)
+        assert away_odds == pytest.approx(140)
+
+    def test_prefers_spread_over_moneyline_for_home(self):
+        odds = OddsInput(
+            moneyline_home=-200,
+            markets=[
+                MarketQuote(market_type="spread", selection="Home", price=-110, line=-4.5),
+                MarketQuote(market_type="moneyline", selection="Home", price=-200),
+                MarketQuote(market_type="moneyline", selection="Away", price=170),
+            ],
+        )
+        home_odds, away_odds = _resolve_game_market_odds(odds, "Home", "Away")
+        assert home_odds == pytest.approx(-110)
+
+    def test_returns_none_when_no_odds(self):
+        odds = OddsInput()
+        home_odds, away_odds = _resolve_game_market_odds(odds, "Home", "Away")
+        assert home_odds is None
+        assert away_odds is None

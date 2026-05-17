@@ -236,4 +236,4 @@ For each substantial task, return:
 
 ## Cowork runtime contract
 
-See [OMEGA_COWORK.md](OMEGA_COWORK.md) for the Cowork Project custom instructions — engine invocation, hard-wall enforcement, session lifecycle, JIT closing-line capture, trace export, and action-plan automation.
+See [OMEGA_COWORK.md](OMEGA_COWORK.md) for the Cowork Project custom instructions — engine invocation, hard-wall enforcement, session lifecycle, paid Odds API closing-line capture, trace export, and action-plan automation.

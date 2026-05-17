@@ -1,0 +1,47 @@
+{
+  "trace": {
+    "trace_id": "sandbox-46b79430-44c5",
+    "session_id": "sess-20260517-p3k8",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-17T17:38:55.030671+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "player_name": "Jalen Duren",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 8.5,
+      "odds_over": -135,
+      "odds_under": 100,
+      "player_context": {
+        "reb_mean": 9.8,
+        "reb_std": 2.8
+      }
+    },
+    "result": {
+      "player_name": "Jalen Duren",
+      "prop_type": "reb",
+      "line": 8.5,
+      "over_prob": 0.6775,
+      "under_prob": 0.3225,
+      "edge_over": 10.3,
+      "edge_under": -17.75,
+      "recommendation": "over",
+      "confidence_tier": "A"
+    },
+    "quality_gate": {
+      "aggregate_quality": 1.0,
+      "downgrades": []
+    }
+  },
+  "bet_record": null,
+  "clv_capture_instructions": {
+    "league": "NBA",
+    "event_date": "2026-05-17",
+    "matchup": "Detroit Pistons vs Cleveland Cavaliers Game 7",
+    "market": "player_prop:reb",
+    "selection_descriptor": "jalen_duren_reb_over_8.5",
+    "line_at_decision": 8.5,
+    "odds_at_decision": -135,
+    "book_at_decision": "betmgm"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "trace": {
+    "trace_id": "sandbox-ede29257-7a63",
+    "session_id": "sess-20260517-p3k8",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-17T17:38:55.047492+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "player_name": "Max Strus",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 4.5,
+      "odds_over": -115,
+      "odds_under": -115,
+      "player_context": {
+        "reb_mean": 5.2,
+        "reb_std": 2.0
+      }
+    },
+    "result": {
+      "player_name": "Max Strus",
+      "prop_type": "reb",
+      "line": 4.5,
+      "over_prob": 0.6362,
+      "under_prob": 0.3638,
+      "edge_over": 10.13,
+      "edge_under": -17.11,
+      "recommendation": "over",
+      "confidence_tier": "A"
+    },
+    "quality_gate": {
+      "aggregate_quality": 1.0,
+      "downgrades": []
+    }
+  },
+  "bet_record": null,
+  "clv_capture_instructions": {
+    "league": "NBA",
+    "event_date": "2026-05-17",
+    "matchup": "Detroit Pistons vs Cleveland Cavaliers Game 7",
+    "market": "player_prop:reb",
+    "selection_descriptor": "max_strus_reb_over_4.5",
+    "line_at_decision": 4.5,
+    "odds_at_decision": -115,
+    "book_at_decision": "betmgm"
+  }
+}

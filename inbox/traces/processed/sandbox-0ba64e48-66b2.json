@@ -1,0 +1,38 @@
+{
+  "trace": {
+    "trace_id": "sandbox-0ba64e48-66b2",
+    "session_id": "sess-20260517-p3k8",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-17T17:38:55.011906+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "player_name": "Cade Cunningham",
+      "league": "NBA",
+      "prop_type": "ast",
+      "line": 8.5,
+      "odds_over": -120,
+      "odds_under": -110,
+      "player_context": {
+        "ast_mean": 8.3,
+        "ast_std": 2.1
+      }
+    },
+    "result": {
+      "player_name": "Cade Cunningham",
+      "prop_type": "ast",
+      "line": 8.5,
+      "over_prob": 0.4608,
+      "under_prob": 0.5392,
+      "edge_over": -8.47,
+      "edge_under": 1.54,
+      "recommendation": "pass",
+      "confidence_tier": null
+    },
+    "quality_gate": {
+      "aggregate_quality": 1.0,
+      "downgrades": []
+    }
+  },
+  "bet_record": null,
+  "clv_capture_instructions": null
+}

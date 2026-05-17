@@ -181,79 +181,44 @@ Log the exit code and any output to Cowork execution telemetry. Do NOT write to 
 
 ---
 
-## 6. JIT Closing-Line Capture
+## 6. Closing-Line Capture (Paid Odds API)
 
-CLV requires a market closing snapshot taken at approximately T−30 minutes before tip-off. When a `bet_record` is logged (i.e., `bet_record` is non-null in a trace export):
-
-### 6.1 Schedule the capture task
-
-1. Read `game_time` from `input_snapshot` (the game's start time, ISO 8601).
-2. Compute `capture_time = game_time − 30 minutes`.
-3. Create a **native Cowork one-shot scheduled task** at `capture_time` with this prompt (fill in the placeholders):
-
-   > "Omega JIT closing capture. For trace `<trace_id>`, WebFetch the `<market>` line for `<selection_descriptor>` from `<book>` (e.g., draftkings.com) at the current time (~T−30min before `<matchup>`). Emit a closing-line JSON file to `inbox/closing_lines/<trace_id>.json` with the exact format in OMEGA_COWORK.md §6.2. Then run `python scripts/ingest_closing_lines.py`. Record success or failure in workspace memory under `jit_captures.<trace_id>`."
-
-4. Store the scheduled task ID in workspace memory under `jit_captures.<trace_id>.task_id`.
-
-### 6.2 Closing-line file format
-
-Write to: `inbox/closing_lines/<trace_id>.json`
-
-```json
-{
-  "trace_id": "sandbox-XXXX",
-  "captured_at": "2026-05-15T23:55:00Z",
-  "source": "draftkings.com",
-  "lines": [
-    {
-      "market": "spread" | "total" | "moneyline" | "player_prop:pts",
-      "selection_descriptor": "home_spread_-3.5",
-      "closing_line": -3.5,
-      "closing_odds": -110
-    }
-  ]
-}
-```
-
-Rules:
-- `selection_descriptor` MUST be **byte-identical** to the descriptor in `bet_record` — the DB join is exact.
-- `closing_line` is required for spread / total / player_prop. Optional (null or omit) for moneyline.
-- `closing_odds` is American odds, always numeric.
-- If WebFetch fails for a selection, OMIT that entry. Never estimate or fabricate. If all fetches fail, write nothing and record the failure in workspace memory.
-
-### 6.3 After the ingest script runs
+CLV requires a market closing snapshot taken at approximately T−30 minutes before tip-off. Closing lines are sourced via the paid Odds API — **never via LLM WebFetch and never via scheduled tasks**. When a `bet_record` is logged, run the capture script shortly before tip-off:
 
 ```bash
 cd "C:\Users\camer\OneDrive\Documents\GitHub\Omega"
-python scripts/ingest_closing_lines.py
+python scripts/fetch_closing_lines.py
 ```
 
-Record result in workspace memory: `jit_captures.<trace_id>.status = "success" | "failed" | "partial"`.
+Add `--league NBA` (or the relevant league) to restrict the run. Use `--dry-run` to verify matches without writing.
 
----
+### 6.1 How capture works
 
-## 6A. Paid Odds API Closing-Line Override
+`scripts/fetch_closing_lines.py`:
+1. Queries `bet_records` for pending bets with no `closing_lines` row yet.
+2. Groups by league and calls `OddsApiClient.fetch_event_odds(league)` (BetMGM-first).
+3. Matches each bet's `selection_descriptor` to the API snapshot.
+4. Writes the closing row via `TraceStore.attach_closing_line()` — **directly to the DB**, no inbox file needed.
 
-Use this section when it conflicts with Section 6.
+### 6.2 Backfill
 
-CLV closes are local market artifacts, not LLM estimates. In Cowork, the preferred source is:
+For missed close windows, use the paid historical endpoint:
 
 ```python
 from omega.integrations.odds_api import OddsApiClient
-client = OddsApiClient()  # reads OMEGA_ODDS_API_KEY from env or .env
+client = OddsApiClient()
+snapshot = client.fetch_historical_odds(league="NBA", date="<ISO-8601 timestamp at close>")
 ```
 
-Rules:
-- BetMGM is the default source for normal current odds and closes.
-- Multi-book requests are explicit line-shopping/consensus/audit operations only.
-- Use current Odds API snapshots for live T-30 minute captures when available.
-- Use paid historical Odds API snapshots to backfill missed closes and to freeze replay/backtest market artifacts.
-- Store API-sourced closes in the existing `inbox/closing_lines/<trace_id>.json` shape, then run `python scripts/ingest_closing_lines.py`.
-- Set `source` to `the-odds-api:<bookmaker>`.
-- Persist the API response timestamp context in logs or future market snapshot artifacts; do not mutate original trace inputs.
-- If the API cannot resolve the exact event/book/market/selection, fall back to WebFetch or omit the line. Never estimate.
+Persist the result through `TraceStore.attach_closing_line()` with `source="the-odds-api:<bookmaker>"`.
 
-The exact DB join remains `(trace_id, market, selection_descriptor)`. Descriptor drift is a QA failure, not something to patch with fuzzy matching in persistence.
+### 6.3 Rules
+
+- BetMGM is the default bookmaker. Multi-book requests are explicit line-shopping or audit operations only.
+- Use paid historical snapshots for backfill and replay/backtest market artifacts.
+- The exact DB join is `(trace_id, market, selection_descriptor)`. Descriptor drift is a QA failure — never patch with fuzzy matching.
+- If the API cannot resolve the exact event/book/market/selection, omit the line. Never estimate or fabricate a close.
+- Do not write `inbox/closing_lines/` files from this path — `fetch_closing_lines.py` writes directly to the DB.
 
 ## 7. Session-Start Protocol
 
@@ -307,13 +272,12 @@ Write to: `inbox/sessions/<session_id>.json`
   "started_at": "2026-05-15T18:00:00Z",
   "ended_at": "2026-05-15T22:30:00Z",
   "model_version": "claude-opus-4-7",
-  "agent_notes": "Honest qualitative summary: what was analyzed, any refusals, downgrades, WebFetch failures, missed JIT windows. Under 500 words.",
+  "agent_notes": "Honest qualitative summary: what was analyzed, any refusals, downgrades, WebFetch failures, closing-line capture results. Under 500 words.",
   "exec_stats": {
     "traces_emitted": 4,
     "bets_recorded": 2,
     "webfetch_failures": 1,
-    "jit_snapshots_emitted": 2,
-    "jit_snapshots_skipped": 0
+    "closing_line_captures": 2
   }
 }
 ```
@@ -345,7 +309,7 @@ All paths relative to the Omega repo root: `C:\Users\camer\OneDrive\Documents\Gi
 | `omega_lite/run.py` | Engine entry point — `analyze(request_dict) → dict` |
 | `omega_traces.db` | SQLite V5 — DO NOT write directly |
 | `inbox/traces/` | Trace export files → `ingest_traces.py` |
-| `inbox/closing_lines/` | JIT closing-line snapshots → `ingest_closing_lines.py` |
+| `inbox/closing_lines/` | Closing-line snapshots (agent-emitted or manually reviewed) → `ingest_closing_lines.py` |
 | `inbox/sessions/` | Session sidecars (no ingest script — read directly) |
 | `inbox/action_plans/` | Action plan JSON → `run_action_plan.py` |
 | `scripts/ingest_traces.py` | Drains `inbox/traces/` → `traces` + `bet_records` tables |

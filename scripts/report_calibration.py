@@ -172,7 +172,8 @@ def _section_clv(store: TraceStore, league: str, cutoff: str) -> Dict[str, Any]:
                 closing_line=float(row["closing_line"]) if row["closing_line"] is not None else None,
                 side=str(row["selection"]).split()[0].lower() if row["selection"] else None,
             )
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("CLV computation failed for trace %s: %s", row.get("trace_id", "?"), exc)
             continue
         clv_cents.append(r.clv_cents)
         if r.beat_close:
@@ -296,16 +297,15 @@ def _render(
     if not sessions:
         lines.append("_No session_id-tagged traces yet._")
     else:
-        lines.append("| session_id | traces | graded | model | jit_ok | jit_skipped | webfetch_fail | notes |")
-        lines.append("|---|---|---|---|---|---|---|---|")
+        lines.append("| session_id | traces | graded | model | closes | webfetch_fail | notes |")
+        lines.append("|---|---|---|---|---|---|---|")
         for s in sessions:
             stats = s["exec_stats"] or {}
             notes = (s["agent_notes"] or "").replace("|", "\\|").replace("\n", " ")[:80]
             lines.append(
                 f"| `{s['session_id']}` | {s['trace_count']} | {s['graded_count']} | "
                 f"{s.get('model_version') or '?'} | "
-                f"{stats.get('jit_snapshots_emitted', '?')} | "
-                f"{stats.get('jit_snapshots_skipped', '?')} | "
+                f"{stats.get('closing_line_captures', '?')} | "
                 f"{stats.get('webfetch_failures', '?')} | {notes} |"
             )
     lines.append("")

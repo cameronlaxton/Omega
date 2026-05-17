@@ -1,5 +1,5 @@
 """
-Tests for scripts/ingest_closing_lines.py — JIT closing-line ingest.
+Tests for scripts/ingest_closing_lines.py — closing-line ingest.
 
 Covers:
 - valid file: rows attached, file moves to processed/
