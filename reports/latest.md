@@ -1,15 +1,15 @@
 # Omega Calibration Report — MLB
 
-Generated: `2026-05-17T17:49:19+00:00` | Window: last 30 days
+Generated: `2026-05-17T21:01:03+00:00` | Window: last 30 days
 
 ## 1. Coverage
 
 | Metric | Count |
 |---|---|
-| Traces | 0 |
+| Traces | 3 |
 | Graded (outcome attached) | 0 |
-| With bet_record | 0 |
-| With closing_line | 0 |
+| With bet_record | 2 |
+| With closing_line | 2 |
 
 ## 2. Production calibration profile
 
@@ -21,11 +21,15 @@ _Fewer than 10 graded traces in window — metrics suppressed (noise dominates).
 
 ## 4. CLV (bets with attached closing lines)
 
-_No CLV-resolvable bets in window._
+- n: 2
+- Mean CLV: +0.00 cents
+- Beat-close rate: 0.0%
 
 ## 5. Sessions (most recent)
 
-_No session_id-tagged traces yet._
+| session_id | traces | graded | model | closes | webfetch_fail | notes |
+|---|---|---|---|---|---|---|
+| `sess-20260517-k9m2` | 3 | 0 | ? | ? | ? |  |
 
 ## 6. Pending CANDIDATE profiles
 
