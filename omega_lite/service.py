@@ -95,6 +95,15 @@ def _pick_best_bet(
         bankroll=bankroll,
         confidence_tier=best.confidence_tier,
     )
+    return BetSlip(
+        selection=f"{best.team} {best.side}",
+        odds=best.market_odds,
+        edge_pct=best.edge_pct,
+        ev_pct=best.ev_pct,
+        confidence_tier=best.confidence_tier,
+        recommended_units=stake["units"],
+        kelly_fraction=stake["kelly_fraction"],
+    )
 
 
 def _quote_matches_selection(quote: MarketQuote, *labels: str) -> bool:
@@ -125,22 +134,19 @@ def _resolve_game_market_odds(
     home_ml = _market_quote(odds, "moneyline", home_team, "Home")
     away_ml = _market_quote(odds, "moneyline", away_team, "Away")
 
+    # Only use spread_home_price when spread_home was explicitly supplied;
+    # otherwise fall through to moneyline_home. The spread_home_price field
+    # defaults to -110 which would otherwise shadow a real moneyline_home value.
+    legacy_home = (
+        odds.spread_home_price if odds.spread_home is not None else odds.moneyline_home
+    )
     home_odds = (
         home_spread.price
         if home_spread is not None
-        else (home_ml.price if home_ml is not None else (odds.spread_home_price or odds.moneyline_home))
+        else (home_ml.price if home_ml is not None else legacy_home)
     )
     away_odds = away_ml.price if away_ml is not None else odds.moneyline_away
     return home_odds, away_odds
-    return BetSlip(
-        selection=f"{best.team} {best.side}",
-        odds=best.market_odds,
-        edge_pct=best.edge_pct,
-        ev_pct=best.ev_pct,
-        confidence_tier=best.confidence_tier,
-        recommended_units=stake["units"],
-        kelly_fraction=stake["kelly_fraction"],
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -291,10 +297,10 @@ def analyze_player_prop(
             missing_requirements=[f"player_context.{mean_key}"],
         )
 
-    std_val = player_ctx.get(std_key, max(1.0, float(mean) * 0.25))
     try:
         mean_f = float(mean)
-        std_f = float(std_val)
+        std_raw = player_ctx.get(std_key)
+        std_f = float(std_raw) if std_raw is not None else max(1.0, mean_f * 0.25)
     except (TypeError, ValueError) as exc:
         return PlayerPropResponse(
             player_name=request.player_name,

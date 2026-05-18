@@ -45,7 +45,8 @@ import re
 import unicodedata
 import urllib.parse
 import urllib.request
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger("omega.integrations.espn_boxscore")
 
@@ -63,44 +64,47 @@ _SUMMARY_URLS = {
 # Map omega prop_type (lowercased) → ESPN stat-row key (string match against
 # the `keys` array in the boxscore category). Multiple aliases per stat are
 # allowed; the first key found in the category wins.
-NBA_STAT_KEYS: Dict[str, Tuple[str, ...]] = {
-    "pts":      ("PTS",),
-    "points":   ("PTS",),
-    "reb":      ("REB",),
-    "rebounds": ("REB",),
-    "ast":      ("AST",),
-    "assists":  ("AST",),
-    "stl":      ("STL",),
-    "steals":   ("STL",),
-    "blk":      ("BLK",),
-    "blocks":   ("BLK",),
+NBA_STAT_KEYS: dict[str, tuple[str, ...]] = {
+    "pts":      ("PTS", "points"),
+    "points":   ("PTS", "points"),
+    "reb":      ("REB", "rebounds"),
+    "rebounds": ("REB", "rebounds"),
+    "ast":      ("AST", "assists"),
+    "assists":  ("AST", "assists"),
+    "stl":      ("STL", "steals"),
+    "steals":   ("STL", "steals"),
+    "blk":      ("BLK", "blocks"),
+    "blocks":   ("BLK", "blocks"),
+    "3pm":      ("3PTM", "3PM", "threePointFieldGoalsMade-threePointFieldGoalsAttempted"),
+    "threes":   ("3PTM", "3PM", "threePointFieldGoalsMade-threePointFieldGoalsAttempted"),
+    "pra":      ("PRA",),
 }
 
 # Batting and pitching live under separate categories — we surface them
 # both and let the caller pick by prop_type semantics.
-MLB_BATTING_KEYS: Dict[str, Tuple[str, ...]] = {
-    "hits":          ("H",),
-    "runs":          ("R",),
-    "rbi":           ("RBI",),
-    "rbis":          ("RBI",),
-    "hr":            ("HR",),
-    "home_runs":     ("HR",),
-    "sb":            ("SB",),
-    "stolen_bases":  ("SB",),
-    "bb":            ("BB",),
-    "walks":         ("BB",),
+MLB_BATTING_KEYS: dict[str, tuple[str, ...]] = {
+    "hits":          ("H", "hits"),
+    "runs":          ("R", "runs"),
+    "rbi":           ("RBI", "RBIs"),
+    "rbis":          ("RBI", "RBIs"),
+    "hr":            ("HR", "homeRuns"),
+    "home_runs":     ("HR", "homeRuns"),
+    "sb":            ("SB", "stolenBases"),
+    "stolen_bases":  ("SB", "stolenBases"),
+    "bb":            ("BB", "walks"),
+    "walks":         ("BB", "walks"),
 }
 
-MLB_PITCHING_KEYS: Dict[str, Tuple[str, ...]] = {
-    "strikeouts":          ("K",),
-    "strikeouts_pitched":  ("K",),
-    "k":                   ("K",),
-    "pitching_outs":       ("IP",),  # innings pitched; outs = floor(IP)*3 + 10*(IP%1)
-    "outs_recorded":       ("IP",),
-    "earned_runs":         ("ER",),
-    "er":                  ("ER",),
-    "hits_allowed":        ("H",),
-    "walks_allowed":       ("BB",),
+MLB_PITCHING_KEYS: dict[str, tuple[str, ...]] = {
+    "strikeouts":          ("K", "strikeouts"),
+    "strikeouts_pitched":  ("K", "strikeouts"),
+    "k":                   ("K", "strikeouts"),
+    "pitching_outs":       ("IP", "fullInnings.partInnings"),
+    "outs_recorded":       ("IP", "fullInnings.partInnings"),
+    "earned_runs":         ("ER", "earnedRuns"),
+    "er":                  ("ER", "earnedRuns"),
+    "hits_allowed":        ("H", "hits"),
+    "walks_allowed":       ("BB", "walks"),
 }
 
 
@@ -112,7 +116,7 @@ _SUFFIX_RE = re.compile(r"\b(jr|sr|ii|iii|iv|v)\.?$", re.IGNORECASE)
 _PUNCT_RE = re.compile(r"[.\'`]")
 
 
-def normalize_player_name(name: Optional[str]) -> str:
+def normalize_player_name(name: str | None) -> str:
     """Normalize a player name for cross-source matching.
 
     Strips accents, lowercases, removes punctuation (periods, apostrophes),
@@ -134,19 +138,33 @@ def normalize_player_name(name: Optional[str]) -> str:
 # Box score parsing
 # ---------------------------------------------------------------------------
 
-def _stat_key_map_for(league: str, category_name: str) -> Dict[str, Tuple[str, ...]]:
-    """Pick the appropriate stat-type → ESPN-key map by league and category."""
+def _stat_key_map_for(
+    league: str,
+    category_name: str,
+    keys: list[str] | None = None,
+) -> dict[str, tuple[str, ...]]:
+    """Pick the appropriate stat-type map by league and category."""
     if league.upper() == "NBA":
         return NBA_STAT_KEYS
     if league.upper() == "MLB":
         cat = (category_name or "").lower()
-        if "pitch" in cat:
+        key_set = {str(key) for key in (keys or [])}
+        pitching_keys = {
+            "IP",
+            "K",
+            "ER",
+            "fullInnings.partInnings",
+            "earnedRuns",
+            "pitches-strikes",
+            "ERA",
+        }
+        if "pitch" in cat or key_set.intersection(pitching_keys):
             return MLB_PITCHING_KEYS
         return MLB_BATTING_KEYS
     return {}
 
 
-def _parse_ip_to_outs(value: str) -> Optional[float]:
+def _parse_ip_to_outs(value: str) -> float | None:
     """Convert MLB innings-pitched string like '6.2' (6 innings, 2 outs) to outs."""
     try:
         whole_str, _, frac_str = str(value).partition(".")
@@ -157,7 +175,7 @@ def _parse_ip_to_outs(value: str) -> Optional[float]:
         return None
 
 
-def _to_number(value: Any) -> Optional[float]:
+def _to_number(value: Any) -> float | None:
     """Coerce an ESPN stat string ('27', '4-of-9', '32:14') to a float when sensible."""
     if value is None:
         return None
@@ -170,10 +188,26 @@ def _to_number(value: Any) -> Optional[float]:
         return None
 
 
+def _made_from_made_attempted(value: Any) -> float | None:
+    """Return the made count from an ESPN value like '4-9'."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    made, sep, _attempted = s.partition("-")
+    if not sep:
+        return _to_number(s)
+    try:
+        return float(made)
+    except ValueError:
+        return None
+
+
 def parse_box_score(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     league: str,
-) -> Dict[str, Dict[str, float]]:
+) -> dict[str, dict[str, float]]:
     """Parse an ESPN summary payload into ``{player_norm → {stat_type → value}}``.
 
     Player names are normalized via :func:`normalize_player_name`. Stat types
@@ -181,16 +215,16 @@ def parse_box_score(
     MLB_PITCHING_KEYS). Unknown categories are skipped, unmapped stat types
     are skipped (logged at DEBUG).
     """
-    out: Dict[str, Dict[str, float]] = {}
+    out: dict[str, dict[str, float]] = {}
     boxscore = payload.get("boxscore") or {}
     for team_blob in boxscore.get("players") or []:
         for category in team_blob.get("statistics") or []:
             cat_name = category.get("name") or ""
-            keys: List[str] = list(category.get("keys") or [])
+            keys: list[str] = list(category.get("keys") or [])
             if not keys:
                 continue
             key_index = {k: i for i, k in enumerate(keys)}
-            stat_map = _stat_key_map_for(league, cat_name)
+            stat_map = _stat_key_map_for(league, cat_name, keys)
             if not stat_map:
                 continue
 
@@ -200,16 +234,20 @@ def parse_box_score(
                 player_norm = normalize_player_name(display)
                 if not player_norm:
                     continue
-                stats: List[Any] = list(athlete_blob.get("stats") or [])
+                stats: list[Any] = list(athlete_blob.get("stats") or [])
 
                 player_stats = out.setdefault(player_norm, {})
                 for prop_type, espn_keys in stat_map.items():
+                    if prop_type == "pra":
+                        continue
                     for ek in espn_keys:
                         if ek not in key_index:
                             continue
                         raw = stats[key_index[ek]] if key_index[ek] < len(stats) else None
-                        if ek == "IP":
+                        if ek in ("IP", "fullInnings.partInnings"):
                             value = _parse_ip_to_outs(raw)
+                        elif prop_type in ("3pm", "threes"):
+                            value = _made_from_made_attempted(raw)
                         else:
                             value = _to_number(raw)
                         if value is None:
@@ -217,6 +255,12 @@ def parse_box_score(
                         # Don't overwrite (e.g. starters category before bench)
                         player_stats.setdefault(prop_type, value)
                         break
+                if league.upper() == "NBA":
+                    pts = player_stats.get("pts") or player_stats.get("points")
+                    reb = player_stats.get("reb") or player_stats.get("rebounds")
+                    ast = player_stats.get("ast") or player_stats.get("assists")
+                    if pts is not None and reb is not None and ast is not None:
+                        player_stats.setdefault("pra", float(pts) + float(reb) + float(ast))
     return out
 
 
@@ -228,7 +272,7 @@ def fetch_box_score(
     league: str,
     event_id: str,
     url_opener: Callable[..., Any] = urllib.request.urlopen,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Fetch the raw ESPN summary JSON for an event. Use :func:`parse_box_score`
     on the result to extract player stats."""
     url_base = _SUMMARY_URLS.get(league.upper())

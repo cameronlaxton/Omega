@@ -12,9 +12,6 @@ Covers:
 from __future__ import annotations
 
 from omega.integrations.espn_boxscore import (
-    MLB_BATTING_KEYS,
-    MLB_PITCHING_KEYS,
-    NBA_STAT_KEYS,
     normalize_player_name,
     parse_box_score,
     supported_prop_type,
@@ -84,6 +81,53 @@ def _nba_fixture() -> dict:
     }
 
 
+def _nba_current_fixture() -> dict:
+    """Current ESPN summary shape: lowercase keys and blank category names."""
+    return {
+        "boxscore": {
+            "players": [
+                {
+                    "team": {"displayName": "Detroit Pistons"},
+                    "statistics": [
+                        {
+                            "name": None,
+                            "keys": [
+                                "minutes",
+                                "points",
+                                "fieldGoalsMade-fieldGoalsAttempted",
+                                "threePointFieldGoalsMade-threePointFieldGoalsAttempted",
+                                "freeThrowsMade-freeThrowsAttempted",
+                                "rebounds",
+                                "assists",
+                                "turnovers",
+                                "steals",
+                                "blocks",
+                            ],
+                            "athletes": [
+                                {
+                                    "athlete": {"displayName": "Cade Cunningham"},
+                                    "stats": [
+                                        "38",
+                                        "29",
+                                        "10-22",
+                                        "3-8",
+                                        "6-7",
+                                        "8",
+                                        "9",
+                                        "4",
+                                        "1",
+                                        "0",
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+
+
 class TestParseBoxScoreNBA:
     def test_pts_reb_ast_extracted(self):
         stats = parse_box_score(_nba_fixture(), "NBA")
@@ -101,6 +145,15 @@ class TestParseBoxScoreNBA:
         """Parser doesn't filter by team — caller filters via event_id selection."""
         stats = parse_box_score(_nba_fixture(), "NBA")
         assert "jaylen brown" in stats
+
+    def test_current_lowercase_payload_shape(self):
+        stats = parse_box_score(_nba_current_fixture(), "NBA")
+        assert stats["cade cunningham"]["pts"] == 29.0
+        assert stats["cade cunningham"]["reb"] == 8.0
+        assert stats["cade cunningham"]["ast"] == 9.0
+        assert stats["cade cunningham"]["3pm"] == 3.0
+        assert stats["cade cunningham"]["threes"] == 3.0
+        assert stats["cade cunningham"]["pra"] == 46.0
 
 
 def _mlb_fixture() -> dict:
@@ -137,6 +190,57 @@ def _mlb_fixture() -> dict:
     }
 
 
+def _mlb_current_fixture() -> dict:
+    """Current ESPN summary shape with blank category names."""
+    return {
+        "boxscore": {
+            "players": [
+                {
+                    "team": {"displayName": "St. Louis Cardinals"},
+                    "statistics": [
+                        {
+                            "name": None,
+                            "keys": [
+                                "hits-atBats",
+                                "atBats",
+                                "runs",
+                                "hits",
+                                "RBIs",
+                                "homeRuns",
+                                "walks",
+                                "strikeouts",
+                            ],
+                            "athletes": [
+                                {
+                                    "athlete": {"displayName": "Nolan Arenado"},
+                                    "stats": ["2-4", "4", "1", "2", "3", "1", "0", "1"],
+                                }
+                            ],
+                        },
+                        {
+                            "name": None,
+                            "keys": [
+                                "fullInnings.partInnings",
+                                "hits",
+                                "runs",
+                                "earnedRuns",
+                                "walks",
+                                "strikeouts",
+                            ],
+                            "athletes": [
+                                {
+                                    "athlete": {"displayName": "Andre Pallante"},
+                                    "stats": ["5.1", "6", "2", "2", "1", "4"],
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ]
+        }
+    }
+
+
 class TestParseBoxScoreMLB:
     def test_batting_hits_runs_rbi(self):
         stats = parse_box_score(_mlb_fixture(), "MLB")
@@ -157,12 +261,21 @@ class TestParseBoxScoreMLB:
         assert stats["brayan bello"]["pitching_outs"] == 20.0
         assert stats["brayan bello"]["outs_recorded"] == 20.0
 
+    def test_current_blank_category_payload_shape(self):
+        stats = parse_box_score(_mlb_current_fixture(), "MLB")
+        assert stats["nolan arenado"]["hits"] == 2.0
+        assert stats["nolan arenado"]["rbi"] == 3.0
+        assert stats["andre pallante"]["strikeouts"] == 4.0
+        assert stats["andre pallante"]["pitching_outs"] == 16.0
+
 
 class TestSupportedPropType:
     def test_nba_pts_supported(self):
         assert supported_prop_type("NBA", "pts") is True
         assert supported_prop_type("NBA", "PTS") is True
         assert supported_prop_type("NBA", "points") is True
+        assert supported_prop_type("NBA", "3pm") is True
+        assert supported_prop_type("NBA", "pra") is True
 
     def test_mlb_batting_and_pitching(self):
         assert supported_prop_type("MLB", "hits") is True

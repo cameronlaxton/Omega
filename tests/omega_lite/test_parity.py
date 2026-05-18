@@ -80,6 +80,9 @@ def test_prop_parity_nba_points():
         league="NBA",
         prop_type="pts",
         line=27.5,
+        home_team="Boston Celtics",
+        away_team="Indiana Pacers",
+        game_date="2026-05-14",
         odds_over=-115,
         odds_under=-105,
         player_context={"pts_mean": 28.4, "pts_std": 6.2},
@@ -108,6 +111,9 @@ def test_prop_missing_mean_skips_in_both():
         league="NBA",
         prop_type="pts",
         line=22.5,
+        home_team="Boston Celtics",
+        away_team="Indiana Pacers",
+        game_date="2026-05-14",
         player_context={},
         n_iterations=ITERS,
     )
@@ -171,14 +177,41 @@ def test_sandbox_analyze_wraps_game_result():
         "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
         "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
         "odds": {"moneyline_home": -160, "moneyline_away": 140},
-    })
+    }, bankroll=2500.0, session_id="sess-20260518-test")
 
     assert out["trace_id"].startswith("sandbox-")
     assert out["model_version"] == "omega-lite-v1"
     assert out["kind"] == "game"
+    assert out["session_id"] == "sess-20260518-test"
+    assert out["bankroll"] == 2500.0
     assert out["result"]["status"] == "success"
     assert "quality_gate" in out
     assert out["quality_gate"]["applied"] is True
+
+
+def test_game_trace_hash_excludes_nested_odds_object():
+    from omega_lite.run import _input_hash
+    from omega_lite.schemas import GameAnalysisRequest
+
+    base = {
+        "home_team": "Boston Celtics",
+        "away_team": "Indiana Pacers",
+        "league": "NBA",
+        "n_iterations": 500,
+        "seed": SEED,
+        "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+        "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+    }
+    early = GameAnalysisRequest(**{
+        **base,
+        "odds": {"spread_home": -3.5, "spread_home_price": -110},
+    })
+    moved = GameAnalysisRequest(**{
+        **base,
+        "odds": {"spread_home": -4.0, "spread_home_price": -105},
+    })
+
+    assert _input_hash(early) == _input_hash(moved)
 
 
 def test_sandbox_refuses_when_critical_missing():

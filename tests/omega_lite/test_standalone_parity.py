@@ -53,6 +53,9 @@ def _prop_payload(league: str, prop_type: str, line: float, mean: float, std: fl
         "league": league,
         "prop_type": prop_type,
         "line": line,
+        "home_team": "Home Side",
+        "away_team": "Away Side",
+        "game_date": "2026-05-14",
         "odds_over": -110,
         "odds_under": -110,
         "player_context": {f"{prop_type}_mean": mean, f"{prop_type}_std": std},
@@ -144,15 +147,20 @@ def test_standalone_emits_sandbox_trace_id(standalone):
         "league": "NBA",
         "prop_type": "pts",
         "line": 20.0,
+        "home_team": "Home Side",
+        "away_team": "Away Side",
+        "game_date": "2026-05-14",
         "odds_over": -110,
         "odds_under": -110,
         "player_context": {"pts_mean": 20.0, "pts_std": 5.0},
         "n_iterations": 500,
         "seed": 1,
-    })
+    }, bankroll=3000.0, session_id="sess-20260518-std")
     assert out["trace_id"].startswith("sandbox-")
     assert out["model_version"] == "omega-lite-v1"
     assert out["kind"] == "prop"
+    assert out["session_id"] == "sess-20260518-std"
+    assert out["bankroll"] == 3000.0
     assert "quality_gate" in out
 
 
@@ -164,6 +172,9 @@ def test_standalone_skips_with_missing_requirements(standalone):
         "league": "NBA",
         "prop_type": "pts",
         "line": 20.0,
+        "home_team": "Home Side",
+        "away_team": "Away Side",
+        "game_date": "2026-05-14",
         "player_context": {},
         "n_iterations": 100,
     })

@@ -46,22 +46,28 @@ def test_mcp_manifest_lists_expected_surface():
 
 
 def test_analyze_game_tool_delegates_to_omega_lite():
-    result = omega_analyze_game({
-        "home_team": "Boston Celtics",
-        "away_team": "Indiana Pacers",
-        "league": "NBA",
-        "n_iterations": 1000,
-        "seed": 42,
-        "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
-        "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
-        "odds": {"moneyline_home": -160, "moneyline_away": 140},
-    })
+    result = omega_analyze_game(
+        {
+            "home_team": "Boston Celtics",
+            "away_team": "Indiana Pacers",
+            "league": "NBA",
+            "n_iterations": 1000,
+            "seed": 42,
+            "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+            "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+            "odds": {"moneyline_home": -160, "moneyline_away": 140},
+        },
+        bankroll=2500.0,
+        session_id="sess-20260518-mcp",
+    )
 
     assert result["schema_version"] == 1
     assert result["tool"] == "omega_analyze_game"
     assert result["status"] == "success"
     assert result["trace"]["trace_id"].startswith("sandbox-")
     assert result["trace"]["kind"] == "game"
+    assert result["trace"]["session_id"] == "sess-20260518-mcp"
+    assert result["trace"]["bankroll"] == 2500.0
     assert result["result"]["status"] == "success"
 
 
@@ -70,10 +76,15 @@ def test_analyze_prop_tool_returns_validation_errors():
         "player_name": "Jayson Tatum",
         "league": "NBA",
         "prop_type": "pts",
+        "line": 25.5,
     })
 
     assert result["status"] == "error"
     assert result["error_code"] == "invalid_request"
+    missing = {tuple(err["loc"]) for err in result["detail"]}
+    assert ("home_team",) in missing
+    assert ("away_team",) in missing
+    assert ("game_date",) in missing
 
 
 def test_replay_bundle_tool_marks_replay_mode_without_live_fetch():

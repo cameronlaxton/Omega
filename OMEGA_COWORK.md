@@ -62,6 +62,9 @@ smoke = r.analyze({
     "league": "NBA",
     "prop_type": "pts",
     "line": 20.0,
+    "home_team": "Smoke Home",
+    "away_team": "Smoke Away",
+    "game_date": "2026-05-14",
     "odds_over": -110,
     "odds_under": -110,
     "player_context": {"pts_mean": 20.0, "pts_std": 5.0},
@@ -81,11 +84,22 @@ import sys, json
 sys.path.insert(0, r"C:\Users\camer\OneDrive\Documents\GitHub\Omega")
 import omega_lite.run as r
 
-result = r.analyze(request_dict)   # request_dict is GameAnalysisRequest | PlayerPropRequest | SlateAnalysisRequest
+# Required runtime payload. Do not rely on analyze() defaults for real runs.
+omega_runtime_config = {
+    "session_id": omega_session_id,
+    "bankroll": omega_bankroll,
+}
+
+result = r.analyze(
+    request_dict,   # GameAnalysisRequest | PlayerPropRequest | SlateAnalysisRequest
+    **omega_runtime_config,
+)
 print(json.dumps(result, indent=2))
 ```
 
-Verify `result["trace_id"].startswith("sandbox-")` before using the result in any Bet Card.
+`omega_session_id` comes from §4. `omega_bankroll` is the explicit bankroll basis for engine stake sizing; set it from the user's configured bankroll for the session. If no bankroll is configured, ask for it before producing a Bet Card. Never silently use the Python default for a real analysis.
+
+Verify `result["trace_id"].startswith("sandbox-")`, `result["session_id"] == omega_session_id`, and `result["bankroll"] == omega_bankroll` before using the result in any Bet Card.
 
 ---
 
@@ -348,6 +362,7 @@ All sub-agents spawned during execution are governed by these same instructions:
 - No sub-agent may write to `omega_traces.db` directly.
 - All sub-agents use the inbox → ingest pipeline (§5, §6).
 - All sub-agents use the same `omega_session_id` from workspace memory.
+- Outcome backfill sub-agents may run `scripts/fetch_outcomes_nba.py`, `scripts/fetch_outcomes_mlb.py`, or `scripts/fetch_outcomes_props.py` for their matching market type. Run with `--dry-run` first when reviewing matches.
 - Action plan scope (§7) applies uniformly — no sub-agent may add action types or emit calibration parameters.
 
 ---
@@ -372,6 +387,7 @@ All paths relative to the Omega repo root: `C:\Users\camer\OneDrive\Documents\Gi
 | `scripts/promote_profile.py` | Promotes a calibration candidate to production |
 | `scripts/fetch_outcomes_nba.py` | Attaches NBA outcomes from ESPN scoreboard |
 | `scripts/fetch_outcomes_mlb.py` | Attaches MLB outcomes from ESPN scoreboard |
+| `scripts/fetch_outcomes_props.py` | Attaches player prop outcomes from ESPN box scores |
 | `scripts/backfill_closing_lines.py` | Backfills missed close windows via historical Odds API |
 
 ---

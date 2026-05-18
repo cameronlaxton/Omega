@@ -51,14 +51,18 @@ PROMPT_NAMES = (
 )
 
 
-def omega_analyze_game(request: Dict[str, Any], bankroll: float = 1000.0) -> Dict[str, Any]:
+def omega_analyze_game(
+    request: Dict[str, Any],
+    bankroll: float = 1000.0,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """Run deterministic single-game analysis through omega_lite.run."""
     from omega_lite.run import analyze
     from omega_lite.schemas import GameAnalysisRequest
 
     try:
         typed = GameAnalysisRequest(**request)
-        trace = analyze(typed, bankroll=bankroll)
+        trace = analyze(typed, bankroll=bankroll, session_id=session_id)
         return _ok("omega_analyze_game", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
         return _error("omega_analyze_game", "invalid_request", exc.errors())
@@ -66,14 +70,18 @@ def omega_analyze_game(request: Dict[str, Any], bankroll: float = 1000.0) -> Dic
         return _error("omega_analyze_game", "analysis_failed", str(exc))
 
 
-def omega_analyze_prop(request: Dict[str, Any], bankroll: float = 1000.0) -> Dict[str, Any]:
+def omega_analyze_prop(
+    request: Dict[str, Any],
+    bankroll: float = 1000.0,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """Run deterministic player-prop analysis through omega_lite.run."""
     from omega_lite.run import analyze
     from omega_lite.schemas import PlayerPropRequest
 
     try:
         typed = PlayerPropRequest(**request)
-        trace = analyze(typed, bankroll=bankroll)
+        trace = analyze(typed, bankroll=bankroll, session_id=session_id)
         return _ok("omega_analyze_prop", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
         return _error("omega_analyze_prop", "invalid_request", exc.errors())
@@ -81,14 +89,14 @@ def omega_analyze_prop(request: Dict[str, Any], bankroll: float = 1000.0) -> Dic
         return _error("omega_analyze_prop", "analysis_failed", str(exc))
 
 
-def omega_analyze_slate(request: Dict[str, Any]) -> Dict[str, Any]:
+def omega_analyze_slate(request: Dict[str, Any], session_id: Optional[str] = None) -> Dict[str, Any]:
     """Run deterministic slate analysis through omega_lite.run."""
     from omega_lite.run import analyze
     from omega_lite.schemas import SlateAnalysisRequest
 
     try:
         typed = SlateAnalysisRequest(**request)
-        trace = analyze(typed, bankroll=typed.bankroll)
+        trace = analyze(typed, bankroll=typed.bankroll, session_id=session_id)
         return _ok("omega_analyze_slate", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
         return _error("omega_analyze_slate", "invalid_request", exc.errors())

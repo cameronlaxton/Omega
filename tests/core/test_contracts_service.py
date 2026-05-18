@@ -210,6 +210,9 @@ class TestAnalyzePlayerProp:
             league="NBA",
             prop_type="pts",
             line=25.5,
+            home_team="Los Angeles Lakers",
+            away_team="Boston Celtics",
+            game_date="2026-05-17",
             player_context={},
         )
         resp = analyze_player_prop(req)
@@ -223,6 +226,9 @@ class TestAnalyzePlayerProp:
             league="NBA",
             prop_type="pts",
             line=25.5,
+            home_team="Los Angeles Lakers",
+            away_team="Boston Celtics",
+            game_date="2026-05-17",
             odds_over=-110,
             odds_under=-110,
             n_iterations=500,
@@ -241,6 +247,9 @@ class TestAnalyzePlayerProp:
             league="NBA",
             prop_type="pts",
             line=20.0,
+            home_team="Home Team",
+            away_team="Away Team",
+            game_date="2026-05-17",
             player_context={"pts_mean": "not_a_number"},
         )
         resp = analyze_player_prop(req)
@@ -252,6 +261,9 @@ class TestAnalyzePlayerProp:
             league="NBA",
             prop_type="pts",
             line=20.0,
+            home_team="Home Team",
+            away_team="Away Team",
+            game_date="2026-05-17",
             odds_over=-110,
             odds_under=-110,
             n_iterations=1000,

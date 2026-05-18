@@ -70,6 +70,7 @@ The intended user flow inside a Claude.ai Project or ChatGPT Project:
    - label incomplete candidates as research-only or missing-data watchlist,
    - and explain which markets were excluded due to missing inputs.
 5. **The LLM runs**:
+   `session_id` and `bankroll` are explicit runtime values. The engine echoes both into the returned trace; do not inject them by hand after the call.
    ```python
    from omega_lite_standalone import analyze
    result = analyze({
@@ -81,9 +82,9 @@ The intended user flow inside a Claude.ai Project or ChatGPT Project:
        "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
        "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
        "odds": {"moneyline_home": -160, "moneyline_away": 140, "over_under": 226.5},
-   })
+   }, session_id=session_id, bankroll=bankroll)
    ```
-6. **The result** is a dict with `trace_id="sandbox-XXXX"`, `model_version="omega-lite-v1"`, `input_snapshot`, `result` (the full `GameAnalysisResponse` / `PlayerPropResponse` shape), and `quality_gate` (the plan-level downgrade summary).
+6. **The result** is a dict with `trace_id="sandbox-XXXX"`, `session_id`, `bankroll`, `model_version="omega-lite-v1"`, `input_snapshot`, `result` (the full `GameAnalysisResponse` / `PlayerPropResponse` shape), and `quality_gate` (the plan-level downgrade summary).
 7. **The Project Claude renders** the Bet Card in Mode A-sandbox citing the `sandbox-` `trace_id` and echoing `Inputs used` with source URLs/timestamps for every external value (system prompt §8).
 
 ## Player props — per-sport gallery (omega_lite is NOT NBA-only)
@@ -94,6 +95,7 @@ NBA — points:
 ```python
 analyze({"player_name": "Jayson Tatum", "league": "NBA", "prop_type": "pts",
          "line": 27.5, "odds_over": -115, "odds_under": -105,
+         "home_team": "Boston Celtics", "away_team": "Indiana Pacers", "game_date": "2026-05-14",
          "player_context": {"pts_mean": 28.4, "pts_std": 6.2},
          "n_iterations": 5000, "seed": 42})
 ```
@@ -102,6 +104,7 @@ MLB — pitcher strikeouts:
 ```python
 analyze({"player_name": "Gerrit Cole", "league": "MLB", "prop_type": "strikeouts_pitched",
          "line": 7.5, "odds_over": -120, "odds_under": +100,
+         "home_team": "New York Yankees", "away_team": "Boston Red Sox", "game_date": "2026-05-14",
          "player_context": {"strikeouts_pitched_mean": 8.1, "strikeouts_pitched_std": 2.3},
          "n_iterations": 5000, "seed": 42})
 ```
@@ -110,6 +113,7 @@ NHL — shots on goal:
 ```python
 analyze({"player_name": "Nathan MacKinnon", "league": "NHL", "prop_type": "shots_on_goal",
          "line": 3.5, "odds_over": -135, "odds_under": +110,
+         "home_team": "Colorado Avalanche", "away_team": "Dallas Stars", "game_date": "2026-05-14",
          "player_context": {"shots_on_goal_mean": 4.2, "shots_on_goal_std": 1.6},
          "n_iterations": 5000, "seed": 42})
 ```
@@ -118,6 +122,7 @@ NFL — receiving yards:
 ```python
 analyze({"player_name": "CeeDee Lamb", "league": "NFL", "prop_type": "rec_yds",
          "line": 78.5, "odds_over": -110, "odds_under": -110,
+         "home_team": "Dallas Cowboys", "away_team": "Philadelphia Eagles", "game_date": "2026-05-14",
          "player_context": {"rec_yds_mean": 85.3, "rec_yds_std": 28.7},
          "n_iterations": 5000, "seed": 42})
 ```
@@ -126,6 +131,7 @@ EPL — shots on target:
 ```python
 analyze({"player_name": "Erling Haaland", "league": "EPL", "prop_type": "shots_on_target",
          "line": 1.5, "odds_over": -120, "odds_under": +100,
+         "home_team": "Manchester City", "away_team": "Arsenal", "game_date": "2026-05-14",
          "player_context": {"shots_on_target_mean": 2.1, "shots_on_target_std": 1.2},
          "n_iterations": 5000, "seed": 42})
 ```
@@ -134,6 +140,7 @@ ATP — total games:
 ```python
 analyze({"player_name": "Carlos Alcaraz", "league": "ATP", "prop_type": "total_games",
          "line": 22.5, "odds_over": -110, "odds_under": -110,
+         "home_team": "Carlos Alcaraz", "away_team": "Jannik Sinner", "game_date": "2026-05-14",
          "player_context": {"total_games_mean": 23.4, "total_games_std": 3.1},
          "n_iterations": 5000, "seed": 42})
 ```
@@ -142,6 +149,7 @@ PGA — top 10 finish:
 ```python
 analyze({"player_name": "Scottie Scheffler", "league": "PGA", "prop_type": "top_10",
          "line": 0.5, "odds_over": -160, "odds_under": +135,
+         "home_team": "Tournament Field", "away_team": "Scottie Scheffler", "game_date": "2026-05-14",
          "player_context": {"top_10_mean": 0.42, "top_10_std": 0.18},
          "n_iterations": 5000, "seed": 42})
 ```
@@ -150,6 +158,7 @@ UFC — significant strikes landed:
 ```python
 analyze({"player_name": "Max Holloway", "league": "UFC", "prop_type": "sig_strikes",
          "line": 99.5, "odds_over": -130, "odds_under": +105,
+         "home_team": "Max Holloway", "away_team": "Opponent", "game_date": "2026-05-14",
          "player_context": {"sig_strikes_mean": 112.0, "sig_strikes_std": 38.0},
          "n_iterations": 5000, "seed": 42})
 ```
@@ -158,6 +167,7 @@ CS2 — total kills:
 ```python
 analyze({"player_name": "s1mple", "league": "CS2", "prop_type": "kills",
          "line": 19.5, "odds_over": -110, "odds_under": -110,
+         "home_team": "Team A", "away_team": "Team B", "game_date": "2026-05-14",
          "player_context": {"kills_mean": 21.2, "kills_std": 5.8},
          "n_iterations": 5000, "seed": 42})
 ```

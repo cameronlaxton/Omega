@@ -12,9 +12,13 @@ Usage from a sandbox at session start:
     from omega_lite_standalone import analyze
     smoke = analyze({"player_name": "X", "league": "NBA",
                      "prop_type": "pts", "line": 20.0,
+                     "home_team": "Smoke Home",
+                     "away_team": "Smoke Away",
+                     "game_date": "2026-05-14",
                      "odds_over": -110, "odds_under": -110,
                      "player_context": {"pts_mean": 20.0, "pts_std": 5.0},
-                     "seed": 1})
+                     "seed": 1},
+                    session_id="sess-20260518-smok", bankroll=1000.0)
     assert smoke["trace_id"].startswith("sandbox-")
 """
 
@@ -1706,12 +1710,12 @@ class PlayerPropRequest(BaseModel):
     game_context: Optional[Dict[str, Any]] = Field(default=None, description="Game-level context (opponent, pace, etc.)")
     n_iterations: int = Field(default=5000, ge=100, le=100000)
     seed: Optional[int] = Field(default=None, description="RNG seed for reproducible simulations")
-    # Game identity (optional but required for automated outcome grading via
-    # scripts/fetch_outcomes_props.py). Populate when the prop is tied to a
-    # specific game so the prop trace can be resolved to an ESPN box score.
-    home_team: Optional[str] = Field(default=None, description="Home team of the game the prop is on")
-    away_team: Optional[str] = Field(default=None, description="Away team of the game the prop is on")
-    game_date: Optional[str] = Field(default=None, description="ISO date (YYYY-MM-DD) of the game")
+    # Required because persisted prop traces are graded by
+    # (game_date, home_team, away_team). Without these fields the outcome
+    # resolver cannot safely attach an ESPN box-score result.
+    home_team: str = Field(description="Home team of the game the prop is on", min_length=1)
+    away_team: str = Field(description="Away team of the game the prop is on", min_length=1)
+    game_date: str = Field(description="ISO date (YYYY-MM-DD) of the game", min_length=10)
 
 
 # -- Response Sub-Models -----------------------------------------------------
@@ -3029,6 +3033,15 @@ def _pick_best_bet(
         bankroll=bankroll,
         confidence_tier=best.confidence_tier,
     )
+    return BetSlip(
+        selection=f"{best.team} {best.side}",
+        odds=best.market_odds,
+        edge_pct=best.edge_pct,
+        ev_pct=best.ev_pct,
+        confidence_tier=best.confidence_tier,
+        recommended_units=stake["units"],
+        kelly_fraction=stake["kelly_fraction"],
+    )
 
 
 def _quote_matches_selection(quote: MarketQuote, *labels: str) -> bool:
@@ -3059,22 +3072,19 @@ def _resolve_game_market_odds(
     home_ml = _market_quote(odds, "moneyline", home_team, "Home")
     away_ml = _market_quote(odds, "moneyline", away_team, "Away")
 
+    # Only use spread_home_price when spread_home was explicitly supplied;
+    # otherwise fall through to moneyline_home. The spread_home_price field
+    # defaults to -110 which would otherwise shadow a real moneyline_home value.
+    legacy_home = (
+        odds.spread_home_price if odds.spread_home is not None else odds.moneyline_home
+    )
     home_odds = (
         home_spread.price
         if home_spread is not None
-        else (home_ml.price if home_ml is not None else (odds.spread_home_price or odds.moneyline_home))
+        else (home_ml.price if home_ml is not None else legacy_home)
     )
     away_odds = away_ml.price if away_ml is not None else odds.moneyline_away
     return home_odds, away_odds
-    return BetSlip(
-        selection=f"{best.team} {best.side}",
-        odds=best.market_odds,
-        edge_pct=best.edge_pct,
-        ev_pct=best.ev_pct,
-        confidence_tier=best.confidence_tier,
-        recommended_units=stake["units"],
-        kelly_fraction=stake["kelly_fraction"],
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -3225,10 +3235,10 @@ def analyze_player_prop(
             missing_requirements=[f"player_context.{mean_key}"],
         )
 
-    std_val = player_ctx.get(std_key, max(1.0, float(mean) * 0.25))
     try:
         mean_f = float(mean)
-        std_f = float(std_val)
+        std_raw = player_ctx.get(std_key)
+        std_f = float(std_raw) if std_raw is not None else max(1.0, mean_f * 0.25)
     except (TypeError, ValueError) as exc:
         return PlayerPropResponse(
             player_name=request.player_name,
@@ -3452,7 +3462,7 @@ MODEL_VERSION = "omega-lite-v1"
 # Trace
 # ---------------------------------------------------------------------------
 
-_TRACE_HASH_EXCLUDE = {"odds_over", "odds_under"}
+_TRACE_HASH_EXCLUDE = {"odds", "odds_over", "odds_under"}
 
 
 def _input_hash(request: Any) -> Optional[str]:
@@ -3680,6 +3690,7 @@ def _synth_facts_from_prop_request(req: PlayerPropRequest) -> List[GatheredFact]
 def analyze(
     request: Union[Dict[str, Any], GameAnalysisRequest, PlayerPropRequest, SlateAnalysisRequest],
     bankroll: float = 1000.0,
+    session_id: Optional[str] = None,
     apply_plan_gate: bool = True,
 ) -> Dict[str, Any]:
     """Run an omega_lite analysis from inside an LLM sandbox.
@@ -3689,6 +3700,8 @@ def analyze(
         - model_version     ("omega-lite-v1")
         - ran_at            (ISO timestamp)
         - kind              ("game" | "prop" | "slate")
+        - session_id        (caller-provided session grouping, optional)
+        - bankroll          (bankroll used for stake sizing)
         - input_snapshot    (echo of the request, for audit)
         - result            (GameAnalysisResponse / PlayerPropResponse /
                              SlateAnalysisResponse as a dict)
@@ -3698,6 +3711,9 @@ def analyze(
         request: Either a dict matching the appropriate Pydantic schema, or
                  an already-constructed request object.
         bankroll: Bankroll for Kelly staking (ignored for prop requests today).
+        session_id: Optional caller-provided session identifier. The engine
+                    echoes it into the trace output so ingest does not depend
+                    on manual JSON wrapping.
         apply_plan_gate: If True, run the plan-level quality gate over the
                          request inputs and include downgrades in the output.
                          Set False for raw service-layer behavior.
@@ -3731,6 +3747,8 @@ def analyze(
         "model_version": MODEL_VERSION,
         "ran_at": ran_at,
         "kind": kind,
+        "session_id": session_id,
+        "bankroll": bankroll,
         "input_snapshot": _safe_dump(typed_req),
         "result": _safe_dump(result),
     }

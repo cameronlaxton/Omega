@@ -56,7 +56,7 @@ MODEL_VERSION = "omega-lite-v1"
 # Trace
 # ---------------------------------------------------------------------------
 
-_TRACE_HASH_EXCLUDE = {"odds_over", "odds_under"}
+_TRACE_HASH_EXCLUDE = {"odds", "odds_over", "odds_under"}
 
 
 def _input_hash(request: Any) -> Optional[str]:
@@ -284,6 +284,7 @@ def _synth_facts_from_prop_request(req: PlayerPropRequest) -> List[GatheredFact]
 def analyze(
     request: Union[Dict[str, Any], GameAnalysisRequest, PlayerPropRequest, SlateAnalysisRequest],
     bankroll: float = 1000.0,
+    session_id: Optional[str] = None,
     apply_plan_gate: bool = True,
 ) -> Dict[str, Any]:
     """Run an omega_lite analysis from inside an LLM sandbox.
@@ -293,6 +294,8 @@ def analyze(
         - model_version     ("omega-lite-v1")
         - ran_at            (ISO timestamp)
         - kind              ("game" | "prop" | "slate")
+        - session_id        (caller-provided session grouping, optional)
+        - bankroll          (bankroll used for stake sizing)
         - input_snapshot    (echo of the request, for audit)
         - result            (GameAnalysisResponse / PlayerPropResponse /
                              SlateAnalysisResponse as a dict)
@@ -302,6 +305,9 @@ def analyze(
         request: Either a dict matching the appropriate Pydantic schema, or
                  an already-constructed request object.
         bankroll: Bankroll for Kelly staking (ignored for prop requests today).
+        session_id: Optional caller-provided session identifier. The engine
+                    echoes it into the trace output so ingest does not depend
+                    on manual JSON wrapping.
         apply_plan_gate: If True, run the plan-level quality gate over the
                          request inputs and include downgrades in the output.
                          Set False for raw service-layer behavior.
@@ -335,6 +341,8 @@ def analyze(
         "model_version": MODEL_VERSION,
         "ran_at": ran_at,
         "kind": kind,
+        "session_id": session_id,
+        "bankroll": bankroll,
         "input_snapshot": _safe_dump(typed_req),
         "result": _safe_dump(result),
     }
