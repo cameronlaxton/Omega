@@ -2,11 +2,11 @@
 Tests for scripts/ingest_traces.py — sandbox export ingestion.
 
 Covers:
-- Export-block (shape A): wrapped trace + bet_record + clv_capture_instructions
+- Export-block (shape A): wrapped trace + bet_record
 - Raw analyze() output (shape B): top-level trace_id/kind, no wrapper
 - Bad JSON / missing trace_id → moved to failed/ with sibling .error.txt
 - Idempotent re-run on processed/ files (no duplicate row)
-- bet_record persisted with selection_descriptor inferred from clv_capture_instructions
+- new bet records require selection_descriptor; legacy exports can infer it
 """
 from __future__ import annotations
 
@@ -36,11 +36,11 @@ import ingest_traces  # type: ignore  # noqa: E402
 # ---------------------------------------------------------------------------
 
 def _make_analyze_out(trace_id: str = "sandbox-abc123", kind: str = "prop") -> Dict[str, Any]:
-    """A minimal but realistic omega_lite_standalone.analyze() return value."""
+    """A minimal but realistic core analyze() return value."""
     if kind == "prop":
         return {
             "trace_id": trace_id,
-            "model_version": "omega-lite-v1",
+            "model_version": "omega-core-phase6h",
             "ran_at": "2026-05-14T19:23:11Z",
             "kind": "prop",
             "input_snapshot": {
@@ -75,7 +75,7 @@ def _make_analyze_out(trace_id: str = "sandbox-abc123", kind: str = "prop") -> D
     # game
     return {
         "trace_id": trace_id,
-        "model_version": "omega-lite-v1",
+        "model_version": "omega-core-phase6h",
         "ran_at": "2026-05-14T19:23:11Z",
         "kind": "game",
         "input_snapshot": {
@@ -106,27 +106,27 @@ def _make_export_block(trace_id: str = "sandbox-abc123", with_bet: bool = True) 
     block = {
         "trace": _make_analyze_out(trace_id=trace_id, kind="prop"),
         "bet_record": None,
-        "clv_capture_instructions": {
-            "league": "NBA",
-            "event_date": "2026-05-14",
-            "matchup": "Boston Celtics @ Miami Heat",
-            "market": "player_prop:pts",
-            "selection_descriptor": "Tatum_over_27.5_pts",
-            "line_at_decision": 27.5,
-            "odds_at_decision": -115,
-            "book_at_decision": "DraftKings",
-        },
     }
     if with_bet:
         block["bet_record"] = {
             "book": "DraftKings",
             "market": "player_prop:pts",
             "selection": "Tatum Over 27.5 pts",
+            "selection_descriptor": "Tatum_over_27.5_pts",
             "line_taken": 27.5,
             "odds_taken": -115,
             "stake_units": 1.0,
             "decision_timestamp": "2026-05-14T19:25:00Z",
         }
+    return block
+
+
+def _make_legacy_export_block(trace_id: str = "sandbox-legacy") -> Dict[str, Any]:
+    block = _make_export_block(trace_id=trace_id, with_bet=True)
+    block["bet_record"].pop("selection_descriptor")
+    block["clv_capture_instructions"] = {
+        "selection_descriptor": "Tatum_over_27.5_pts",
+    }
     return block
 
 
@@ -191,6 +191,32 @@ class TestExportBlock:
         store = TraceStore(db_path=str(db_path))
         assert store.get_trace("sandbox-xyz") is not None
         assert store.get_bet_records("sandbox-xyz") == []
+        store.close()
+
+    def test_legacy_selection_descriptor_sibling_still_ingests(self, workspace, monkeypatch):
+        inbox, db_path = workspace
+        _write_file(inbox, "legacy.json", _make_legacy_export_block("sandbox-legacy"))
+
+        monkeypatch.setattr(sys, "argv", [
+            "ingest_traces.py", "--inbox", str(inbox), "--db", str(db_path),
+        ])
+        assert ingest_traces.main() == 0
+
+        store = TraceStore(db_path=str(db_path))
+        bets = store.get_bet_records("sandbox-legacy")
+        assert len(bets) == 1
+        assert bets[0]["selection_descriptor"] == "Tatum_over_27.5_pts"
+        store.close()
+
+    def test_new_bet_record_requires_selection_descriptor(self, workspace):
+        inbox, db_path = workspace
+        payload = _make_export_block("sandbox-missing-descriptor", with_bet=True)
+        payload["bet_record"].pop("selection_descriptor")
+        path = _write_file(inbox, "missing_descriptor.json", payload)
+
+        store = TraceStore(db_path=str(db_path))
+        with pytest.raises(ValueError, match="selection_descriptor"):
+            ingest_traces.ingest_file(path, store)
         store.close()
 
 

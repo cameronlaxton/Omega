@@ -45,7 +45,7 @@ def test_mcp_manifest_lists_expected_surface():
     assert "omega_runtime_prompt" in PROMPT_NAMES
 
 
-def test_analyze_game_tool_delegates_to_omega_lite():
+def test_analyze_game_tool_delegates_to_core_service():
     result = omega_analyze_game(
         {
             "home_team": "Boston Celtics",
@@ -68,16 +68,21 @@ def test_analyze_game_tool_delegates_to_omega_lite():
     assert result["trace"]["kind"] == "game"
     assert result["trace"]["session_id"] == "sess-20260518-mcp"
     assert result["trace"]["bankroll"] == 2500.0
+    assert result["trace"]["model_version"] == "omega-core-phase6h"
     assert result["result"]["status"] == "success"
 
 
 def test_analyze_prop_tool_returns_validation_errors():
-    result = omega_analyze_prop({
-        "player_name": "Jayson Tatum",
-        "league": "NBA",
-        "prop_type": "pts",
-        "line": 25.5,
-    })
+    result = omega_analyze_prop(
+        {
+            "player_name": "Jayson Tatum",
+            "league": "NBA",
+            "prop_type": "pts",
+            "line": 25.5,
+        },
+        bankroll=1000.0,
+        session_id="sess-20260518-mcp",
+    )
 
     assert result["status"] == "error"
     assert result["error_code"] == "invalid_request"

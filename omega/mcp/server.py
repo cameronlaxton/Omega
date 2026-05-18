@@ -53,12 +53,12 @@ PROMPT_NAMES = (
 
 def omega_analyze_game(
     request: Dict[str, Any],
-    bankroll: float = 1000.0,
-    session_id: Optional[str] = None,
+    bankroll: float,
+    session_id: str,
 ) -> Dict[str, Any]:
-    """Run deterministic single-game analysis through omega_lite.run."""
-    from omega_lite.run import analyze
-    from omega_lite.schemas import GameAnalysisRequest
+    """Run deterministic single-game analysis through canonical core service."""
+    from omega.core.contracts.schemas import GameAnalysisRequest
+    from omega.core.contracts.service import analyze
 
     try:
         typed = GameAnalysisRequest(**request)
@@ -66,18 +66,20 @@ def omega_analyze_game(
         return _ok("omega_analyze_game", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
         return _error("omega_analyze_game", "invalid_request", exc.errors())
+    except ValueError as exc:
+        return _error("omega_analyze_game", "invalid_request", str(exc))
     except Exception as exc:
         return _error("omega_analyze_game", "analysis_failed", str(exc))
 
 
 def omega_analyze_prop(
     request: Dict[str, Any],
-    bankroll: float = 1000.0,
-    session_id: Optional[str] = None,
+    bankroll: float,
+    session_id: str,
 ) -> Dict[str, Any]:
-    """Run deterministic player-prop analysis through omega_lite.run."""
-    from omega_lite.run import analyze
-    from omega_lite.schemas import PlayerPropRequest
+    """Run deterministic player-prop analysis through canonical core service."""
+    from omega.core.contracts.schemas import PlayerPropRequest
+    from omega.core.contracts.service import analyze
 
     try:
         typed = PlayerPropRequest(**request)
@@ -85,21 +87,25 @@ def omega_analyze_prop(
         return _ok("omega_analyze_prop", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
         return _error("omega_analyze_prop", "invalid_request", exc.errors())
+    except ValueError as exc:
+        return _error("omega_analyze_prop", "invalid_request", str(exc))
     except Exception as exc:
         return _error("omega_analyze_prop", "analysis_failed", str(exc))
 
 
-def omega_analyze_slate(request: Dict[str, Any], session_id: Optional[str] = None) -> Dict[str, Any]:
-    """Run deterministic slate analysis through omega_lite.run."""
-    from omega_lite.run import analyze
-    from omega_lite.schemas import SlateAnalysisRequest
+def omega_analyze_slate(request: Dict[str, Any], bankroll: float, session_id: str) -> Dict[str, Any]:
+    """Run deterministic slate analysis through canonical core service."""
+    from omega.core.contracts.schemas import SlateAnalysisRequest
+    from omega.core.contracts.service import analyze
 
     try:
         typed = SlateAnalysisRequest(**request)
-        trace = analyze(typed, bankroll=typed.bankroll, session_id=session_id)
+        trace = analyze(typed, bankroll=bankroll, session_id=session_id)
         return _ok("omega_analyze_slate", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
         return _error("omega_analyze_slate", "invalid_request", exc.errors())
+    except ValueError as exc:
+        return _error("omega_analyze_slate", "invalid_request", str(exc))
     except Exception as exc:
         return _error("omega_analyze_slate", "analysis_failed", str(exc))
 
@@ -473,7 +479,7 @@ def omega_runtime_prompt() -> str:
 
 def omega_missing_input_repair(missing_requirements: str = "") -> str:
     return (
-        "Inspect missing_requirements, skip_reason, quality-gate downgrades, "
+        "Inspect missing_requirements, skip_reason, and trace downgrades, "
         "and trace facts. Retrieve only missing pre-decision inputs with "
         "provenance, then rerun the same Omega MCP analyze tool. Missing: "
         f"{missing_requirements}"

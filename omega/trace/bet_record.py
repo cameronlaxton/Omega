@@ -70,7 +70,7 @@ class BetRecord(BaseModel):
 
         The export block has fields: book, market, selection, line_taken, odds_taken,
         stake_units, decision_timestamp. The `selection_descriptor` may come from
-        the sibling `clv_capture_instructions` block; the caller resolves which.
+        the trace export; the caller resolves which market was actually taken.
         """
         return cls(
             bet_id=bet_id,

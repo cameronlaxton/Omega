@@ -9,7 +9,7 @@ DB is intentionally copy/paste (the sandbox cannot reach localhost).
 
 - Local repo at HEAD of the Phase 6f changes (this branch).
 - Python 3.11+ with the project deps installed.
-- A Claude Project (claude.ai) with `omega_lite_standalone.py` and
+- A local VM/MCP runtime with `omega.core.contracts.service.analyze` and
   `prompts/system_prompt.txt` uploaded to project knowledge.
 - Empty `omega_traces.db` (or fresh `--db <path>` for the smoke).
 
@@ -32,7 +32,7 @@ Expected emission (§10 + §12.2):
     ...
   },
   "bet_record": { ... },
-  "clv_capture_instructions": { ... }
+  "bet_record": null
 }
 ```
 

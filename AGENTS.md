@@ -28,7 +28,7 @@ Do not move deterministic responsibilities into LLM logic. This restriction appl
 - confidence tiers (A / B / C / Pass)
 - trace_ids (always begin with `sandbox-` and are minted by the engine)
 
-**Hard rule (supersedes all prior fallback wording in OMEGA_RUN_RECIPE.md and OMEGA_HANDBOOK.md):** The LLM is forbidden from generating any of the above values via text. They must come from Python execution of `omega_lite_standalone.py` (sandbox) or the canonical FastAPI service (`omega/api/`). There is no "estimated", "rough", "ballpark", `[LLM-ESTIMATED]`, or "estimated lean" mode for these fields. If the engine is unavailable, the response is qualitative-only: matchup narrative, news, recent form, listed sportsbook lines from a cited source — never a Bet Card with placeholder numbers.
+**Hard rule (supersedes all prior fallback wording in OMEGA_RUN_RECIPE.md and OMEGA_HANDBOOK.md):** The LLM is forbidden from generating any of the above values via text. They must come from Python execution through the local MCP server or `omega.core.contracts.service.analyze`. There is no "estimated", "rough", "ballpark", `[LLM-ESTIMATED]`, or "estimated lean" mode for these fields. If the engine is unavailable, the response is qualitative-only: matchup narrative, news, recent form, listed sportsbook lines from a cited source — never a Bet Card with placeholder numbers.
 
 The LLM may still perform a best-effort exploratory market scan with public web data, but any candidate it surfaces is labeled as a **research-only lean** or **missing-data watchlist** item with NO edge%, EV%, Kelly, units, confidence tier, or trace_id. The previous "estimated lean" label is retired.
 

@@ -30,7 +30,7 @@ _REQUEST_TIMEOUT_SECONDS = 15
 
 
 # Canonical team names (left side = canonical, right side = aliases)
-# Canonical name matches what omega_lite_standalone treats as the official label.
+# Canonical name matches the official label used by the core contracts.
 MLB_TEAMS: Dict[str, List[str]] = {
     # American League East
     "Baltimore Orioles":       ["bal", "orioles", "baltimore", "o's"],

@@ -22,6 +22,8 @@ from omega.core.contracts.schemas import (
 from omega.core.contracts.service import (
     _pick_best_bet,
     _resolve_game_market_odds,
+    _stable_input_hash,
+    analyze,
     analyze_game,
     analyze_player_prop,
     analyze_slate,
@@ -197,6 +199,72 @@ class TestAnalyzeGame:
         resp = analyze_game(req)
         assert resp.matchup == "Indiana Pacers @ Boston Celtics"
         assert resp.league == "NBA"
+
+
+class TestAnalyzeTraceEnvelope:
+    def test_analyze_returns_core_trace_envelope(self):
+        trace = analyze(
+            {
+                "home_team": "Boston Celtics",
+                "away_team": "Indiana Pacers",
+                "league": "NBA",
+                "n_iterations": 100,
+                "seed": 42,
+                "home_context": _NBA_HOME_CTX,
+                "away_context": _NBA_AWAY_CTX,
+                "odds": {"moneyline_home": -150, "moneyline_away": 130},
+            },
+            session_id="sess-20260518-core",
+            bankroll=2500.0,
+        )
+
+        assert trace["trace_id"].startswith("sandbox-")
+        assert trace["model_version"] == "omega-core-phase6h"
+        assert trace["kind"] == "game"
+        assert trace["session_id"] == "sess-20260518-core"
+        assert trace["bankroll"] == 2500.0
+        assert trace["input_snapshot"]["seed"] == 42
+        assert trace["result"]["status"] == "success"
+
+    def test_analyze_requires_explicit_session_id_and_bankroll(self):
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=100,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+        )
+
+        with pytest.raises(ValueError):
+            analyze(req, session_id="", bankroll=1000.0)
+        with pytest.raises(ValueError):
+            analyze(req, session_id="sess-20260518-core", bankroll=0.0)
+
+    def test_stable_hash_excludes_volatile_odds_structures(self):
+        base = {
+            "home_team": "Boston Celtics",
+            "away_team": "Indiana Pacers",
+            "league": "NBA",
+            "seed": 42,
+            "home_context": _NBA_HOME_CTX,
+            "away_context": _NBA_AWAY_CTX,
+            "odds": {"moneyline_home": -150, "markets": [{"price": -150}]},
+            "market_snapshots": [{"book": "betmgm", "price": -150}],
+        }
+        moved_market = {
+            **base,
+            "odds": {"moneyline_home": -180, "markets": [{"price": -180}]},
+            "market_snapshots": [{"book": "betmgm", "price": -180}],
+        }
+        changed_context = {
+            **base,
+            "home_context": {**_NBA_HOME_CTX, "pace": 104.0},
+        }
+
+        assert _stable_input_hash(base) == _stable_input_hash(moved_market)
+        assert _stable_input_hash(base) != _stable_input_hash(changed_context)
 
 
 # ---------------------------------------------------------------------------

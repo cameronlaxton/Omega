@@ -12,7 +12,10 @@
       "line": 4.5,
       "odds_over": -108.0,
       "odds_under": -122.0,
-      "player_context": {"strikeouts_mean": 4.0, "strikeouts_std": 2.0},
+      "player_context": {
+        "strikeouts_mean": 4.0,
+        "strikeouts_std": 2.0
+      },
       "n_iterations": 50000,
       "seed": 42
     },
@@ -35,15 +38,5 @@
       "downgrades": []
     }
   },
-  "bet_record": null,
-  "clv_capture_instructions": {
-    "league": "MLB",
-    "event_date": "2026-05-17",
-    "matchup": "Chicago Cubs @ Chicago White Sox",
-    "market": "player_prop:strikeouts",
-    "selection_descriptor": "rea_strikeouts_under_4.5",
-    "line_at_decision": 4.5,
-    "odds_at_decision": -122,
-    "book_at_decision": "betmgm"
-  }
+  "bet_record": null
 }

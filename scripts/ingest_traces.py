@@ -67,7 +67,7 @@ def _adapt_sandbox_trace(analyze_out: Dict[str, Any]) -> Dict[str, Any]:
     matchup = _derive_matchup(kind, input_snap, result)
     seed = input_snap.get("seed")
     aggregate_quality = gate.get("aggregate_quality")
-    downgrades = gate.get("downgrades") or []
+    downgrades = gate.get("downgrades") or analyze_out.get("downgrades") or []
 
     # Predictions/recommendations vary by kind; we pull what's available
     predictions = result.get("simulation") if kind == "game" else {
@@ -146,7 +146,7 @@ def _load_payload(path: Path) -> Dict[str, Any]:
     """Parse the JSON file and return the export-block dict.
 
     Accepts two shapes:
-      A) The system-prompt §10 export block: {"trace": {...}, "bet_record": ..., "clv_capture_instructions": ...}
+      A) The Phase 6h export block: {"trace": {...}, "bet_record": ...}
       B) The raw analyze() output: {"trace_id": "sandbox-...", "kind": "...", ...}
     Shape B is wrapped into A for uniform downstream handling.
     """
@@ -159,7 +159,7 @@ def _load_payload(path: Path) -> Dict[str, Any]:
     if "trace" in payload and isinstance(payload["trace"], dict):
         return payload  # shape A
     if "trace_id" in payload and "kind" in payload:
-        return {"trace": payload, "bet_record": None, "clv_capture_instructions": None}  # shape B
+        return {"trace": payload, "bet_record": None}  # shape B
     raise ValueError("JSON must contain either 'trace' (export block) or top-level 'trace_id'+'kind'")
 
 
@@ -187,10 +187,14 @@ def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> Tuple[s
     bet_id: Optional[str] = None
     bet_block = payload.get("bet_record")
     if isinstance(bet_block, dict):
-        # selection_descriptor may live on the sibling clv_capture_instructions
-        clv = payload.get("clv_capture_instructions") or {}
-        if "selection_descriptor" not in bet_block and clv.get("selection_descriptor"):
-            bet_block = {**bet_block, "selection_descriptor": clv["selection_descriptor"]}
+        # Phase 6h writes selection_descriptor directly on bet_record. Legacy
+        # processed exports may still carry it on the retired sibling block.
+        if "selection_descriptor" not in bet_block:
+            clv = payload.get("clv_capture_instructions") or {}
+            if clv.get("selection_descriptor"):
+                bet_block = {**bet_block, "selection_descriptor": clv["selection_descriptor"]}
+            else:
+                raise ValueError("bet_record.selection_descriptor is required")
         bet = BetRecord.from_export_block(
             trace_id=trace_id,
             bet_id=uuid.uuid4().hex[:12],

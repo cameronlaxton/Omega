@@ -130,6 +130,20 @@ def compose_response(
             alt_edges = execution.edges[1:] if len(execution.edges) > 1 else []
             sections["alternative_bets"] = {"edges": alt_edges}
 
+    if not sections and not execution.simulation and not execution.edges and not execution.best_bet:
+        filled = [f for f in facts if f.filled]
+        sections["fallback"] = {
+            "reason": "insufficient_verified_inputs",
+            "filled_facts": len(filled),
+            "total_facts": len(facts),
+            "data_quality": execution.data_quality_score,
+            "mode": execution.mode.value,
+        }
+        narrative_parts.append(
+            "Not enough verified input data is available to produce a formal Omega analysis. "
+            "This should stay narrative-only until the missing inputs are supplied."
+        )
+
     # Build text summary
     text = _build_text_summary(understanding, execution, narrative_parts)
 
@@ -189,7 +203,8 @@ def _build_text_summary(
             parts.extend(narrative_parts)
         else:
             parts.append(
-                f"Analysis complete for: {understanding.raw_prompt}"
+                "Not enough verified input data is available for a formal Omega analysis. "
+                "Use narrative-only context until the missing inputs are supplied."
             )
 
     return "\n\n".join(parts)

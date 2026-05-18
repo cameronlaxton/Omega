@@ -18,8 +18,7 @@ grading.
    `python -m omega.mcp.server`
 2. If MCP is unavailable, use the local repo engine path documented in
    `OMEGA_COWORK.md`.
-3. Use `omega_lite_standalone.py` only for no-local-access project sandboxes.
-4. If no deterministic path can run, produce qualitative Standard Text only.
+3. If no deterministic path can run, produce qualitative Standard Text only.
 
 ## MCP Tools
 
@@ -40,11 +39,10 @@ grading.
 ## Workflow
 
 1. Read `docs/LLM_MCP_INTERFACE.md` when you need the full contract.
-2. Validate the request shape against `omega/core/contracts/schemas.py` or the
-   mirrored `omega_lite` schemas used by `omega_lite.run`.
+2. Validate the request shape against `omega/core/contracts/schemas.py`.
 3. Call the narrowest Omega MCP tool that satisfies the task.
-4. If a result is skipped or gated, inspect `missing_requirements`,
-   `skip_reason`, and quality-gate downgrades.
+4. If a result is skipped or downgraded, inspect `missing_requirements`,
+   `skip_reason`, and trace downgrades.
 5. Retrieve only missing pre-decision inputs; use `omega_resolve_odds` for
    current odds when local API access is available and preserve source notes.
 6. Rerun the same deterministic tool.
@@ -57,8 +55,7 @@ For package prop analysis, player context uses sport-specific keys:
 - `stat_mean` maps to `{prop_type}_mean`
 - `stat_std_dev` maps to `{prop_type}_std`
 
-For standalone fallback only, use the generic `stat_mean` / `stat_std_dev`
-schema described in `OMEGA_RUN_RECIPE.md`.
+There is no standalone fallback bridge in Phase 6h.
 
 ## References
 

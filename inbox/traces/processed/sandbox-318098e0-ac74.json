@@ -12,7 +12,10 @@
       "line": 4.5,
       "odds_over": -142.0,
       "odds_under": 116.0,
-      "player_context": {"strikeouts_mean": 5.8, "strikeouts_std": 2.1},
+      "player_context": {
+        "strikeouts_mean": 5.8,
+        "strikeouts_std": 2.1
+      },
       "n_iterations": 50000,
       "seed": 42
     },
@@ -35,15 +38,5 @@
       "downgrades": []
     }
   },
-  "bet_record": null,
-  "clv_capture_instructions": {
-    "league": "MLB",
-    "event_date": "2026-05-17",
-    "matchup": "Texas Rangers @ Houston Astros",
-    "market": "player_prop:strikeouts",
-    "selection_descriptor": "lambert_strikeouts_over_4.5",
-    "line_at_decision": 4.5,
-    "odds_at_decision": -142,
-    "book_at_decision": "betmgm"
-  }
+  "bet_record": null
 }

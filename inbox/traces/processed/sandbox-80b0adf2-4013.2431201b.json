@@ -74,15 +74,5 @@
     "stake_units": 1.0,
     "stake_dollars": 25.0,
     "decision_timestamp": "2026-05-16T04:05:00Z"
-  },
-  "clv_capture_instructions": {
-    "league": "NBA",
-    "event_date": "2026-05-17",
-    "matchup": "Cleveland Cavaliers @ Detroit Pistons",
-    "market": "player_prop:pts",
-    "selection_descriptor": "home_pts_under_27.5",
-    "line_at_decision": 27.5,
-    "odds_at_decision": -105,
-    "book_at_decision": "theScore Bet"
   }
 }

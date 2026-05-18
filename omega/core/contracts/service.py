@@ -7,9 +7,13 @@ no data fetching, no config loading, no network calls.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import timezone
+from typing import Any, Dict, List, Optional, Union
 
 from omega.core.betting.odds import (
     american_to_decimal,
@@ -39,6 +43,143 @@ from omega.core.calibration.probability import apply_calibration
 logger = logging.getLogger("omega.service")
 
 _engine = OmegaSimulationEngine()
+MODEL_VERSION = "omega-core-phase6h"
+_TRACE_HASH_EXCLUDE = {
+    "odds",
+    "odds_over",
+    "odds_under",
+    "markets",
+    "odds_snapshot",
+    "market_snapshots",
+    "closing_line",
+    "closing_lines",
+}
+
+
+def _sanitize_for_trace_hash(value: Any) -> Any:
+    """Drop volatile market fields before deriving trace hash identity."""
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json")
+    if isinstance(value, dict):
+        return {
+            str(k): _sanitize_for_trace_hash(v)
+            for k, v in value.items()
+            if str(k) not in _TRACE_HASH_EXCLUDE
+        }
+    if isinstance(value, list):
+        return [_sanitize_for_trace_hash(item) for item in value]
+    return value
+
+
+def _stable_input_hash(request: Any) -> Optional[str]:
+    """Stable 8-char content hash, excluding volatile odds and close snapshots."""
+    try:
+        payload = _sanitize_for_trace_hash(request)
+        encoded = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:8]
+    except Exception:
+        return None
+
+
+def _new_trace_id(request: Any = None) -> str:
+    """Python-minted trace id for VM/MCP runs.
+
+    The stable hash prefix identifies the simulation context while the nonce
+    keeps repeated runs separately persistable. Volatile odds structures are
+    intentionally excluded from the hash to avoid cache fracturing.
+    """
+    if request is not None:
+        h = _stable_input_hash(request)
+        if h is not None:
+            return f"sandbox-{h}-{uuid.uuid4().hex[:4]}"
+    return f"sandbox-{uuid.uuid4().hex[:12]}"
+
+
+def _coerce_request(
+    request: Union[Dict[str, Any], GameAnalysisRequest, PlayerPropRequest, SlateAnalysisRequest],
+) -> Union[GameAnalysisRequest, PlayerPropRequest, SlateAnalysisRequest]:
+    """Accept a typed request or a dict and return the canonical typed request."""
+    if isinstance(request, (GameAnalysisRequest, PlayerPropRequest, SlateAnalysisRequest)):
+        return request
+    if not isinstance(request, dict):
+        raise TypeError(f"Expected dict or request object, got {type(request).__name__}")
+
+    if "player_name" in request and "prop_type" in request:
+        return PlayerPropRequest(**request)
+    if "games" in request or (
+        "league" in request and "home_team" not in request and "player_name" not in request
+    ):
+        return SlateAnalysisRequest(**request)
+    return GameAnalysisRequest(**request)
+
+
+def _safe_dump(obj: Any) -> Dict[str, Any]:
+    """Convert Pydantic models and dicts to JSON-friendly dictionaries."""
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump(mode="json")
+    if isinstance(obj, dict):
+        return obj
+    return {"value": str(obj)}
+
+
+def _result_downgrades(result: Any) -> List[str]:
+    """Expose minimal trace-level downgrades without reviving the lite gate."""
+    status = getattr(result, "status", None)
+    if status == "skipped":
+        return ["engine_skipped"]
+    if status == "error":
+        return ["engine_error"]
+    return []
+
+
+def analyze(
+    request: Union[Dict[str, Any], GameAnalysisRequest, PlayerPropRequest, SlateAnalysisRequest],
+    *,
+    session_id: str,
+    bankroll: float,
+) -> Dict[str, Any]:
+    """Run a canonical Omega analysis and return an auditable trace envelope.
+
+    This wrapper owns only request typing, trace identity, and audit snapshots.
+    Simulation, calibration, edge, EV, Kelly, staking, and confidence tiers stay
+    in the deterministic analyzers below.
+    """
+    if not session_id:
+        raise ValueError("session_id is required for canonical analyze()")
+    if bankroll is None or bankroll <= 0:
+        raise ValueError("bankroll must be a positive explicit value")
+
+    typed_req = _coerce_request(request)
+    trace_id = _new_trace_id(typed_req)
+    ran_at = datetime.now(timezone.utc).isoformat()
+
+    if isinstance(typed_req, GameAnalysisRequest):
+        result = analyze_game(typed_req, bankroll=bankroll)
+        kind = "game"
+    elif isinstance(typed_req, PlayerPropRequest):
+        result = analyze_player_prop(typed_req, bankroll=bankroll)
+        kind = "prop"
+    elif isinstance(typed_req, SlateAnalysisRequest):
+        typed_req = typed_req.model_copy(update={"bankroll": bankroll})
+        result = analyze_slate(typed_req)
+        kind = "slate"
+    else:
+        raise TypeError(
+            f"Unsupported request type {type(typed_req).__name__}. "
+            "Expected GameAnalysisRequest, PlayerPropRequest, or SlateAnalysisRequest."
+        )
+
+    return {
+        "trace_id": trace_id,
+        "model_version": MODEL_VERSION,
+        "ran_at": ran_at,
+        "kind": kind,
+        "session_id": session_id,
+        "bankroll": bankroll,
+        "input_snapshot": _safe_dump(typed_req),
+        "result": _safe_dump(result),
+        "downgrades": _result_downgrades(result),
+    }
 
 
 def _calibrate(raw_prob: float, league: str | None = None) -> float:

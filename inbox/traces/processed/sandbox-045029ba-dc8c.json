@@ -12,7 +12,10 @@
       "line": 3.5,
       "odds_over": -130.0,
       "odds_under": 106.0,
-      "player_context": {"strikeouts_mean": 4.1, "strikeouts_std": 2.0},
+      "player_context": {
+        "strikeouts_mean": 4.1,
+        "strikeouts_std": 2.0
+      },
       "n_iterations": 50000,
       "seed": 42
     },
@@ -35,6 +38,5 @@
       "downgrades": []
     }
   },
-  "bet_record": null,
-  "clv_capture_instructions": null
+  "bet_record": null
 }

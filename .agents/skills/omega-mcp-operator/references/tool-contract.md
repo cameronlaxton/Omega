@@ -5,9 +5,9 @@ importable even when the optional MCP package is not installed.
 
 ## Tools
 
-- `omega_analyze_game(request, bankroll=1000.0)`
-- `omega_analyze_prop(request, bankroll=1000.0)`
-- `omega_analyze_slate(request)`
+- `omega_analyze_game(request, bankroll, session_id)`
+- `omega_analyze_prop(request, bankroll, session_id)`
+- `omega_analyze_slate(request, bankroll, session_id)`
 - `omega_chat_orchestrate(prompt, context=None)`
 - `omega_replay_bundle(bundle, strict=False)`
 - `omega_trace_get(trace_id, db_path=None)`

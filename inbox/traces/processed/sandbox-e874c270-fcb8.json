@@ -33,15 +33,5 @@
       "downgrades": []
     }
   },
-  "bet_record": null,
-  "clv_capture_instructions": {
-    "league": "NBA",
-    "event_date": "2026-05-17",
-    "matchup": "Detroit Pistons vs Cleveland Cavaliers Game 7",
-    "market": "player_prop:pts",
-    "selection_descriptor": "donovan_mitchell_pts_under_25.5",
-    "line_at_decision": 25.5,
-    "odds_at_decision": -110,
-    "book_at_decision": "betmgm"
-  }
+  "bet_record": null
 }

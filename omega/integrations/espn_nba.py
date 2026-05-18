@@ -30,7 +30,7 @@ _REQUEST_TIMEOUT_SECONDS = 15
 
 
 # Canonical team names (left side = canonical, right side = aliases)
-# Canonical name matches what omega_lite_standalone treats as the official label.
+# Canonical name matches the official label used by the core contracts.
 NBA_TEAMS: Dict[str, List[str]] = {
     "Atlanta Hawks":        ["atl", "hawks", "atlanta"],
     "Boston Celtics":       ["bos", "celtics", "boston"],

@@ -70,7 +70,7 @@ Recommended next:
 
 | Concern | Owner | Contract |
 |---|---|---|
-| Runtime engine trace | `omega_lite.run` / `omega_lite_standalone.py` | Mints `sandbox-` trace IDs and protected numeric outputs |
+| Runtime engine trace | `omega.core.contracts.service.analyze` / MCP analyze tools | Mints `sandbox-` trace IDs and protected numeric outputs |
 | Trace persistence | `omega/trace/store.py` | Idempotent write/read; no direct DB writes from agents |
 | Bet tracking | `omega/trace/bet_record.py` + `TraceStore.record_bet()` | User-confirmed wager metadata only |
 | Closing lines | `TraceStore.attach_closing_line()` | One row per exact trace/market/selection descriptor |

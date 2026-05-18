@@ -6,22 +6,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_system_prompt_mentions_mcp_without_replacing_standalone_sandbox():
+def test_system_prompt_mentions_mcp_and_core_service():
     text = (ROOT / "prompts" / "system_prompt.txt").read_text(encoding="utf-8").lower()
 
-    assert "prefer typed mcp tools first" in text
-    assert "omega_lite_standalone.py" in text
-    assert "standard text only" in text
-    assert "you do not own any of the engine's responsibilities" in text
+    assert "local omega mcp server" in text
+    assert "omega.core.contracts.service.analyze" in text
+    assert "qualitative research only" in text
+    assert "deterministic python engine owns" in text
 
 
 def test_cowork_prompt_uses_mcp_before_direct_repo_import_when_available():
     text = (ROOT / "OMEGA_COWORK.md").read_text(encoding="utf-8").lower()
 
-    assert "prefer the local omega mcp server" in text
-    assert "not a separate betting engine" in text
-    assert "direct repo import flow" in text
-    assert "only for no-local-access project sandboxes" in text
+    assert "local mcp server first" in text or "use the local mcp server first" in text
+    assert "not a second betting engine" in text
+    assert "omega.core.contracts.service.analyze" in text
+    assert "phase 6h" in text
 
 
 def test_llm_mcp_interface_documents_replay_as_audit_only():
@@ -31,7 +31,7 @@ def test_llm_mcp_interface_documents_replay_as_audit_only():
     assert "live fetching is disabled" in text
     assert "replay is sampled audit" in text
     assert "not the default benchmark path" in text
-    assert "standard text only" in text
+    assert "qualitative text only" in text
 
 
 def test_plugin_mcp_config_uses_installed_package_not_relative_escape():

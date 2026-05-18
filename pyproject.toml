@@ -44,5 +44,5 @@ pythonpath = ["."]
 
 
 [tool.setuptools.packages.find]
-include = ["omega*", "omega_lite*"]
+include = ["omega*"]
 exclude = ["tests*", "docs*", "inbox*", "reports*", "config*", "scripts*"]

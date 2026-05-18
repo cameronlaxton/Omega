@@ -4,7 +4,7 @@ How Omega sources live and historical data. The full no-local self-heal loop is 
 
 ## Sourcing Model
 
-The deterministic engines (`omega_lite_standalone.py`, `omega_lite.run`, and the MCP analyze tools) perform no network calls.
+The deterministic core service and MCP analyze tools perform no network calls.
 
 In local Cowork/Codex operation, pre-decision current odds are resolved through The Odds API with BetMGM as the default bookmaker. Use `scripts/resolve_odds.py` or the `omega_resolve_odds` MCP tool. Multi-book requests are reserved for explicit line shopping, consensus checks, or audit/backfill work.
 
@@ -73,4 +73,4 @@ When an injected value is older than its window, label it as `stale` in `Inputs 
 - `omega/mcp/server.py`: `omega_resolve_odds` MCP tool.
 - `omega/trace/market_snapshot.py`: line-movement snapshot model.
 - `omega/core/simulation/archetypes.py`: supported `prop_type` keys per sport archetype.
-- `omega_lite_standalone.py`: sandbox engine. No network code.
+- `omega/core/contracts/service.py`: canonical local analyze entry point. No network code.
