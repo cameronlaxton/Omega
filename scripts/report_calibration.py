@@ -66,16 +66,33 @@ def _window_cutoff(window_days: int) -> str:
 
 
 def _section_counts(store: TraceStore, league: str, cutoff: str) -> Dict[str, int]:
-    """Trace / bet / close counts within the window."""
+    """Trace / bet / close counts within the window.
+
+    "Graded" is the union of game outcomes and prop outcomes — a trace counts
+    once whether it has a game-score result, one or more prop results, or both.
+    """
     conn = store.conn
     n_traces = conn.execute(
         "SELECT COUNT(*) FROM traces WHERE league = ? AND timestamp >= ?",
         (league, cutoff),
     ).fetchone()[0]
-    n_graded = conn.execute(
-        """SELECT COUNT(*) FROM traces t
+    n_graded_game = conn.execute(
+        """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
            JOIN outcomes o ON t.trace_id = o.trace_id
            WHERE t.league = ? AND t.timestamp >= ?""",
+        (league, cutoff),
+    ).fetchone()[0]
+    n_graded_prop = conn.execute(
+        """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
+           JOIN prop_outcomes p ON t.trace_id = p.trace_id
+           WHERE t.league = ? AND t.timestamp >= ?""",
+        (league, cutoff),
+    ).fetchone()[0]
+    n_graded = conn.execute(
+        """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
+           WHERE t.league = ? AND t.timestamp >= ?
+             AND (EXISTS (SELECT 1 FROM outcomes o WHERE o.trace_id = t.trace_id)
+               OR EXISTS (SELECT 1 FROM prop_outcomes p WHERE p.trace_id = t.trace_id))""",
         (league, cutoff),
     ).fetchone()[0]
     n_with_bet = conn.execute(
@@ -93,6 +110,8 @@ def _section_counts(store: TraceStore, league: str, cutoff: str) -> Dict[str, in
     return {
         "traces": n_traces,
         "graded": n_graded,
+        "graded_game": n_graded_game,
+        "graded_prop": n_graded_prop,
         "with_bet": n_with_bet,
         "with_close": n_with_close,
     }
@@ -121,6 +140,53 @@ def _section_realized_metrics(
     ) / n
 
     # ECE
+    n_bins = 10
+    bin_counts = [0] * n_bins
+    bin_pred_sum = [0.0] * n_bins
+    bin_out_sum = [0.0] * n_bins
+    for p, o in zip(predictions, outcomes):
+        idx = min(int(p * n_bins), n_bins - 1)
+        bin_counts[idx] += 1
+        bin_pred_sum[idx] += p
+        bin_out_sum[idx] += o
+    ece = 0.0
+    for i in range(n_bins):
+        if bin_counts[i] > 0:
+            ece += abs(bin_pred_sum[i] / bin_counts[i] - bin_out_sum[i] / bin_counts[i]) * bin_counts[i] / n
+
+    return {
+        "n": float(n),
+        "brier": brier,
+        "ece": ece,
+        "log_loss": log_loss,
+    }
+
+
+def _section_prop_realized_metrics(
+    store: TraceStore, league: str, cutoff: str
+) -> Optional[Dict[str, float]]:
+    """Brier / ECE / log_loss on graded prop traces in the window.
+
+    Separate from the game plane: prop calibration is a different forecasting
+    problem (over/under stat lines, not home/away win). Suppressed when fewer
+    than 10 prop (prediction, outcome) pairs are available.
+    """
+    rows = store.query_traces(league=league, start=cutoff, has_outcome=True, limit=100_000)
+    if not rows:
+        return None
+    predictions, outcomes = CalibrationFitter.extract_prop_pairs(rows)
+    if len(predictions) < 10:
+        return None
+
+    n = len(predictions)
+    brier = sum((p - o) ** 2 for p, o in zip(predictions, outcomes)) / n
+    from math import log
+    eps = 1e-15
+    log_loss = -sum(
+        o * log(max(eps, min(1 - eps, p))) + (1 - o) * log(max(eps, min(1 - eps, 1 - p)))
+        for p, o in zip(predictions, outcomes)
+    ) / n
+
     n_bins = 10
     bin_counts = [0] * n_bins
     bin_pred_sum = [0.0] * n_bins
@@ -235,6 +301,7 @@ def _render(
     window_days: int,
     counts: Dict[str, int],
     realized: Optional[Dict[str, float]],
+    realized_prop: Optional[Dict[str, float]],
     clv: Dict[str, Any],
     sessions: List[Dict[str, Any]],
     production_profile_id: Optional[str],
@@ -252,7 +319,9 @@ def _render(
     lines.append("| Metric | Count |")
     lines.append("|---|---|")
     lines.append(f"| Traces | {counts['traces']} |")
-    lines.append(f"| Graded (outcome attached) | {counts['graded']} |")
+    lines.append(f"| Graded (any outcome) | {counts['graded']} |")
+    lines.append(f"| &nbsp;&nbsp;of which game-graded | {counts['graded_game']} |")
+    lines.append(f"| &nbsp;&nbsp;of which prop-graded | {counts['graded_prop']} |")
     lines.append(f"| With bet_record | {counts['with_bet']} |")
     lines.append(f"| With closing_line | {counts['with_close']} |")
     lines.append("")
@@ -265,10 +334,10 @@ def _render(
         lines.append("**None** — calibration is using the static fallback policy.")
     lines.append("")
 
-    lines.append("## 3. Realized metrics (graded traces in window)")
+    lines.append("## 3. Realized metrics — game plane (graded game traces in window)")
     lines.append("")
     if realized is None:
-        lines.append("_Fewer than 10 graded traces in window — metrics suppressed (noise dominates)._")
+        lines.append("_Fewer than 10 game-graded traces in window — metrics suppressed (noise dominates)._")
     else:
         lines.append(f"- n: {int(realized['n'])}")
         lines.append(f"- Brier: {realized['brier']:.4f}")
@@ -276,7 +345,21 @@ def _render(
         lines.append(f"- Log loss: {realized['log_loss']:.4f}")
         if realized["ece"] > 0.05:
             lines.append("")
-            lines.append("> **FLAG — ECE > 0.05.** Investigate which probability quintile is miscalibrated.")
+            lines.append("> **FLAG — ECE > 0.05 on game plane.** Investigate which probability quintile is miscalibrated.")
+    lines.append("")
+
+    lines.append("## 3B. Realized metrics — prop plane (graded prop traces in window)")
+    lines.append("")
+    if realized_prop is None:
+        lines.append("_Fewer than 10 prop (prediction, outcome) pairs in window — metrics suppressed._")
+    else:
+        lines.append(f"- n: {int(realized_prop['n'])}")
+        lines.append(f"- Brier: {realized_prop['brier']:.4f}")
+        lines.append(f"- ECE (10-bin): {realized_prop['ece']:.4f}")
+        lines.append(f"- Log loss: {realized_prop['log_loss']:.4f}")
+        if realized_prop["ece"] > 0.05:
+            lines.append("")
+            lines.append("> **FLAG — ECE > 0.05 on prop plane.** Prop calibration is separately tunable; consider a prop-specific shrinkage profile.")
     lines.append("")
 
     lines.append("## 4. CLV (bets with attached closing lines)")
@@ -371,6 +454,7 @@ def main() -> int:
 
     counts = _section_counts(store, args.league, cutoff)
     realized = _section_realized_metrics(store, args.league, cutoff)
+    realized_prop = _section_prop_realized_metrics(store, args.league, cutoff)
     clv = _section_clv(store, args.league, cutoff)
     sessions = _section_sessions(store, sidecars, args.league)
 
@@ -383,6 +467,7 @@ def main() -> int:
         window_days=args.window_days,
         counts=counts,
         realized=realized,
+        realized_prop=realized_prop,
         clv=clv,
         sessions=sessions,
         production_profile_id=prod.profile_id if prod else None,

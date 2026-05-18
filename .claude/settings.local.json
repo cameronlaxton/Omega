@@ -57,7 +57,16 @@
       "Bash(awk '/^## §10/,/^## §14/' prompts/system_prompt.txt)",
       "Bash(python -m pytest tests/core/test_contracts_service.py -v)",
       "Bash(python -m pytest tests/ --tb=short)",
-      "Bash(python -m pytest tests/ --tb=short -q)"
+      "Bash(python -m pytest tests/ --tb=short -q)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(python -m pytest tests/trace/test_prop_outcomes.py -v)",
+      "Bash(python -m pytest tests/trace/ -v)",
+      "Bash(python -c \"from omega.trace.store import TraceStore; s = TraceStore\\(\\); print\\('schema_version =', s.schema_version\\(\\)\\); print\\('prop_outcomes exists:', s.conn.execute\\(\\\\\"SELECT COUNT\\(*\\) FROM sqlite_master WHERE type='table' AND name='prop_outcomes'\\\\\"\\).fetchone\\(\\)[0] == 1\\); s.close\\(\\)\")",
+      "Bash(python -m pytest tests/ -x --timeout=60)",
+      "Bash(python -m pytest tests/integrations/test_espn_boxscore.py tests/scripts/test_fetch_outcomes_props.py -v)",
+      "Bash(python -m pytest tests/scripts/test_backfill_outcomes_manual.py -v)",
+      "Bash(python -m pytest tests/core/test_calibration_profiles.py -v)"
     ]
   }
 }

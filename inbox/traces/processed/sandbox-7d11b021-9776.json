@@ -1,0 +1,45 @@
+{
+  "trace": {
+    "trace_id": "sandbox-7d11b021-9776",
+    "session_id": "sess-20260517-p3k8",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-17T23:01:01.169085+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "player_name": "Jarrett Allen",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 7.5,
+      "odds_over": -125,
+      "odds_under": -105,
+      "player_context": {
+        "reb_mean": 8.4,
+        "reb_std": 2.2
+      }
+    },
+    "result": {
+      "player_name": "Jarrett Allen",
+      "prop_type": "reb",
+      "line": 7.5,
+      "edge_over": 10.23,
+      "edge_under": -17.01,
+      "recommendation": "over",
+      "confidence_tier": "A"
+    },
+    "quality_gate": {
+      "aggregate_quality": 1.0,
+      "downgrades": []
+    }
+  },
+  "bet_record": null,
+  "clv_capture_instructions": {
+    "league": "NBA",
+    "event_date": "2026-05-17",
+    "matchup": "Detroit Pistons vs Cleveland Cavaliers Game 7",
+    "market": "player_prop:reb",
+    "selection_descriptor": "jarrett_allen_reb_over_7.5",
+    "line_at_decision": 7.5,
+    "odds_at_decision": -125,
+    "book_at_decision": "betmgm"
+  }
+}

@@ -21,6 +21,20 @@ Schema version 4 (additive):
   chat session. Legacy traces stay NULL. Session metadata lives in a JSON sidecar
   under inbox/sessions/<session_id>.json — no separate sessions table.
 
+Schema version 5 (additive):
+- market_snapshots: provider market observations for line movement. Currently
+  written by capture jobs but has no consumer in report_calibration.py — the
+  compute_market_movement() helper exists but is not wired into any report.
+  Captured for future use; wiring deserves its own design pass.
+
+Schema version 6 (additive):
+- prop_outcomes: player-prop grading rows, mirroring the outcomes table for
+  game-level results. Separate table because the grading shape is different
+  (player stat value vs. game score) and overloading outcomes would break
+  the 1:1 LEFT JOIN assumed by calibration consumers. One row per
+  (trace_id, player_name, stat_type). Source convention matches outcomes
+  (e.g. "api:espn_boxscore", "manual:espn_boxscore_YYYYMMDD").
+
 Design rules:
 - Full trace stored as JSON blob to decouple trace evolution from SQLite schema
 - Denormalized columns exist for querying only — the blob is source of truth
@@ -29,7 +43,7 @@ Design rules:
 """
 from __future__ import annotations
 
-CURRENT_VERSION = 5
+CURRENT_VERSION = 6
 
 SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS traces (
@@ -145,6 +159,24 @@ CREATE INDEX IF NOT EXISTS idx_market_snapshots_event
     ON market_snapshots(league, provider_event_id, market, bookmaker);
 CREATE INDEX IF NOT EXISTS idx_market_snapshots_movement
     ON market_snapshots(provider_event_id, market, selection, bookmaker, snapshot_timestamp);
+"""
+
+SCHEMA_V6 = """
+CREATE TABLE IF NOT EXISTS prop_outcomes (
+    prop_outcome_id  TEXT PRIMARY KEY,
+    trace_id         TEXT NOT NULL REFERENCES traces(trace_id),
+    player_name      TEXT NOT NULL,
+    stat_type        TEXT NOT NULL,
+    stat_value       REAL NOT NULL,
+    line             REAL NOT NULL,
+    side             TEXT NOT NULL,
+    result           TEXT NOT NULL,
+    attached_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    source           TEXT NOT NULL DEFAULT 'manual',
+    UNIQUE (trace_id, player_name, stat_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prop_outcomes_trace_id ON prop_outcomes(trace_id);
 """
 
 

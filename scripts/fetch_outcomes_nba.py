@@ -174,6 +174,11 @@ def main() -> int:
         ))
 
         for trace in traces:
+            # Prop traces grade against player stats, not game scores. Skip
+            # them here — scripts/fetch_outcomes_props.py owns prop grading.
+            if trace.get("kind") == "prop":
+                continue
+
             game = _match_trace_to_game(trace, games_by_pair)
             if game is None:
                 pair = _trace_matchup(trace)

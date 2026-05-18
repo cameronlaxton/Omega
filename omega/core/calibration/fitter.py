@@ -41,7 +41,11 @@ class CalibrationFitter:
     def extract_pairs(
         graded_traces: List[Dict[str, Any]],
     ) -> Tuple[List[float], List[int]]:
-        """Extract (predicted_prob, actual_outcome) pairs from graded traces.
+        """Extract (predicted_prob, actual_outcome) pairs from game-level
+        graded traces.
+
+        Prop traces are skipped silently — they have neither ``home_win_prob``
+        nor ``_outcome``. Use :func:`extract_prop_pairs` for prop calibration.
 
         Args:
             graded_traces: Output of TraceStore.get_graded_traces().
@@ -71,6 +75,59 @@ class CalibrationFitter:
             actual = 1 if result == "home_win" else 0
             predictions.append(prob)
             outcomes.append(actual)
+
+        return predictions, outcomes
+
+    @staticmethod
+    def extract_prop_pairs(
+        graded_traces: List[Dict[str, Any]],
+    ) -> Tuple[List[float], List[int]]:
+        """Extract (predicted_prob, actual_outcome) pairs from prop-level
+        graded traces.
+
+        For each prop_outcome row attached to a trace, the prediction is the
+        trace's ``over_prob`` (when side='over') or ``under_prob`` (when
+        side='under'). The outcome is 1 for ``result='win'``, 0 for
+        ``result='loss'``. Pushes are excluded (they carry no calibration
+        signal).
+
+        Game traces are skipped silently.
+
+        Args:
+            graded_traces: Output of TraceStore.query_traces / get_graded_traces.
+                Each prop trace has ``predictions`` and ``_prop_outcomes`` keys.
+
+        Returns:
+            (predictions, outcomes) — parallel lists of floats and 0/1 ints.
+        """
+        predictions: List[float] = []
+        outcomes: List[int] = []
+
+        for trace in graded_traces:
+            preds = trace.get("predictions") or {}
+            prop_outcomes = trace.get("_prop_outcomes")
+            if not prop_outcomes:
+                continue
+            over_p = preds.get("over_prob")
+            under_p = preds.get("under_prob")
+            for row in prop_outcomes:
+                side = (row.get("side") or "").lower()
+                result = row.get("result")
+                if result == "push":
+                    continue
+                if side == "over" and over_p is not None:
+                    prob = float(over_p)
+                elif side == "under" and under_p is not None:
+                    prob = float(under_p)
+                else:
+                    continue
+                # Normalize percentage form
+                if prob > 1.0:
+                    prob = prob / 100.0
+                prob = max(0.0, min(1.0, prob))
+                actual = 1 if result == "win" else 0
+                predictions.append(prob)
+                outcomes.append(actual)
 
         return predictions, outcomes
 

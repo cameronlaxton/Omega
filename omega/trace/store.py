@@ -27,6 +27,7 @@ from omega.trace.schema import (
     SCHEMA_V2,
     SCHEMA_V3,
     SCHEMA_V5,
+    SCHEMA_V6,
     apply_v4_migration,
 )
 
@@ -82,6 +83,10 @@ class TraceStore:
         # V5: market_snapshots (provider observations for line movement)
         self.conn.executescript(SCHEMA_V5)
         self._record_version(5, "Phase 6g: market_snapshots table for line movement")
+
+        # V6: prop_outcomes (player-prop grading; separate from outcomes)
+        self.conn.executescript(SCHEMA_V6)
+        self._record_version(6, "Phase 6h: prop_outcomes table for player-prop grading")
 
     def _record_version(self, version: int, description: str) -> None:
         """Idempotently stamp a schema version into schema_versions."""
@@ -208,6 +213,99 @@ class TraceStore:
         )
         self.conn.commit()
         return outcome_id
+
+    # ------------------------------------------------------------------
+    # Prop outcome attachment (Phase 6h — player-prop grading)
+    # ------------------------------------------------------------------
+
+    def attach_prop_outcome(
+        self,
+        trace_id: str,
+        player_name: str,
+        stat_type: str,
+        stat_value: float,
+        line: float,
+        side: str,
+        source: str = "manual",
+    ) -> str:
+        """Attach a graded player-prop outcome to a persisted trace.
+
+        Idempotent on (trace_id, player_name, stat_type): re-attaching returns the
+        existing row's id, mirroring closing_lines semantics.
+
+        Args:
+            trace_id: Must reference an existing trace.
+            player_name: Canonical player name (matches input_snapshot.player_name).
+            stat_type: Stat graded (e.g. "points", "rebounds", "hits", "strikeouts").
+            stat_value: Actual stat the player produced.
+            line: Prop line at decision time.
+            side: "over" or "under" — the selection being graded.
+            source: How the outcome was obtained (e.g. "manual",
+                "api:espn_boxscore", "manual:espn_boxscore_YYYYMMDD").
+
+        Returns:
+            prop_outcome_id of the row (existing or newly inserted).
+
+        Raises:
+            ValueError: if trace_id does not exist or side is not over/under.
+        """
+        side_norm = side.lower().strip()
+        if side_norm not in ("over", "under"):
+            raise ValueError(f"side must be 'over' or 'under', got {side!r}")
+
+        row = self.conn.execute(
+            "SELECT trace_id FROM traces WHERE trace_id = ?", (trace_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"No trace found with trace_id={trace_id!r}")
+
+        existing = self.conn.execute(
+            """SELECT prop_outcome_id FROM prop_outcomes
+               WHERE trace_id = ? AND player_name = ? AND stat_type = ?""",
+            (trace_id, player_name, stat_type),
+        ).fetchone()
+        if existing:
+            return existing["prop_outcome_id"]
+
+        if stat_value == line:
+            result = "push"
+        elif (side_norm == "over" and stat_value > line) or (
+            side_norm == "under" and stat_value < line
+        ):
+            result = "win"
+        else:
+            result = "loss"
+
+        prop_outcome_id = uuid.uuid4().hex[:12]
+        self.conn.execute(
+            """INSERT INTO prop_outcomes
+               (prop_outcome_id, trace_id, player_name, stat_type,
+                stat_value, line, side, result, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                prop_outcome_id,
+                trace_id,
+                player_name,
+                stat_type,
+                float(stat_value),
+                float(line),
+                side_norm,
+                result,
+                source,
+            ),
+        )
+        self.conn.commit()
+        return prop_outcome_id
+
+    def get_prop_outcomes(self, trace_id: str) -> List[Dict[str, Any]]:
+        """Return all prop outcomes attached to a trace (may be empty)."""
+        rows = self.conn.execute(
+            """SELECT prop_outcome_id, trace_id, player_name, stat_type,
+                      stat_value, line, side, result, source, attached_at
+               FROM prop_outcomes WHERE trace_id = ? ORDER BY attached_at""",
+            (trace_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     # ------------------------------------------------------------------
     # Bet records (Phase 6d — CLV substrate)
@@ -504,16 +602,27 @@ class TraceStore:
             clauses.append("t.execution_mode = ?")
             params.append(execution_mode)
 
+        # "Outcome" for query purposes means either a game outcome OR one or
+        # more prop outcomes attached to the trace. EXISTS subqueries avoid
+        # the row-duplication that would come from LEFT JOINing prop_outcomes
+        # (which is 1:N per trace).
+        any_outcome_sql = (
+            "(EXISTS (SELECT 1 FROM outcomes WHERE outcomes.trace_id = t.trace_id) "
+            "OR EXISTS (SELECT 1 FROM prop_outcomes WHERE prop_outcomes.trace_id = t.trace_id))"
+        )
         if has_outcome is True:
-            clauses.append("o.outcome_id IS NOT NULL")
+            clauses.append(any_outcome_sql)
         elif has_outcome is False:
-            clauses.append("o.outcome_id IS NULL")
+            clauses.append(f"NOT {any_outcome_sql}")
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         params.append(limit)
 
+        # LEFT JOIN outcomes stays for the convenient _outcome attach (1:1 in
+        # practice). Prop outcomes are 1:N so we fetch them per-trace below.
         sql = f"""
-            SELECT t.full_trace, o.outcome_id, o.home_score, o.away_score, o.result
+            SELECT t.trace_id, t.full_trace,
+                   o.outcome_id, o.home_score, o.away_score, o.result
             FROM traces t
             LEFT JOIN outcomes o ON t.trace_id = o.trace_id
             {where}
@@ -532,6 +641,9 @@ class TraceStore:
                     "away_score": row["away_score"],
                     "result": row["result"],
                 }
+            prop_rows = self.get_prop_outcomes(row["trace_id"])
+            if prop_rows:
+                trace["_prop_outcomes"] = prop_rows
             results.append(trace)
         return results
 

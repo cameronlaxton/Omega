@@ -108,6 +108,14 @@ def _derive_matchup(kind: str, input_snap: Dict[str, Any], result: Dict[str, Any
         if home and away:
             return f"{away} @ {home}"
     if kind == "prop":
+        # Prefer the game pair when the prop request carried game identity so
+        # the trace can be resolved by the existing time-window + league query
+        # path and graded via fetch_outcomes_props.py. The prop descriptor
+        # stays available in full_trace.input_snapshot for human inspection.
+        home = input_snap.get("home_team") or ""
+        away = input_snap.get("away_team") or ""
+        if home and away:
+            return f"{away} @ {home}"
         player = input_snap.get("player_name") or ""
         prop = input_snap.get("prop_type") or ""
         line = input_snap.get("line")

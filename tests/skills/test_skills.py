@@ -27,6 +27,7 @@ from omega.core.models import (
     ProviderResult,
 )
 from omega.skills.base import SkillBase, SkillObservation
+from omega.trace.schema import CURRENT_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -157,20 +158,6 @@ class TestTraceRecorder:
             assert obs.ok is True
             assert obs.findings == []
 
-    def test_jsonl_fallback_on_sqlite_failure(self):
-        """When SQLite fails, trace falls back to JSONL."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "traces.jsonl"
-            with patch("omega.trace.store.TraceStore", side_effect=Exception("db error")), \
-                 patch("omega.skills.trace_recorder._resolve_log_path", return_value=path):
-                obs = self._skill().observe(trace=self._valid_trace())
-            assert obs.ok is True
-            lines = path.read_text().strip().splitlines()
-            assert len(lines) == 1
-            record = json.loads(lines[0])
-            assert record["schema_version"] == 1
-            assert record["trace_id"] == "abc-123"
-
     def test_missing_required_fields(self):
         trace = {"prompt": "test"}  # missing trace_id, run_id, timestamp
         obs = self._skill().observe(trace=trace)
@@ -178,40 +165,33 @@ class TestTraceRecorder:
         finding_keys = {f.split(":")[0] for f in obs.findings}
         assert "missing_field" in finding_keys
 
-    def test_write_failure_captured_as_finding(self):
-        """When both SQLite and JSONL fail, finding is emitted."""
-        with patch("omega.trace.store.TraceStore", side_effect=Exception("db error")), \
-             patch("omega.skills.trace_recorder._resolve_log_path") as mock_path:
-            mock_path.return_value = Path("/nonexistent/deep/path/traces.jsonl")
-            with patch("pathlib.Path.mkdir", side_effect=PermissionError("no access")):
-                obs = self._skill().observe(trace=self._valid_trace())
+    def test_sqlite_failure_is_loud(self):
+        """SQLite write failure surfaces as ok=False + write_failed finding —
+        no silent JSONL fallback. Phase 6h removes the unused fallback path."""
+        with patch("omega.trace.store.TraceStore", side_effect=Exception("db error")):
+            obs = self._skill().observe(trace=self._valid_trace())
         assert obs.ok is False
         assert any("write_failed" in f for f in obs.findings)
 
-    def test_schema_version_injected(self):
-        """schema_version is injected into the trace record before persistence."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "traces.jsonl"
-            with patch("omega.trace.store.TraceStore", side_effect=Exception("db error")), \
-                 patch("omega.skills.trace_recorder._resolve_log_path", return_value=path):
-                self._skill().observe(trace=self._valid_trace())
-            record = json.loads(path.read_text().strip())
-            assert "schema_version" in record
-            assert record["schema_version"] == 1
+    def test_schema_version_injected_into_persisted_record(self):
+        """schema_version is injected into the record before persistence."""
+        captured = {}
 
-    def test_multiple_writes_append(self):
-        """Multiple traces append to JSONL fallback."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "traces.jsonl"
-            with patch("omega.trace.store.TraceStore", side_effect=Exception("db error")), \
-                 patch("omega.skills.trace_recorder._resolve_log_path", return_value=path):
-                skill = self._skill()
-                t = self._valid_trace()
-                skill.observe(trace=t)
-                t2 = {**t, "trace_id": "abc-456"}
-                skill.observe(trace=t2)
-            lines = path.read_text().strip().splitlines()
-            assert len(lines) == 2
+        class _CapturingStore:
+            def __init__(self, db_path=None):
+                pass
+
+            def persist(self, record):
+                captured.update(record)
+                return record["trace_id"]
+
+            def close(self):
+                pass
+
+        with patch("omega.trace.store.TraceStore", _CapturingStore):
+            self._skill().observe(trace=self._valid_trace())
+        assert captured.get("schema_version") == CURRENT_VERSION
+        assert captured.get("trace_id") == "abc-123"
 
 
 # ---------------------------------------------------------------------------

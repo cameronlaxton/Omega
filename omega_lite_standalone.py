@@ -1706,6 +1706,12 @@ class PlayerPropRequest(BaseModel):
     game_context: Optional[Dict[str, Any]] = Field(default=None, description="Game-level context (opponent, pace, etc.)")
     n_iterations: int = Field(default=5000, ge=100, le=100000)
     seed: Optional[int] = Field(default=None, description="RNG seed for reproducible simulations")
+    # Game identity (optional but required for automated outcome grading via
+    # scripts/fetch_outcomes_props.py). Populate when the prop is tied to a
+    # specific game so the prop trace can be resolved to an ESPN box score.
+    home_team: Optional[str] = Field(default=None, description="Home team of the game the prop is on")
+    away_team: Optional[str] = Field(default=None, description="Away team of the game the prop is on")
+    game_date: Optional[str] = Field(default=None, description="ISO date (YYYY-MM-DD) of the game")
 
 
 # -- Response Sub-Models -----------------------------------------------------

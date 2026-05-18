@@ -1,0 +1,45 @@
+{
+  "trace": {
+    "trace_id": "sandbox-a7840d15-a7ea",
+    "session_id": "sess-20260517-p3k8",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-17T23:01:01.169085+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "player_name": "Paul Reed Jr",
+      "league": "NBA",
+      "prop_type": "pra",
+      "line": 13.5,
+      "odds_over": -140,
+      "odds_under": 105,
+      "player_context": {
+        "pra_mean": 20.5,
+        "pra_std": 5.2
+      }
+    },
+    "result": {
+      "player_name": "Paul Reed Jr",
+      "prop_type": "pra",
+      "line": 13.5,
+      "edge_over": 20.28,
+      "edge_under": -27.39,
+      "recommendation": "over",
+      "confidence_tier": "A"
+    },
+    "quality_gate": {
+      "aggregate_quality": 1.0,
+      "downgrades": []
+    }
+  },
+  "bet_record": null,
+  "clv_capture_instructions": {
+    "league": "NBA",
+    "event_date": "2026-05-17",
+    "matchup": "Detroit Pistons vs Cleveland Cavaliers Game 7",
+    "market": "player_prop:pra",
+    "selection_descriptor": "paul_reed_jr_pra_over_13.5",
+    "line_at_decision": 13.5,
+    "odds_at_decision": -140,
+    "book_at_decision": "betmgm"
+  }
+}

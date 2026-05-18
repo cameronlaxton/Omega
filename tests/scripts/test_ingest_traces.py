@@ -298,3 +298,70 @@ class TestDryRun:
         store = TraceStore(db_path=str(db_path))
         assert store.get_trace("sandbox-dry") is None  # not persisted
         store.close()
+
+
+# ---------------------------------------------------------------------------
+# Prop matchup derivation: with vs. without game identity
+# ---------------------------------------------------------------------------
+
+class TestPropMatchupDerivation:
+    """Phase 6h: prop traces should denormalize matchup to the game pair when
+    home_team/away_team are present on input_snapshot. This makes prop traces
+    discoverable by the existing time-window + league query path used by
+    scripts/fetch_outcomes_props.py.
+    """
+
+    def test_prop_with_game_identity_denormalizes_to_game_pair(self):
+        analyze_out = {
+            "trace_id": "sandbox-prop-g1",
+            "kind": "prop",
+            "ran_at": "2026-05-14T19:00:00Z",
+            "input_snapshot": {
+                "player_name": "Jayson Tatum",
+                "league": "NBA",
+                "prop_type": "pts",
+                "line": 27.5,
+                "home_team": "Miami Heat",
+                "away_team": "Boston Celtics",
+                "game_date": "2026-05-14",
+            },
+            "result": {"status": "success"},
+        }
+        adapted = ingest_traces._adapt_sandbox_trace(analyze_out)
+        assert adapted["matchup"] == "Boston Celtics @ Miami Heat"
+        # Prop descriptor still recoverable from input_snapshot inside full_trace
+        assert adapted["input_snapshot"]["player_name"] == "Jayson Tatum"
+        assert adapted["input_snapshot"]["prop_type"] == "pts"
+
+    def test_prop_without_game_identity_falls_back_to_descriptor(self):
+        """Legacy prop traces without home/away keep the old descriptor form."""
+        analyze_out = {
+            "trace_id": "sandbox-prop-legacy",
+            "kind": "prop",
+            "ran_at": "2026-05-14T19:00:00Z",
+            "input_snapshot": {
+                "player_name": "Jayson Tatum",
+                "league": "NBA",
+                "prop_type": "pts",
+                "line": 27.5,
+            },
+            "result": {},
+        }
+        adapted = ingest_traces._adapt_sandbox_trace(analyze_out)
+        assert adapted["matchup"] == "Jayson Tatum pts 27.5"
+
+    def test_game_kind_unchanged(self):
+        """Game traces continue to denormalize matchup as before."""
+        analyze_out = {
+            "trace_id": "sandbox-game-1",
+            "kind": "game",
+            "ran_at": "2026-05-14T19:00:00Z",
+            "input_snapshot": {
+                "home_team": "Lakers",
+                "away_team": "Celtics",
+                "league": "NBA",
+            },
+            "result": {},
+        }
+        adapted = ingest_traces._adapt_sandbox_trace(analyze_out)
+        assert adapted["matchup"] == "Celtics @ Lakers"

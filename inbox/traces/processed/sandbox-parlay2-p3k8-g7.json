@@ -1,0 +1,45 @@
+{
+  "trace": {
+    "trace_id": "sandbox-parlay2-p3k8-g7",
+    "session_id": "sess-20260517-p3k8",
+    "model_version": "omega-lite-v1",
+    "ran_at": "2026-05-17T23:07:49.204607+00:00",
+    "kind": "prop",
+    "input_snapshot": {
+      "type": "3-leg parlay",
+      "legs": [
+        {
+          "player": "Daniss Jenkins",
+          "prop": "3pm",
+          "line": 1.5,
+          "selection": "over"
+        },
+        {
+          "player": "Jarrett Allen",
+          "prop": "reb",
+          "line": 8.0,
+          "selection": "over"
+        },
+        {
+          "player": "Evan Mobley",
+          "prop": "reb",
+          "line": 8.0,
+          "selection": "over"
+        }
+      ],
+      "odds": 452,
+      "note": "User-constructed parlay; legs differ from straight suggestions (Jenkins 1.5 not 2.5, Allen/Mobley 8+ not 7.5/8.5)"
+    },
+    "result": {
+      "type": "parlay",
+      "recommendation": "user_placed",
+      "confidence_tier": null
+    },
+    "quality_gate": {
+      "aggregate_quality": 1.0,
+      "downgrades": []
+    }
+  },
+  "bet_record": null,
+  "clv_capture_instructions": null
+}

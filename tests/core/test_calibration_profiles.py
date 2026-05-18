@@ -229,6 +229,95 @@ class TestCalibrationFitter:
         assert preds[0] == pytest.approx(0.65, abs=0.01)
         assert outs[0] == 1
 
+    def test_extract_pairs_ignores_prop_only_traces(self):
+        """Prop traces have no _outcome — extract_pairs must skip them silently."""
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = [
+            {
+                "predictions": {"over_prob": 0.6, "under_prob": 0.4},
+                "_prop_outcomes": [{"side": "over", "result": "win"}],
+                # No _outcome — this is a prop-only trace
+            },
+            {"predictions": {"home_win_prob": 0.65}, "_outcome": {"result": "home_win"}},
+        ]
+        preds, outs = CalibrationFitter.extract_pairs(traces)
+        assert len(preds) == 1
+        assert preds[0] == pytest.approx(0.65, abs=0.01)
+
+    def test_extract_prop_pairs_over_win(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = [
+            {
+                "predictions": {"over_prob": 0.62, "under_prob": 0.38},
+                "_prop_outcomes": [{"side": "over", "result": "win"}],
+            }
+        ]
+        preds, outs = CalibrationFitter.extract_prop_pairs(traces)
+        assert preds == [pytest.approx(0.62, abs=1e-6)]
+        assert outs == [1]
+
+    def test_extract_prop_pairs_under_loss(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = [
+            {
+                "predictions": {"over_prob": 0.45, "under_prob": 0.55},
+                "_prop_outcomes": [{"side": "under", "result": "loss"}],
+            }
+        ]
+        preds, outs = CalibrationFitter.extract_prop_pairs(traces)
+        assert preds == [pytest.approx(0.55, abs=1e-6)]
+        assert outs == [0]
+
+    def test_extract_prop_pairs_skips_push(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = [
+            {
+                "predictions": {"over_prob": 0.5, "under_prob": 0.5},
+                "_prop_outcomes": [{"side": "over", "result": "push"}],
+            }
+        ]
+        preds, outs = CalibrationFitter.extract_prop_pairs(traces)
+        assert preds == []
+        assert outs == []
+
+    def test_extract_prop_pairs_multiple_props_per_trace(self):
+        """One trace can have many prop outcomes (e.g. pts, reb, ast)."""
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = [
+            {
+                "predictions": {"over_prob": 0.58, "under_prob": 0.42},
+                "_prop_outcomes": [
+                    {"side": "over", "result": "win"},
+                    {"side": "over", "result": "loss"},
+                    {"side": "under", "result": "win"},
+                ],
+            }
+        ]
+        preds, outs = CalibrationFitter.extract_prop_pairs(traces)
+        assert len(preds) == 3
+        assert outs == [1, 0, 1]
+
+    def test_extract_prop_pairs_normalizes_percentage_form(self):
+        """If over_prob comes in as 62 (percent) it must be coerced to 0.62."""
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = [
+            {
+                "predictions": {"over_prob": 62, "under_prob": 38},
+                "_prop_outcomes": [{"side": "over", "result": "win"}],
+            }
+        ]
+        preds, _ = CalibrationFitter.extract_prop_pairs(traces)
+        assert preds[0] == pytest.approx(0.62, abs=1e-6)
+
+    def test_extract_prop_pairs_skips_game_only_traces(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+        traces = [
+            {"predictions": {"home_win_prob": 0.6}, "_outcome": {"result": "home_win"}},
+        ]
+        preds, outs = CalibrationFitter.extract_prop_pairs(traces)
+        assert preds == []
+        assert outs == []
+
     def test_fit_isotonic_reproducible(self):
         from omega.core.calibration.fitter import CalibrationFitter
         traces = _make_graded_traces(n=100)
