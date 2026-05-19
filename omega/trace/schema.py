@@ -35,6 +35,15 @@ Schema version 6 (additive):
   (trace_id, player_name, stat_type). Source convention matches outcomes
   (e.g. "api:espn_boxscore", "manual:espn_boxscore_YYYYMMDD").
 
+Schema version 7 (additive + cleanup):
+- bet_records.session_id (nullable TEXT): mirrors traces.session_id so
+  session-scoped audits can join bet_records directly without going through
+  traces. Backfilled on migrate from traces via trace_id join.
+- BUG-3 cleanup: removes binary 1/0 game-outcome rows that the manual
+  backfill incorrectly attached to prop-kind traces. Predicate is narrow
+  (home_score IN (0,1) AND away_score IN (0,1) AND linked trace.kind='prop')
+  to avoid touching legitimate close-game outcomes.
+
 Design rules:
 - Full trace stored as JSON blob to decouple trace evolution from SQLite schema
 - Denormalized columns exist for querying only — the blob is source of truth
@@ -43,7 +52,11 @@ Design rules:
 """
 from __future__ import annotations
 
-CURRENT_VERSION = 6
+import logging
+
+CURRENT_VERSION = 7
+
+_logger = logging.getLogger("omega.trace.schema")
 
 SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS traces (
@@ -191,3 +204,50 @@ def apply_v4_migration(conn) -> None:
         conn.execute(V4_ADD_COLUMN_SQL)
     conn.execute(V4_INDEX_SQL)
     conn.commit()
+
+
+V7_ADD_COLUMN_SQL = "ALTER TABLE bet_records ADD COLUMN session_id TEXT"
+V7_INDEX_SQL = (
+    "CREATE INDEX IF NOT EXISTS idx_bet_records_session_id "
+    "ON bet_records(session_id)"
+)
+V7_BACKFILL_SQL = (
+    "UPDATE bet_records "
+    "SET session_id = (SELECT t.session_id FROM traces t "
+    "                  WHERE t.trace_id = bet_records.trace_id) "
+    "WHERE session_id IS NULL"
+)
+# BUG-3 cleanup: the manual outcome backfill dropped placeholder 1/0 game
+# scores onto prop-kind traces. The predicate is intentionally narrow — only
+# rows where BOTH scores are in {0,1} AND the linked trace blob declares
+# kind='prop' get removed. A legitimate 1-0 baseball game on a *game-kind*
+# trace is untouched.
+V7_CLEANUP_BAD_PROP_OUTCOMES_SQL = (
+    "DELETE FROM outcomes "
+    "WHERE home_score IN (0, 1) AND away_score IN (0, 1) "
+    "  AND trace_id IN ("
+    "    SELECT trace_id FROM traces "
+    "    WHERE json_extract(full_trace, '$.kind') = 'prop'"
+    "  )"
+)
+
+
+def apply_v7_migration(conn) -> int:
+    """Idempotently apply V7: bet_records.session_id + BUG-3 outcome cleanup.
+
+    Returns the number of bad outcome rows deleted (for audit logging).
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(bet_records)").fetchall()}
+    if "session_id" not in cols:
+        conn.execute(V7_ADD_COLUMN_SQL)
+    conn.execute(V7_INDEX_SQL)
+    conn.execute(V7_BACKFILL_SQL)
+    cur = conn.execute(V7_CLEANUP_BAD_PROP_OUTCOMES_SQL)
+    deleted = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
+    conn.commit()
+    if deleted:
+        _logger.warning(
+            "V7 cleanup removed %d binary-placeholder outcome rows attached to "
+            "prop-kind traces (BUG-3).", deleted,
+        )
+    return deleted

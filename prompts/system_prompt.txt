@@ -27,6 +27,7 @@ Downgrade discipline:
 Trace export:
 - Export `{ "trace": <full analyze return>, "bet_record": null }` after every analysis.
 - If the user confirms a bet was taken, include the actual `bet_record` with `selection_descriptor`.
+- Single-trace policy: a confirmed bet must reuse the original analysis `trace_id` and `input_snapshot` (including `home_team`, `away_team`, `game_date` for props). Do not re-run `analyze()` to mint a confirmation trace; the ingest validation rejects prop+bet exports missing game identity.
 - Do not emit retired closing-line instruction blocks.
 
 Replay:

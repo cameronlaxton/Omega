@@ -240,6 +240,21 @@ def _select_game_input(
     return selected
 
 
+def _filter_prop_quotes(
+    quotes: list[dict[str, Any]],
+    *,
+    player_name: str,
+    prop_type: str,
+) -> list[dict[str, Any]]:
+    """Return only the quotes matching the requested player and stat type."""
+    return [
+        q for q in quotes
+        if q.get("market_type") == "player_prop"
+        and q.get("stat_key") == prop_type
+        and _norm(q.get("player")) == _norm(player_name)
+    ]
+
+
 def _select_prop_input(
     quotes: Iterable[dict[str, Any]],
     *,
@@ -355,13 +370,19 @@ def resolve_odds(
 
     quotes = normalize_event_odds(event, league=league, prop_type_by_market=prop_type_by_market)
     if kind == "prop":
-        selected = _select_prop_input(
+        player_quotes = _filter_prop_quotes(
             quotes,
+            player_name=player_name or "",
+            prop_type=prop_type or "",
+        )
+        selected = _select_prop_input(
+            player_quotes,
             player_name=player_name or "",
             prop_type=prop_type or "",
             line=line,
         )
         request_patch = selected
+        output_quotes = player_quotes
     else:
         selected = _select_game_input(
             quotes,
@@ -369,6 +390,7 @@ def resolve_odds(
             away_team or event.away_team,
         )
         request_patch = {"odds": {**selected, "markets": quotes}}
+        output_quotes = quotes
 
     if not selected:
         skipped.append(
@@ -376,7 +398,7 @@ def resolve_odds(
             if not (line_shopping or all_books)
             else "no exact market match"
         )
-        return _unavailable(kind, league, bookmaker, skipped, client, quotes=quotes, event=event)
+        return _unavailable(kind, league, bookmaker, skipped, client, quotes=output_quotes, event=event)
 
     return {
         "status": "success",
@@ -390,7 +412,7 @@ def resolve_odds(
         "line_shopping": line_shopping,
         "all_books": all_books,
         "request_patch": request_patch,
-        "quotes": quotes,
+        "quotes": output_quotes,
         "skipped_reasons": skipped,
         "quota": dict(client.last_quota_headers),
     }
@@ -423,8 +445,13 @@ def _unavailable(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--kind", choices=["game", "prop"], required=True)
-    parser.add_argument("--league", required=True)
+    parser.add_argument(
+        "--list-prop-types",
+        action="store_true",
+        help="Print valid prop stat keys for --league (or all leagues) and exit. No API call is made.",
+    )
+    parser.add_argument("--kind", choices=["game", "prop"])
+    parser.add_argument("--league")
     parser.add_argument("--home-team")
     parser.add_argument("--away-team")
     parser.add_argument("--player-name")
@@ -437,6 +464,22 @@ def main() -> int:
     parser.add_argument("--line-shopping", action="store_true")
     parser.add_argument("--all-books", action="store_true")
     args = parser.parse_args()
+
+    if args.list_prop_types:
+        league_filter = args.league.upper() if args.league else None
+        leagues = [league_filter] if league_filter else sorted(PROP_MARKET_MAP)
+        out: dict[str, Any] = {}
+        for lg in leagues:
+            keys = PROP_MARKET_MAP.get(lg)
+            if keys:
+                out[lg] = sorted(keys)
+        print(json.dumps(out, indent=2))
+        return 0
+
+    if not args.kind:
+        parser.error("--kind is required unless --list-prop-types is specified")
+    if not args.league:
+        parser.error("--league is required unless --list-prop-types is specified")
 
     result = resolve_odds(
         kind=args.kind,

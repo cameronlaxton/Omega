@@ -29,6 +29,7 @@ from omega.trace.schema import (
     SCHEMA_V5,
     SCHEMA_V6,
     apply_v4_migration,
+    apply_v7_migration,
 )
 
 logger = logging.getLogger("omega.trace.store")
@@ -87,6 +88,13 @@ class TraceStore:
         # V6: prop_outcomes (player-prop grading; separate from outcomes)
         self.conn.executescript(SCHEMA_V6)
         self._record_version(6, "Phase 6h: prop_outcomes table for player-prop grading")
+
+        # V7: bet_records.session_id (mirrors traces.session_id) + BUG-3 cleanup
+        apply_v7_migration(self.conn)
+        self._record_version(
+            7,
+            "Phase 6i: bet_records.session_id column + BUG-3 prop-trace outcome cleanup",
+        )
 
     def _record_version(self, version: int, description: str) -> None:
         """Idempotently stamp a schema version into schema_versions."""
@@ -329,11 +337,16 @@ class TraceStore:
         if row is None:
             raise ValueError(f"No trace found with trace_id={bet.trace_id!r}")
 
+        # session_id is sourced from the linked trace so it stays consistent
+        # with traces.session_id without requiring callers to plumb it through
+        # the BetRecord model.
         self.conn.execute(
             """INSERT OR IGNORE INTO bet_records
                (bet_id, trace_id, book, market, selection, selection_descriptor,
-                line_taken, odds_taken, stake_units, decision_timestamp, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                line_taken, odds_taken, stake_units, decision_timestamp, status,
+                session_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       (SELECT session_id FROM traces WHERE trace_id = ?))""",
             (
                 bet.bet_id,
                 bet.trace_id,
@@ -346,6 +359,7 @@ class TraceStore:
                 bet.stake_units,
                 bet.decision_timestamp,
                 bet.status.value,
+                bet.trace_id,
             ),
         )
         self.conn.commit()
@@ -356,11 +370,59 @@ class TraceStore:
         rows = self.conn.execute(
             """SELECT bet_id, trace_id, book, market, selection, selection_descriptor,
                       line_taken, odds_taken, stake_units, decision_timestamp,
-                      status, recorded_at
+                      status, recorded_at, session_id
                FROM bet_records WHERE trace_id = ? ORDER BY recorded_at""",
             (trace_id,),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def query_ungraded_prop_bet_traces(
+        self,
+        league: Optional[str] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        limit: int = 1000,
+    ) -> List[Dict[str, Any]]:
+        """Return traces linked to pending player-prop bet_records that have no
+        prop_outcome yet.
+
+        Defense-in-depth for BUG-2 (docs/session_bugs_20260519.md): when the
+        agent minted a separate bet-confirmation trace, the bet's trace_id and
+        the analysis trace_id end up disjoint, so prop_outcomes attached to the
+        analysis trace never reach the bet. This method surfaces the bet's
+        trace_id directly so the grading pipeline can attach under it.
+
+        Filters mirror query_traces() for league/time so window semantics are
+        consistent. Returns full trace dicts; callers are expected to call
+        the same _prop_fields()/grading path as analysis-trace candidates.
+        """
+        clauses = [
+            "b.status = 'pending'",
+            "b.market LIKE 'player_prop:%'",
+            "NOT EXISTS (SELECT 1 FROM prop_outcomes p WHERE p.trace_id = b.trace_id)",
+        ]
+        params: list[Any] = []
+        if league:
+            clauses.append("t.league = ?")
+            params.append(league)
+        if start:
+            clauses.append("t.timestamp >= ?")
+            params.append(start)
+        if end:
+            clauses.append("t.timestamp <= ?")
+            params.append(end)
+        params.append(limit)
+
+        sql = f"""
+            SELECT DISTINCT t.trace_id, t.full_trace
+            FROM bet_records b
+            JOIN traces t ON t.trace_id = b.trace_id
+            WHERE {" AND ".join(clauses)}
+            ORDER BY t.timestamp DESC
+            LIMIT ?
+        """
+        rows = self.conn.execute(sql, params).fetchall()
+        return [json.loads(row["full_trace"]) for row in rows]
 
     def update_bet_status(self, bet_id: str, status: str) -> None:
         """Mark a bet won/lost/void/push after outcome resolves."""

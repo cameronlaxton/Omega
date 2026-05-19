@@ -73,9 +73,9 @@ class TestPickBestBet:
     def test_returns_none_for_empty_edges(self):
         assert _pick_best_bet([], bankroll=1000.0) is None
 
-    def test_selects_highest_absolute_edge(self):
-        weak = _edge(team="TeamA", edge_pct=4.0, tier="B")
-        strong = _edge(team="TeamB", edge_pct=15.0, tier="A", side="away")
+    def test_selects_highest_positive_ev_edge(self):
+        weak = _edge(team="TeamA", edge_pct=4.0, ev_pct=2.5, tier="B")
+        strong = _edge(team="TeamB", edge_pct=15.0, ev_pct=9.0, tier="A", side="away")
         result = _pick_best_bet([weak, strong], bankroll=1000.0)
         assert result is not None
         assert "TeamB" in result.selection
@@ -91,6 +91,19 @@ class TestPickBestBet:
         assert isinstance(result.recommended_units, float)
         assert isinstance(result.kelly_fraction, float)
         assert result.kelly_fraction >= 0.0
+
+    # Issue #3 regression: best_bet must never select a negative-EV side
+    def test_ignores_negative_ev_side(self):
+        neg = _edge(team="HomeTeam", side="home", edge_pct=-15.27, ev_pct=-33.29, tier="A")
+        pos = _edge(team="AwayTeam", side="away", edge_pct=8.0, ev_pct=5.0, tier="A")
+        result = _pick_best_bet([neg, pos], bankroll=1000.0)
+        assert result is not None
+        assert "AwayTeam" in result.selection
+
+    def test_returns_none_when_all_negative_ev(self):
+        neg_a = _edge(team="HomeTeam", edge_pct=-10.0, ev_pct=-20.0, tier="A")
+        neg_b = _edge(team="AwayTeam", side="away", edge_pct=-5.0, ev_pct=-8.0, tier="B")
+        assert _pick_best_bet([neg_a, neg_b], bankroll=1000.0) is None
 
 
 # ---------------------------------------------------------------------------
@@ -391,3 +404,87 @@ class TestResolveGameMarketOdds:
         home_odds, away_odds = _resolve_game_market_odds(odds, "Home", "Away")
         assert home_odds is None
         assert away_odds is None
+
+
+# ---------------------------------------------------------------------------
+# Issue #4 regression: EdgeDetail must serialize recommended_units
+# ---------------------------------------------------------------------------
+
+class TestEdgeDetailRecommendedUnits:
+    def test_edge_detail_has_recommended_units(self):
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=1000,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+            odds=OddsInput(moneyline_home=300, moneyline_away=-350),
+        )
+        resp = analyze_game(req, bankroll=1000.0)
+        assert resp.status == "success"
+        assert len(resp.edges) > 0
+        for edge in resp.edges:
+            assert isinstance(edge.recommended_units, float)
+
+    def test_edge_recommended_units_nonzero_for_actionable_edge(self):
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=1000,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+            # +300 home moneyline guarantees a large positive edge for home
+            odds=OddsInput(moneyline_home=300),
+        )
+        resp = analyze_game(req, bankroll=1000.0)
+        home_edge = next((e for e in resp.edges if e.side == "home"), None)
+        assert home_edge is not None
+        assert home_edge.confidence_tier in ("A", "B")
+        assert home_edge.recommended_units > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Issue #5 regression: run-line edge must use coverage prob, not win prob
+# ---------------------------------------------------------------------------
+
+class TestRunLineCoverageProb:
+    _MLB_HOME_CTX = {"off_rating": 4.5, "def_rating": 3.5}
+    _MLB_AWAY_CTX = {"off_rating": 3.0, "def_rating": 4.5}
+
+    def test_spread_edge_true_prob_is_coverage_not_win_prob(self):
+        req = GameAnalysisRequest(
+            home_team="TB",
+            away_team="BAL",
+            league="MLB",
+            n_iterations=5000,
+            seed=42,
+            home_context=self._MLB_HOME_CTX,
+            away_context=self._MLB_AWAY_CTX,
+            odds=OddsInput(spread_home=-1.5, spread_home_price=140),
+        )
+        resp = analyze_game(req, bankroll=1000.0)
+        assert resp.status == "success"
+        home_edge = next((e for e in resp.edges if e.side == "home"), None)
+        assert home_edge is not None
+        assert home_edge.spread_coverage_prob is not None
+        # Coverage prob must be meaningfully below outright win prob
+        assert home_edge.true_prob < resp.simulation.home_win_prob / 100.0 - 0.05
+
+    def test_moneyline_edge_has_no_spread_coverage_prob(self):
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=500,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+            odds=OddsInput(moneyline_home=-150, moneyline_away=130),
+        )
+        resp = analyze_game(req, bankroll=1000.0)
+        for edge in resp.edges:
+            assert edge.spread_coverage_prob is None

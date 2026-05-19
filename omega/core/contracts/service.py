@@ -208,6 +208,13 @@ def _build_edge(
     if abs(edge_pct) < 3.0:
         tier = "Pass"
 
+    stake = recommend_stake(
+        true_prob=calibrated_prob,
+        odds=market_odds,
+        bankroll=bankroll,
+        confidence_tier=tier,
+    )
+
     return EdgeDetail(
         side=side,
         team=team,
@@ -218,6 +225,7 @@ def _build_edge(
         ev_pct=round(ev_pct, 2),
         market_odds=market_odds,
         confidence_tier=tier,
+        recommended_units=stake["units"],
     )
 
 
@@ -226,10 +234,10 @@ def _pick_best_bet(
     bankroll: float,
 ) -> Optional[BetSlip]:
     """Select the strongest edge and build a BetSlip, if any edge qualifies."""
-    actionable = [e for e in edges if e.confidence_tier in ("A", "B")]
+    actionable = [e for e in edges if e.confidence_tier in ("A", "B") and e.ev_pct > 0]
     if not actionable:
         return None
-    best = max(actionable, key=lambda e: abs(e.edge_pct))
+    best = max(actionable, key=lambda e: e.ev_pct)
     stake = recommend_stake(
         true_prob=best.calibrated_prob,
         odds=best.market_odds,
@@ -303,6 +311,16 @@ def analyze_game(
     matchup = f"{request.away_team} @ {request.home_team}"
     archetype_name = get_archetype_name(request.league)
 
+    # Extract spread value so the engine can compute coverage probabilities.
+    # Done before the engine call; odds may be absent.
+    spread_value: Optional[float] = None
+    if request.odds:
+        _hsq = _market_quote(request.odds, "spread", request.home_team, "Home")
+        if _hsq and _hsq.line is not None:
+            spread_value = _hsq.line
+        elif request.odds.spread_home is not None:
+            spread_value = request.odds.spread_home
+
     try:
         sim_result = _engine.run_fast_game_simulation(
             home_team=request.home_team,
@@ -312,6 +330,7 @@ def analyze_game(
             home_context=request.home_context,
             away_context=request.away_context,
             seed=request.seed,
+            spread_home=spread_value,
         )
     except Exception as exc:
         logger.warning("Simulation error for %s: %s", matchup, exc)
@@ -363,20 +382,41 @@ def analyze_game(
             away_prob /= total_prob
             draw_prob_raw /= total_prob
 
-        cal_home = _calibrate(home_prob, league=request.league)
-        cal_away = _calibrate(away_prob, league=request.league)
-
         home_odds, away_odds = _resolve_game_market_odds(
             request.odds,
             request.home_team,
             request.away_team,
         )
 
+        # Detect whether the home market is a spread/run-line so we can
+        # substitute coverage probability for outright win probability.
+        home_spread_q = _market_quote(request.odds, "spread", request.home_team, "Home")
+        home_ml_q = _market_quote(request.odds, "moneyline", request.home_team, "Home")
+        is_home_spread_market = (home_spread_q is not None) or (
+            request.odds.spread_home is not None
+            and home_ml_q is None
+            and request.odds.moneyline_home is None
+        )
+
         if home_odds is not None:
-            edges.append(
-                _build_edge("home", request.home_team, home_prob, cal_home, home_odds, bankroll, request.n_iterations)
-            )
+            if is_home_spread_market and "home_cover_prob" in sim_result:
+                cover_prob = sim_result["home_cover_prob"] / 100.0
+                cal_cover = _calibrate(cover_prob, league=request.league)
+                home_edge = _build_edge(
+                    "home", request.home_team, cover_prob, cal_cover,
+                    home_odds, bankroll, request.n_iterations,
+                )
+                home_edge = home_edge.model_copy(update={"spread_coverage_prob": cover_prob})
+            else:
+                cal_home = _calibrate(home_prob, league=request.league)
+                home_edge = _build_edge(
+                    "home", request.home_team, home_prob, cal_home,
+                    home_odds, bankroll, request.n_iterations,
+                )
+            edges.append(home_edge)
+
         if away_odds is not None:
+            cal_away = _calibrate(away_prob, league=request.league)
             edges.append(
                 _build_edge("away", request.away_team, away_prob, cal_away, away_odds, bankroll, request.n_iterations)
             )

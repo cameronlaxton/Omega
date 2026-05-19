@@ -1,0 +1,19 @@
+{
+  "trace": {
+    "trace_id": "sandbox-c41a3ab9-1001",
+    "session_id": "sess-20260518-wcf1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-18T21:17:00.092163+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "prop": "Jalen Williams PTS Under 16.5"
+    },
+    "result": {
+      "edge_under": 23.12,
+      "odds": -125
+    },
+    "downgrades": []
+  },
+  "bet_record": null
+}

@@ -66,7 +66,19 @@
       "Bash(python -m pytest tests/ -x --timeout=60)",
       "Bash(python -m pytest tests/integrations/test_espn_boxscore.py tests/scripts/test_fetch_outcomes_props.py -v)",
       "Bash(python -m pytest tests/scripts/test_backfill_outcomes_manual.py -v)",
-      "Bash(python -m pytest tests/core/test_calibration_profiles.py -v)"
+      "Bash(python -m pytest tests/core/test_calibration_profiles.py -v)",
+      "Bash(python scripts/resolve_odds.py --list-prop-types --league MLB)",
+      "Bash(python -m pytest tests/core/test_contracts_service.py -x -q)",
+      "Bash(python -m pytest tests/ -x -q -k \"resolve_odds or prop\")",
+      "Bash(python -m pytest tests/trace/test_schema_v7.py -v)",
+      "Bash(python -m pytest tests/scripts/test_fetch_outcomes_props_bet_sweep.py tests/scripts/test_fetch_outcomes_props.py -v)",
+      "Bash(python -m pytest tests/scripts/test_ingest_traces.py tests/scripts/test_ingest_traces_validation.py -v)",
+      "Bash(cp omega_traces.db /tmp/omega_traces_test.db)",
+      "Bash(python -c \"from omega.trace.store import TraceStore; s = TraceStore\\(db_path='/tmp/omega_traces_test.db'\\); print\\('schema_version:', s.schema_version\\(\\)\\); cur = s.conn.execute\\('SELECT COUNT\\(*\\) AS c FROM bet_records WHERE session_id IS NOT NULL'\\); print\\('bet_records with session_id:', cur.fetchone\\(\\)['c']\\); cur = s.conn.execute\\('SELECT COUNT\\(*\\) AS c FROM bet_records WHERE session_id IS NULL'\\); print\\('bet_records still NULL:', cur.fetchone\\(\\)['c']\\); cur = s.conn.execute\\(\\\\\"SELECT COUNT\\(*\\) AS c FROM outcomes WHERE home_score IN \\(0,1\\) AND away_score IN \\(0,1\\) AND trace_id IN \\(SELECT trace_id FROM traces WHERE json_extract\\(full_trace, '\\\\$.kind'\\)='prop'\\)\\\\\"\\); print\\('remaining bad prop-game outcomes:', cur.fetchone\\(\\)['c']\\); s.close\\(\\)\")",
+      "Bash(cp omega_traces.db omega_traces_v7test.db)",
+      "Bash(python -m py_compile C:\\\\Users\\\\camer\\\\OneDrive\\\\Documents\\\\GitHub\\\\Omega\\\\scripts\\\\ingest_traces.py)",
+      "Read(//mnt/c/Users/camer/OneDrive/Documents/GitHub/**)",
+      "Bash(python -m py_compile scripts/ingest_traces.py)"
     ]
   }
 }

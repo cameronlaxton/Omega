@@ -163,6 +163,81 @@ def _load_payload(path: Path) -> Dict[str, Any]:
     raise ValueError("JSON must contain either 'trace' (export block) or top-level 'trace_id'+'kind'")
 
 
+# Drift thresholds for the BUG-5 consistency check. Anything beyond these
+# bounds between analysis-trace state and the user-confirmed bet is worth a
+# warning but not worth failing ingest — line moves and odds drift are
+# expected.
+_LINE_DRIFT_WARN = 1.0
+_ODDS_DRIFT_WARN_AMERICAN = 25
+
+
+def _validate_bet_with_prop_identity(
+    trace_id: str, kind: str, input_snap: Dict[str, Any], bet_block: Dict[str, Any]
+) -> None:
+    """BUG-4 defense: when a bet_record is attached to a prop trace, the trace
+    MUST carry home_team/away_team/game_date so fetch_outcomes_props.py can
+    resolve the box score.
+
+    Enforces the OMEGA_COWORK.md §6 single-trace policy at the ingest seam.
+    """
+    if kind != "prop":
+        return
+    missing = [
+        f for f in ("home_team", "away_team", "game_date")
+        if not input_snap.get(f)
+    ]
+    if missing:
+        raise ValueError(
+            f"prop trace {trace_id} carries a bet_record but is missing "
+            f"input_snapshot fields {missing}. Per OMEGA_COWORK.md §6 the "
+            "bet must attach to the original analysis trace (single-trace "
+            "policy); do not mint a stripped-down confirmation trace."
+        )
+
+
+def _warn_drift(
+    trace_id: str, input_snap: Dict[str, Any], bet_block: Dict[str, Any]
+) -> None:
+    """BUG-5 defense: log a warning when bet_record.line_taken or odds_taken
+    diverge meaningfully from the analysis trace's snapshot. Warnings only —
+    line/odds shopping is legitimate; we just want the audit trail."""
+    line_taken = bet_block.get("line_taken")
+    analysis_line = input_snap.get("line")
+    if line_taken is not None and analysis_line is not None:
+        try:
+            delta = abs(float(line_taken) - float(analysis_line))
+        except (TypeError, ValueError):
+            delta = 0.0
+        if delta > _LINE_DRIFT_WARN:
+            logger.warning(
+                "line drift trace=%s analysis_line=%s bet_line=%s delta=%.2f",
+                trace_id, analysis_line, line_taken, delta,
+            )
+
+    odds_taken = bet_block.get("odds_taken")
+    # The bet's selection_descriptor encodes the side (over/under). Compare
+    # against the matching snapshot odds when we can resolve it; otherwise
+    # compare to the closer of odds_over/odds_under.
+    if odds_taken is not None:
+        side_hint = str(bet_block.get("selection_descriptor", "")).lower()
+        if "under" in side_hint:
+            snap_odds = input_snap.get("odds_under")
+        elif "over" in side_hint:
+            snap_odds = input_snap.get("odds_over")
+        else:
+            snap_odds = None
+        if snap_odds is not None:
+            try:
+                odds_delta = abs(float(odds_taken) - float(snap_odds))
+            except (TypeError, ValueError):
+                odds_delta = 0.0
+            if odds_delta > _ODDS_DRIFT_WARN_AMERICAN:
+                logger.warning(
+                    "odds drift trace=%s analysis_odds=%s bet_odds=%s delta=%.0f",
+                    trace_id, snap_odds, odds_taken, odds_delta,
+                )
+
+
 def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> Tuple[str, Optional[str]]:
     """Ingest one file. Returns (trace_id, bet_id or None). Raises on error."""
     payload = _load_payload(path)
@@ -179,13 +254,23 @@ def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> Tuple[s
     if not adapted["timestamp"]:
         raise ValueError("trace.ran_at is missing or empty")
 
+    # Pre-persist validation: a bet_record on a prop trace must come with
+    # full game identity (BUG-4 defense). Warnings about line/odds drift
+    # (BUG-5) are emitted before we hand off to the store.
+    bet_block = payload.get("bet_record")
+    if isinstance(bet_block, dict):
+        _validate_bet_with_prop_identity(
+            adapted["trace_id"], adapted.get("kind", ""),
+            adapted.get("input_snapshot") or {}, bet_block,
+        )
+        _warn_drift(adapted["trace_id"], adapted.get("input_snapshot") or {}, bet_block)
+
     if dry_run:
         return (adapted["trace_id"], None)
 
     trace_id = store.persist(adapted)
 
     bet_id: Optional[str] = None
-    bet_block = payload.get("bet_record")
     if isinstance(bet_block, dict):
         # Phase 6h writes selection_descriptor directly on bet_record. Legacy
         # processed exports may still carry it on the retired sibling block.

@@ -60,16 +60,43 @@ class OddsInput(BaseModel):
 
 class GameAnalysisRequest(BaseModel):
     """Request to analyze a single game matchup.
-    Caller (e.g. agent) should supply home_context/away_context when available;
-    engine does not fetch live data."""
+
+    Caller must supply home_context and away_context (not game_context) with
+    archetype-specific keys. Missing or None context produces status='skipped'
+    with missing_requirements listing the exact keys needed.
+
+    Required keys by archetype (see omega/core/simulation/archetypes.py for full lists):
+      Basketball (NBA, NCAAB): off_rating, def_rating, pace
+      American football (NFL): off_rating, def_rating
+      Baseball (MLB): off_rating, def_rating
+      Hockey (NHL): off_rating, def_rating
+      Soccer (EPL, MLS, ...): off_rating, def_rating
+      Tennis (ATP, WTA): serve_win_pct, return_win_pct
+      Golf (PGA): strokes_gained_total
+      Combat sports (UFC, Boxing): win_pct, finish_rate
+      Esports (CS2): map_win_rate, recent_form
+    """
 
     home_team: str = Field(description="Home team name")
     away_team: str = Field(description="Away team name")
     league: str = Field(description="League identifier: NBA, NFL, MLB, NHL, NCAAB, EPL, UFC, ATP, PGA, CS2, ...")
     odds: Optional[OddsInput] = Field(default=None, description="Market odds (if available)")
     n_iterations: int = Field(default=1000, ge=100, le=100000, description="Simulation iterations")
-    home_context: Optional[Dict[str, Any]] = Field(default=None, description="Pre-fetched home team/player A stats")
-    away_context: Optional[Dict[str, Any]] = Field(default=None, description="Pre-fetched away team/player B stats")
+    home_context: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Pre-fetched home team stats. Required keys depend on league archetype "
+            "(e.g. off_rating, def_rating, pace for basketball). "
+            "Omitting or passing None returns status='skipped' with missing_requirements listing exact keys."
+        ),
+    )
+    away_context: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Pre-fetched away team stats. Same required keys as home_context. "
+            "Do not nest these under a 'game_context' key — use home_context and away_context directly."
+        ),
+    )
     seed: Optional[int] = Field(default=None, description="RNG seed for reproducible simulations")
 
 
@@ -133,6 +160,11 @@ class EdgeDetail(BaseModel):
     ev_pct: float = Field(description="Expected value percentage")
     market_odds: float = Field(description="American odds used for this side")
     confidence_tier: str = Field(description="A (high), B (medium), C (low), or Pass")
+    recommended_units: float = Field(default=0.0, description="Kelly-sized stake in units")
+    spread_coverage_prob: Optional[float] = Field(
+        default=None,
+        description="P(covers spread) when market is run-line/puck-line (0-1); None for moneyline edges",
+    )
 
 
 class BetSlip(BaseModel):

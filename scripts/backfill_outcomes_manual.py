@@ -246,7 +246,21 @@ def backfill_date(
             counts["prop_attached"] += 1
             logger.info("ATTACHED %s", desc)
 
-        else:  # game / research / analysis-only / unknown — all use game-pair grading
+        else:
+            # BUG-3 guard: only true game traces get game-shaped outcomes.
+            # Previously the `else` branch swept up "research / analysis-only
+            # / unknown" kinds, which let placeholder 1-0 scores land on prop
+            # traces missing a `kind` field. Skip anything that isn't
+            # explicitly kind='game'.
+            if kind != "game":
+                logger.warning(
+                    "SKIP %s: trace.kind=%r is not 'game'; refusing to attach "
+                    "a game-shaped outcome. Grade props via the prop branch or "
+                    "fix the trace's kind field.",
+                    tid, kind,
+                )
+                counts["skipped"] += 1
+                continue
             pair = _trace_game_pair(trace, league)
             if pair is None:
                 logger.warning("UNMATCHED game-kind trace %s (no team identity)", tid)
@@ -377,6 +391,15 @@ def backfill_single_trace(
         counts["prop_attached"] += 1
         logger.info("ATTACHED %s", desc)
     else:
+        # BUG-3 guard: see backfill_date(). Only explicit game traces get a
+        # game-shaped outcome attached.
+        if kind != "game":
+            logger.warning(
+                "SKIP %s: trace.kind=%r is not 'game'; refusing to attach a "
+                "game-shaped outcome.", trace_id, kind,
+            )
+            counts["skipped"] += 1
+            return counts
         desc = (
             f"GAME {trace_id} [{kind}]: {pair[1]} @ {pair[0]} {game_date} "
             f"=> {game.away_team} {game.away_score}, {game.home_team} {game.home_score}"

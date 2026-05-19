@@ -1,0 +1,98 @@
+{
+  "trace": {
+    "trace_id": "sandbox-4dbb52a4-3494",
+    "session_id": "sess-20260518-mlb1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-18T21:21:49.032960+00:00",
+    "kind": "game",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "Minnesota Twins",
+      "away_team": "Houston Astros",
+      "league": "MLB",
+      "odds": {
+        "spread_home": -1.5,
+        "spread_home_price": 110.0,
+        "moneyline_home": -115.0,
+        "moneyline_away": -105.0,
+        "over_under": 9.5,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 10000,
+      "home_context": {
+        "off_rating": 4.4,
+        "def_rating": 3.9,
+        "starter_era": 9.24
+      },
+      "away_context": {
+        "off_rating": 4.9,
+        "def_rating": 4.0,
+        "starter_era": 4.1
+      },
+      "seed": 585189459
+    },
+    "result": {
+      "matchup": "Houston Astros @ Minnesota Twins",
+      "league": "MLB",
+      "analyzed_at": "2026-05-18T21:21:48.837253",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 10000,
+        "home_win_prob": 16.4,
+        "away_win_prob": 75.7,
+        "draw_prob": 8.0,
+        "predicted_spread": -2.9,
+        "predicted_total": 12.5,
+        "predicted_home_score": 4.8,
+        "predicted_away_score": 7.7
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Minnesota Twins",
+          "true_prob": 0.1638,
+          "calibrated_prob": 0.1638,
+          "market_implied": 0.4762,
+          "edge_pct": -31.24,
+          "ev_pct": -65.59,
+          "market_odds": 110.0,
+          "confidence_tier": "A"
+        },
+        {
+          "side": "away",
+          "team": "Houston Astros",
+          "true_prob": 0.7562,
+          "calibrated_prob": 0.7562,
+          "market_implied": 0.5122,
+          "edge_pct": 24.4,
+          "ev_pct": 47.65,
+          "market_odds": -105.0,
+          "confidence_tier": "A"
+        }
+      ],
+      "best_bet": {
+        "selection": "Minnesota Twins home",
+        "odds": 110.0,
+        "edge_pct": -31.24,
+        "ev_pct": -65.59,
+        "confidence_tier": "A",
+        "recommended_units": 0.0,
+        "kelly_fraction": 0.0
+      },
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "calibration_method": "combined",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      }
+    },
+    "downgrades": []
+  },
+  "bet_record": null
+}

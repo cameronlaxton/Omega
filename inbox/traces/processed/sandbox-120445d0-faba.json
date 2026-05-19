@@ -1,0 +1,19 @@
+{
+  "trace": {
+    "trace_id": "sandbox-120445d0-faba",
+    "session_id": "sess-20260518-wcf1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-18T21:17:00.092163+00:00",
+    "kind": "game",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "prop": "OKC-SA Game: model_spread=-4.3 market=-6.5"
+    },
+    "result": {
+      "edge": null,
+      "note": "game_edges_empty"
+    },
+    "downgrades": []
+  },
+  "bet_record": null
+}

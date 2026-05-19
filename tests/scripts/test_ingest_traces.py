@@ -50,6 +50,9 @@ def _make_analyze_out(trace_id: str = "sandbox-abc123", kind: str = "prop") -> D
                 "line": 27.5,
                 "odds_over": -115,
                 "odds_under": -105,
+                "home_team": "Miami Heat",
+                "away_team": "Boston Celtics",
+                "game_date": "2026-05-14",
                 "seed": 42,
             },
             "result": {

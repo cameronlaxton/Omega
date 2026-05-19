@@ -207,6 +207,23 @@ def main(
                 limit=1000,
             )
 
+            # Defense-in-depth for BUG-2: when the agent minted a separate
+            # bet-confirmation trace, the bet's trace_id is disjoint from the
+            # analysis trace's id. Sweep pending prop bet_records so we grade
+            # via the bet's trace_id (which the report tooling joins on).
+            # Idempotent merge — skip ids already in `traces` to avoid
+            # double-processing.
+            seen_ids = {t.get("trace_id") for t in traces}
+            for bt in store.query_ungraded_prop_bet_traces(
+                league=league,
+                start=window_start,
+                end=window_end,
+                limit=1000,
+            ):
+                if bt.get("trace_id") not in seen_ids:
+                    traces.append(bt)
+                    seen_ids.add(bt.get("trace_id"))
+
             # Group prop traces for this game date by canonical (home, away)
             grouped: Dict[Tuple[str, str], List[Tuple[Dict[str, Any], Dict[str, Any]]]] = defaultdict(list)
             for trace in traces:

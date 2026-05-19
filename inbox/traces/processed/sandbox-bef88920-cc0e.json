@@ -1,0 +1,102 @@
+{
+  "trace": {
+    "trace_id": "sandbox-bef88920-cc0e",
+    "session_id": "sess-20260519-nba1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-19T19:32:02.385299+00:00",
+    "kind": "game",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "New York Knicks",
+      "away_team": "Cleveland Cavaliers",
+      "league": "NBA",
+      "odds": {
+        "spread_home": -6.5,
+        "spread_home_price": -115.0,
+        "moneyline_home": -250.0,
+        "moneyline_away": 200.0,
+        "over_under": 217.5,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 5000,
+      "home_context": {
+        "off_rating": 124.8,
+        "def_rating": 104.8,
+        "pace": 96.0
+      },
+      "away_context": {
+        "off_rating": 118.0,
+        "def_rating": 112.0,
+        "pace": 96.0
+      },
+      "seed": 1928071684
+    },
+    "result": {
+      "matchup": "Cleveland Cavaliers @ New York Knicks",
+      "league": "NBA",
+      "analyzed_at": "2026-05-19T19:32:02.385311",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 5000,
+        "home_win_prob": 54.3,
+        "away_win_prob": 45.7,
+        "draw_prob": 0.0,
+        "predicted_spread": 1.8,
+        "predicted_total": 215.1,
+        "predicted_home_score": 108.4,
+        "predicted_away_score": 106.6
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "New York Knicks",
+          "true_prob": 0.543,
+          "calibrated_prob": 0.543,
+          "market_implied": 0.5349,
+          "edge_pct": 0.81,
+          "ev_pct": 1.52,
+          "market_odds": -115.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 0.44,
+          "spread_coverage_prob": null
+        },
+        {
+          "side": "away",
+          "team": "Cleveland Cavaliers",
+          "true_prob": 0.457,
+          "calibrated_prob": 0.457,
+          "market_implied": 0.3333,
+          "edge_pct": 12.37,
+          "ev_pct": 37.1,
+          "market_odds": 200.0,
+          "confidence_tier": "A",
+          "recommended_units": 5.0,
+          "spread_coverage_prob": null
+        }
+      ],
+      "best_bet": {
+        "selection": "Cleveland Cavaliers away",
+        "odds": 200.0,
+        "edge_pct": 12.37,
+        "ev_pct": 37.1,
+        "confidence_tier": "A",
+        "recommended_units": 5.0,
+        "kelly_fraction": 0.0928
+      },
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "calibration_method": "combined",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "basketball"
+      }
+    },
+    "downgrades": []
+  },
+  "bet_record": null
+}

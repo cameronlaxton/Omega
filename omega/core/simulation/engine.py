@@ -149,7 +149,8 @@ def _validate_required_keys(
 ) -> List[str]:
     """Return list of missing requirement strings for a context dict."""
     if context is None:
-        return [f"{side}_context"]
+        # Enumerate all required keys so callers know exactly what to supply.
+        return [f"{side}_context.{k}" for k in required_keys]
     missing = []
     for key in required_keys:
         val = context.get(key)
@@ -172,6 +173,7 @@ def _build_team_score_result(
     home_context: Optional[Dict] = None,
     away_context: Optional[Dict] = None,
     archetype_name: Optional[str] = None,
+    spread_home: Optional[float] = None,
 ) -> Dict:
     """Build a standardized result dict from team score simulations."""
     home_wins = sum(1 for h, a in zip(home_scores, away_scores) if h > a)
@@ -199,6 +201,16 @@ def _build_team_score_result(
         "home_context": home_context or {},
         "away_context": away_context or {},
     }
+
+    if spread_home is not None:
+        # spread_home convention: negative = home favored (e.g., -1.5 → home must win by 2+).
+        # Home covers when margin > -spread_home; away covers when margin < -spread_home.
+        threshold = -spread_home
+        home_covers = sum(1 for h, a in zip(home_scores, away_scores) if h - a > threshold)
+        away_covers = sum(1 for h, a in zip(home_scores, away_scores) if h - a < threshold)
+        result["home_cover_prob"] = round(home_covers / n_iterations * 100, 1)
+        result["away_cover_prob"] = round(away_covers / n_iterations * 100, 1)
+
     return result
 
 
@@ -855,6 +867,7 @@ class OmegaSimulationEngine:
         home_context: Optional[Dict] = None,
         away_context: Optional[Dict] = None,
         seed: Optional[int] = None,
+        spread_home: Optional[float] = None,
     ) -> Dict:
         """
         Run a fast game simulation using team stats dispatched by sport archetype.
@@ -921,6 +934,7 @@ class OmegaSimulationEngine:
             home_context=home_context,
             away_context=away_context,
             archetype_name=archetype_name,
+            spread_home=spread_home,
         )
 
     def run_game_simulation(

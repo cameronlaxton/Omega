@@ -2,7 +2,7 @@
 name = "omega"
 version = "0.2.0"
 description = "Quantitative sports analytics: deterministic simulation, strategy registry, sandbox-runnable engine"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 dependencies = [
     # Deterministic engine only. No network, no API clients.
@@ -26,14 +26,14 @@ requires = ["setuptools>=75.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py310"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

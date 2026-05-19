@@ -55,8 +55,10 @@ def _make_prop_trace(
 
 
 class TestSchemaV6:
-    def test_current_version_is_six(self):
-        assert CURRENT_VERSION == 6
+    def test_v6_applied(self):
+        # V6 is still applied in the migration chain even after later
+        # versions land; the schema_version stamp must exist.
+        assert CURRENT_VERSION >= 6
 
     def test_prop_outcomes_table_exists(self):
         store = _tmp_store()
@@ -92,7 +94,9 @@ class TestSchemaV6:
 
     def test_schema_version_recorded(self):
         store = _tmp_store()
-        assert store.schema_version() == 6
+        # V6 is part of the applied chain; its description row must exist
+        # even after subsequent versions land.
+        assert store.schema_version() >= 6
         row = store.conn.execute(
             "SELECT description FROM schema_versions WHERE version = 6"
         ).fetchone()
