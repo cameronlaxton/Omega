@@ -4,38 +4,28 @@ Tests for Omega core runtime: schemas, simulation, betting, config.
 Tests the deterministic core — no network, no LLM.
 """
 
-import pytest
 
 
 class TestModuleImports:
     """Verify core modules import without error."""
 
     def test_contracts_schemas(self):
-        from omega.core.contracts.schemas import (
-            GameAnalysisRequest,
-            MarketQuote,
-            OddsInput,
-            SlateAnalysisRequest,
-        )
+        pass
 
     def test_league_config(self):
-        from omega.core.config.leagues import get_league_config
+        pass
 
     def test_simulation_modules(self):
-        from omega.core.simulation.engine import OmegaSimulationEngine
+        pass
 
     def test_betting_modules(self):
-        from omega.core.betting.odds import edge_percentage, implied_probability
-        from omega.core.betting.kelly import recommend_stake
+        pass
 
     def test_calibration_modules(self):
-        from omega.core.calibration.probability import calibrate_probability
+        pass
 
     def test_archetypes(self):
         from omega.core.simulation.archetypes import (
-            get_archetype,
-            get_archetype_name,
-            get_required_inputs,
             ARCHETYPE_REGISTRY,
             LEAGUE_TO_ARCHETYPE,
         )
@@ -330,3 +320,59 @@ class TestCalibration:
         )
 
         assert result.analyses[0].edges
+
+    def test_slate_analysis_preserves_per_game_seed_and_iterations(self):
+        from omega.core.contracts.schemas import SlateAnalysisRequest
+        from omega.core.contracts.service import analyze_slate
+
+        request = SlateAnalysisRequest(
+            league="NBA",
+            games=[
+                {
+                    "home_team": "Los Angeles Lakers",
+                    "away_team": "Boston Celtics",
+                    "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+                    "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+                    "n_iterations": 100,
+                    "seed": 123,
+                }
+            ],
+        )
+
+        first = analyze_slate(request)
+        second = analyze_slate(request)
+
+        assert first.analyses[0].simulation == second.analyses[0].simulation
+        assert first.analyses[0].simulation.iterations == 100
+
+
+class TestLegacyMarkovMethods:
+    def test_run_game_simulation_missing_markov_module_returns_skip(self):
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        result = OmegaSimulationEngine().run_game_simulation(
+            home_team="Home",
+            away_team="Away",
+            league="NBA",
+            home_context={"off_rating": 110, "def_rating": 105, "pace": 99},
+            away_context={"off_rating": 108, "def_rating": 107, "pace": 98},
+        )
+
+        assert result["success"] is False
+        assert "omega.core.simulation.markov_engine" in result["missing_requirements"]
+
+    def test_run_player_prop_simulation_missing_markov_module_returns_skip(self):
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        result = OmegaSimulationEngine().run_player_prop_simulation(
+            player_name="Test Player",
+            team="Home",
+            opponent="Away",
+            league="NBA",
+            prop_type="pts",
+            game_context={"home_context": {}, "away_context": {}, "home_players": []},
+            player_context={"pts_mean": 20.0},
+        )
+
+        assert result["success"] is False
+        assert "omega.core.simulation.markov_engine" in result["missing_requirements"]

@@ -7,15 +7,12 @@ bankroll risk across different confidence levels.
 
 from __future__ import annotations
 
-from typing import Dict
-
 from omega.core.betting.odds import american_to_decimal
-
 
 # Fraction of full Kelly to use per confidence tier.
 # Full Kelly is mathematically optimal but volatile;
 # fractional Kelly trades expected growth for lower variance.
-_TIER_MULTIPLIERS: Dict[str, float] = {
+_TIER_MULTIPLIERS: dict[str, float] = {
     "A": 0.50,   # High confidence: half Kelly
     "B": 0.25,   # Medium confidence: quarter Kelly
     "C": 0.10,   # Low confidence: tenth Kelly
@@ -51,7 +48,7 @@ def recommend_stake(
     odds: float,
     bankroll: float,
     confidence_tier: str = "B",
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Recommend a stake size using fractional Kelly.
 
     Args:

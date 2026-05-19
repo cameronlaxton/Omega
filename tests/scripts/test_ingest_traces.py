@@ -12,9 +12,8 @@ from __future__ import annotations
 
 import json
 import sys
-import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -27,15 +26,15 @@ _SCRIPTS = _REPO_ROOT / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from omega.trace.store import TraceStore  # noqa: E402
 import ingest_traces  # type: ignore  # noqa: E402
 
+from omega.trace.store import TraceStore  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_analyze_out(trace_id: str = "sandbox-abc123", kind: str = "prop") -> Dict[str, Any]:
+def _make_analyze_out(trace_id: str = "sandbox-abc123", kind: str = "prop") -> dict[str, Any]:
     """A minimal but realistic core analyze() return value."""
     if kind == "prop":
         return {
@@ -105,7 +104,7 @@ def _make_analyze_out(trace_id: str = "sandbox-abc123", kind: str = "prop") -> D
     }
 
 
-def _make_export_block(trace_id: str = "sandbox-abc123", with_bet: bool = True) -> Dict[str, Any]:
+def _make_export_block(trace_id: str = "sandbox-abc123", with_bet: bool = True) -> dict[str, Any]:
     block = {
         "trace": _make_analyze_out(trace_id=trace_id, kind="prop"),
         "bet_record": None,
@@ -124,7 +123,7 @@ def _make_export_block(trace_id: str = "sandbox-abc123", with_bet: bool = True) 
     return block
 
 
-def _make_legacy_export_block(trace_id: str = "sandbox-legacy") -> Dict[str, Any]:
+def _make_legacy_export_block(trace_id: str = "sandbox-legacy") -> dict[str, Any]:
     block = _make_export_block(trace_id=trace_id, with_bet=True)
     block["bet_record"].pop("selection_descriptor")
     block["clv_capture_instructions"] = {
@@ -142,7 +141,7 @@ def workspace(tmp_path: Path):
     yield inbox, db_path
 
 
-def _write_file(inbox: Path, name: str, payload: Dict[str, Any]) -> Path:
+def _write_file(inbox: Path, name: str, payload: dict[str, Any]) -> Path:
     p = inbox / name
     p.write_text(json.dumps(payload), encoding="utf-8")
     return p

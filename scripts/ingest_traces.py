@@ -30,7 +30,7 @@ import sys
 import traceback
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 # Allow running as a script from repo root
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -40,7 +40,6 @@ if str(_REPO_ROOT) not in sys.path:
 from omega.trace.bet_record import BetRecord  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
-
 logger = logging.getLogger("ingest_traces")
 
 
@@ -48,7 +47,7 @@ logger = logging.getLogger("ingest_traces")
 # Adapters: engine analyze() output → TraceStore.persist() shape
 # ---------------------------------------------------------------------------
 
-def _adapt_sandbox_trace(analyze_out: Dict[str, Any]) -> Dict[str, Any]:
+def _adapt_sandbox_trace(analyze_out: dict[str, Any]) -> dict[str, Any]:
     """Map an `analyze()` return value to the TraceStore persist schema.
 
     TraceStore.persist requires: trace_id, run_id, timestamp. It uses other
@@ -101,7 +100,7 @@ def _adapt_sandbox_trace(analyze_out: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _derive_matchup(kind: str, input_snap: Dict[str, Any], result: Dict[str, Any]) -> str:
+def _derive_matchup(kind: str, input_snap: dict[str, Any], result: dict[str, Any]) -> str:
     if kind == "game":
         home = input_snap.get("home_team") or ""
         away = input_snap.get("away_team") or ""
@@ -125,12 +124,12 @@ def _derive_matchup(kind: str, input_snap: Dict[str, Any], result: Dict[str, Any
     return result.get("matchup", "") or ""
 
 
-def _derive_prompt(kind: str, input_snap: Dict[str, Any], league: str, matchup: str) -> str:
+def _derive_prompt(kind: str, input_snap: dict[str, Any], league: str, matchup: str) -> str:
     base = f"{league} {kind}: {matchup}".strip()
     return base or json.dumps(input_snap, default=str)[:200]
 
 
-def _prop_odds_snapshot(input_snap: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _prop_odds_snapshot(input_snap: dict[str, Any]) -> dict[str, Any] | None:
     over = input_snap.get("odds_over")
     under = input_snap.get("odds_under")
     if over is None and under is None:
@@ -142,7 +141,7 @@ def _prop_odds_snapshot(input_snap: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 # File-level ingest
 # ---------------------------------------------------------------------------
 
-def _load_payload(path: Path) -> Dict[str, Any]:
+def _load_payload(path: Path) -> dict[str, Any]:
     """Parse the JSON file and return the export-block dict.
 
     Accepts two shapes:
@@ -172,7 +171,7 @@ _ODDS_DRIFT_WARN_AMERICAN = 25
 
 
 def _validate_bet_with_prop_identity(
-    trace_id: str, kind: str, input_snap: Dict[str, Any], bet_block: Dict[str, Any]
+    trace_id: str, kind: str, input_snap: dict[str, Any], bet_block: dict[str, Any]
 ) -> None:
     """BUG-4 defense: when a bet_record is attached to a prop trace, the trace
     MUST carry home_team/away_team/game_date so fetch_outcomes_props.py can
@@ -196,7 +195,7 @@ def _validate_bet_with_prop_identity(
 
 
 def _warn_drift(
-    trace_id: str, input_snap: Dict[str, Any], bet_block: Dict[str, Any]
+    trace_id: str, input_snap: dict[str, Any], bet_block: dict[str, Any]
 ) -> None:
     """BUG-5 defense: log a warning when bet_record.line_taken or odds_taken
     diverge meaningfully from the analysis trace's snapshot. Warnings only —
@@ -238,7 +237,7 @@ def _warn_drift(
                 )
 
 
-def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> Tuple[str, Optional[str]]:
+def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> tuple[str, str | None]:
     """Ingest one file. Returns (trace_id, bet_id or None). Raises on error."""
     payload = _load_payload(path)
     analyze_out = payload["trace"]
@@ -270,7 +269,7 @@ def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> Tuple[s
 
     trace_id = store.persist(adapted)
 
-    bet_id: Optional[str] = None
+    bet_id: str | None = None
     if isinstance(bet_block, dict):
         # Phase 6h writes selection_descriptor directly on bet_record. Legacy
         # processed exports may still carry it on the retired sibling block.

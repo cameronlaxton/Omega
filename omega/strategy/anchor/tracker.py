@@ -15,10 +15,10 @@ import json
 import logging
 import sqlite3
 import uuid
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 logger = logging.getLogger("omega.strategy.anchor.tracker")
 
@@ -66,8 +66,8 @@ class AnchorBetLeg:
     stat: str             # pts, reb, ast, 3pm, stl, blk
     threshold: float      # e.g. 20 for "20+ points"
     hit_rate: float       # empirical at scan time
-    odds_over: Optional[float] = None   # American odds
-    result: Optional[str] = None        # "HIT", "MISS", None
+    odds_over: float | None = None   # American odds
+    result: str | None = None        # "HIT", "MISS", None
 
 
 @dataclass
@@ -77,22 +77,22 @@ class AnchorBetRecord:
     bet_id: str
     scan_date: str                    # ISO date: "2026-04-13"
     game: str                         # "Thunder @ Clippers"
-    legs: List[AnchorBetLeg]
+    legs: list[AnchorBetLeg]
     odds_taken: float                 # decimal odds at bet time
     league: str = "NBA"
     sportsbook: str = "BetMGM"
-    odds_close: Optional[float] = None  # decimal odds at close
-    modeled_true_p: Optional[float] = None
+    odds_close: float | None = None  # decimal odds at close
+    modeled_true_p: float | None = None
     result: Literal["WIN", "LOSS", "PUSH", "PENDING"] = "PENDING"
-    clv_pct: Optional[float] = None
-    trace_id: Optional[str] = None
-    notes: Optional[str] = None
+    clv_pct: float | None = None
+    trace_id: str | None = None
+    notes: str | None = None
 
     @staticmethod
     def generate_id() -> str:
         return uuid.uuid4().hex[:12]
 
-    def compute_clv(self) -> Optional[float]:
+    def compute_clv(self) -> float | None:
         """Compute closing line value if close odds are available.
 
         CLV% = (implied_prob_close - implied_prob_taken) * 100
@@ -115,12 +115,12 @@ class AnchorBetRecord:
 class AnchorBetTracker:
     """SQLite-backed anchor bet persistence and retrieval."""
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         if db_path is None:
             repo_root = Path(__file__).parent.parent.parent.parent
             db_path = str(repo_root / _DEFAULT_DB_PATH)
         self._db_path = db_path
-        self._conn: Optional[sqlite3.Connection] = None
+        self._conn: sqlite3.Connection | None = None
         self._ensure_schema()
 
     @property
@@ -179,8 +179,8 @@ class AnchorBetTracker:
         self,
         bet_id: str,
         result: Literal["WIN", "LOSS", "PUSH"],
-        odds_close: Optional[float] = None,
-        notes: Optional[str] = None,
+        odds_close: float | None = None,
+        notes: str | None = None,
     ) -> None:
         """Attach an outcome to a pending bet and compute CLV."""
         row = self.conn.execute(
@@ -195,7 +195,7 @@ class AnchorBetTracker:
             if odds_taken > 1.0:
                 clv_pct = round((1.0 / odds_close - 1.0 / odds_taken) * 100.0, 2)
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         self.conn.execute(
             """UPDATE anchor_bets
                SET result = ?, odds_close = ?, clv_pct = ?, graded_at = ?, notes = COALESCE(?, notes)
@@ -209,7 +209,7 @@ class AnchorBetTracker:
     # Read
     # ------------------------------------------------------------------
 
-    def get_bet(self, bet_id: str) -> Optional[AnchorBetRecord]:
+    def get_bet(self, bet_id: str) -> AnchorBetRecord | None:
         """Retrieve a single bet by ID."""
         row = self.conn.execute(
             "SELECT * FROM anchor_bets WHERE bet_id = ?", (bet_id,)
@@ -218,15 +218,15 @@ class AnchorBetTracker:
 
     def query_bets(
         self,
-        league: Optional[str] = None,
-        result: Optional[str] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
+        league: str | None = None,
+        result: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
         limit: int = 100,
-    ) -> List[AnchorBetRecord]:
+    ) -> list[AnchorBetRecord]:
         """Query bets with optional filters."""
-        clauses: List[str] = []
-        params: List[Any] = []
+        clauses: list[str] = []
+        params: list[Any] = []
 
         if league:
             clauses.append("league = ?")
@@ -255,7 +255,7 @@ class AnchorBetTracker:
     # Analytics
     # ------------------------------------------------------------------
 
-    def summary_stats(self, league: Optional[str] = None) -> Dict[str, Any]:
+    def summary_stats(self, league: str | None = None) -> dict[str, Any]:
         """Compute summary statistics for graded bets."""
         bets = self.query_bets(league=league, limit=10000)
         graded = [b for b in bets if b.result in ("WIN", "LOSS", "PUSH")]

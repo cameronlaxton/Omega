@@ -19,17 +19,17 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from datetime import UTC, datetime
+from typing import Any
 
-from omega.core.simulation.engine import OmegaSimulationEngine
+from omega.core.betting.kelly import recommend_stake
 from omega.core.betting.odds import (
     american_to_decimal,
     edge_percentage,
     implied_probability,
 )
-from omega.core.betting.kelly import recommend_stake
 from omega.core.calibration.probability import apply_calibration
+from omega.core.simulation.engine import OmegaSimulationEngine
 from omega.strategy.artifacts import FrozenArtifact, compat_dict_to_artifact
 from omega.strategy.models import BacktestResult, StrategyEntry
 
@@ -68,7 +68,7 @@ class BacktestEngine:
     def run(
         self,
         strategy: StrategyEntry,
-        games: Union[List[FrozenArtifact], List[HistoricalGame], List[Dict[str, Any]]],
+        games: list[FrozenArtifact] | list[HistoricalGame] | list[dict[str, Any]],
     ) -> BacktestResult:
         """Run a full backtest.
 
@@ -83,15 +83,15 @@ class BacktestEngine:
         5. Track P&L
         """
         run_id = f"bt-{uuid.uuid4().hex[:8]}"
-        started_at = datetime.now(timezone.utc).isoformat()
+        started_at = datetime.now(UTC).isoformat()
 
         # Normalize inputs to FrozenArtifact
         artifacts = self._normalize_inputs(games)
 
-        bets: List[Dict[str, Any]] = []
-        by_league: Dict[str, Dict[str, Any]] = {}
-        by_market: Dict[str, Dict[str, Any]] = {}
-        trace_ids: List[str] = []
+        bets: list[dict[str, Any]] = []
+        by_league: dict[str, dict[str, Any]] = {}
+        by_market: dict[str, dict[str, Any]] = {}
+        trace_ids: list[str] = []
 
         for artifact in artifacts:
             game_bets = self._process_artifact(strategy, artifact)
@@ -155,7 +155,7 @@ class BacktestEngine:
         win_rate = wins / len(bets) if bets else 0.0
 
         # Pass/fail criteria
-        rejection_reasons: List[str] = []
+        rejection_reasons: list[str] = []
         if len(bets) < 20:
             rejection_reasons.append(f"Insufficient sample: {len(bets)} bets (need 20+)")
         if roi < -5.0:
@@ -174,7 +174,7 @@ class BacktestEngine:
             strategy_version=strategy.version,
             run_id=run_id,
             started_at=started_at,
-            completed_at=datetime.now(timezone.utc).isoformat(),
+            completed_at=datetime.now(UTC).isoformat(),
             total_games=len(artifacts),
             games_with_edge=sum(1 for b in bets if b["edge_pct"] > 0),
             total_bets_placed=len(bets),
@@ -199,29 +199,29 @@ class BacktestEngine:
 
     @staticmethod
     def _normalize_inputs(
-        games: Union[List[FrozenArtifact], List[Dict[str, Any]]],
-    ) -> List[FrozenArtifact]:
+        games: list[FrozenArtifact] | list[HistoricalGame] | list[dict[str, Any]],
+    ) -> list[FrozenArtifact]:
         """Convert mixed inputs to a uniform list of FrozenArtifacts."""
         if not games:
             return []
         if isinstance(games[0], FrozenArtifact):
             return games  # type: ignore[return-value]
-        return [compat_dict_to_artifact(g) for g in games]
+        return [compat_dict_to_artifact(dict(g)) for g in games]
 
     def _process_game(
         self,
         strategy: StrategyEntry,
         game: HistoricalGame,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Legacy entry point — delegates to _process_artifact via shim."""
-        artifact = compat_dict_to_artifact(game)
+        artifact = compat_dict_to_artifact(dict(game))
         return self._process_artifact(strategy, artifact)
 
     def _process_artifact(
         self,
         strategy: StrategyEntry,
         artifact: FrozenArtifact,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Process one artifact: simulate, evaluate, decide, grade."""
         home_team = artifact.home_team
         away_team = artifact.away_team
@@ -233,7 +233,9 @@ class BacktestEngine:
         closing = artifact.closing_odds or odds
 
         # Check league filter
-        if strategy.leagues and league.upper() not in [l.upper() for l in strategy.leagues]:
+        if strategy.leagues and league.upper() not in [
+            strategy_league.upper() for strategy_league in strategy.leagues
+        ]:
             return []
 
         # Simulate
@@ -300,10 +302,10 @@ class BacktestEngine:
         model_prob: float,
         market_odds: float,
         strategy: StrategyEntry,
-        outcome: Dict[str, Any],
-        closing_odds: Optional[float],
+        outcome: dict[str, Any],
+        closing_odds: float | None,
         market_type: str = "moneyline",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Evaluate a single side for edge, decide bet, grade against outcome."""
         impl_prob = implied_probability(market_odds)
         edge = edge_percentage(model_prob, impl_prob)

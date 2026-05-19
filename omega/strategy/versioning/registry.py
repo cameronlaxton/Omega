@@ -17,9 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from omega.strategy.models import (
     BacktestResult,
@@ -35,8 +33,8 @@ logger = logging.getLogger("omega.strategy.registry")
 class StrategyRegistry:
     """In-memory strategy registry with optional JSON file persistence."""
 
-    def __init__(self, storage_path: Optional[str] = None) -> None:
-        self._strategies: Dict[str, StrategyEntry] = {}  # key: "{id}:v{version}"
+    def __init__(self, storage_path: str | None = None) -> None:
+        self._strategies: dict[str, StrategyEntry] = {}  # key: "{id}:v{version}"
         self._storage_path = storage_path
         if storage_path and os.path.exists(storage_path):
             self._load_from_file(storage_path)
@@ -51,11 +49,11 @@ class StrategyRegistry:
         name: str,
         description: str = "",
         strategy_type: StrategyType = StrategyType.GAME_EDGE,
-        leagues: Optional[List[str]] = None,
-        markets: Optional[List[str]] = None,
+        leagues: list[str] | None = None,
+        markets: list[str] | None = None,
         edge_threshold: float = 0.03,
-        confidence_tiers: Optional[List[str]] = None,
-        params: Optional[Dict] = None,
+        confidence_tiers: list[str] | None = None,
+        params: dict | None = None,
         created_by: str = "system",
     ) -> StrategyEntry:
         """Register a new strategy or a new version of an existing one.
@@ -92,7 +90,7 @@ class StrategyRegistry:
     # Querying
     # ------------------------------------------------------------------
 
-    def get(self, strategy_id: str, version: Optional[int] = None) -> Optional[StrategyEntry]:
+    def get(self, strategy_id: str, version: int | None = None) -> StrategyEntry | None:
         """Get a specific strategy. If version is None, returns latest."""
         if version is not None:
             return self._strategies.get(self._key(strategy_id, version))
@@ -102,7 +100,7 @@ class StrategyRegistry:
             return None
         return self._strategies[self._key(strategy_id, max(versions))]
 
-    def get_production(self, strategy_id: str) -> Optional[StrategyEntry]:
+    def get_production(self, strategy_id: str) -> StrategyEntry | None:
         """Get the production version of a strategy (if any)."""
         for entry in self._strategies.values():
             if entry.strategy_id == strategy_id and entry.status == StrategyStatus.PRODUCTION:
@@ -111,10 +109,10 @@ class StrategyRegistry:
 
     def list_all(
         self,
-        status: Optional[StrategyStatus] = None,
-        strategy_type: Optional[StrategyType] = None,
-        league: Optional[str] = None,
-    ) -> List[StrategyEntry]:
+        status: StrategyStatus | None = None,
+        strategy_type: StrategyType | None = None,
+        league: str | None = None,
+    ) -> list[StrategyEntry]:
         """List strategies with optional filters."""
         results = list(self._strategies.values())
 
@@ -124,11 +122,15 @@ class StrategyRegistry:
             results = [s for s in results if s.strategy_type == strategy_type]
         if league is not None:
             league_upper = league.upper()
-            results = [s for s in results if league_upper in [l.upper() for l in s.leagues]]
+            results = [
+                s
+                for s in results
+                if league_upper in [strategy_league.upper() for strategy_league in s.leagues]
+            ]
 
         return sorted(results, key=lambda s: (s.strategy_id, s.version))
 
-    def list_production(self) -> List[StrategyEntry]:
+    def list_production(self) -> list[StrategyEntry]:
         """List all strategies currently in production."""
         return self.list_all(status=StrategyStatus.PRODUCTION)
 
@@ -175,7 +177,7 @@ class StrategyRegistry:
         version: int,
         reason: str = "Passed backtest criteria",
         decided_by: str = "system",
-        backtest_run_id: Optional[str] = None,
+        backtest_run_id: str | None = None,
     ) -> StrategyEntry:
         """Promote a strategy to production.
 
@@ -262,7 +264,7 @@ class StrategyRegistry:
     def _key(strategy_id: str, version: int) -> str:
         return f"{strategy_id}:v{version}"
 
-    def _versions_of(self, strategy_id: str) -> List[int]:
+    def _versions_of(self, strategy_id: str) -> list[int]:
         return [
             e.version for e in self._strategies.values()
             if e.strategy_id == strategy_id

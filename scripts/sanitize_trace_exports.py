@@ -12,7 +12,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 RETIRED_KEYS = {"clv_capture_instructions"}
 
 

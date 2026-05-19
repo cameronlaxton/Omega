@@ -10,9 +10,9 @@ Fitting is handled by CalibrationFitter (fitter.py).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -45,7 +45,7 @@ class CalibrationProfile(BaseModel):
     status: ProfileStatus = ProfileStatus.CANDIDATE
 
     # Method parameters — passed as kwargs to calibrate_probability()
-    params: Dict[str, Any] = Field(
+    params: dict[str, Any] = Field(
         default_factory=dict,
         description="Method-specific: {shrink_factor}, {cap_max, cap_min}, or {calibration_map: {...}}",
     )
@@ -56,21 +56,21 @@ class CalibrationProfile(BaseModel):
     dataset_hash: str = Field(description="sha256 of sorted prediction+outcome arrays")
 
     # Quality metrics (measured on held-out set)
-    metrics: Dict[str, float] = Field(
+    metrics: dict[str, float] = Field(
         default_factory=dict,
         description="brier_score, calibration_error, log_loss, n_eval",
     )
 
     # Lifecycle timestamps
     created_at: str = Field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
-    promoted_at: Optional[str] = None
-    rejected_at: Optional[str] = None
-    reject_reason: Optional[str] = None
+    promoted_at: str | None = None
+    rejected_at: str | None = None
+    reject_reason: str | None = None
 
     # Promotion lineage
-    incumbent_id: Optional[str] = Field(
+    incumbent_id: str | None = Field(
         default=None,
         description="profile_id of the incumbent this was compared against",
     )

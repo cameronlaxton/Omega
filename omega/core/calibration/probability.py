@@ -5,8 +5,9 @@ Calibrates model probabilities to fix unrealistic extremes (>90% or <10% too fre
 """
 
 from __future__ import annotations
+
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger("omega.core.calibration.probability")
 
@@ -14,18 +15,18 @@ logger = logging.getLogger("omega.core.calibration.probability")
 def shrinkage_calibration(raw_prob: float, shrink_factor: float = 0.7) -> float:
     """
     Calibrates probability by shrinking toward 0.5.
-    
+
     Formula: p_calibrated = 0.5 + shrink_factor * (p_raw - 0.5)
-    
+
     This reduces extreme probabilities while preserving relative ordering.
-    
+
     Args:
         raw_prob: Raw model probability (0.0 to 1.0)
         shrink_factor: Shrinkage factor (0.0 to 1.0)
                       - 1.0 = no shrinkage (returns raw_prob)
                       - 0.0 = maximum shrinkage (always returns 0.5)
                       - 0.7 = moderate shrinkage (default)
-    
+
     Returns:
         Calibrated probability (0.0 to 1.0)
     """
@@ -37,14 +38,14 @@ def shrinkage_calibration(raw_prob: float, shrink_factor: float = 0.7) -> float:
 def cap_calibration(raw_prob: float, cap_max: float = 0.85, cap_min: float = 0.15) -> float:
     """
     Calibrates probability by capping extremes.
-    
+
     This prevents probabilities from exceeding reasonable bounds.
-    
+
     Args:
         raw_prob: Raw model probability (0.0 to 1.0)
         cap_max: Maximum allowed probability (default 0.85)
         cap_min: Minimum allowed probability (default 0.15)
-    
+
     Returns:
         Calibrated probability (capped between cap_min and cap_max)
     """
@@ -57,43 +58,43 @@ def cap_calibration(raw_prob: float, cap_max: float = 0.85, cap_min: float = 0.1
         return raw_prob
 
 
-def isotonic_calibration(raw_prob: float, calibration_map: Dict[float, float]) -> float:
+def isotonic_calibration(raw_prob: float, calibration_map: dict[float, float]) -> float:
     """
     Calibrates probability using isotonic regression mapping.
-    
+
     This uses a lookup table/mapping derived from historical performance.
     The calibration_map should map raw probability bins to calibrated probabilities.
-    
+
     Args:
         raw_prob: Raw model probability (0.0 to 1.0)
         calibration_map: Dict mapping raw_prob bins to calibrated probs
                         Example: {0.0: 0.15, 0.2: 0.18, 0.5: 0.50, 0.8: 0.75, 1.0: 0.85}
-    
+
     Returns:
         Calibrated probability (interpolated from calibration_map)
     """
     raw_prob = max(0.0, min(1.0, raw_prob))
-    
+
     if not calibration_map:
         return raw_prob
-    
+
     sorted_keys = sorted(calibration_map.keys())
-    
+
     if raw_prob <= sorted_keys[0]:
         return calibration_map[sorted_keys[0]]
     if raw_prob >= sorted_keys[-1]:
         return calibration_map[sorted_keys[-1]]
-    
+
     for i in range(len(sorted_keys) - 1):
         if sorted_keys[i] <= raw_prob <= sorted_keys[i + 1]:
             lower_key = sorted_keys[i]
             upper_key = sorted_keys[i + 1]
             lower_val = calibration_map[lower_key]
             upper_val = calibration_map[upper_key]
-            
+
             t = (raw_prob - lower_key) / (upper_key - lower_key)
             return lower_val + t * (upper_val - lower_val)
-    
+
     return raw_prob
 
 
@@ -103,11 +104,11 @@ def calibrate_probability(
     shrink_factor: float = 0.7,
     cap_max: float = 0.85,
     cap_min: float = 0.15,
-    calibration_map: Optional[Dict[float, float]] = None
-) -> Dict[str, Any]:
+    calibration_map: dict[float, float] | None = None,
+) -> dict[str, Any]:
     """
     Main calibration function that applies specified calibration method.
-    
+
     Args:
         raw_prob: Raw model probability (0.0 to 1.0)
         method: Calibration method ("shrinkage", "cap", "isotonic", "combined")
@@ -115,7 +116,7 @@ def calibrate_probability(
         cap_max: Maximum cap for cap method (default 0.85)
         cap_min: Minimum cap for cap method (default 0.15)
         calibration_map: Calibration map for isotonic method
-    
+
     Returns:
         Dict with keys:
             - "calibrated": float (calibrated probability)
@@ -123,7 +124,7 @@ def calibrate_probability(
             - "method": str (method used)
     """
     raw_prob = max(0.0, min(1.0, raw_prob))
-    
+
     if method == "shrinkage":
         calibrated = shrinkage_calibration(raw_prob, shrink_factor)
     elif method == "cap":
@@ -140,12 +141,8 @@ def calibrate_probability(
     else:
         calibrated = raw_prob
         method = "none"
-    
-    return {
-        "calibrated": calibrated,
-        "raw": raw_prob,
-        "method": method
-    }
+
+    return {"calibrated": calibrated, "raw": raw_prob, "method": method}
 
 
 def should_apply_calibration(raw_prob: float, strict_cap: bool = False) -> bool:
@@ -180,7 +177,7 @@ _POLICY_CAP_MAX = 0.90
 _POLICY_CAP_MIN = 0.10
 
 
-def apply_calibration(raw_prob: float, league: Optional[str] = None) -> float:
+def apply_calibration(raw_prob: float, league: str | None = None) -> float:
     """Apply the canonical calibration policy. Used by both service and backtest.
 
     When a league is provided, attempts to use a learned production profile
@@ -201,9 +198,7 @@ def apply_calibration(raw_prob: float, league: Optional[str] = None) -> float:
     if league is not None:
         profile = _get_active_profile(league)
         if profile is not None:
-            result = calibrate_probability(
-                raw_prob, method=profile.method, **profile.params
-            )
+            result = calibrate_probability(raw_prob, method=profile.method, **profile.params)
             return result["calibrated"]
 
     # Static fallback (current behavior, unchanged)
@@ -227,6 +222,7 @@ def _get_active_profile(league: str):
     """
     try:
         from omega.core.calibration.registry import CalibrationRegistry
+
         registry = CalibrationRegistry()
         return registry.get_production(league)
     except Exception:

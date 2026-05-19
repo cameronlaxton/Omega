@@ -12,11 +12,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Dict, List, Optional
 
 from omega.core.models import (
-    GatherSlot,
     GatheredFact,
+    GatherSlot,
     InputImportance,
     ProviderResult,
 )
@@ -46,7 +45,7 @@ def _score_result(slot: GatherSlot, result: ProviderResult) -> float:
     return max(0.0, min(1.0, score))
 
 
-def gather_facts(slots: List[GatherSlot]) -> List[GatheredFact]:
+def gather_facts(slots: list[GatherSlot]) -> list[GatheredFact]:
     """Fill gather slots via the search-first data pipeline.
 
     Delegates to src/data/orchestration/retrieval_orchestrator which handles:
@@ -60,7 +59,7 @@ def gather_facts(slots: List[GatherSlot]) -> List[GatheredFact]:
     return retrieve_facts(slots)
 
 
-def compute_aggregate_quality(facts: List[GatheredFact]) -> float:
+def compute_aggregate_quality(facts: list[GatheredFact]) -> float:
     """Compute an aggregate data quality score across all gathered facts.
 
     Weights by importance tier:
@@ -91,7 +90,7 @@ def compute_aggregate_quality(facts: List[GatheredFact]) -> float:
     return weighted_score / total_weight
 
 
-def critical_inputs_filled(facts: List[GatheredFact]) -> bool:
+def critical_inputs_filled(facts: list[GatheredFact]) -> bool:
     """Check if ALL critical-importance slots were successfully filled.
 
     Returns False if there are no critical slots (avoids vacuous truth).
@@ -102,7 +101,7 @@ def critical_inputs_filled(facts: List[GatheredFact]) -> bool:
     return all(f.filled for f in critical_facts)
 
 
-def important_inputs_filled(facts: List[GatheredFact]) -> bool:
+def important_inputs_filled(facts: list[GatheredFact]) -> bool:
     """Check if ALL important-importance slots were successfully filled.
 
     Returns False if there are no important slots (avoids vacuous truth).
@@ -113,12 +112,12 @@ def important_inputs_filled(facts: List[GatheredFact]) -> bool:
     return all(f.filled for f in important_facts)
 
 
-def build_data_completeness(facts: List[GatheredFact]) -> Dict[str, str]:
+def build_data_completeness(facts: list[GatheredFact]) -> dict[str, str]:
     """Build a completeness map showing which slots are real/missing.
 
     Returns: {slot_key: "real" | "missing"}
     """
-    completeness: Dict[str, str] = {}
+    completeness: dict[str, str] = {}
     for fact in facts:
         completeness[fact.slot.key] = "real" if fact.filled else "missing"
     return completeness

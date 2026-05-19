@@ -28,10 +28,11 @@ import logging
 import os
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("omega.integrations.odds_api")
 
@@ -44,7 +45,7 @@ DEFAULT_MARKETS = "h2h,spreads,totals"
 
 
 # Omega league code -> the-odds-api sport key. Add a row when extending coverage.
-SPORT_KEY_MAP: Dict[str, str] = {
+SPORT_KEY_MAP: dict[str, str] = {
     "NBA": "basketball_nba",
     "WNBA": "basketball_wnba",
     "NCAAB": "basketball_ncaab",
@@ -65,7 +66,7 @@ SPORT_KEY_MAP: Dict[str, str] = {
 }
 
 
-def sport_key_for(league: str) -> Optional[str]:
+def sport_key_for(league: str) -> str | None:
     """Resolve an Omega league code to the-odds-api sport key, or None."""
     if not league:
         return None
@@ -88,13 +89,13 @@ class BookOdds:
     market: str
     selection: str
     price: float
-    point: Optional[float]
+    point: float | None
     last_update: str
-    description: Optional[str] = None
-    event_id: Optional[str] = None
-    snapshot_timestamp: Optional[str] = None
+    description: str | None = None
+    event_id: str | None = None
+    snapshot_timestamp: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -107,9 +108,9 @@ class EventOdds:
     commence_time: str
     home_team: str
     away_team: str
-    books: List[BookOdds]
+    books: list[BookOdds]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "event_id": self.event_id,
             "sport_key": self.sport_key,
@@ -148,7 +149,7 @@ class EventMarketAvailability:
     """Recently seen market keys for one bookmaker on one event."""
 
     bookmaker: str
-    markets: List[str]
+    markets: list[str]
 
 
 @dataclass(frozen=True)
@@ -156,11 +157,11 @@ class HistoricalSnapshot:
     """Metadata wrapper around a historical odds snapshot."""
 
     timestamp: str
-    previous_timestamp: Optional[str]
-    next_timestamp: Optional[str]
-    events: List[EventOdds]
+    previous_timestamp: str | None
+    next_timestamp: str | None
+    events: list[EventOdds]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "timestamp": self.timestamp,
             "previous_timestamp": self.previous_timestamp,
@@ -174,25 +175,25 @@ class OddsApiClient:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         monthly_budget: int = _DEFAULT_MONTHLY_BUDGET,
-        budget_file: Optional[str] = None,
+        budget_file: str | None = None,
         url_opener: Callable = urllib.request.urlopen,
     ) -> None:
         self._api_key = api_key or os.environ.get("OMEGA_ODDS_API_KEY")
         self._monthly_budget = monthly_budget
         self._budget_file = Path(budget_file) if budget_file else Path.cwd() / _DEFAULT_BUDGET_FILE
         self._url_opener = url_opener
-        self.last_quota_headers: Dict[str, str] = {}
+        self.last_quota_headers: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Budget bookkeeping
     # ------------------------------------------------------------------
 
     def _current_month_key(self) -> str:
-        return datetime.now(timezone.utc).strftime("%Y-%m")
+        return datetime.now(UTC).strftime("%Y-%m")
 
-    def _read_budget(self) -> Dict[str, int]:
+    def _read_budget(self) -> dict[str, int]:
         if not self._budget_file.exists():
             return {}
         try:
@@ -201,7 +202,7 @@ class OddsApiClient:
             logger.warning("Budget file unreadable, resetting: %s", self._budget_file)
             return {}
 
-    def _write_budget(self, data: Dict[str, int]) -> None:
+    def _write_budget(self, data: dict[str, int]) -> None:
         self._budget_file.write_text(json.dumps(data, sort_keys=True), encoding="utf-8")
 
     def _consume_budget(self, n: int = 1) -> None:
@@ -224,7 +225,7 @@ class OddsApiClient:
     # HTTP
     # ------------------------------------------------------------------
 
-    def _get_json(self, path: str, params: Dict[str, Any], request_cost: int = 1) -> Any:
+    def _get_json(self, path: str, params: dict[str, Any], request_cost: int = 1) -> Any:
         if not self._api_key:
             raise OddsApiKeyMissing("OMEGA_ODDS_API_KEY not set")
         self._consume_budget(request_cost)
@@ -236,25 +237,25 @@ class OddsApiClient:
             self.last_quota_headers = _quota_headers(resp)
             return json.loads(resp.read().decode("utf-8"))
 
-    def fetch_sports(self, all_sports: bool = True) -> List[SportInfo]:
+    def fetch_sports(self, all_sports: bool = True) -> list[SportInfo]:
         """Fetch supported sports metadata.
 
         This is useful for coverage audits and does not perform any Omega
         betting math.
         """
-        params: Dict[str, Any] = {"all": str(bool(all_sports)).lower()}
+        params: dict[str, Any] = {"all": str(bool(all_sports)).lower()}
         payload = self._get_json("/sports", params)
         return parse_sports(payload)
 
     def fetch_events(
         self,
         league: str,
-        commence_time_from: Optional[str] = None,
-        commence_time_to: Optional[str] = None,
-    ) -> List[HistoricalEvent]:
+        commence_time_from: str | None = None,
+        commence_time_to: str | None = None,
+    ) -> list[HistoricalEvent]:
         """Fetch current/live event metadata for resolving event IDs."""
         sport_key = _require_sport_key(league)
-        params: Dict[str, Any] = {"dateFormat": "iso"}
+        params: dict[str, Any] = {"dateFormat": "iso"}
         if commence_time_from:
             params["commenceTimeFrom"] = commence_time_from
         if commence_time_to:
@@ -267,8 +268,8 @@ class OddsApiClient:
         league: str,
         event_id: str,
         regions: str = "us",
-        bookmakers: Optional[str] = None,
-    ) -> List[EventMarketAvailability]:
+        bookmakers: str | None = None,
+    ) -> list[EventMarketAvailability]:
         """Fetch recently seen market keys per bookmaker for one event."""
         sport_key = _require_sport_key(league)
         params = _event_params(regions=regions, bookmakers=bookmakers)
@@ -284,8 +285,8 @@ class OddsApiClient:
         league: str,
         regions: str = "us",
         markets: str = "h2h,spreads,totals",
-        bookmakers: Optional[str] = None,
-    ) -> List[EventOdds]:
+        bookmakers: str | None = None,
+    ) -> list[EventOdds]:
         """Fetch current event odds for a league across books."""
         sport_key = _require_sport_key(league)
         params = _odds_params(regions=regions, markets=markets, bookmakers=bookmakers)
@@ -298,7 +299,7 @@ class OddsApiClient:
         event_id: str,
         regions: str = "us",
         markets: str = DEFAULT_MARKETS,
-        bookmakers: Optional[str] = None,
+        bookmakers: str | None = None,
     ) -> EventOdds:
         """Fetch current odds for one event, including props/additional markets."""
         sport_key = _require_sport_key(league)
@@ -313,8 +314,8 @@ class OddsApiClient:
         self,
         regions: str = "us",
         markets: str = "h2h,spreads,totals",
-        bookmakers: Optional[str] = None,
-    ) -> List[EventOdds]:
+        bookmakers: str | None = None,
+    ) -> list[EventOdds]:
         """Back-compat shim. Delegates to fetch_event_odds(league='NBA')."""
         return self.fetch_event_odds(
             league="NBA", regions=regions, markets=markets, bookmakers=bookmakers
@@ -330,7 +331,7 @@ class OddsApiClient:
         date: str,
         regions: str = "us",
         markets: str = "h2h,spreads,totals",
-        bookmakers: Optional[str] = None,
+        bookmakers: str | None = None,
     ) -> HistoricalSnapshot:
         """Fetch a sport-level historical featured-market snapshot.
 
@@ -352,13 +353,13 @@ class OddsApiClient:
         self,
         league: str,
         date: str,
-        commence_time_from: Optional[str] = None,
-        commence_time_to: Optional[str] = None,
-        event_ids: Optional[str] = None,
-    ) -> List[HistoricalEvent]:
+        commence_time_from: str | None = None,
+        commence_time_to: str | None = None,
+        event_ids: str | None = None,
+    ) -> list[HistoricalEvent]:
         """Fetch historical event metadata for resolving event IDs."""
         sport_key = _require_sport_key(league)
-        params: Dict[str, Any] = {"date": date, "dateFormat": "iso"}
+        params: dict[str, Any] = {"date": date, "dateFormat": "iso"}
         if commence_time_from:
             params["commenceTimeFrom"] = commence_time_from
         if commence_time_to:
@@ -375,7 +376,7 @@ class OddsApiClient:
         date: str,
         regions: str = "us",
         markets: str = "h2h,spreads,totals",
-        bookmakers: Optional[str] = None,
+        bookmakers: str | None = None,
     ) -> HistoricalSnapshot:
         """Fetch historical odds for one event, including prop/additional markets."""
         sport_key = _require_sport_key(league)
@@ -402,9 +403,9 @@ def _require_sport_key(league: str) -> str:
 def _odds_params(
     regions: str,
     markets: str,
-    bookmakers: Optional[str],
-) -> Dict[str, Any]:
-    params: Dict[str, Any] = {
+    bookmakers: str | None,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {
         "markets": markets,
         "oddsFormat": "american",
         "dateFormat": "iso",
@@ -416,8 +417,8 @@ def _odds_params(
     return params
 
 
-def _event_params(regions: str, bookmakers: Optional[str]) -> Dict[str, Any]:
-    params: Dict[str, Any] = {"dateFormat": "iso"}
+def _event_params(regions: str, bookmakers: str | None) -> dict[str, Any]:
+    params: dict[str, Any] = {"dateFormat": "iso"}
     if bookmakers:
         params["bookmakers"] = bookmakers
     else:
@@ -431,11 +432,11 @@ def _historical_cost(regions: str, markets: str) -> int:
     return 10 * region_count * market_count
 
 
-def _quota_headers(resp: Any) -> Dict[str, str]:
+def _quota_headers(resp: Any) -> dict[str, str]:
     headers = getattr(resp, "headers", None)
     if not headers:
         return {}
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     for key in ("x-requests-remaining", "x-requests-used", "x-requests-last"):
         try:
             value = headers.get(key)
@@ -451,13 +452,13 @@ def _quota_headers(resp: Any) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def parse_events(payload: Any) -> List[EventOdds]:
+def parse_events(payload: Any) -> list[EventOdds]:
     """Parse the-odds-api event list into EventOdds dataclasses."""
-    events: List[EventOdds] = []
+    events: list[EventOdds] = []
     if not isinstance(payload, list):
         return events
     for evt in payload:
-        books: List[BookOdds] = []
+        books: list[BookOdds] = []
         for bm in evt.get("bookmakers") or []:
             bm_key = bm.get("key", "")
             bm_last_update = bm.get("last_update", "")
@@ -494,9 +495,9 @@ def parse_events(payload: Any) -> List[EventOdds]:
     return events
 
 
-def parse_sports(payload: Any) -> List[SportInfo]:
+def parse_sports(payload: Any) -> list[SportInfo]:
     """Parse sports metadata from GET /sports."""
-    sports: List[SportInfo] = []
+    sports: list[SportInfo] = []
     if not isinstance(payload, list):
         return sports
     for item in payload:
@@ -513,9 +514,9 @@ def parse_sports(payload: Any) -> List[SportInfo]:
     return sports
 
 
-def parse_events_metadata(payload: Any) -> List[HistoricalEvent]:
+def parse_events_metadata(payload: Any) -> list[HistoricalEvent]:
     """Parse current event metadata from GET /sports/{sport}/events."""
-    events: List[HistoricalEvent] = []
+    events: list[HistoricalEvent] = []
     if not isinstance(payload, list):
         return events
     for evt in payload:
@@ -531,7 +532,7 @@ def parse_events_metadata(payload: Any) -> List[HistoricalEvent]:
     return events
 
 
-def parse_event_markets(payload: Any) -> List[EventMarketAvailability]:
+def parse_event_markets(payload: Any) -> list[EventMarketAvailability]:
     """Parse event-market availability from GET /events/{eventId}/markets.
 
     The provider shape is intentionally parsed tolerantly because market
@@ -543,7 +544,7 @@ def parse_event_markets(payload: Any) -> List[EventMarketAvailability]:
         data = payload.get("bookmakers") or payload.get("data") or payload.get("markets") or []
     if isinstance(data, dict):
         data = [{"key": key, "markets": value} for key, value in data.items()]
-    out: List[EventMarketAvailability] = []
+    out: list[EventMarketAvailability] = []
     if not isinstance(data, list):
         return out
     for row in data:
@@ -551,7 +552,7 @@ def parse_event_markets(payload: Any) -> List[EventMarketAvailability]:
             out.append(EventMarketAvailability(bookmaker="", markets=[row]))
             continue
         markets_raw = row.get("markets") or []
-        markets: List[str] = []
+        markets: list[str] = []
         for item in markets_raw:
             if isinstance(item, str):
                 markets.append(item)
@@ -580,7 +581,7 @@ def parse_historical_snapshot(payload: Any) -> HistoricalSnapshot:
         next_timestamp=payload.get("next_timestamp"),
         events=parse_events(event_payload),
     )
-    events: List[EventOdds] = []
+    events: list[EventOdds] = []
     for event in snapshot.events:
         books = [
             BookOdds(
@@ -614,14 +615,14 @@ def parse_historical_snapshot(payload: Any) -> HistoricalSnapshot:
     )
 
 
-def parse_historical_events(payload: Any) -> List[HistoricalEvent]:
+def parse_historical_events(payload: Any) -> list[HistoricalEvent]:
     """Parse a wrapped historical events response."""
     if not isinstance(payload, dict):
         return []
     data = payload.get("data")
     if not isinstance(data, list):
         return []
-    events: List[HistoricalEvent] = []
+    events: list[HistoricalEvent] = []
     for evt in data:
         events.append(
             HistoricalEvent(

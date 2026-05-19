@@ -8,16 +8,11 @@ Tests for V7 schema migration:
 """
 from __future__ import annotations
 
-import json
-import sqlite3
 import tempfile
 import uuid
-from pathlib import Path
-
-import pytest
 
 from omega.trace.bet_record import BetRecord, BetStatus
-from omega.trace.schema import CURRENT_VERSION, apply_v7_migration
+from omega.trace.schema import CURRENT_VERSION, apply_v7_migration, apply_v8_migration
 from omega.trace.store import TraceStore
 
 
@@ -75,8 +70,8 @@ class TestV7SchemaColumn:
 
     def test_current_version_is_seven(self):
         store = TraceStore(db_path=_tmp_db_path())
-        assert CURRENT_VERSION == 7
-        assert store.schema_version() == 7
+        assert CURRENT_VERSION == 8
+        assert store.schema_version() == 8
         store.close()
 
 
@@ -208,8 +203,40 @@ class TestIdempotency:
         ).fetchone()
         assert row["session_id"] == "sess-20260517-xxxx"
 
-        # Schema version stays at 7
-        assert store.schema_version() == 7
+        # Schema version stays current
+        assert store.schema_version() == CURRENT_VERSION
+        store.close()
+
+
+class TestV8OutcomeUniqueness:
+    def test_duplicate_game_outcomes_are_collapsed_before_unique_index(self):
+        store = TraceStore(db_path=_tmp_db_path())
+        _persist_trace(store, "t-dup-outcome", session_id=None, kind="game")
+
+        store.conn.execute("DROP INDEX IF EXISTS idx_outcomes_trace_id_unique")
+        store.conn.execute(
+            """INSERT INTO outcomes
+               (outcome_id, trace_id, home_score, away_score, result, source)
+               VALUES
+               ('o-first', 't-dup-outcome', 100, 90, 'home_win', 'test'),
+               ('o-second', 't-dup-outcome', 80, 95, 'away_win', 'test')"""
+        )
+        store.conn.commit()
+
+        deleted = apply_v8_migration(store.conn)
+
+        assert deleted == 1
+        rows = store.conn.execute(
+            "SELECT outcome_id, result FROM outcomes WHERE trace_id = 't-dup-outcome'"
+        ).fetchall()
+        assert [dict(row) for row in rows] == [
+            {"outcome_id": "o-first", "result": "home_win"}
+        ]
+        idx = store.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' "
+            "AND name='idx_outcomes_trace_id_unique'"
+        ).fetchone()
+        assert idx is not None
         store.close()
 
     def test_reopening_store_is_no_op(self):
@@ -219,5 +246,5 @@ class TestIdempotency:
         store_a.close()
 
         store_b = TraceStore(db_path=path)
-        assert store_b.schema_version() == 7
+        assert store_b.schema_version() == CURRENT_VERSION
         store_b.close()

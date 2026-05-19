@@ -9,13 +9,10 @@ Covers:
 """
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import patch
-
-import pytest
 
 from omega.core.models import (
     AnswerPlan,
@@ -28,7 +25,6 @@ from omega.core.models import (
 )
 from omega.skills.base import SkillBase, SkillObservation
 from omega.trace.schema import CURRENT_VERSION
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -54,7 +50,7 @@ def _make_result(
     confidence: float = 0.9,
     source: str = "espn",
     method: str = "structured_api",
-    data: Dict[str, Any] | None = None,
+    data: dict[str, Any] | None = None,
 ) -> ProviderResult:
     return ProviderResult(
         data=data if data is not None else {"off_rating": 115.2},
@@ -78,12 +74,12 @@ def _make_fact(
 
 
 def _make_plan(
-    packages: List[OutputPackage] | None = None,
-    modes: List[ExecutionMode] | None = None,
+    packages: list[OutputPackage] | None = None,
+    modes: list[ExecutionMode] | None = None,
     simulation_required: bool = True,
     betting_included: bool = True,
-    downgrades: List[str] | None = None,
-    thresholds: Dict[str, float] | None = None,
+    downgrades: list[str] | None = None,
+    thresholds: dict[str, float] | None = None,
 ) -> AnswerPlan:
     return AnswerPlan(
         execution_modes=modes or [ExecutionMode.NATIVE_SIM],
@@ -139,7 +135,7 @@ class TestTraceRecorder:
         from omega.skills.trace_recorder import TraceRecorder
         return TraceRecorder()
 
-    def _valid_trace(self) -> Dict[str, Any]:
+    def _valid_trace(self) -> dict[str, Any]:
         return {
             "trace_id": "abc-123",
             "run_id": "r-001",
@@ -151,9 +147,13 @@ class TestTraceRecorder:
     def test_happy_path_sqlite(self):
         """Primary path: trace persists to SQLite via TraceStore."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = str(Path(tmpdir) / "test.db")
+            db_file = str(Path(tmpdir) / "test.db")
             from omega.trace.store import TraceStore as RealStore
-            with patch("omega.trace.store.TraceStore", lambda db_path=None: RealStore(db_path=db_path or str(Path(tmpdir) / "test.db"))):
+
+            with patch(
+                "omega.trace.store.TraceStore",
+                lambda db_path=None: RealStore(db_path=db_path or db_file),
+            ):
                 obs = self._skill().observe(trace=self._valid_trace())
             assert obs.ok is True
             assert obs.findings == []
@@ -280,7 +280,7 @@ class TestDataQualityGrader:
         from omega.skills.data_quality_grader import DataQualityGrader
         return DataQualityGrader()
 
-    def _good_facts(self) -> List[GatheredFact]:
+    def _good_facts(self) -> list[GatheredFact]:
         return [_make_fact("home.off_rating"), _make_fact("away.off_rating")]
 
     def test_happy_path_good_quality(self):

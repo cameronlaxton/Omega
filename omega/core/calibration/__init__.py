@@ -8,10 +8,10 @@ Public API:
     CalibrationFitter                         — fit profiles from graded traces
 """
 
+from omega.core.calibration.fitter import CalibrationFitter
 from omega.core.calibration.probability import apply_calibration
 from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus
 from omega.core.calibration.registry import CalibrationRegistry
-from omega.core.calibration.fitter import CalibrationFitter
 
 __all__ = [
     "apply_calibration",

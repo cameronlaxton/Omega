@@ -23,6 +23,8 @@ from scripts.fetch_closing_lines import (  # noqa: E402,F401
     _is_supported_market,
     _match_outcome,
     _pending_bets_needing_close,
+)
+from scripts.fetch_closing_lines import (  # noqa: E402
     main as _generalized_main,
 )
 

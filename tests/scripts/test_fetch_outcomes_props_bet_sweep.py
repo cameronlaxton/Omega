@@ -14,9 +14,7 @@ import tempfile
 import uuid
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List
-
-import pytest
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -25,10 +23,11 @@ _SCRIPTS = _REPO_ROOT / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+import fetch_outcomes_props  # type: ignore  # noqa: E402
+
 from omega.integrations.espn_nba import FinalGame  # noqa: E402
 from omega.trace.bet_record import BetRecord, BetStatus  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
-import fetch_outcomes_props  # type: ignore  # noqa: E402
 
 
 def _tmp_db_path() -> str:
@@ -45,8 +44,8 @@ def _make_prop_trace(
     line: float = 24.5,
     timestamp: str = "2026-05-17T19:00:00Z",
     include_identity: bool = True,
-) -> Dict[str, Any]:
-    snap: Dict[str, Any] = {
+) -> dict[str, Any]:
+    snap: dict[str, Any] = {
         "player_name": player,
         "league": "NBA",
         "prop_type": prop_type,
@@ -62,7 +61,7 @@ def _make_prop_trace(
         "timestamp": timestamp,
         "prompt": f"NBA {player} {prop_type} {line}",
         "league": "NBA",
-        "matchup": f"Boston Celtics @ Miami Heat" if include_identity
+        "matchup": "Boston Celtics @ Miami Heat" if include_identity
         else f"{player} {prop_type} {line}",
         "execution_mode": "sandbox_prop",
         "kind": "prop",
@@ -132,7 +131,7 @@ def _box_score():
         }
     }
 
-    def _fetch(league: str, event_id: str) -> Dict[str, Any]:
+    def _fetch(league: str, event_id: str) -> dict[str, Any]:
         return payload
 
     return _fetch

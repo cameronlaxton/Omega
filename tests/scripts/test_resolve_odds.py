@@ -14,7 +14,7 @@ class FakeOddsClient:
 
     def __init__(self, market_available: bool = True):
         self.market_available = market_available
-        self.event_odds_bookmakers = []
+        self.event_odds_bookmakers: list[str | None] = []
 
     def fetch_events(self, league, commence_time_from=None, commence_time_to=None):
         return [

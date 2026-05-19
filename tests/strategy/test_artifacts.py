@@ -4,7 +4,6 @@ Tests for frozen artifacts — conversion, deterministic IDs, round-trip, parity
 All tests are deterministic — no network calls, no LLM.
 """
 
-import pytest
 
 
 # -----------------------------------------------------------------------
@@ -189,7 +188,7 @@ class TestTraceToArtifact:
         assert artifact.outcome is None
 
     def test_deterministic_id_from_trace(self):
-        from omega.strategy.artifacts import trace_to_artifact, compute_artifact_id
+        from omega.strategy.artifacts import compute_artifact_id, trace_to_artifact
         trace = _make_trace_dict()
         artifact = trace_to_artifact(trace)
         expected_id = compute_artifact_id("Celtics", "Pacers", "NBA", "2025-03-01")
@@ -232,8 +231,9 @@ class TestBacktestParity:
 
     def test_artifact_vs_dict_parity(self):
         import numpy as np
-        from omega.strategy.backtest.engine import BacktestEngine, HistoricalGame
+
         from omega.strategy.artifacts import compat_dict_to_artifact
+        from omega.strategy.backtest.engine import BacktestEngine, HistoricalGame
         from omega.strategy.models import StrategyEntry
 
         strategy = StrategyEntry(
@@ -265,8 +265,8 @@ class TestBacktestParity:
         assert result_dict.roi_pct == result_artifact.roi_pct
 
     def test_artifact_backtest_has_trace_ids(self):
-        from omega.strategy.backtest.engine import BacktestEngine
         from omega.strategy.artifacts import FrozenArtifact
+        from omega.strategy.backtest.engine import BacktestEngine
         from omega.strategy.models import StrategyEntry
 
         strategy = StrategyEntry(

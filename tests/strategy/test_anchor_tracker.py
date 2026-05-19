@@ -1,7 +1,5 @@
 """Tests for the anchor bet result tracker."""
 
-import os
-import tempfile
 
 import pytest
 

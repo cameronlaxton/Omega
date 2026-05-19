@@ -35,9 +35,10 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from datetime import date, datetime, timedelta, timezone
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -73,7 +74,7 @@ def _interactive_confirm(description: str) -> str:
         print("Please answer y, n, or q.")
 
 
-def _canonical_pair(league: str, home: str, away: str) -> Optional[Tuple[str, str]]:
+def _canonical_pair(league: str, home: str, away: str) -> tuple[str, str] | None:
     if league == "NBA":
         c_home = espn_nba.canonical_team(home)
         c_away = espn_nba.canonical_team(away)
@@ -104,9 +105,9 @@ def _source_label(d: date) -> str:
 # ---------------------------------------------------------------------------
 
 def _trace_game_pair(
-    trace: Dict[str, Any],
+    trace: dict[str, Any],
     league: str,
-) -> Optional[Tuple[str, str]]:
+) -> tuple[str, str] | None:
     """Resolve a trace to a canonical (home, away) pair, or None."""
     snap = trace.get("input_snapshot") or {}
     home = snap.get("home_team")
@@ -131,9 +132,9 @@ def backfill_date(
     *,
     confirm: ConfirmFn = _interactive_confirm,
     scoreboard_fetcher: Callable[[str, date], Any] = _scoreboard_for,
-    box_score_fetcher: Callable[[str, str], Dict[str, Any]] = fetch_box_score,
+    box_score_fetcher: Callable[[str, str], dict[str, Any]] = fetch_box_score,
     dry_run: bool = False,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Walk every ungraded trace tied to `(league, d)` with attach/skip prompts.
 
     Returns counts: {'game_attached', 'prop_attached', 'skipped', 'quit'}.
@@ -161,7 +162,7 @@ def backfill_date(
     games_by_pair = {(g.home_team, g.away_team): g for g in games}
 
     # Cache box scores so we fetch each event once per session
-    box_score_cache: Dict[str, Dict[str, Any]] = {}
+    box_score_cache: dict[str, dict[str, Any]] = {}
     source = _source_label(d)
 
     for trace in traces:
@@ -309,9 +310,9 @@ def backfill_single_trace(
     *,
     confirm: ConfirmFn = _interactive_confirm,
     scoreboard_fetcher: Callable[[str, date], Any] = _scoreboard_for,
-    box_score_fetcher: Callable[[str, str], Dict[str, Any]] = fetch_box_score,
+    box_score_fetcher: Callable[[str, str], dict[str, Any]] = fetch_box_score,
     dry_run: bool = False,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Pin a single legacy trace to an operator-supplied game and grade it."""
     counts = {"game_attached": 0, "prop_attached": 0, "skipped": 0, "quit": 0, "unmatched": 0}
 
@@ -431,13 +432,13 @@ def backfill_single_trace(
 def _parse_date_arg(s: str) -> date:
     s = s.strip().lower()
     if s == "today":
-        return datetime.now(timezone.utc).date()
+        return datetime.now(UTC).date()
     if s == "yesterday":
-        return datetime.now(timezone.utc).date() - timedelta(days=1)
+        return datetime.now(UTC).date() - timedelta(days=1)
     return date.fromisoformat(s)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Interactive ESPN-based grading for the ungraded trace backlog"
     )

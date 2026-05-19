@@ -29,9 +29,10 @@ import argparse
 import logging
 import sys
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -58,9 +59,9 @@ _SUPPORTED_LEAGUES = ("NBA", "MLB")
 def _parse_date_arg(s: str) -> date:
     s = s.strip().lower()
     if s == "today":
-        return datetime.now(timezone.utc).date()
+        return datetime.now(UTC).date()
     if s == "yesterday":
-        return datetime.now(timezone.utc).date() - timedelta(days=1)
+        return datetime.now(UTC).date() - timedelta(days=1)
     return date.fromisoformat(s)
 
 
@@ -75,7 +76,7 @@ def _iter_dates(start: date, end: date):
 # Trace extraction
 # ---------------------------------------------------------------------------
 
-def _prop_fields(trace: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _prop_fields(trace: dict[str, Any]) -> dict[str, Any] | None:
     """Pull the prop-grading fields out of a trace dict. Returns None when
     the trace is not a prop or required fields are missing."""
     if trace.get("kind") != "prop":
@@ -112,7 +113,7 @@ def _prop_fields(trace: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
-def _canonical_pair(league: str, home: str, away: str) -> Optional[Tuple[str, str]]:
+def _canonical_pair(league: str, home: str, away: str) -> tuple[str, str] | None:
     if league == "NBA":
         c_home = espn_nba.canonical_team(home)
         c_away = espn_nba.canonical_team(away)
@@ -143,10 +144,10 @@ def _scoreboard_for(league: str, d: date):
 # ---------------------------------------------------------------------------
 
 def main(
-    argv: Optional[List[str]] = None,
+    argv: list[str] | None = None,
     *,
-    scoreboard_fetcher: Optional[Callable[[str, date], Any]] = None,
-    box_score_fetcher: Optional[Callable[[str, str], Dict[str, Any]]] = None,
+    scoreboard_fetcher: Callable[[str, date], Any] | None = None,
+    box_score_fetcher: Callable[[str, str], dict[str, Any]] | None = None,
 ) -> int:
     """CLI entry point.
 
@@ -189,9 +190,9 @@ def main(
     store = TraceStore(db_path=args.db)
 
     attached = 0
-    unmatched: List[str] = []
-    unsupported_prop: List[str] = []
-    skipped_missing_fields: List[str] = []
+    unmatched: list[str] = []
+    unsupported_prop: list[str] = []
+    skipped_missing_fields: list[str] = []
 
     for league in leagues:
         for d in _iter_dates(start, end):
@@ -225,7 +226,7 @@ def main(
                     seen_ids.add(bt.get("trace_id"))
 
             # Group prop traces for this game date by canonical (home, away)
-            grouped: Dict[Tuple[str, str], List[Tuple[Dict[str, Any], Dict[str, Any]]]] = defaultdict(list)
+            grouped: dict[tuple[str, str], list[tuple[dict[str, Any], dict[str, Any]]]] = defaultdict(list)
             for trace in traces:
                 fields = _prop_fields(trace)
                 if fields is None:

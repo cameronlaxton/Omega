@@ -245,7 +245,7 @@ def parse_box_score(
                             continue
                         raw = stats[key_index[ek]] if key_index[ek] < len(stats) else None
                         if ek in ("IP", "fullInnings.partInnings"):
-                            value = _parse_ip_to_outs(raw)
+                            value = _parse_ip_to_outs(str(raw)) if raw is not None else None
                         elif prop_type in ("3pm", "threes"):
                             value = _made_from_made_attempted(raw)
                         else:

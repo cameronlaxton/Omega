@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
-from omega.mcp.server import PROMPT_NAMES, RESOURCE_URIS, TOOL_NAMES
+from omega.mcp.server import PROMPT_NAMES, RESOURCE_URIS, TOOL_NAMES  # noqa: E402
 
 
 def main() -> int:

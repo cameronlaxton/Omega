@@ -13,7 +13,6 @@ This module runs AFTER data gathering and BEFORE execution.
 from __future__ import annotations
 
 import logging
-from typing import List
 
 from omega.core.models import (
     AnswerPlan,
@@ -33,7 +32,7 @@ logger = logging.getLogger("omega.agent.quality_gate")
 
 def apply_quality_gate(
     plan: AnswerPlan,
-    facts: List[GatheredFact],
+    facts: list[GatheredFact],
 ) -> AnswerPlan:
     """Revise an AnswerPlan based on actual gathered data quality.
 

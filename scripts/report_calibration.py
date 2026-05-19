@@ -30,9 +30,9 @@ import argparse
 import json
 import logging
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -47,11 +47,11 @@ from omega.trace.store import TraceStore  # noqa: E402
 logger = logging.getLogger("report_calibration")
 
 
-def _load_session_sidecars(inbox: Path) -> List[Dict[str, Any]]:
+def _load_session_sidecars(inbox: Path) -> list[dict[str, Any]]:
     """Read every inbox/sessions/*.json sidecar. Bad files are skipped with a warning."""
     if not inbox.exists():
         return []
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for path in sorted(inbox.glob("*.json")):
         try:
             with path.open("r", encoding="utf-8") as fh:
@@ -62,10 +62,10 @@ def _load_session_sidecars(inbox: Path) -> List[Dict[str, Any]]:
 
 
 def _window_cutoff(window_days: int) -> str:
-    return (datetime.now(timezone.utc) - timedelta(days=window_days)).isoformat()
+    return (datetime.now(UTC) - timedelta(days=window_days)).isoformat()
 
 
-def _section_counts(store: TraceStore, league: str, cutoff: str) -> Dict[str, int]:
+def _section_counts(store: TraceStore, league: str, cutoff: str) -> dict[str, int]:
     """Trace / bet / close counts within the window.
 
     "Graded" is the union of game outcomes and prop outcomes — a trace counts
@@ -119,7 +119,7 @@ def _section_counts(store: TraceStore, league: str, cutoff: str) -> Dict[str, in
 
 def _section_realized_metrics(
     store: TraceStore, league: str, cutoff: str
-) -> Optional[Dict[str, float]]:
+) -> dict[str, float] | None:
     """Brier / ECE / log_loss on graded traces in the window. Returns None if too few."""
     rows = store.query_traces(league=league, start=cutoff, has_outcome=True, limit=100_000)
     if len(rows) < 10:
@@ -164,7 +164,7 @@ def _section_realized_metrics(
 
 def _section_prop_realized_metrics(
     store: TraceStore, league: str, cutoff: str
-) -> Optional[Dict[str, float]]:
+) -> dict[str, float] | None:
     """Brier / ECE / log_loss on graded prop traces in the window.
 
     Separate from the game plane: prop calibration is a different forecasting
@@ -209,7 +209,7 @@ def _section_prop_realized_metrics(
     }
 
 
-def _section_clv(store: TraceStore, league: str, cutoff: str) -> Dict[str, Any]:
+def _section_clv(store: TraceStore, league: str, cutoff: str) -> dict[str, Any]:
     """Mean CLV cents and beat-close rate across bets with attached closes in the window."""
     conn = store.conn
     rows = conn.execute(
@@ -227,7 +227,7 @@ def _section_clv(store: TraceStore, league: str, cutoff: str) -> Dict[str, Any]:
     if not rows:
         return {"n": 0, "mean_clv_cents": None, "beat_close_pct": None}
 
-    clv_cents: List[float] = []
+    clv_cents: list[float] = []
     beat_count = 0
     for row in rows:
         try:
@@ -256,12 +256,12 @@ def _section_clv(store: TraceStore, league: str, cutoff: str) -> Dict[str, Any]:
 
 
 def _section_sessions(
-    store: TraceStore, sidecars: List[Dict[str, Any]], league: str, limit: int = 10
-) -> List[Dict[str, Any]]:
+    store: TraceStore, sidecars: list[dict[str, Any]], league: str, limit: int = 10
+) -> list[dict[str, Any]]:
     """Join trace-level session summary with sidecar exec_stats."""
     summaries = store.get_session_summary(league=league, limit=limit)
     sidecar_index = {s.get("session_id"): s for s in sidecars if s.get("session_id")}
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for s in summaries:
         sid = s["session_id"]
         sidecar = sidecar_index.get(sid, {})
@@ -280,7 +280,7 @@ def _section_sessions(
     return out
 
 
-def _section_pending_candidates(registry: CalibrationRegistry, league: str) -> List[Dict[str, Any]]:
+def _section_pending_candidates(registry: CalibrationRegistry, league: str) -> list[dict[str, Any]]:
     candidates = registry.list_profiles(league=league, status=ProfileStatus.CANDIDATE.value)
     out = []
     for p in candidates:
@@ -299,16 +299,16 @@ def _section_pending_candidates(registry: CalibrationRegistry, league: str) -> L
 def _render(
     league: str,
     window_days: int,
-    counts: Dict[str, int],
-    realized: Optional[Dict[str, float]],
-    realized_prop: Optional[Dict[str, float]],
-    clv: Dict[str, Any],
-    sessions: List[Dict[str, Any]],
-    production_profile_id: Optional[str],
-    candidates: List[Dict[str, Any]],
+    counts: dict[str, int],
+    realized: dict[str, float] | None,
+    realized_prop: dict[str, float] | None,
+    clv: dict[str, Any],
+    sessions: list[dict[str, Any]],
+    production_profile_id: str | None,
+    candidates: list[dict[str, Any]],
 ) -> str:
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    lines: List[str] = []
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    lines: list[str] = []
     lines.append(f"# Omega Calibration Report — {league}")
     lines.append("")
     lines.append(f"Generated: `{now}` | Window: last {window_days} days")

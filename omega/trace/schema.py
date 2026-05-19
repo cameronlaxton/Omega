@@ -44,6 +44,11 @@ Schema version 7 (additive + cleanup):
   (home_score IN (0,1) AND away_score IN (0,1) AND linked trace.kind='prop')
   to avoid touching legitimate close-game outcomes.
 
+Schema version 8 (additive + cleanup):
+- outcomes.trace_id uniqueness: game outcomes are one row per trace. Existing
+  duplicate rows are collapsed to the earliest row before the unique index is
+  added. Re-grading requires explicit row deletion first.
+
 Design rules:
 - Full trace stored as JSON blob to decouple trace evolution from SQLite schema
 - Denormalized columns exist for querying only — the blob is source of truth
@@ -54,7 +59,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 7
+CURRENT_VERSION = 8
 
 _logger = logging.getLogger("omega.trace.schema")
 
@@ -249,5 +254,37 @@ def apply_v7_migration(conn) -> int:
         _logger.warning(
             "V7 cleanup removed %d binary-placeholder outcome rows attached to "
             "prop-kind traces (BUG-3).", deleted,
+        )
+    return deleted
+
+
+V8_DEDUP_OUTCOMES_SQL = (
+    "DELETE FROM outcomes "
+    "WHERE rowid NOT IN ("
+    "  SELECT MIN(rowid) FROM outcomes GROUP BY trace_id"
+    ")"
+)
+V8_UNIQUE_OUTCOME_SQL = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_outcomes_trace_id_unique "
+    "ON outcomes(trace_id)"
+)
+
+
+def apply_v8_migration(conn) -> int:
+    """Idempotently apply V8: enforce one game outcome per trace.
+
+    Returns the number of duplicate outcome rows deleted. The earliest row is
+    preserved because it is the first attached grade and the only deterministic
+    choice available without operator review.
+    """
+    cur = conn.execute(V8_DEDUP_OUTCOMES_SQL)
+    deleted = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
+    conn.execute(V8_UNIQUE_OUTCOME_SQL)
+    conn.commit()
+    if deleted:
+        _logger.warning(
+            "V8 cleanup removed %d duplicate game outcome rows; earliest "
+            "outcome per trace was preserved.",
+            deleted,
         )
     return deleted

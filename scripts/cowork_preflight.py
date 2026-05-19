@@ -20,11 +20,11 @@ def _version_text(version_info: Sequence[int]) -> str:
 
 
 def check_python(version_info: Sequence[int] | None = None) -> list[str]:
-    version_info = version_info or sys.version_info
-    if tuple(version_info[:2]) < MIN_PYTHON:
+    current = tuple((version_info if version_info is not None else sys.version_info)[:3])
+    if current[:2] < MIN_PYTHON:
         return [
             "Python 3.12+ is required. "
-            f"Current interpreter is {_version_text(version_info)} at {sys.executable}."
+            f"Current interpreter is {_version_text(current)} at {sys.executable}."
         ]
     return []
 
@@ -92,7 +92,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("- Do not emit formal Omega numeric outputs until preflight passes.")
         return 1
 
-    print(f"cowork_preflight_ready: python={_version_text(sys.version_info)}")
+    print(f"cowork_preflight_ready: python={_version_text(tuple(sys.version_info[:3]))}")
     return 0
 
 

@@ -8,15 +8,13 @@ no randomness — just math on historical data.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
-
+from dataclasses import dataclass
 
 # ---------------------------------------------------------------------------
 # Default thresholds per stat category
 # ---------------------------------------------------------------------------
 
-DEFAULT_THRESHOLDS: Dict[str, List[float]] = {
+DEFAULT_THRESHOLDS: dict[str, list[float]] = {
     "pts": [10, 15, 20, 25, 30],
     "reb": [3, 5, 7, 10],
     "ast": [3, 5, 7, 10],
@@ -55,7 +53,7 @@ class AnchorLeg:
     threshold: float
     hit_rate: float
     games_checked: int
-    odds_over: Optional[float]    # American odds for over this threshold
+    odds_over: float | None    # American odds for over this threshold
     implied_prob: float            # from odds (0-1)
     empirical_prob: float          # = hit_rate (0-1)
     edge_pct: float               # (empirical - implied) * 100
@@ -66,9 +64,9 @@ class AnchorLeg:
 # ---------------------------------------------------------------------------
 
 def compute_hit_rate(
-    values: List[float],
+    values: list[float],
     threshold: float,
-) -> Tuple[int, int, float]:
+) -> tuple[int, int, float]:
     """Compute how often values meet or exceed a threshold.
 
     Args:
@@ -89,11 +87,11 @@ def compute_hit_rate(
 def detect_anchors(
     player_name: str,
     stat_key: str,
-    values: List[float],
-    thresholds: Optional[List[float]] = None,
+    values: list[float],
+    thresholds: list[float] | None = None,
     min_hit_rate: float = 0.70,
     min_games: int = MIN_GAMES_DEFAULT,
-) -> List[AnchorThreshold]:
+) -> list[AnchorThreshold]:
     """Detect stat thresholds that qualify as anchors for a player.
 
     Args:
@@ -114,7 +112,7 @@ def detect_anchors(
     if thresholds is None:
         thresholds = DEFAULT_THRESHOLDS.get(stat_key, [])
 
-    anchors: List[AnchorThreshold] = []
+    anchors: list[AnchorThreshold] = []
     for threshold in thresholds:
         games_checked, games_hit, hit_rate = compute_hit_rate(values, threshold)
         if hit_rate >= min_hit_rate:
@@ -169,11 +167,11 @@ def match_anchor_to_odds(
 def scan_player(
     player_name: str,
     team: str,
-    game_logs: Dict[str, List[float]],
-    prop_odds: Optional[Dict[str, Dict[float, float]]] = None,
+    game_logs: dict[str, list[float]],
+    prop_odds: dict[str, dict[float, float]] | None = None,
     min_hit_rate: float = 0.70,
     min_games: int = MIN_GAMES_DEFAULT,
-) -> List[AnchorLeg]:
+) -> list[AnchorLeg]:
     """Scan a single player for all anchor opportunities.
 
     Args:
@@ -188,7 +186,7 @@ def scan_player(
     Returns:
         List of AnchorLeg objects across all stat categories.
     """
-    all_legs: List[AnchorLeg] = []
+    all_legs: list[AnchorLeg] = []
 
     for stat_key, values in game_logs.items():
         anchors = detect_anchors(

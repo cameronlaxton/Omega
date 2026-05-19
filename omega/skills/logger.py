@@ -2,9 +2,10 @@
 This is intentionally minimal and sync; heavy workloads should replace with
 an async queue or external sink.
 """
-from pathlib import Path
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from pathlib import Path
+
 from . import config
 
 
@@ -16,7 +17,7 @@ def _ensure_log_dir():
 
 def write_event(event: dict):
     path = _ensure_log_dir()
-    ts = datetime.now(timezone.utc).isoformat()
+    ts = datetime.now(UTC).isoformat()
     event.setdefault("ts", ts)
     fname = path / "events.jsonl"
     with fname.open("a", encoding="utf-8") as f:

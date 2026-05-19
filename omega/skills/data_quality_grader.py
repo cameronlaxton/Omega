@@ -20,17 +20,17 @@ unnecessarily suppress good-evidence queries.
 """
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
+from omega.core.models import AnswerPlan, GatheredFact, InputImportance, OutputPackage
 from omega.skills import register
 from omega.skills.base import SkillBase, SkillObservation
-from omega.core.models import AnswerPlan, GatheredFact, InputImportance, OutputPackage
 
 _DEFAULT_BET_CARD_THRESHOLD = 0.7
 _LOW_QUALITY_THRESHOLD = 0.3
 
 
-def _critical_inputs_filled(facts: List[GatheredFact]) -> bool:
+def _critical_inputs_filled(facts: list[GatheredFact]) -> bool:
     critical = [f for f in facts if f.slot.importance == InputImportance.CRITICAL]
     if not critical:
         return False
@@ -42,10 +42,10 @@ class DataQualityGrader(SkillBase):
     name = "data-quality-grader"
     stage = "quality_gate"
 
-    def _run(
+    def _run(  # type: ignore[override]
         self,
         *,
-        facts: List[GatheredFact],
+        facts: list[GatheredFact],
         quality: float,
         revised_plan: AnswerPlan,
         **_: Any,

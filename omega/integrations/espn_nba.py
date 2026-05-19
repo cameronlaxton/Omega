@@ -19,7 +19,6 @@ import logging
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 
 logger = logging.getLogger("omega.integrations.espn_nba")
 
@@ -31,7 +30,7 @@ _REQUEST_TIMEOUT_SECONDS = 15
 
 # Canonical team names (left side = canonical, right side = aliases)
 # Canonical name matches the official label used by the core contracts.
-NBA_TEAMS: Dict[str, List[str]] = {
+NBA_TEAMS: dict[str, list[str]] = {
     "Atlanta Hawks":        ["atl", "hawks", "atlanta"],
     "Boston Celtics":       ["bos", "celtics", "boston"],
     "Brooklyn Nets":        ["bkn", "bro", "nets", "brooklyn"],
@@ -65,7 +64,7 @@ NBA_TEAMS: Dict[str, List[str]] = {
 }
 
 # Reverse map: alias (lowercased) → canonical name
-_ALIAS_TO_CANONICAL: Dict[str, str] = {}
+_ALIAS_TO_CANONICAL: dict[str, str] = {}
 for _canonical, _aliases in NBA_TEAMS.items():
     _ALIAS_TO_CANONICAL[_canonical.lower()] = _canonical
     for _alias in _aliases:
@@ -88,7 +87,7 @@ class FinalGame:
 # Alias resolution
 # ---------------------------------------------------------------------------
 
-def canonical_team(name_or_alias: str) -> Optional[str]:
+def canonical_team(name_or_alias: str) -> str | None:
     """Resolve a team string to its canonical NBA team name.
 
     Returns None if the string does not match any known alias. Callers should
@@ -114,7 +113,7 @@ def canonical_team(name_or_alias: str) -> Optional[str]:
 def fetch_scoreboard(
     date: str,
     url_opener=urllib.request.urlopen,
-) -> List[FinalGame]:
+) -> list[FinalGame]:
     """Fetch the ESPN NBA scoreboard for a given Eastern game date.
 
     Args:
@@ -136,13 +135,13 @@ def fetch_scoreboard(
     return parse_scoreboard(payload)
 
 
-def parse_scoreboard(payload: dict) -> List[FinalGame]:
+def parse_scoreboard(payload: dict) -> list[FinalGame]:
     """Parse the ESPN JSON envelope into a list of FinalGame.
 
     Public for testability — feed it a fixture dict to verify field extraction
     without making a network call.
     """
-    results: List[FinalGame] = []
+    results: list[FinalGame] = []
     for event in payload.get("events") or []:
         event_id = str(event.get("id") or "")
         iso_date = (event.get("date") or "")[:10]  # YYYY-MM-DD

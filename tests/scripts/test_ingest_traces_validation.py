@@ -12,9 +12,8 @@ from __future__ import annotations
 import json
 import logging
 import sys
-import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -25,8 +24,9 @@ _SCRIPTS = _REPO_ROOT / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from omega.trace.store import TraceStore  # noqa: E402
 import ingest_traces  # type: ignore  # noqa: E402
+
+from omega.trace.store import TraceStore  # noqa: E402
 
 
 def _make_prop_export(
@@ -38,8 +38,8 @@ def _make_prop_export(
     odds_taken: float = -115,
     descriptor: str = "Tatum_over_27.5_pts",
     with_identity: bool = True,
-) -> Dict[str, Any]:
-    snap: Dict[str, Any] = {
+) -> dict[str, Any]:
+    snap: dict[str, Any] = {
         "player_name": "Jayson Tatum",
         "league": "NBA",
         "prop_type": "pts",
@@ -85,7 +85,7 @@ def workspace(tmp_path: Path):
     return inbox, db
 
 
-def _write(inbox: Path, name: str, payload: Dict[str, Any]) -> Path:
+def _write(inbox: Path, name: str, payload: dict[str, Any]) -> Path:
     p = inbox / name
     p.write_text(json.dumps(payload), encoding="utf-8")
     return p

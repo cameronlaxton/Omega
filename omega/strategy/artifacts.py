@@ -13,8 +13,7 @@ Legacy HistoricalGame dicts can be converted via ``compat_dict_to_artifact()``.
 from __future__ import annotations
 
 import hashlib
-import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -29,7 +28,7 @@ class FrozenArtifact(BaseModel):
     # Identity
     artifact_id: str = Field(description="Deterministic hash of event identity")
     schema_version: int = 1
-    source_trace_id: Optional[str] = Field(
+    source_trace_id: str | None = Field(
         default=None, description="Links back to the originating ExecutionTrace"
     )
 
@@ -40,11 +39,11 @@ class FrozenArtifact(BaseModel):
     date: str = Field(description="YYYY-MM-DD")
 
     # Contexts (as used by the sim at decision time)
-    home_context: Dict[str, Any] = Field(default_factory=dict)
-    away_context: Dict[str, Any] = Field(default_factory=dict)
+    home_context: dict[str, Any] = Field(default_factory=dict)
+    away_context: dict[str, Any] = Field(default_factory=dict)
 
     # Odds (decision-time snapshot)
-    odds: Dict[str, Any] = Field(
+    odds: dict[str, Any] = Field(
         default_factory=dict,
         description="Decision-time odds: moneyline_home, moneyline_away, spread_home, over_under",
     )
@@ -56,10 +55,10 @@ class FrozenArtifact(BaseModel):
     calibration_policy: str = "static_v1"
 
     # Outcome (attached only at grading time, NOT during simulation)
-    outcome: Optional[Dict[str, Any]] = Field(
+    outcome: dict[str, Any] | None = Field(
         default=None, description="home_score, away_score — attached at grading time"
     )
-    closing_odds: Optional[Dict[str, Any]] = Field(
+    closing_odds: dict[str, Any] | None = Field(
         default=None, description="Closing-line odds for CLV calculation"
     )
 
@@ -77,8 +76,8 @@ def compute_artifact_id(
 
 
 def trace_to_artifact(
-    trace: Dict[str, Any],
-    outcome: Optional[Dict[str, Any]] = None,
+    trace: dict[str, Any],
+    outcome: dict[str, Any] | None = None,
 ) -> FrozenArtifact:
     """Convert a persisted trace dict into a frozen backtest artifact.
 
@@ -148,7 +147,7 @@ def trace_to_artifact(
     )
 
 
-def compat_dict_to_artifact(game: Dict[str, Any]) -> FrozenArtifact:
+def compat_dict_to_artifact(game: dict[str, Any]) -> FrozenArtifact:
     """Convert a legacy HistoricalGame dict to FrozenArtifact.
 
     This shim allows existing backtest code and tests that use
@@ -177,17 +176,17 @@ def compat_dict_to_artifact(game: Dict[str, Any]) -> FrozenArtifact:
 
 
 def _extract_contexts_from_facts(
-    facts: List[Dict[str, Any]],
+    facts: list[dict[str, Any]],
     home_team: str,
     away_team: str,
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Best-effort context extraction from gathered facts.
 
     Scans gathered_facts for team_stat entries matching home/away teams.
     Returns (home_context, away_context).
     """
-    home_ctx: Dict[str, Any] = {}
-    away_ctx: Dict[str, Any] = {}
+    home_ctx: dict[str, Any] = {}
+    away_ctx: dict[str, Any] = {}
 
     for fact in facts:
         slot = fact.get("slot", {})

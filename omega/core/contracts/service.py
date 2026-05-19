@@ -11,17 +11,16 @@ import hashlib
 import json
 import logging
 import uuid
-from datetime import datetime
-from datetime import timezone
-from typing import Any, Dict, List, Optional, Union
+from datetime import UTC, datetime
+from typing import Any
 
+from omega.core.betting.kelly import recommend_stake
 from omega.core.betting.odds import (
-    american_to_decimal,
     edge_percentage,
     expected_value_percent,
     implied_probability,
 )
-from omega.core.betting.kelly import recommend_stake
+from omega.core.calibration.probability import apply_calibration
 from omega.core.contracts.schemas import (
     AnalysisMetadata,
     BetSlip,
@@ -36,9 +35,12 @@ from omega.core.contracts.schemas import (
     SlateAnalysisRequest,
     SlateAnalysisResponse,
 )
-from omega.core.simulation.engine import OmegaSimulationEngine, run_player_simulation, select_distribution
-from omega.core.simulation.archetypes import get_archetype, get_archetype_name
-from omega.core.calibration.probability import apply_calibration
+from omega.core.simulation.archetypes import get_archetype_name
+from omega.core.simulation.engine import (
+    OmegaSimulationEngine,
+    run_player_simulation,
+    select_distribution,
+)
 
 logger = logging.getLogger("omega.service")
 
@@ -71,7 +73,7 @@ def _sanitize_for_trace_hash(value: Any) -> Any:
     return value
 
 
-def _stable_input_hash(request: Any) -> Optional[str]:
+def _stable_input_hash(request: Any) -> str | None:
     """Stable 8-char content hash, excluding volatile odds and close snapshots."""
     try:
         payload = _sanitize_for_trace_hash(request)
@@ -96,8 +98,8 @@ def _new_trace_id(request: Any = None) -> str:
 
 
 def _coerce_request(
-    request: Union[Dict[str, Any], GameAnalysisRequest, PlayerPropRequest, SlateAnalysisRequest],
-) -> Union[GameAnalysisRequest, PlayerPropRequest, SlateAnalysisRequest]:
+    request: dict[str, Any] | GameAnalysisRequest | PlayerPropRequest | SlateAnalysisRequest,
+) -> GameAnalysisRequest | PlayerPropRequest | SlateAnalysisRequest:
     """Accept a typed request or a dict and return the canonical typed request."""
     if isinstance(request, (GameAnalysisRequest, PlayerPropRequest, SlateAnalysisRequest)):
         return request
@@ -113,7 +115,7 @@ def _coerce_request(
     return GameAnalysisRequest(**request)
 
 
-def _safe_dump(obj: Any) -> Dict[str, Any]:
+def _safe_dump(obj: Any) -> dict[str, Any]:
     """Convert Pydantic models and dicts to JSON-friendly dictionaries."""
     if hasattr(obj, "model_dump"):
         return obj.model_dump(mode="json")
@@ -122,7 +124,7 @@ def _safe_dump(obj: Any) -> Dict[str, Any]:
     return {"value": str(obj)}
 
 
-def _result_downgrades(result: Any) -> List[str]:
+def _result_downgrades(result: Any) -> list[str]:
     """Expose minimal trace-level downgrades without reviving the lite gate."""
     status = getattr(result, "status", None)
     if status == "skipped":
@@ -133,11 +135,11 @@ def _result_downgrades(result: Any) -> List[str]:
 
 
 def analyze(
-    request: Union[Dict[str, Any], GameAnalysisRequest, PlayerPropRequest, SlateAnalysisRequest],
+    request: dict[str, Any] | GameAnalysisRequest | PlayerPropRequest | SlateAnalysisRequest,
     *,
     session_id: str,
     bankroll: float,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run a canonical Omega analysis and return an auditable trace envelope.
 
     This wrapper owns only request typing, trace identity, and audit snapshots.
@@ -151,8 +153,9 @@ def analyze(
 
     typed_req = _coerce_request(request)
     trace_id = _new_trace_id(typed_req)
-    ran_at = datetime.now(timezone.utc).isoformat()
+    ran_at = datetime.now(UTC).isoformat()
 
+    result: GameAnalysisResponse | PlayerPropResponse | SlateAnalysisResponse
     if isinstance(typed_req, GameAnalysisRequest):
         result = analyze_game(typed_req, bankroll=bankroll)
         kind = "game"
@@ -230,9 +233,9 @@ def _build_edge(
 
 
 def _pick_best_bet(
-    edges: List[EdgeDetail],
+    edges: list[EdgeDetail],
     bankroll: float,
-) -> Optional[BetSlip]:
+) -> BetSlip | None:
     """Select the strongest edge and build a BetSlip, if any edge qualifies."""
     actionable = [e for e in edges if e.confidence_tier in ("A", "B") and e.ev_pct > 0]
     if not actionable:
@@ -264,7 +267,7 @@ def _market_quote(
     odds: OddsInput,
     market_type: str,
     *labels: str,
-) -> Optional[MarketQuote]:
+) -> MarketQuote | None:
     for quote in odds.markets or []:
         if quote.market_type != market_type:
             continue
@@ -277,7 +280,7 @@ def _resolve_game_market_odds(
     odds: OddsInput,
     home_team: str,
     away_team: str,
-) -> tuple[Optional[float], Optional[float]]:
+) -> tuple[float | None, float | None]:
     """Resolve home/away odds from normalized markets first, legacy fields second."""
     home_spread = _market_quote(odds, "spread", home_team, "Home")
     home_ml = _market_quote(odds, "moneyline", home_team, "Home")
@@ -313,7 +316,7 @@ def analyze_game(
 
     # Extract spread value so the engine can compute coverage probabilities.
     # Done before the engine call; odds may be absent.
-    spread_value: Optional[float] = None
+    spread_value: float | None = None
     if request.odds:
         _hsq = _market_quote(request.odds, "spread", request.home_team, "Home")
         if _hsq and _hsq.line is not None:
@@ -366,7 +369,7 @@ def analyze_game(
     )
 
     # Edge analysis — requires odds
-    edges: List[EdgeDetail] = []
+    edges: list[EdgeDetail] = []
     data_sources = ["simulation"]
 
     if request.odds:
@@ -527,7 +530,7 @@ def analyze_player_prop(
     over_prob = sim_result.get("over_prob", 0.0)
     under_prob = sim_result.get("under_prob", 0.0)
 
-    notes: List[str] = []
+    notes: list[str] = []
     resolved_dist = select_distribution(
         stat_key, request.league, mean=mean_f, override=distribution_override,
     )
@@ -545,21 +548,22 @@ def analyze_player_prop(
     except (TypeError, ValueError):
         sample_size = None
 
-    imputed_fraction: Optional[float]
+    imputed_fraction: float | None
     if imputed_keys and (sample_size is None or sample_size <= 0):
         imputed_fraction = 1.0
         notes.append("imputed_keys_provided_without_sample_size")
     elif imputed_keys:
+        assert sample_size is not None
         imputed_fraction = min(1.0, len(imputed_keys) / float(sample_size))
     else:
         imputed_fraction = 0.0
 
     # B4: single-side odds — "implied opposite" is forbidden. If only one
     # side is sourced, compute that side's edge only and annotate the other.
-    edge_over: Optional[float] = None
-    edge_under: Optional[float] = None
+    edge_over: float | None = None
+    edge_under: float | None = None
     recommendation = "pass"
-    tier: Optional[str] = None
+    tier: str | None = None
 
     if request.odds_over is not None:
         market_over = implied_probability(request.odds_over)
@@ -622,7 +626,7 @@ def analyze_player_prop(
 
 def analyze_slate(
     request: SlateAnalysisRequest,
-    games: Optional[List[Dict[str, Any]]] = None,
+    games: list[dict[str, Any]] | None = None,
 ) -> SlateAnalysisResponse:
     """Analyze a slate of games. Loops analyze_game per game; catches errors per-game.
     Does not fetch games; caller must supply request.games or games argument."""
@@ -632,7 +636,7 @@ def analyze_slate(
     if not games:
         games = []
 
-    analyses: List[GameAnalysisResponse] = []
+    analyses: list[GameAnalysisResponse] = []
     for game in games:
         home = _extract_team(game, "home_team") or _extract_team(game, "home")
         away = _extract_team(game, "away_team") or _extract_team(game, "away")
@@ -652,14 +656,20 @@ def analyze_slate(
                 markets=odds_dict.get("markets"),
             )
 
-        game_request = GameAnalysisRequest(
-            home_team=home,
-            away_team=away,
-            league=request.league,
-            odds=odds_input,
-            home_context=game.get("home_context"),
-            away_context=game.get("away_context"),
-        )
+        game_kwargs: dict[str, Any] = {
+            "home_team": home,
+            "away_team": away,
+            "league": request.league,
+            "odds": odds_input,
+            "home_context": game.get("home_context"),
+            "away_context": game.get("away_context"),
+        }
+        if game.get("n_iterations") is not None:
+            game_kwargs["n_iterations"] = game.get("n_iterations")
+        if game.get("seed") is not None:
+            game_kwargs["seed"] = game.get("seed")
+
+        game_request = GameAnalysisRequest(**game_kwargs)
         result = analyze_game(game_request, bankroll=request.bankroll)
         analyses.append(result)
 
@@ -675,7 +685,7 @@ def analyze_slate(
     )
 
 
-def _extract_team(game: Dict[str, Any], key: str) -> Optional[str]:
+def _extract_team(game: dict[str, Any], key: str) -> str | None:
     """Safely extract team name from various game dict shapes."""
     val = game.get(key)
     if val is None:

@@ -38,7 +38,7 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -47,7 +47,7 @@ if str(_REPO_ROOT) not in sys.path:
 logger = logging.getLogger("run_action_plan")
 
 
-def _validate_fit_calibration(args: Dict[str, Any]) -> List[str]:
+def _validate_fit_calibration(args: dict[str, Any]) -> list[str]:
     if "league" not in args or not isinstance(args["league"], str):
         raise ValueError("fit_calibration.args.league is required and must be str")
     method = args.get("method", "both")
@@ -67,7 +67,7 @@ def _validate_fit_calibration(args: Dict[str, Any]) -> List[str]:
     return cmd
 
 
-def _validate_promote_profile(args: Dict[str, Any]) -> List[str]:
+def _validate_promote_profile(args: dict[str, Any]) -> list[str]:
     if "candidate_id" not in args or not isinstance(args["candidate_id"], str):
         raise ValueError("promote_profile.args.candidate_id is required and must be str")
     auto = args.get("auto", False)
@@ -84,7 +84,7 @@ def _validate_promote_profile(args: Dict[str, Any]) -> List[str]:
     return cmd
 
 
-def _validate_report_calibration(args: Dict[str, Any]) -> List[str]:
+def _validate_report_calibration(args: dict[str, Any]) -> list[str]:
     if "league" not in args or not isinstance(args["league"], str):
         raise ValueError("report_calibration.args.league is required and must be str")
     window_days = args.get("window_days", 30)
@@ -101,14 +101,14 @@ def _validate_report_calibration(args: Dict[str, Any]) -> List[str]:
 
 
 # Strict allowlist. Adding a key here is a deliberate boundary change.
-_DISPATCH: Dict[str, Any] = {
+_DISPATCH: dict[str, Any] = {
     "fit_calibration": _validate_fit_calibration,
     "promote_profile": _validate_promote_profile,
     "report_calibration": _validate_report_calibration,
 }
 
 
-def _load_plan(path: Path) -> Dict[str, Any]:
+def _load_plan(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as fh:
         plan = json.load(fh)
     if not isinstance(plan, dict):
@@ -118,9 +118,9 @@ def _load_plan(path: Path) -> Dict[str, Any]:
     return plan
 
 
-def _validate_all(plan: Dict[str, Any]) -> List[Tuple[str, List[str]]]:
+def _validate_all(plan: dict[str, Any]) -> list[tuple[str, list[str]]]:
     """Validate every action up-front and return (type, cmd) pairs. Raises on bad input."""
-    out: List[Tuple[str, List[str]]] = []
+    out: list[tuple[str, list[str]]] = []
     for i, action in enumerate(plan["actions"]):
         if not isinstance(action, dict):
             raise ValueError(f"actions[{i}] must be an object")

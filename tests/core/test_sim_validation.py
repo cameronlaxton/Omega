@@ -1,10 +1,7 @@
 """Tests for omega.core.simulation.validation — sim-input boundary hardening."""
 
-import math
-import pytest
 
-from omega.core.simulation.validation import validate_sim_context, SIM_INPUT_BOUNDS
-
+from omega.core.simulation.validation import SIM_INPUT_BOUNDS, validate_sim_context
 
 # ---------------------------------------------------------------------------
 # Happy path: valid data passes through

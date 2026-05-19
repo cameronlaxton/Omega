@@ -26,10 +26,7 @@ from omega.core.contracts.service import (
     analyze,
     analyze_game,
     analyze_player_prop,
-    analyze_slate,
 )
-from omega.core.contracts.schemas import SlateAnalysisRequest
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

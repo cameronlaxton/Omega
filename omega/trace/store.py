@@ -17,7 +17,7 @@ import logging
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from omega.trace.bet_record import BetRecord
 from omega.trace.market_snapshot import MarketMovement, MarketSnapshot
@@ -30,6 +30,7 @@ from omega.trace.schema import (
     SCHEMA_V6,
     apply_v4_migration,
     apply_v7_migration,
+    apply_v8_migration,
 )
 
 logger = logging.getLogger("omega.trace.store")
@@ -40,13 +41,13 @@ _DEFAULT_DB_PATH = "omega_traces.db"
 class TraceStore:
     """SQLite-backed trace persistence."""
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         if db_path is None:
             # Default: repo root
             repo_root = Path(__file__).parent.parent.parent
             db_path = str(repo_root / _DEFAULT_DB_PATH)
         self._db_path = db_path
-        self._conn: Optional[sqlite3.Connection] = None
+        self._conn: sqlite3.Connection | None = None
         self._ensure_schema()
 
     @property
@@ -96,6 +97,13 @@ class TraceStore:
             "Phase 6i: bet_records.session_id column + BUG-3 prop-trace outcome cleanup",
         )
 
+        # V8: one game outcome per trace
+        apply_v8_migration(self.conn)
+        self._record_version(
+            8,
+            "Phase 6j: enforce one game outcome row per trace",
+        )
+
     def _record_version(self, version: int, description: str) -> None:
         """Idempotently stamp a schema version into schema_versions."""
         existing = self.conn.execute(
@@ -113,7 +121,7 @@ class TraceStore:
     # Persist
     # ------------------------------------------------------------------
 
-    def persist(self, trace: Dict[str, Any]) -> str:
+    def persist(self, trace: dict[str, Any]) -> str:
         """Write a trace to SQLite. Idempotent on trace_id.
 
         Args:
@@ -204,6 +212,15 @@ class TraceStore:
         ).fetchone()
         if row is None:
             raise ValueError(f"No trace found with trace_id={trace_id!r}")
+
+        existing = self.conn.execute(
+            "SELECT outcome_id FROM outcomes WHERE trace_id = ?", (trace_id,)
+        ).fetchone()
+        if existing:
+            raise ValueError(
+                f"Outcome already attached for trace_id={trace_id!r}; "
+                "delete the existing outcome explicitly before re-grading"
+            )
 
         # Determine result
         if home_score > away_score:
@@ -305,7 +322,7 @@ class TraceStore:
         self.conn.commit()
         return prop_outcome_id
 
-    def get_prop_outcomes(self, trace_id: str) -> List[Dict[str, Any]]:
+    def get_prop_outcomes(self, trace_id: str) -> list[dict[str, Any]]:
         """Return all prop outcomes attached to a trace (may be empty)."""
         rows = self.conn.execute(
             """SELECT prop_outcome_id, trace_id, player_name, stat_type,
@@ -365,7 +382,7 @@ class TraceStore:
         self.conn.commit()
         return bet.bet_id
 
-    def get_bet_records(self, trace_id: str) -> List[Dict[str, Any]]:
+    def get_bet_records(self, trace_id: str) -> list[dict[str, Any]]:
         """Return all bet records attached to a trace (may be empty)."""
         rows = self.conn.execute(
             """SELECT bet_id, trace_id, book, market, selection, selection_descriptor,
@@ -378,11 +395,11 @@ class TraceStore:
 
     def query_ungraded_prop_bet_traces(
         self,
-        league: Optional[str] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
+        league: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
         limit: int = 1000,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Return traces linked to pending player-prop bet_records that have no
         prop_outcome yet.
 
@@ -442,7 +459,7 @@ class TraceStore:
         market: str,
         selection_descriptor: str,
         closing_odds: float,
-        closing_line: Optional[float],
+        closing_line: float | None,
         closing_timestamp: str,
         source: str,
     ) -> str:
@@ -499,7 +516,7 @@ class TraceStore:
         self.conn.commit()
         return closing_id
 
-    def get_closing_lines(self, trace_id: str) -> List[Dict[str, Any]]:
+    def get_closing_lines(self, trace_id: str) -> list[dict[str, Any]]:
         """Return all closing-line snapshots attached to a trace."""
         rows = self.conn.execute(
             """SELECT closing_id, trace_id, market, selection_descriptor,
@@ -549,10 +566,10 @@ class TraceStore:
     def get_market_snapshots(
         self,
         provider_event_id: str,
-        market: Optional[str] = None,
-        bookmaker: Optional[str] = None,
-        selection: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        market: str | None = None,
+        bookmaker: str | None = None,
+        selection: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Return provider market observations for movement analysis."""
         clauses = ["provider_event_id = ?"]
         params: list[Any] = [provider_event_id]
@@ -583,7 +600,7 @@ class TraceStore:
         market: str,
         selection: str,
         bookmaker: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Compute simple first-to-last line movement for an exact market row."""
         rows = self.get_market_snapshots(
             provider_event_id=provider_event_id,
@@ -617,7 +634,7 @@ class TraceStore:
     # Retrieval
     # ------------------------------------------------------------------
 
-    def get_trace(self, trace_id: str) -> Optional[Dict[str, Any]]:
+    def get_trace(self, trace_id: str) -> dict[str, Any] | None:
         """Retrieve the full trace dict by ID."""
         row = self.conn.execute(
             "SELECT full_trace FROM traces WHERE trace_id = ?", (trace_id,)
@@ -628,13 +645,13 @@ class TraceStore:
 
     def query_traces(
         self,
-        league: Optional[str] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        has_outcome: Optional[bool] = None,
-        execution_mode: Optional[str] = None,
+        league: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        has_outcome: bool | None = None,
+        execution_mode: str | None = None,
         limit: int = 100,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Query traces with optional filters.
 
         Args:
@@ -710,8 +727,8 @@ class TraceStore:
         return results
 
     def get_graded_traces(
-        self, league: Optional[str] = None, limit: int = 1000
-    ) -> List[Dict[str, Any]]:
+        self, league: str | None = None, limit: int = 1000
+    ) -> list[dict[str, Any]]:
         """Return traces that have attached outcomes. Used by calibration fitter.
 
         Each returned dict has a '_outcome' key with the attached outcome.
@@ -719,8 +736,8 @@ class TraceStore:
         return self.query_traces(league=league, has_outcome=True, limit=limit)
 
     def get_session_summary(
-        self, league: Optional[str] = None, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+        self, league: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
         """Aggregate trace counts grouped by session_id. NULL session_ids excluded.
 
         Used by report_calibration.py to surface per-session metrics.
@@ -737,11 +754,21 @@ class TraceStore:
             f"""
             SELECT t.session_id,
                    COUNT(*) AS trace_count,
-                   SUM(CASE WHEN o.outcome_id IS NOT NULL THEN 1 ELSE 0 END) AS graded_count,
+                   SUM(
+                       CASE WHEN
+                           EXISTS (
+                               SELECT 1 FROM outcomes o
+                               WHERE o.trace_id = t.trace_id
+                           )
+                           OR EXISTS (
+                               SELECT 1 FROM prop_outcomes p
+                               WHERE p.trace_id = t.trace_id
+                           )
+                       THEN 1 ELSE 0 END
+                   ) AS graded_count,
                    MIN(t.timestamp) AS first_ts,
                    MAX(t.timestamp) AS last_ts
             FROM traces t
-            LEFT JOIN outcomes o ON t.trace_id = o.trace_id
             {where}
             GROUP BY t.session_id
             ORDER BY last_ts DESC

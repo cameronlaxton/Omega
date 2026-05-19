@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from omega.mcp.server import (
     PROMPT_NAMES,
     RESOURCE_URIS,
     TOOL_NAMES,
+    _read_repo_file,
     omega_analyze_game,
     omega_analyze_prop,
     omega_calibration_fit_preview,
@@ -18,7 +19,7 @@ from omega.mcp.server import (
 )
 
 
-def _trace_payload(trace_id: str = "mcp-trace-1") -> Dict[str, Any]:
+def _trace_payload(trace_id: str = "mcp-trace-1") -> dict[str, Any]:
     return {
         "trace_id": trace_id,
         "run_id": "run-1",
@@ -43,6 +44,12 @@ def test_mcp_manifest_lists_expected_surface():
     assert "omega_resolve_odds" in TOOL_NAMES
     assert "omega://docs/llm-mcp-interface" in RESOURCE_URIS
     assert "omega_runtime_prompt" in PROMPT_NAMES
+
+
+def test_calibration_resource_path_is_readable():
+    data = _read_repo_file("config/calibration/universal_latest.json")
+
+    assert "universal_v1.0" in data
 
 
 def test_analyze_game_tool_delegates_to_core_service():

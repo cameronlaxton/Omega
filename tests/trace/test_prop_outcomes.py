@@ -14,7 +14,7 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -33,7 +33,7 @@ def _make_prop_trace(
     player_name: str = "LeBron James",
     prop_type: str = "points",
     line: float = 24.5,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "trace_id": trace_id,
         "run_id": "r-001",
@@ -382,7 +382,6 @@ class TestTraceRecorderSchemaVersion:
     """The recorder must inject CURRENT_VERSION, not a stale hard-coded 1."""
 
     def test_recorded_schema_version_matches_current(self):
-        from omega.skills.trace_recorder import TraceRecorder
 
         tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         tmp.close()

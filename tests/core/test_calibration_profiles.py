@@ -4,12 +4,10 @@ Tests for Phase 6c: Calibration profiles, registry, fitter, and selection.
 All tests are deterministic — no network calls, no LLM.
 """
 
-import json
 import os
 import tempfile
 
 import pytest
-
 
 # -----------------------------------------------------------------------
 # Fixtures
@@ -430,9 +428,9 @@ class TestApplyCalibration:
 
     def test_with_league_and_profile(self):
         """When a production profile exists, apply_calibration uses it."""
-        from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus
-        from omega.core.calibration.registry import CalibrationRegistry
         from omega.core.calibration.probability import apply_calibration
+        from omega.core.calibration.profiles import CalibrationProfile
+        from omega.core.calibration.registry import CalibrationRegistry
 
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = f.name

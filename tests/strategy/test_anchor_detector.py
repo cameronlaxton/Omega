@@ -3,14 +3,12 @@
 import pytest
 
 from omega.strategy.anchor.detector import (
-    AnchorLeg,
     AnchorThreshold,
     compute_hit_rate,
     detect_anchors,
     match_anchor_to_odds,
     scan_player,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test data — inspired by real NBA player performances

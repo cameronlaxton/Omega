@@ -6,8 +6,6 @@ Produces human-readable ranked tables of parlay recommendations.
 
 from __future__ import annotations
 
-from typing import List
-
 from omega.strategy.anchor.scanner import AnchorParlay, ScanResult
 
 
@@ -17,7 +15,7 @@ def format_scan_result(result: ScanResult) -> str:
     Returns:
         Multi-line string with scan summary and ranked parlays.
     """
-    lines: List[str] = []
+    lines: list[str] = []
 
     lines.append(f"=== Anchor Parlay Scan: {result.league} ({result.date}) ===")
     lines.append(
@@ -49,7 +47,7 @@ def format_parlay(parlay: AnchorParlay, rank: int = 0) -> str:
     Returns:
         Multi-line string for one parlay.
     """
-    lines: List[str] = []
+    lines: list[str] = []
 
     header = f"#{rank} " if rank > 0 else ""
     lines.append(

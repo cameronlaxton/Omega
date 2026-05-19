@@ -19,9 +19,7 @@ import sys
 import tempfile
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List
-
-import pytest
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -30,9 +28,10 @@ _SCRIPTS = _REPO_ROOT / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+import backfill_outcomes_manual as backfill  # type: ignore  # noqa: E402
+
 from omega.integrations.espn_nba import FinalGame  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
-import backfill_outcomes_manual as backfill  # type: ignore  # noqa: E402
 
 
 def _tmp_db() -> str:
@@ -46,7 +45,7 @@ def _make_game_trace(
     home_team: str = "Miami Heat",
     away_team: str = "Boston Celtics",
     timestamp: str = "2026-05-17T19:00:00Z",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "trace_id": trace_id,
         "run_id": trace_id,
@@ -80,8 +79,8 @@ def _make_prop_trace(
     prop_type: str = "pts",
     line: float = 24.5,
     recommendation: str = "over",
-) -> Dict[str, Any]:
-    snap: Dict[str, Any] = {
+) -> dict[str, Any]:
+    snap: dict[str, Any] = {
         "player_name": player_name,
         "league": "NBA",
         "prop_type": prop_type,
@@ -126,7 +125,7 @@ def _final_game() -> FinalGame:
     )
 
 
-def _nba_box_score(player: str, pts: float) -> Dict[str, Any]:
+def _nba_box_score(player: str, pts: float) -> dict[str, Any]:
     return {
         "boxscore": {
             "players": [

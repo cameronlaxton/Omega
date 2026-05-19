@@ -19,11 +19,11 @@ reports filled=True but the underlying data is absent, synthetic, or unattribute
 """
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
+from omega.core.models import GatheredFact, InputImportance
 from omega.skills import register
 from omega.skills.base import SkillBase, SkillObservation
-from omega.core.models import GatheredFact, InputImportance
 
 _LOW_CONFIDENCE_THRESHOLD = 0.3
 
@@ -33,7 +33,7 @@ class EvidenceValidator(SkillBase):
     name = "evidence-validator"
     stage = "gathering"
 
-    def _run(self, *, facts: List[GatheredFact], **_: Any) -> SkillObservation:
+    def _run(self, *, facts: list[GatheredFact], **_: Any) -> SkillObservation:  # type: ignore[override]
         findings: list[str] = []
 
         for fact in facts:

@@ -14,12 +14,12 @@ Supports:
 from __future__ import annotations
 
 import hashlib
-import math
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+import math
+from datetime import UTC, datetime
+from typing import Any
 
-from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus
+from omega.core.calibration.profiles import CalibrationProfile
 
 logger = logging.getLogger("omega.core.calibration.fitter")
 
@@ -39,8 +39,8 @@ class CalibrationFitter:
 
     @staticmethod
     def extract_pairs(
-        graded_traces: List[Dict[str, Any]],
-    ) -> Tuple[List[float], List[int]]:
+        graded_traces: list[dict[str, Any]],
+    ) -> tuple[list[float], list[int]]:
         """Extract (predicted_prob, actual_outcome) pairs from game-level
         graded traces.
 
@@ -54,8 +54,8 @@ class CalibrationFitter:
         Returns:
             (predictions, outcomes) — parallel lists of floats and 0/1 ints.
         """
-        predictions: List[float] = []
-        outcomes: List[int] = []
+        predictions: list[float] = []
+        outcomes: list[int] = []
 
         for trace in graded_traces:
             preds = trace.get("predictions")
@@ -80,8 +80,8 @@ class CalibrationFitter:
 
     @staticmethod
     def extract_prop_pairs(
-        graded_traces: List[Dict[str, Any]],
-    ) -> Tuple[List[float], List[int]]:
+        graded_traces: list[dict[str, Any]],
+    ) -> tuple[list[float], list[int]]:
         """Extract (predicted_prob, actual_outcome) pairs from prop-level
         graded traces.
 
@@ -100,8 +100,8 @@ class CalibrationFitter:
         Returns:
             (predictions, outcomes) — parallel lists of floats and 0/1 ints.
         """
-        predictions: List[float] = []
-        outcomes: List[int] = []
+        predictions: list[float] = []
+        outcomes: list[int] = []
 
         for trace in graded_traces:
             preds = trace.get("predictions") or {}
@@ -137,8 +137,8 @@ class CalibrationFitter:
 
     def fit_isotonic(
         self,
-        predictions: List[float],
-        outcomes: List[int],
+        predictions: list[float],
+        outcomes: list[int],
         league: str,
         n_bins: int = 10,
     ) -> CalibrationProfile:
@@ -166,9 +166,9 @@ class CalibrationFitter:
 
         # Bin predictions
         bin_edges = [i / n_bins for i in range(n_bins + 1)]
-        bin_counts: List[int] = [0] * n_bins
-        bin_sums: List[float] = [0.0] * n_bins
-        bin_pred_sums: List[float] = [0.0] * n_bins
+        bin_counts: list[int] = [0] * n_bins
+        bin_sums: list[float] = [0.0] * n_bins
+        bin_pred_sums: list[float] = [0.0] * n_bins
 
         for pred, out in zip(predictions, outcomes):
             idx = min(int(pred * n_bins), n_bins - 1)
@@ -177,7 +177,7 @@ class CalibrationFitter:
             bin_pred_sums[idx] += pred
 
         # Observed rate per bin (handle empty bins via interpolation)
-        observed: List[Optional[float]] = []
+        observed: list[float | None] = []
         for i in range(n_bins):
             if bin_counts[i] > 0:
                 observed.append(bin_sums[i] / bin_counts[i])
@@ -191,7 +191,7 @@ class CalibrationFitter:
         pav_values, pav_counts = _pool_adjacent_violators(observed_filled, bin_counts)
 
         # Build calibration map: bin_center → calibrated_prob
-        calibration_map: Dict[str, float] = {}
+        calibration_map: dict[str, float] = {}
         for i in range(n_bins):
             center = (bin_edges[i] + bin_edges[i + 1]) / 2.0
             # Use string keys for JSON serialization
@@ -217,8 +217,8 @@ class CalibrationFitter:
 
     def fit_shrinkage(
         self,
-        predictions: List[float],
-        outcomes: List[int],
+        predictions: list[float],
+        outcomes: list[int],
         league: str,
     ) -> CalibrationProfile:
         """Fit a shrinkage calibration profile by minimizing Brier score.
@@ -273,9 +273,9 @@ class CalibrationFitter:
     def evaluate(
         self,
         profile: CalibrationProfile,
-        predictions: List[float],
-        outcomes: List[int],
-    ) -> Dict[str, float]:
+        predictions: list[float],
+        outcomes: list[int],
+    ) -> dict[str, float]:
         """Evaluate a profile on held-out data.
 
         Applies the profile's calibration to each prediction, then computes
@@ -289,7 +289,7 @@ class CalibrationFitter:
         if not predictions:
             return {"brier_score": 0.0, "calibration_error": 0.0, "log_loss": 0.0, "n_eval": 0}
 
-        calibrated: List[float] = []
+        calibrated: list[float] = []
         for pred in predictions:
             result = calibrate_probability(pred, method=profile.method, **profile.params)
             calibrated.append(result["calibrated"])
@@ -324,9 +324,9 @@ class CalibrationFitter:
         self,
         candidate: CalibrationProfile,
         incumbent: CalibrationProfile,
-        predictions: List[float],
-        outcomes: List[int],
-    ) -> Dict[str, Any]:
+        predictions: list[float],
+        outcomes: list[int],
+    ) -> dict[str, Any]:
         """Compare a candidate profile against the incumbent on held-out data.
 
         Returns:
@@ -358,9 +358,9 @@ class CalibrationFitter:
 # ---------------------------------------------------------------------------
 
 def _pool_adjacent_violators(
-    values: List[float],
-    counts: List[int],
-) -> Tuple[List[float], List[int]]:
+    values: list[float],
+    counts: list[int],
+) -> tuple[list[float], list[int]]:
     """Pool-Adjacent-Violators algorithm for isotonic regression.
 
     Enforces monotonically non-decreasing values by merging adjacent
@@ -369,7 +369,6 @@ def _pool_adjacent_violators(
     Returns:
         (adjusted_values, adjusted_counts) — same length as input.
     """
-    n = len(values)
     result_vals = list(values)
     result_counts = list(counts)
 
@@ -408,15 +407,16 @@ def _pool_adjacent_violators(
     return result_vals, result_counts
 
 
-def _interpolate_empty_bins(observed: List[Optional[float]]) -> List[float]:
+def _interpolate_empty_bins(observed: list[float | None]) -> list[float]:
     """Fill None entries via linear interpolation from nearest non-None neighbors."""
     n = len(observed)
     result = [0.0] * n
 
     # Copy known values
     for i in range(n):
-        if observed[i] is not None:
-            result[i] = observed[i]
+        value = observed[i]
+        if value is not None:
+            result[i] = value
 
     # Forward-fill then backward-fill for edges
     last_known = None
@@ -442,6 +442,8 @@ def _interpolate_empty_bins(observed: List[Optional[float]]) -> List[float]:
             if right - left > 1:
                 left_val = observed[left]
                 right_val = observed[right]
+                if left_val is None or right_val is None:
+                    continue
                 for j in range(left + 1, right):
                     t = (j - left) / (right - left)
                     result[j] = left_val + t * (right_val - left_val)
@@ -450,8 +452,8 @@ def _interpolate_empty_bins(observed: List[Optional[float]]) -> List[float]:
 
 
 def _expected_calibration_error(
-    calibrated: List[float],
-    outcomes: List[int],
+    calibrated: list[float],
+    outcomes: list[int],
     n_bins: int = 10,
 ) -> float:
     """Compute Expected Calibration Error (ECE)."""
@@ -459,9 +461,9 @@ def _expected_calibration_error(
     if n == 0:
         return 0.0
 
-    bin_counts: List[int] = [0] * n_bins
-    bin_pred_sums: List[float] = [0.0] * n_bins
-    bin_outcome_sums: List[float] = [0.0] * n_bins
+    bin_counts: list[int] = [0] * n_bins
+    bin_pred_sums: list[float] = [0.0] * n_bins
+    bin_outcome_sums: list[float] = [0.0] * n_bins
 
     for pred, out in zip(calibrated, outcomes):
         idx = min(int(pred * n_bins), n_bins - 1)
@@ -479,7 +481,7 @@ def _expected_calibration_error(
     return ece
 
 
-def _compute_hash(predictions: List[float], outcomes: List[int]) -> str:
+def _compute_hash(predictions: list[float], outcomes: list[int]) -> str:
     """Deterministic hash of prediction-outcome pairs for reproducibility."""
     # Round predictions to avoid floating-point noise
     data = sorted(zip([round(p, 6) for p in predictions], outcomes))
@@ -487,7 +489,7 @@ def _compute_hash(predictions: List[float], outcomes: List[int]) -> str:
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
-def _infer_window(predictions: List[float]) -> str:
+def _infer_window(predictions: list[float]) -> str:
     """Placeholder training window — actual dates would come from traces."""
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now = datetime.now(UTC).strftime("%Y-%m-%d")
     return f"fitted_{now}"

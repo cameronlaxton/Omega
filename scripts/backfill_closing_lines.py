@@ -30,9 +30,9 @@ import argparse
 import importlib
 import logging
 import sys
-from datetime import date, datetime, timedelta, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -57,11 +57,11 @@ _DEFAULT_CLOSE_OFFSET_HOURS = 6  # added to decision_timestamp when --close-time
 # self-contained; extract to omega.integrations.match if they grow)
 # ---------------------------------------------------------------------------
 
-def _identity(name: str) -> Optional[str]:
+def _identity(name: str) -> str | None:
     return name or None
 
 
-def _load_canonicalizer(league: str) -> Callable[[str], Optional[str]]:
+def _load_canonicalizer(league: str) -> Callable[[str], str | None]:
     league_lc = league.lower()
     for mod_path in (f"omega.integrations.espn_{league_lc}", f"omega.integrations.team_aliases_{league_lc}"):
         try:
@@ -87,7 +87,7 @@ def _match_outcome(
     home: str,
     away: str,
     books,
-    book_preference: Optional[str],
+    book_preference: str | None,
 ):
     odds_market = _MARKET_MAP[bet_market]
     candidates = [b for b in books if b.market == odds_market]
@@ -127,7 +127,7 @@ def _match_outcome(
     return None
 
 
-def _match_prop_outcome(bet: Dict, books):
+def _match_prop_outcome(bet: dict, books):
     stat_key = bet["market"].split(":", 1)[1]
     provider_market = provider_market_for_prop(bet["league"], stat_key)
     if not provider_market:
@@ -157,11 +157,11 @@ def _match_prop_outcome(bet: Dict, books):
 
 def _pending_bets_needing_close(
     store: TraceStore,
-    league_filter: Optional[str],
-    since: Optional[str],
-    until: Optional[str],
-    trace_id: Optional[str],
-) -> List[Dict]:
+    league_filter: str | None,
+    since: str | None,
+    until: str | None,
+    trace_id: str | None,
+) -> list[dict]:
     sql = (
         "SELECT b.bet_id, b.trace_id, b.book, b.market, b.selection,"
         "       b.selection_descriptor, b.line_taken, b.odds_taken,"
@@ -197,7 +197,7 @@ def _pending_bets_needing_close(
 # Historical timestamp derivation
 # ---------------------------------------------------------------------------
 
-def _close_timestamp_for_bet(bet: Dict, explicit_at: Optional[str], close_offset_hours: int) -> str:
+def _close_timestamp_for_bet(bet: dict, explicit_at: str | None, close_offset_hours: int) -> str:
     """Return an ISO-8601 UTC timestamp to pass to the historical endpoint.
 
     If ``explicit_at`` is provided it is used for all bets. Otherwise we add
@@ -210,7 +210,7 @@ def _close_timestamp_for_bet(bet: Dict, explicit_at: Optional[str], close_offset
     try:
         dt = datetime.fromisoformat(decision.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
-        dt = datetime.now(timezone.utc)
+        dt = datetime.now(UTC)
     return (dt + timedelta(hours=close_offset_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -220,24 +220,24 @@ def _close_timestamp_for_bet(bet: Dict, explicit_at: Optional[str], close_offset
 
 def _process_league(
     league: str,
-    bets: List[Dict],
+    bets: list[dict],
     client: OddsApiClient,
     store: TraceStore,
-    explicit_at: Optional[str],
+    explicit_at: str | None,
     close_offset_hours: int,
     dry_run: bool,
-) -> Tuple[int, List[str]]:
+) -> tuple[int, list[str]]:
     sport_key = sport_key_for(league)
     if sport_key is None:
         return 0, [f"{b['bet_id']} (league {league!r} has no sport_key mapping)" for b in bets]
 
     canonicalize = _load_canonicalizer(league)
     attached = 0
-    skipped: List[str] = []
+    skipped: list[str] = []
 
     # Group bets by the historical timestamp we'll use for them so we issue
     # one API request per timestamp bucket rather than one per bet.
-    by_ts: Dict[str, List[Dict]] = {}
+    by_ts: dict[str, list[dict]] = {}
     for bet in bets:
         ts = _close_timestamp_for_bet(bet, explicit_at, close_offset_hours)
         by_ts.setdefault(ts, []).append(bet)
@@ -261,7 +261,7 @@ def _process_league(
         logger.info("[%s] snapshot timestamp=%s, events=%d, remaining budget=%d",
                     league, actual_ts, len(snapshot.events), client.remaining_budget())
 
-        events_by_pair: Dict[Tuple[str, str], EventOdds] = {
+        events_by_pair: dict[tuple[str, str], EventOdds] = {
             (canonicalize(e.home_team) or e.home_team, canonicalize(e.away_team) or e.away_team): e
             for e in snapshot.events
         }
@@ -294,14 +294,14 @@ def _process_league(
                     skipped.append(f"{bet['bet_id']} (no provider prop mapping for {stat_key})")
                     continue
                 try:
-                    event = client.fetch_historical_event_odds(
+                    prop_snapshot = client.fetch_historical_event_odds(
                         league,
                         event_id=event.event_id,
                         date=ts,
                         markets=provider_market,
                         bookmakers=str(bet["book"]).lower(),
                     )
-                    event = event.events[0] if event.events else None
+                    event = prop_snapshot.events[0] if prop_snapshot.events else None
                     if event is None:
                         skipped.append(f"{bet['bet_id']} (historical event odds returned no events)")
                         continue
@@ -395,7 +395,7 @@ def main() -> int:
         store.close()
         return 0
 
-    by_league: Dict[str, List[Dict]] = {}
+    by_league: dict[str, list[dict]] = {}
     for bet in pending:
         by_league.setdefault((bet["league"] or "").upper(), []).append(bet)
 
@@ -412,7 +412,7 @@ def main() -> int:
         return 1
 
     total_attached = 0
-    total_skipped: List[str] = []
+    total_skipped: list[str] = []
 
     for league in sorted(by_league):
         if not league:

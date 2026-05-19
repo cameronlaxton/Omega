@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -12,12 +12,12 @@ MCP_SCHEMA_VERSION = 1
 class TraceQueryRequest(BaseModel):
     """Filters accepted by omega_trace_query."""
 
-    db_path: Optional[str] = None
-    league: Optional[str] = None
-    start: Optional[str] = None
-    end: Optional[str] = None
-    has_outcome: Optional[bool] = None
-    execution_mode: Optional[str] = None
+    db_path: str | None = None
+    league: str | None = None
+    start: str | None = None
+    end: str | None = None
+    has_outcome: bool | None = None
+    execution_mode: str | None = None
     limit: int = Field(default=100, ge=1, le=1000)
 
 
@@ -28,14 +28,14 @@ class TraceAttachOutcomeRequest(BaseModel):
     home_score: int
     away_score: int
     source: str = "mcp"
-    db_path: Optional[str] = None
+    db_path: str | None = None
 
 
 class CalibrationFitPreviewRequest(BaseModel):
     """Dry-run calibration fitting request."""
 
-    db_path: Optional[str] = None
-    league: Optional[str] = None
+    db_path: str | None = None
+    league: str | None = None
     method: str = Field(default="isotonic", pattern="^(isotonic|shrinkage)$")
     limit: int = Field(default=1000, ge=1, le=10000)
 
@@ -50,15 +50,15 @@ class ReplayBundle(BaseModel):
 
     schema_version: int = 1
     prompt: str
-    facts: List[Dict[str, Any]] = Field(default_factory=list)
-    source_trace_id: Optional[str] = None
-    decision_date: Optional[str] = None
-    simulation_seed: Optional[int] = None
-    expected_outputs: List[str] = Field(default_factory=list)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    facts: list[dict[str, Any]] = Field(default_factory=list)
+    source_trace_id: str | None = None
+    decision_date: str | None = None
+    simulation_seed: int | None = None
+    expected_outputs: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _reject_live_fetch_flags(self) -> "ReplayBundle":
+    def _reject_live_fetch_flags(self) -> ReplayBundle:
         if self.metadata.get("live_fetch_enabled") is True:
             raise ValueError("replay bundles must disable live fetching")
         for fact in self.facts:
@@ -84,4 +84,4 @@ class EvidenceRetrieveRequest(BaseModel):
     evidence channels outside replay or Standard Text mode.
     """
 
-    slots: List[Dict[str, Any]] = Field(default_factory=list)
+    slots: list[dict[str, Any]] = Field(default_factory=list)

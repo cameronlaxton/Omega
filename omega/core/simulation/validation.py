@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any
 
 from omega.core.simulation.archetypes import get_archetype
 
@@ -22,7 +22,7 @@ logger = logging.getLogger("omega.core.simulation.validation")
 # Keys without explicit bounds get a generic finite-number check only.
 # ---------------------------------------------------------------------------
 
-SIM_INPUT_BOUNDS: Dict[str, Tuple[float, float]] = {
+SIM_INPUT_BOUNDS: dict[str, tuple[float, float]] = {
     # Basketball
     "off_rating": (80.0, 140.0),
     "def_rating": (80.0, 140.0),
@@ -101,7 +101,7 @@ SIM_INPUT_BOUNDS: Dict[str, Tuple[float, float]] = {
 }
 
 
-def _coerce_numeric(value: Any) -> Optional[float]:
+def _coerce_numeric(value: Any) -> float | None:
     """Try to coerce a value to float. Returns None if impossible."""
     if isinstance(value, (int, float)):
         return float(value)
@@ -114,11 +114,11 @@ def _coerce_numeric(value: Any) -> Optional[float]:
 
 
 def validate_sim_context(
-    context: Optional[Dict[str, Any]],
+    context: dict[str, Any] | None,
     league: str,
     side: str,
     strict: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Validate and sanitize a simulation context dict.
 
     - Keeps only keys recognized by the archetype
@@ -152,13 +152,13 @@ def validate_sim_context(
         logger.warning("No archetype for league %s — passing context through", league)
         return dict(context)
 
-    known_keys: Set[str] = set(
+    known_keys: set[str] = set(
         archetype.critical_team_keys
         + archetype.required_team_keys
         + archetype.optional_team_keys
     )
 
-    cleaned: Dict[str, Any] = {}
+    cleaned: dict[str, Any] = {}
     violations: list[str] = []
 
     for key, value in context.items():

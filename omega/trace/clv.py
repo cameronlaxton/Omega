@@ -19,7 +19,6 @@ Conventions:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 def american_to_decimal(american_odds: float) -> float:
@@ -54,18 +53,18 @@ class CLVResult:
     decimal_taken: float
     decimal_closing: float
     decimal_gain: float             # decimal_taken - decimal_closing (positive = beat close)
-    line_taken: Optional[float]
-    closing_line: Optional[float]
-    line_value: Optional[float]     # for spread/total, signed line movement in your favor
+    line_taken: float | None
+    closing_line: float | None
+    line_value: float | None     # for spread/total, signed line movement in your favor
     beat_close: bool                # True iff implied_taken < implied_closing
 
 
 def compute_clv(
     odds_taken: float,
     closing_odds: float,
-    line_taken: Optional[float] = None,
-    closing_line: Optional[float] = None,
-    side: Optional[str] = None,
+    line_taken: float | None = None,
+    closing_line: float | None = None,
+    side: str | None = None,
 ) -> CLVResult:
     """Compute CLV for a single bet vs its closing snapshot.
 
@@ -85,7 +84,7 @@ def compute_clv(
     decimal_taken = american_to_decimal(odds_taken)
     decimal_closing = american_to_decimal(closing_odds)
 
-    line_value: Optional[float] = None
+    line_value: float | None = None
     if line_taken is not None and closing_line is not None and side:
         # Positive line_value = the line moved in your favor.
         delta = closing_line - line_taken  # raw movement

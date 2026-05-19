@@ -6,7 +6,6 @@ All tests are deterministic — no network calls, no LLM.
 
 import pytest
 
-
 # -----------------------------------------------------------------------
 # Fixtures
 # -----------------------------------------------------------------------
@@ -172,7 +171,7 @@ class TestBacktestEngine:
         assert "Insufficient sample" in str(result.rejection_reasons)
 
     def test_league_filter(self):
-        from omega.strategy.backtest.engine import BacktestEngine, HistoricalGame
+        from omega.strategy.backtest.engine import BacktestEngine
         from omega.strategy.models import StrategyEntry
 
         engine = BacktestEngine(n_iterations=50)
@@ -242,7 +241,7 @@ class TestPromotion:
         from omega.strategy.models import BacktestResult, StrategyStatus
 
         registry = _make_registry()
-        entry = registry.register(strategy_id="promo-test", name="Promo Test")
+        registry.register(strategy_id="promo-test", name="Promo Test")
 
         result = BacktestResult(
             strategy_id="promo-test",
@@ -338,8 +337,8 @@ class TestPromotion:
     def test_auto_promote_or_reject(self):
         from omega.strategy.models import BacktestResult, StrategyStatus
         from omega.strategy.versioning.promotion import (
-            auto_promote_or_reject,
             PromotionCriteria,
+            auto_promote_or_reject,
         )
 
         registry = _make_registry()
@@ -364,8 +363,8 @@ class TestPromotion:
     def test_auto_reject_low_roi(self):
         from omega.strategy.models import BacktestResult, StrategyStatus
         from omega.strategy.versioning.promotion import (
-            auto_promote_or_reject,
             PromotionCriteria,
+            auto_promote_or_reject,
         )
 
         registry = _make_registry()

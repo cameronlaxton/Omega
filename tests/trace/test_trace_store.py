@@ -10,16 +10,13 @@ Covers:
 """
 from __future__ import annotations
 
-import json
 import tempfile
-from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
-from omega.trace.store import TraceStore
 from omega.trace.schema import CURRENT_VERSION
-
+from omega.trace.store import TraceStore
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,7 +39,7 @@ def _make_trace(
     aggregate_quality: float = 0.85,
     prompt: str = "Lakers vs Celtics NBA",
     **overrides: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     base = {
         "trace_id": trace_id,
         "run_id": run_id,
@@ -180,6 +177,19 @@ class TestOutcomeAttachment:
             store.attach_outcome("nonexistent", home_score=100, away_score=90)
         store.close()
 
+    def test_second_game_outcome_for_same_trace_is_rejected(self):
+        store = _tmp_store()
+        store.persist(_make_trace())
+        store.attach_outcome("t-001", home_score=112, away_score=105)
+
+        with pytest.raises(ValueError, match="Outcome already attached"):
+            store.attach_outcome("t-001", home_score=98, away_score=110)
+
+        graded = store.get_graded_traces()
+        assert len(graded) == 1
+        assert graded[0]["_outcome"]["result"] == "home_win"
+        store.close()
+
     def test_outcome_source(self):
         store = _tmp_store()
         store.persist(_make_trace())
@@ -286,6 +296,41 @@ class TestGradedTraces:
         store = _tmp_store()
         store.persist(_make_trace())
         assert store.get_graded_traces() == []
+        store.close()
+
+
+class TestSessionSummary:
+    def test_prop_outcomes_count_as_graded_in_session_summary(self):
+        store = _tmp_store()
+        store.persist(
+            _make_trace(
+                trace_id="t-prop-session",
+                execution_mode="sandbox_prop",
+                predictions={"over_prob": 0.62, "under_prob": 0.38},
+                session_id="sess-props",
+                kind="prop",
+            )
+        )
+        store.attach_prop_outcome(
+            "t-prop-session",
+            player_name="Test Player",
+            stat_type="pts",
+            stat_value=26,
+            line=24.5,
+            side="over",
+        )
+
+        summary = store.get_session_summary()
+
+        assert summary == [
+            {
+                "session_id": "sess-props",
+                "trace_count": 1,
+                "graded_count": 1,
+                "first_ts": "2026-03-21T12:00:00Z",
+                "last_ts": "2026-03-21T12:00:00Z",
+            }
+        ]
         store.close()
 
 

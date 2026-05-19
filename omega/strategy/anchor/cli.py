@@ -12,16 +12,15 @@ import argparse
 import json
 import logging
 import sys
-from dataclasses import asdict
-from typing import Any, Dict
+from typing import Any
 
 from omega.strategy.anchor.formatter import format_scan_result
 from omega.strategy.anchor.scanner import AnchorParlayConfig, ScanResult, run_full_scan
 
 
-def _scan_result_to_dict(result: ScanResult) -> Dict[str, Any]:
+def _scan_result_to_dict(result: ScanResult) -> dict[str, Any]:
     """Convert ScanResult to a JSON-serializable dict."""
-    d = {
+    d: dict[str, Any] = {
         "league": result.league,
         "date": result.date,
         "games_scanned": result.games_scanned,

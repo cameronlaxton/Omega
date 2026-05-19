@@ -9,10 +9,9 @@ numeric baselines.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
-
-_LEAGUE_CONFIGS: Dict[str, Dict[str, Any]] = {
+_LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
     # ── Basketball ─────────────────────────────────────────────
     "NBA": {
         "sport": "basketball",
@@ -400,7 +399,7 @@ _LEAGUE_CONFIGS: Dict[str, Dict[str, Any]] = {
     },
 }
 
-_DEFAULT_CONFIG: Dict[str, Any] = {
+_DEFAULT_CONFIG: dict[str, Any] = {
     "sport": "unknown",
     "archetype": None,
     "periods": 4,
@@ -410,7 +409,7 @@ _DEFAULT_CONFIG: Dict[str, Any] = {
 }
 
 
-def get_league_config(league: str) -> Dict[str, Any]:
+def get_league_config(league: str) -> dict[str, Any]:
     """Return configuration for a given league.
 
     Falls back to a generic default if the league is unrecognized.

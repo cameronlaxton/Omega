@@ -11,13 +11,12 @@ All models are Pydantic v2 for validation and serialization.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Dimension A: Subject — what is the prompt about?
@@ -108,7 +107,7 @@ class Entity(BaseModel):
     name: str
     role: EntityRole
     entity_type: str = "team"  # "team", "player"
-    canonical_id: Optional[UUID] = None  # resolved identity
+    canonical_id: UUID | None = None  # resolved identity
 
 
 # ---------------------------------------------------------------------------
@@ -123,13 +122,13 @@ class QueryUnderstanding(BaseModel):
     """
 
     # Dimension A
-    subjects: List[Subject]
-    league: Optional[str] = None
-    entities: List[Entity] = Field(default_factory=list)
-    markets: List[str] = Field(default_factory=list)
-    prop_type: Optional[str] = None
-    prop_line: Optional[float] = None
-    date: Optional[str] = None  # ISO date, defaults to today
+    subjects: list[Subject]
+    league: str | None = None
+    entities: list[Entity] = Field(default_factory=list)
+    markets: list[str] = Field(default_factory=list)
+    prop_type: str | None = None
+    prop_line: float | None = None
+    date: str | None = None  # ISO date, defaults to today
 
     # Dimension B
     goal: UserGoal = UserGoal.ANALYZE
@@ -139,7 +138,7 @@ class QueryUnderstanding(BaseModel):
     tone: str = "analytical"  # "analytical", "conversational", "brief"
 
     # User constraints
-    explicit_constraints: List[str] = Field(default_factory=list)
+    explicit_constraints: list[str] = Field(default_factory=list)
     raw_prompt: str = ""
 
 
@@ -154,17 +153,17 @@ class AnswerPlan(BaseModel):
     if data quality does not meet thresholds.
     """
 
-    execution_modes: List[ExecutionMode]
-    output_packages: List[OutputPackage]
+    execution_modes: list[ExecutionMode]
+    output_packages: list[OutputPackage]
     simulation_required: bool = False
     betting_recommendations_included: bool = False
 
     # Min data quality per output package that requires it
-    quality_thresholds: Dict[str, float] = Field(default_factory=dict)
+    quality_thresholds: dict[str, float] = Field(default_factory=dict)
 
     clarification_needed: bool = False
-    clarification_question: Optional[str] = None
-    downgrades: List[str] = Field(default_factory=list)  # e.g. ["dropped_bet_card", "native_sim_to_mixed"]
+    clarification_question: str | None = None
+    downgrades: list[str] = Field(default_factory=list)  # e.g. ["dropped_bet_card", "native_sim_to_mixed"]
 
 
 # ---------------------------------------------------------------------------
@@ -184,8 +183,8 @@ class GatherSlot(BaseModel):
     league: str
     importance: InputImportance = InputImportance.IMPORTANT
     freshness_max: float = 86400.0     # seconds; default 24h
-    providers: List[str] = Field(default_factory=list)  # preferred provider names
-    focus_hint: Optional[str] = None   # e.g. "defense", "rushing" — signals query focus for composition
+    providers: list[str] = Field(default_factory=list)  # preferred provider names
+    focus_hint: str | None = None   # e.g. "defense", "rushing" — signals query focus for composition
 
 
 # ---------------------------------------------------------------------------
@@ -198,10 +197,10 @@ class ProviderResult(BaseModel):
     Carries provenance metadata for quality scoring and audit.
     """
 
-    data: Dict[str, Any]
+    data: dict[str, Any]
     source: str                        # provider name: "espn", "bbref", etc.
-    source_url: Optional[str] = None   # attribution URL
-    fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    source_url: str | None = None   # attribution URL
+    fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     confidence: float = 1.0            # 1.0 = primary API, 0.5 = LLM-extracted, 0.3 = stale cache
     method: str = "unknown"            # "structured_api", "llm_extraction", "web_scrape", "cache_hit"
 
@@ -214,7 +213,7 @@ class GatheredFact(BaseModel):
     """A gather slot that has been filled with a provider result."""
 
     slot: GatherSlot
-    result: Optional[ProviderResult] = None
+    result: ProviderResult | None = None
     filled: bool = False
     quality_score: float = 0.0         # 0.0–1.0 composite quality
 
@@ -231,20 +230,20 @@ class ExecutionResult(BaseModel):
     """
 
     mode: ExecutionMode
-    simulation: Optional[Dict[str, Any]] = None
-    edges: List[Dict[str, Any]] = Field(default_factory=list)
-    best_bet: Optional[Dict[str, Any]] = None
-    research_facts: List[GatheredFact] = Field(default_factory=list)
+    simulation: dict[str, Any] | None = None
+    edges: list[dict[str, Any]] = Field(default_factory=list)
+    best_bet: dict[str, Any] | None = None
+    research_facts: list[GatheredFact] = Field(default_factory=list)
     data_quality_score: float = 0.0
-    data_completeness: Dict[str, str] = Field(default_factory=dict)  # key → "real" | "defaulted" | "missing"
-    extra: Dict[str, Any] = Field(default_factory=dict, description="Mode-specific output (e.g., parlay scan results)")
+    data_completeness: dict[str, str] = Field(default_factory=dict)  # key → "real" | "defaulted" | "missing"
+    extra: dict[str, Any] = Field(default_factory=dict, description="Mode-specific output (e.g., parlay scan results)")
 
 
 # ---------------------------------------------------------------------------
 # Freshness rules by data type
 # ---------------------------------------------------------------------------
 
-FRESHNESS_RULES: Dict[str, float] = {
+FRESHNESS_RULES: dict[str, float] = {
     "team_stat": 86400.0,       # 24 hours
     "player_stat": 86400.0,     # 24 hours
     "player_game_log": 86400.0, # 24 hours
@@ -272,49 +271,49 @@ class ExecutionTrace(BaseModel):
     # --- Identity ---
     trace_id: UUID = Field(default_factory=uuid4)
     run_id: str = Field(default_factory=lambda: uuid4().hex[:12])  # short, human-friendly
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     prompt: str
-    session_id: Optional[str] = None
+    session_id: str | None = None
     model_version: str = "omega-v0"  # tracks engine/model iteration for backtest comparison
 
     # Stage 1: Intent
-    understanding: Optional[Dict[str, Any]] = None
+    understanding: dict[str, Any] | None = None
 
     # Stage 2: Strategy
-    answer_plan: Optional[Dict[str, Any]] = None
+    answer_plan: dict[str, Any] | None = None
 
     # Stage 3: Requirements
-    gather_slots: List[Dict[str, Any]] = Field(default_factory=list)
+    gather_slots: list[dict[str, Any]] = Field(default_factory=list)
 
     # Stage 4: Evidence collection
-    gathered_facts: List[Dict[str, Any]] = Field(default_factory=list)
+    gathered_facts: list[dict[str, Any]] = Field(default_factory=list)
     aggregate_quality: float = 0.0
-    facts_summary: Optional[Dict[str, Any]] = None  # {total_slots, filled, critical_filled, sources_used}
+    facts_summary: dict[str, Any] | None = None  # {total_slots, filled, critical_filled, sources_used}
 
     # Stage 5: Quality gate
-    revised_plan: Optional[Dict[str, Any]] = None
-    downgrades: List[str] = Field(default_factory=list)
+    revised_plan: dict[str, Any] | None = None
+    downgrades: list[str] = Field(default_factory=list)
 
     # Stage 6: Execution
-    execution_mode: Optional[str] = None
-    simulation_seed: Optional[int] = None
-    execution_result: Optional[Dict[str, Any]] = None
+    execution_mode: str | None = None
+    simulation_seed: int | None = None
+    execution_result: dict[str, Any] | None = None
 
     # Stage 7: Composition
-    output_packages: List[str] = Field(default_factory=list)
+    output_packages: list[str] = Field(default_factory=list)
     narrative_length: int = 0
 
     # --- Backtest-ready fields ---
     # Final predictions (what the system recommended)
-    predictions: Optional[Dict[str, Any]] = None  # {home_win_prob, away_win_prob, predicted_spread, predicted_total}
-    recommendations: List[Dict[str, Any]] = Field(default_factory=list)  # [{side, edge_pct, confidence_tier, units}]
-    odds_snapshot: Optional[Dict[str, Any]] = None  # {moneyline_home, moneyline_away, spread_home, over_under}
-    league: Optional[str] = None
-    matchup: Optional[str] = None  # "Away @ Home"
+    predictions: dict[str, Any] | None = None  # {home_win_prob, away_win_prob, predicted_spread, predicted_total}
+    recommendations: list[dict[str, Any]] = Field(default_factory=list)  # [{side, edge_pct, confidence_tier, units}]
+    odds_snapshot: dict[str, Any] | None = None  # {moneyline_home, moneyline_away, spread_home, over_under}
+    league: str | None = None
+    matchup: str | None = None  # "Away @ Home"
 
     # Timing
-    stage_timings: Dict[str, float] = Field(default_factory=dict)  # stage → seconds
+    stage_timings: dict[str, float] = Field(default_factory=dict)  # stage → seconds
     total_duration_ms: float = 0.0
 
     # Errors
-    error: Optional[str] = None
+    error: str | None = None

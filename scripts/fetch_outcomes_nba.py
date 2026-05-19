@@ -25,9 +25,8 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -47,9 +46,9 @@ def _parse_date_arg(s: str) -> date:
     """Accept YYYY-MM-DD, 'today', 'yesterday'."""
     s = s.strip().lower()
     if s == "today":
-        return datetime.now(timezone.utc).date()
+        return datetime.now(UTC).date()
     if s == "yesterday":
-        return datetime.now(timezone.utc).date() - timedelta(days=1)
+        return datetime.now(UTC).date() - timedelta(days=1)
     return date.fromisoformat(s)
 
 
@@ -64,7 +63,7 @@ def _iter_dates(start: date, end: date):
 # Matching
 # ---------------------------------------------------------------------------
 
-def _trace_matchup(trace: Dict) -> Optional[Tuple[str, str]]:
+def _trace_matchup(trace: dict) -> tuple[str, str] | None:
     """Pull (home_canonical, away_canonical) from a trace dict, or None if unresolvable.
 
     Looks first at trace['input_snapshot'] (the canonical engine input), then
@@ -90,9 +89,9 @@ def _trace_matchup(trace: Dict) -> Optional[Tuple[str, str]]:
 
 
 def _match_trace_to_game(
-    trace: Dict,
-    games_by_pair: Dict[Tuple[str, str], FinalGame],
-) -> Optional[FinalGame]:
+    trace: dict,
+    games_by_pair: dict[tuple[str, str], FinalGame],
+) -> FinalGame | None:
     pair = _trace_matchup(trace)
     if pair is None:
         return None
@@ -130,7 +129,7 @@ def main() -> int:
     store = TraceStore(db_path=args.db)
 
     attached = 0
-    unmatched: List[str] = []
+    unmatched: list[str] = []
     skipped_already_graded = 0
 
     for d in _iter_dates(start, end):
@@ -146,7 +145,7 @@ def main() -> int:
             logger.info("No final games on %s (%d events total)", d, len(games))
             continue
 
-        games_by_pair: Dict[Tuple[str, str], FinalGame] = {
+        games_by_pair: dict[tuple[str, str], FinalGame] = {
             (g.home_team, g.away_team): g for g in finals
         }
 

@@ -46,9 +46,9 @@ import argparse
 import importlib
 import logging
 import sys
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -72,11 +72,11 @@ logger = logging.getLogger("fetch_closing_lines")
 # Team canonicalization registry
 # ---------------------------------------------------------------------------
 
-def _identity(name: str) -> Optional[str]:
+def _identity(name: str) -> str | None:
     return name or None
 
 
-def _load_canonicalizer(league: str) -> Callable[[str], Optional[str]]:
+def _load_canonicalizer(league: str) -> Callable[[str], str | None]:
     """Per-league team-name canonicalizer. Falls back to identity when no
     omega.integrations.espn_{league} module ships a ``canonical_team``."""
     league_lc = league.lower()
@@ -115,9 +115,9 @@ def _match_outcome(
     descriptor: str,
     home: str,
     away: str,
-    books: List[BookOdds],
-    book_preference: Optional[str],
-) -> Optional[BookOdds]:
+    books: list[BookOdds],
+    book_preference: str | None,
+) -> BookOdds | None:
     """Find the BookOdds row matching the descriptor.
 
     Descriptor conventions (from system_prompt.txt §11):
@@ -149,11 +149,11 @@ def _match_outcome(
         return None
 
     if bet_market == "spread":
-        target = home if "home" in desc else (away if "away" in desc else None)
-        if target is None:
+        spread_target = home if "home" in desc else (away if "away" in desc else None)
+        if spread_target is None:
             return None
         for b in candidates:
-            if b.selection.lower() == target.lower():
+            if b.selection.lower() == spread_target.lower():
                 return b
         return None
 
@@ -172,7 +172,7 @@ def _match_outcome(
     return None
 
 
-def _match_prop_outcome(bet: Dict, books: List[BookOdds]) -> Optional[BookOdds]:
+def _match_prop_outcome(bet: dict, books: list[BookOdds]) -> BookOdds | None:
     """Find the provider row for an exact player-prop close."""
     stat_key = bet["market"].split(":", 1)[1]
     provider_market = provider_market_for_prop(bet["league"], stat_key)
@@ -205,8 +205,8 @@ def _match_prop_outcome(bet: Dict, books: List[BookOdds]) -> Optional[BookOdds]:
 # ---------------------------------------------------------------------------
 
 def _pending_bets_needing_close(
-    store: TraceStore, league_filter: Optional[str] = None,
-) -> List[Dict]:
+    store: TraceStore, league_filter: str | None = None,
+) -> list[dict]:
     """Return rows joining bet_records, traces, closing_lines — only pending bets
     with no closing-line attached yet. Optionally filter to a single league."""
     sql = (
@@ -231,7 +231,7 @@ def _pending_bets_needing_close(
     return [dict(r) for r in rows]
 
 
-def _event_key(home: str, away: str, canonicalize: Callable[[str], Optional[str]]) -> Tuple[str, str]:
+def _event_key(home: str, away: str, canonicalize: Callable[[str], str | None]) -> tuple[str, str]:
     return (canonicalize(home) or home, canonicalize(away) or away)
 
 
@@ -241,11 +241,11 @@ def _event_key(home: str, away: str, canonicalize: Callable[[str], Optional[str]
 
 def _process_league(
     league: str,
-    bets: List[Dict],
+    bets: list[dict],
     client: OddsApiClient,
     store: TraceStore,
     dry_run: bool,
-) -> Tuple[int, List[str]]:
+) -> tuple[int, list[str]]:
     """Fetch one snapshot for `league`, attach closing lines for `bets`.
     Returns ``(attached_count, skipped_messages)``."""
     sport_key = sport_key_for(league)
@@ -270,12 +270,12 @@ def _process_league(
     )
 
     canonicalize = _load_canonicalizer(league)
-    events_by_pair: Dict[Tuple[str, str], EventOdds] = {
+    events_by_pair: dict[tuple[str, str], EventOdds] = {
         _event_key(e.home_team, e.away_team, canonicalize): e for e in events
     }
 
     attached = 0
-    skipped: List[str] = []
+    skipped: list[str] = []
 
     for bet in bets:
         if not _is_supported_market(bet["market"]):
@@ -343,7 +343,7 @@ def _process_league(
             selection_descriptor=bet["selection_descriptor"],
             closing_odds=outcome.price,
             closing_line=outcome.point,
-            closing_timestamp=outcome.last_update or datetime.now(timezone.utc).isoformat(),
+            closing_timestamp=outcome.last_update or datetime.now(UTC).isoformat(),
             source=f"the-odds-api:{outcome.bookmaker}",
         )
         attached += 1
@@ -382,7 +382,7 @@ def main() -> int:
         return 0
 
     # Group by league
-    by_league: Dict[str, List[Dict]] = {}
+    by_league: dict[str, list[dict]] = {}
     for bet in pending:
         by_league.setdefault((bet["league"] or "").upper(), []).append(bet)
 
@@ -393,7 +393,7 @@ def main() -> int:
 
     client = OddsApiClient()
     total_attached = 0
-    total_skipped: List[str] = []
+    total_skipped: list[str] = []
 
     for league in sorted(by_league):
         if not league:

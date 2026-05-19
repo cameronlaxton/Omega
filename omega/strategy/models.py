@@ -12,9 +12,9 @@ Strategies are immutable once registered. New versions create new entries.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -45,7 +45,7 @@ class BacktestResult(BaseModel):
     strategy_version: int
     run_id: str = Field(description="Unique backtest run identifier")
     started_at: str = Field(description="ISO 8601")
-    completed_at: Optional[str] = None
+    completed_at: str | None = None
 
     # Universe
     total_games: int = 0
@@ -69,23 +69,23 @@ class BacktestResult(BaseModel):
         default=0.0,
         description="Average CLV — positive means beating the close",
     )
-    brier_score: Optional[float] = Field(
+    brier_score: float | None = Field(
         default=None,
         description="Brier score of predicted probabilities vs outcomes",
     )
 
     # Breakdown
-    results_by_league: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-    results_by_market: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    results_by_league: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    results_by_market: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     # Phase 6b: Trace linkage
     artifact_schema_version: int = Field(default=1, description="FrozenArtifact schema version used")
     calibration_policy: str = Field(default="static_v1", description="Calibration policy applied")
-    trace_ids: List[str] = Field(default_factory=list, description="Source trace IDs from artifacts")
+    trace_ids: list[str] = Field(default_factory=list, description="Source trace IDs from artifacts")
 
     # Verdict
     passed: bool = False
-    rejection_reasons: List[str] = Field(default_factory=list)
+    rejection_reasons: list[str] = Field(default_factory=list)
 
 
 class PromotionRecord(BaseModel):
@@ -97,8 +97,8 @@ class PromotionRecord(BaseModel):
     to_status: str
     reason: str
     decided_by: str = Field(default="system", description="'system' or user ID")
-    decided_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    backtest_run_id: Optional[str] = None
+    decided_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+    backtest_run_id: str | None = None
 
 
 class StrategyEntry(BaseModel):
@@ -111,26 +111,26 @@ class StrategyEntry(BaseModel):
     status: StrategyStatus = StrategyStatus.CANDIDATE
 
     # What this strategy does
-    leagues: List[str] = Field(default_factory=list, description="Applicable leagues")
-    markets: List[str] = Field(default_factory=list, description="Market types targeted")
+    leagues: list[str] = Field(default_factory=list, description="Applicable leagues")
+    markets: list[str] = Field(default_factory=list, description="Market types targeted")
     edge_threshold: float = Field(default=0.03, description="Minimum edge to trigger bet")
-    confidence_tiers: List[str] = Field(
+    confidence_tiers: list[str] = Field(
         default_factory=lambda: ["A", "B"],
         description="Required confidence tiers",
     )
 
     # Parameters (strategy-specific config)
-    params: Dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
 
     # Provenance
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     created_by: str = Field(default="system")
 
     # Backtest history
-    backtest_results: List[BacktestResult] = Field(default_factory=list)
-    promotion_history: List[PromotionRecord] = Field(default_factory=list)
+    backtest_results: list[BacktestResult] = Field(default_factory=list)
+    promotion_history: list[PromotionRecord] = Field(default_factory=list)
 
     # Latest backtest summary (denormalized for fast access)
-    latest_roi: Optional[float] = None
-    latest_win_rate: Optional[float] = None
-    latest_clv: Optional[float] = None
+    latest_roi: float | None = None
+    latest_win_rate: float | None = None
+    latest_clv: float | None = None

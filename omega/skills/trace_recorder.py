@@ -13,7 +13,7 @@ Invariants:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from omega.skills import register
 from omega.skills.base import SkillBase, SkillObservation
@@ -29,7 +29,7 @@ class TraceRecorder(SkillBase):
     name = "trace-recorder"
     stage = "composition"
 
-    def _run(self, *, trace: Dict[str, Any], **_: Any) -> SkillObservation:
+    def _run(self, *, trace: dict[str, Any], **_: Any) -> SkillObservation:  # type: ignore[override]
         findings: list[str] = []
 
         # Validate required fields
@@ -56,7 +56,7 @@ class TraceRecorder(SkillBase):
         return SkillObservation(skill=self.name, stage=self.stage, ok=True)
 
 
-def _write_trace(record: Dict[str, Any]) -> str:
+def _write_trace(record: dict[str, Any]) -> str:
     """Persist trace to SQLite. Returns empty string on success, error message
     on failure."""
     try:

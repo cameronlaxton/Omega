@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("omega.skills.base")
 
@@ -37,16 +37,16 @@ class SkillObservation:
         skill: str,
         stage: str,
         ok: bool,
-        findings: Optional[List[str]] = None,
-        error: Optional[str] = None,
+        findings: list[str] | None = None,
+        error: str | None = None,
     ) -> None:
         self.skill = skill
         self.stage = stage
         self.ok = ok
-        self.findings: List[str] = findings or []
+        self.findings: list[str] = findings or []
         self.error = error
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "skill": self.skill,
             "stage": self.stage,

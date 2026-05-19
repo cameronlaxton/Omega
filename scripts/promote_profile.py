@@ -41,7 +41,6 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -63,13 +62,13 @@ def _evaluate_gates(
     min_samples: int,
     brier_improvement: float,
     log_loss_tol: float,
-) -> List[Tuple[str, bool, str]]:
+) -> list[tuple[str, bool, str]]:
     """Return a list of (gate_name, passed, message) tuples.
 
     Gates 4 and 5 are marked SKIPPED (passed=None becomes False in --auto mode
     unless the operator confirms via the corresponding --confirm-* flag).
     """
-    results: List[Tuple[str, bool, str]] = []
+    results: list[tuple[str, bool, str]] = []
 
     # Gate 1: sample size
     n = candidate.sample_size
@@ -125,7 +124,7 @@ def _evaluate_gates(
     return results
 
 
-def _print_gates(results: List[Tuple[str, bool, str]]) -> None:
+def _print_gates(results: list[tuple[str, bool, str]]) -> None:
     for name, passed, msg in results:
         flag = "PASS" if passed else "FAIL"
         logger.info("  [%s] %-18s %s", flag, name, msg)

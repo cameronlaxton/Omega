@@ -19,9 +19,7 @@ Archetypes:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
-
+from dataclasses import dataclass
 
 # ---------------------------------------------------------------------------
 # Archetype definition
@@ -38,22 +36,22 @@ class SportArchetype:
     result_type: str  # "team_score", "individual_matchup", "field", "combat"
 
     # Required context keys the agent must supply for team/participant A and B
-    required_team_keys: Tuple[str, ...]
-    optional_team_keys: Tuple[str, ...] = ()
+    required_team_keys: tuple[str, ...]
+    optional_team_keys: tuple[str, ...] = ()
 
     # Critical subset of required keys: missing ANY one prevents formal edge output.
     # Important keys (required minus critical) allow sim but cap confidence at C.
-    critical_team_keys: Tuple[str, ...] = ()
+    critical_team_keys: tuple[str, ...] = ()
 
     # Required player/participant context keys
-    required_player_keys: Tuple[str, ...] = ()
-    optional_player_keys: Tuple[str, ...] = ()
+    required_player_keys: tuple[str, ...] = ()
+    optional_player_keys: tuple[str, ...] = ()
 
     # Stat keys available for props
-    prop_stat_keys: Tuple[str, ...] = ()
+    prop_stat_keys: tuple[str, ...] = ()
 
     # Market types this archetype supports
-    supported_markets: Tuple[str, ...] = (
+    supported_markets: tuple[str, ...] = (
         "moneyline", "spread", "total",
     )
 
@@ -67,7 +65,7 @@ class SportArchetype:
     avg_tempo: float = 100.0
 
     # For best-of-N formats (tennis, esports)
-    best_of: Optional[int] = None
+    best_of: int | None = None
     segment_name: str = "period"
 
 
@@ -325,7 +323,7 @@ ESPORTS = SportArchetype(
 # Archetype registry & league mapping
 # ---------------------------------------------------------------------------
 
-ARCHETYPE_REGISTRY: Dict[str, SportArchetype] = {
+ARCHETYPE_REGISTRY: dict[str, SportArchetype] = {
     "basketball": BASKETBALL,
     "american_football": AMERICAN_FOOTBALL,
     "baseball": BASEBALL,
@@ -338,7 +336,7 @@ ARCHETYPE_REGISTRY: Dict[str, SportArchetype] = {
 }
 
 # Maps every known league code → archetype name
-LEAGUE_TO_ARCHETYPE: Dict[str, str] = {
+LEAGUE_TO_ARCHETYPE: dict[str, str] = {
     # Basketball
     "NBA": "basketball",
     "WNBA": "basketball",
@@ -431,7 +429,7 @@ LEAGUE_TO_ARCHETYPE: Dict[str, str] = {
 }
 
 
-def get_archetype(league: str) -> Optional[SportArchetype]:
+def get_archetype(league: str) -> SportArchetype | None:
     """Return the archetype for a given league, or None if unmapped."""
     archetype_name = LEAGUE_TO_ARCHETYPE.get(league.upper())
     if archetype_name is None:
@@ -439,12 +437,12 @@ def get_archetype(league: str) -> Optional[SportArchetype]:
     return ARCHETYPE_REGISTRY.get(archetype_name)
 
 
-def get_archetype_name(league: str) -> Optional[str]:
+def get_archetype_name(league: str) -> str | None:
     """Return just the archetype name string for a league."""
     return LEAGUE_TO_ARCHETYPE.get(league.upper())
 
 
-def get_required_inputs(league: str) -> List[str]:
+def get_required_inputs(league: str) -> list[str]:
     """Return the list of required team context keys for a league.
 
     Useful for building missing_requirements responses.
@@ -455,7 +453,7 @@ def get_required_inputs(league: str) -> List[str]:
     return list(archetype.required_team_keys)
 
 
-def get_critical_inputs(league: str) -> List[str]:
+def get_critical_inputs(league: str) -> list[str]:
     """Return the critical team context keys for a league.
 
     Missing any critical input should prevent formal edge output.
@@ -466,7 +464,7 @@ def get_critical_inputs(league: str) -> List[str]:
     return list(archetype.critical_team_keys)
 
 
-def get_important_inputs(league: str) -> List[str]:
+def get_important_inputs(league: str) -> list[str]:
     """Return important (required but non-critical) team context keys.
 
     These are required_team_keys minus critical_team_keys.
@@ -479,7 +477,7 @@ def get_important_inputs(league: str) -> List[str]:
     return [k for k in archetype.required_team_keys if k not in critical]
 
 
-def get_supported_markets(league: str) -> List[str]:
+def get_supported_markets(league: str) -> list[str]:
     """Return the list of market types an archetype supports."""
     archetype = get_archetype(league)
     if archetype is None:
@@ -487,7 +485,7 @@ def get_supported_markets(league: str) -> List[str]:
     return list(archetype.supported_markets)
 
 
-def get_prop_stat_keys(league: str) -> List[str]:
+def get_prop_stat_keys(league: str) -> list[str]:
     """Return available prop stat keys for a league."""
     archetype = get_archetype(league)
     if archetype is None:

@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from omega.core.calibration.profiles import (
     CalibrationProfile,
@@ -35,21 +35,21 @@ class CalibrationRegistry:
     for the expected ~10-50 profiles.
     """
 
-    def __init__(self, path: Optional[str] = None) -> None:
+    def __init__(self, path: str | None = None) -> None:
         self._path = Path(path) if path else _DEFAULT_PATH
 
-    def _load(self) -> Dict[str, Any]:
+    def _load(self) -> dict[str, Any]:
         """Read the registry file. Returns empty structure if missing."""
         if not self._path.exists():
             return {"schema_version": _SCHEMA_VERSION, "profiles": []}
         try:
-            with open(self._path, "r", encoding="utf-8") as f:
+            with open(self._path, encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to read profile registry at %s: %s", self._path, exc)
             return {"schema_version": _SCHEMA_VERSION, "profiles": []}
 
-    def _save(self, data: Dict[str, Any]) -> None:
+    def _save(self, data: dict[str, Any]) -> None:
         """Write the registry file atomically (write tmp, rename)."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self._path.with_suffix(".json.tmp")
@@ -73,7 +73,7 @@ class CalibrationRegistry:
         logger.info("Registered profile %s (league=%s, method=%s)",
                      profile.profile_id, profile.league, profile.method)
 
-    def get_production(self, league: str) -> Optional[CalibrationProfile]:
+    def get_production(self, league: str) -> CalibrationProfile | None:
         """Return the active production profile for a league, or None."""
         data = self._load()
         for p in data["profiles"]:
@@ -82,7 +82,7 @@ class CalibrationRegistry:
                 return CalibrationProfile(**p)
         return None
 
-    def get_profile(self, profile_id: str) -> Optional[CalibrationProfile]:
+    def get_profile(self, profile_id: str) -> CalibrationProfile | None:
         """Retrieve a profile by ID."""
         data = self._load()
         for p in data["profiles"]:
@@ -108,7 +108,7 @@ class CalibrationRegistry:
             )
 
         league = target["league"]
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         # Archive existing production profile for this league
         for p in data["profiles"]:
@@ -131,7 +131,7 @@ class CalibrationRegistry:
         for p in data["profiles"]:
             if p["profile_id"] == profile_id:
                 p["status"] = ProfileStatus.REJECTED.value
-                p["rejected_at"] = datetime.now(timezone.utc).isoformat()
+                p["rejected_at"] = datetime.now(UTC).isoformat()
                 p["reject_reason"] = reason
                 self._save(data)
                 logger.info("Rejected profile %s: %s", profile_id, reason)
@@ -140,9 +140,9 @@ class CalibrationRegistry:
 
     def list_profiles(
         self,
-        league: Optional[str] = None,
-        status: Optional[str] = None,
-    ) -> List[CalibrationProfile]:
+        league: str | None = None,
+        status: str | None = None,
+    ) -> list[CalibrationProfile]:
         """List profiles with optional league and status filters."""
         data = self._load()
         results = []

@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
 
 from omega.strategy.models import BacktestResult, StrategyEntry, StrategyStatus
 from omega.strategy.versioning.registry import StrategyRegistry
@@ -40,14 +39,14 @@ class PromotionCriteria:
 
 def evaluate_for_promotion(
     result: BacktestResult,
-    criteria: Optional[PromotionCriteria] = None,
-) -> tuple[bool, List[str]]:
+    criteria: PromotionCriteria | None = None,
+) -> tuple[bool, list[str]]:
     """Evaluate whether a backtest result meets promotion criteria.
 
     Returns (should_promote, rejection_reasons).
     """
     criteria = criteria or PromotionCriteria()
-    reasons: List[str] = []
+    reasons: list[str] = []
 
     if not result.passed:
         reasons.extend(result.rejection_reasons)
@@ -86,7 +85,7 @@ def auto_promote_or_reject(
     strategy_id: str,
     version: int,
     result: BacktestResult,
-    criteria: Optional[PromotionCriteria] = None,
+    criteria: PromotionCriteria | None = None,
     decided_by: str = "auto_promoter",
 ) -> StrategyEntry:
     """Record backtest, then auto-promote or reject based on criteria.

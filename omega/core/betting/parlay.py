@@ -7,12 +7,9 @@ expected value, and correlation warnings. Reuses odds conversion from odds.py.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
-from omega.core.betting.odds import american_to_decimal, implied_probability
-
+from omega.core.betting.odds import american_to_decimal
 
 # ---------------------------------------------------------------------------
 # Models
@@ -38,7 +35,7 @@ class ParlayLeg:
         player: str = "",
         stat_key: str = "",
         team: str = "",
-    ) -> "ParlayLeg":
+    ) -> ParlayLeg:
         """Create a leg from American odds."""
         return cls(
             selection=selection,
@@ -54,13 +51,13 @@ class ParlayLeg:
 class ParlaySlip:
     """A complete parlay with combined metrics."""
 
-    legs: List[ParlayLeg]
+    legs: list[ParlayLeg]
     combined_decimal_odds: float
     combined_win_probability: float
     implied_probability: float        # from combined odds
     combined_edge_pct: float          # empirical - implied, in pct points
     ev_pct: float                     # expected value as % of stake
-    correlation_warnings: List[str] = field(default_factory=list)
+    correlation_warnings: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +66,7 @@ class ParlaySlip:
 
 # Stat pairs for the same player that are highly correlated.
 # (stat_a, stat_b) — order does not matter.
-_SAME_PLAYER_CORRELATED: List[Tuple[str, str]] = [
+_SAME_PLAYER_CORRELATED: list[tuple[str, str]] = [
     ("pts", "pra"),
     ("reb", "pra"),
     ("ast", "pra"),
@@ -82,7 +79,7 @@ _SAME_PLAYER_CORRELATED: List[Tuple[str, str]] = [
 ]
 
 
-def check_correlation(legs: List[ParlayLeg]) -> List[str]:
+def check_correlation(legs: list[ParlayLeg]) -> list[str]:
     """Check for correlated legs and return warning strings.
 
     Checks:
@@ -90,7 +87,7 @@ def check_correlation(legs: List[ParlayLeg]) -> List[str]:
     2. Same player, same stat at different thresholds (redundant)
     3. Same team, same stat (pace-driven correlation)
     """
-    warnings: List[str] = []
+    warnings: list[str] = []
     correlated_pairs = {frozenset(p) for p in _SAME_PLAYER_CORRELATED}
 
     for i, a in enumerate(legs):
@@ -127,7 +124,7 @@ def check_correlation(legs: List[ParlayLeg]) -> List[str]:
 # Parlay math
 # ---------------------------------------------------------------------------
 
-def compute_parlay_odds(legs: List[ParlayLeg]) -> float:
+def compute_parlay_odds(legs: list[ParlayLeg]) -> float:
     """Compute combined decimal odds for a parlay (product of leg odds)."""
     result = 1.0
     for leg in legs:
@@ -136,7 +133,7 @@ def compute_parlay_odds(legs: List[ParlayLeg]) -> float:
 
 
 def compute_parlay_probability(
-    legs: List[ParlayLeg],
+    legs: list[ParlayLeg],
     independence_discount: float = 1.0,
 ) -> float:
     """Compute combined win probability assuming near-independence.
@@ -156,7 +153,7 @@ def compute_parlay_probability(
 
 
 def build_parlay(
-    legs: List[ParlayLeg],
+    legs: list[ParlayLeg],
     independence_discount: float = 1.0,
 ) -> ParlaySlip:
     """Build a complete ParlaySlip with all computed metrics.

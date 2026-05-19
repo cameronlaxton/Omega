@@ -12,9 +12,8 @@ multiple bets, each addressed by its descriptor.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -45,7 +44,7 @@ class BetRecord(BaseModel):
     selection_descriptor: str = Field(
         description="Canonical, snake_case, line embedded — e.g. 'home_spread_-3.5', 'Tatum_over_27.5_pts'"
     )
-    line_taken: Optional[float] = Field(
+    line_taken: float | None = Field(
         default=None,
         description="The point/total value at which the user bet; None for moneyline",
     )
@@ -56,7 +55,7 @@ class BetRecord(BaseModel):
     )
     status: BetStatus = BetStatus.PENDING
     recorded_at: str = Field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
 
     @classmethod
@@ -65,7 +64,7 @@ class BetRecord(BaseModel):
         trace_id: str,
         bet_id: str,
         block: dict,
-    ) -> "BetRecord":
+    ) -> BetRecord:
         """Build a BetRecord from the `bet_record` sub-dict emitted by the LLM per system prompt §10.
 
         The export block has fields: book, market, selection, line_taken, odds_taken,

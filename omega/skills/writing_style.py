@@ -2,7 +2,7 @@
 This module is a heuristic placeholder; replace with an LLM-based or ML-based
 implementation in Phase 1.
 """
-from . import register, is_enabled
+from . import is_enabled, register
 from .logger import write_event
 
 

@@ -7,8 +7,8 @@ and generates human-readable text summaries from simulation and edge data.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 from omega.core.models import (
     AnswerPlan,
@@ -22,12 +22,12 @@ from omega.core.models import (
 def compose_response(
     understanding: QueryUnderstanding,
     plan: AnswerPlan,
-    facts: List[GatheredFact],
+    facts: list[GatheredFact],
     execution: ExecutionResult,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build structured response from execution results."""
-    sections: Dict[str, Any] = {}
-    narrative_parts: List[str] = []
+    sections: dict[str, Any] = {}
+    narrative_parts: list[str] = []
 
     for pkg in plan.output_packages:
         if pkg == OutputPackage.BET_CARD and execution.best_bet:
@@ -161,7 +161,7 @@ def compose_response(
             "sources_used": len([f for f in facts if f.filled]),
             "total_slots": len(facts),
             "league": understanding.league,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         },
     }
 
@@ -169,10 +169,10 @@ def compose_response(
 def _build_text_summary(
     understanding: QueryUnderstanding,
     execution: ExecutionResult,
-    narrative_parts: List[str],
+    narrative_parts: list[str],
 ) -> str:
     """Build a human-readable text summary."""
-    parts: List[str] = []
+    parts: list[str] = []
 
     if execution.simulation:
         sim = execution.simulation
@@ -210,7 +210,7 @@ def _build_text_summary(
     return "\n\n".join(parts)
 
 
-def _extract_key_factors(facts: List[GatheredFact]) -> List[Dict[str, Any]]:
+def _extract_key_factors(facts: list[GatheredFact]) -> list[dict[str, Any]]:
     """Extract key factors from gathered facts."""
     factors = []
     for fact in facts:

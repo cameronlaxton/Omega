@@ -11,7 +11,7 @@ Covers:
 from __future__ import annotations
 
 import tempfile
-from typing import Any, Dict
+from typing import Any
 
 from omega.trace.store import TraceStore
 
@@ -22,7 +22,7 @@ def _tmp_store() -> TraceStore:
     return TraceStore(db_path=tmp.name)
 
 
-def _make_minimal_trace(trace_id: str = "t-clv-001") -> Dict[str, Any]:
+def _make_minimal_trace(trace_id: str = "t-clv-001") -> dict[str, Any]:
     return {
         "trace_id": trace_id,
         "run_id": trace_id,

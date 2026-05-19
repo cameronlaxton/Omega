@@ -9,11 +9,9 @@ These models define the JSON interface between:
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # -- Request Models ----------------------------------------------------------
 
@@ -24,16 +22,16 @@ class MarketQuote(BaseModel):
     market_type: str = Field(description="e.g. moneyline, spread, total, moneyline_3way, puck_line, run_line, team_total, method_of_victory, set_spread, total_games, map_spread, outright_winner")
     selection: str = Field(description="Human label, e.g. 'Home', 'Over 224.5', 'KO/TKO', 'Top 10'")
     price: float = Field(description="American odds")
-    line: Optional[float] = Field(default=None, description="Spread/total line value if applicable")
+    line: float | None = Field(default=None, description="Spread/total line value if applicable")
     segment: str = Field(default="full_game", description="full_game, 1h, 1q, 1p, regulation, first_5_innings, etc.")
-    player: Optional[str] = Field(default=None, description="Player name for player props")
-    stat_key: Optional[str] = Field(default=None, description="Prop stat key, e.g. pts, pass_yds, aces, kills")
-    bookmaker: Optional[str] = Field(default=None, description="Source sportsbook")
-    source: Optional[str] = Field(default=None, description="Provider/source label, e.g. the-odds-api:betmgm")
-    event_id: Optional[str] = Field(default=None, description="Provider event id")
-    provider_market_key: Optional[str] = Field(default=None, description="Provider-native market key")
-    last_update: Optional[str] = Field(default=None, description="Provider market last update timestamp")
-    snapshot_timestamp: Optional[str] = Field(default=None, description="Provider snapshot timestamp")
+    player: str | None = Field(default=None, description="Player name for player props")
+    stat_key: str | None = Field(default=None, description="Prop stat key, e.g. pts, pass_yds, aces, kills")
+    bookmaker: str | None = Field(default=None, description="Source sportsbook")
+    source: str | None = Field(default=None, description="Provider/source label, e.g. the-odds-api:betmgm")
+    event_id: str | None = Field(default=None, description="Provider event id")
+    provider_market_key: str | None = Field(default=None, description="Provider-native market key")
+    last_update: str | None = Field(default=None, description="Provider market last update timestamp")
+    snapshot_timestamp: str | None = Field(default=None, description="Provider snapshot timestamp")
 
 
 class OddsInput(BaseModel):
@@ -45,17 +43,17 @@ class OddsInput(BaseModel):
     """
 
     # Legacy flat fields (2-way)
-    spread_home: Optional[float] = Field(default=None, description="Home spread line (e.g., -3.5)")
-    spread_home_price: Optional[float] = Field(default=-110, description="Juice on the home spread (American odds)")
-    moneyline_home: Optional[float] = Field(default=None, description="Home moneyline (American odds)")
-    moneyline_away: Optional[float] = Field(default=None, description="Away moneyline (American odds)")
-    over_under: Optional[float] = Field(default=None, description="Total line (e.g., 224.5)")
+    spread_home: float | None = Field(default=None, description="Home spread line (e.g., -3.5)")
+    spread_home_price: float | None = Field(default=-110, description="Juice on the home spread (American odds)")
+    moneyline_home: float | None = Field(default=None, description="Home moneyline (American odds)")
+    moneyline_away: float | None = Field(default=None, description="Away moneyline (American odds)")
+    over_under: float | None = Field(default=None, description="Total line (e.g., 224.5)")
 
     # 3-way moneyline (hockey regulation, soccer)
-    moneyline_draw: Optional[float] = Field(default=None, description="Draw moneyline (American odds) for 3-way markets")
+    moneyline_draw: float | None = Field(default=None, description="Draw moneyline (American odds) for 3-way markets")
 
     # Normalized market list (preferred path for all new integrations)
-    markets: Optional[List[MarketQuote]] = Field(default=None, description="Normalized list of all scraped markets")
+    markets: list[MarketQuote] | None = Field(default=None, description="Normalized list of all scraped markets")
 
 
 class GameAnalysisRequest(BaseModel):
@@ -80,9 +78,9 @@ class GameAnalysisRequest(BaseModel):
     home_team: str = Field(description="Home team name")
     away_team: str = Field(description="Away team name")
     league: str = Field(description="League identifier: NBA, NFL, MLB, NHL, NCAAB, EPL, UFC, ATP, PGA, CS2, ...")
-    odds: Optional[OddsInput] = Field(default=None, description="Market odds (if available)")
+    odds: OddsInput | None = Field(default=None, description="Market odds (if available)")
     n_iterations: int = Field(default=1000, ge=100, le=100000, description="Simulation iterations")
-    home_context: Optional[Dict[str, Any]] = Field(
+    home_context: dict[str, Any] | None = Field(
         default=None,
         description=(
             "Pre-fetched home team stats. Required keys depend on league archetype "
@@ -90,14 +88,14 @@ class GameAnalysisRequest(BaseModel):
             "Omitting or passing None returns status='skipped' with missing_requirements listing exact keys."
         ),
     )
-    away_context: Optional[Dict[str, Any]] = Field(
+    away_context: dict[str, Any] | None = Field(
         default=None,
         description=(
             "Pre-fetched away team stats. Same required keys as home_context. "
             "Do not nest these under a 'game_context' key — use home_context and away_context directly."
         ),
     )
-    seed: Optional[int] = Field(default=None, description="RNG seed for reproducible simulations")
+    seed: int | None = Field(default=None, description="RNG seed for reproducible simulations")
 
 
 class SlateAnalysisRequest(BaseModel):
@@ -105,10 +103,10 @@ class SlateAnalysisRequest(BaseModel):
     Caller (e.g. agent) should supply games list; service does not fetch schedule."""
 
     league: str = Field(description="League identifier")
-    date: Optional[str] = Field(default=None, description="Date in YYYY-MM-DD format; defaults to today")
+    date: str | None = Field(default=None, description="Date in YYYY-MM-DD format; defaults to today")
     bankroll: float = Field(default=1000.0, gt=0, description="Bankroll for stake sizing")
     edge_threshold: float = Field(default=0.03, ge=0.0, le=0.5, description="Minimum edge to flag")
-    games: Optional[List[Dict[str, Any]]] = Field(default=None, description="Pre-fetched games (home/away/odds); required for analysis")
+    games: list[dict[str, Any]] | None = Field(default=None, description="Pre-fetched games (home/away/odds); required for analysis")
 
 
 class PlayerPropRequest(BaseModel):
@@ -118,12 +116,12 @@ class PlayerPropRequest(BaseModel):
     league: str
     prop_type: str = Field(description="Stat key, e.g. pts, pass_yds, aces, kills, goals")
     line: float = Field(description="The prop line, e.g. 22.5")
-    odds_over: Optional[float] = Field(default=None, description="American odds for Over")
-    odds_under: Optional[float] = Field(default=None, description="American odds for Under")
-    player_context: Optional[Dict[str, Any]] = Field(default=None, description="Player statistical context")
-    game_context: Optional[Dict[str, Any]] = Field(default=None, description="Game-level context (opponent, pace, etc.)")
+    odds_over: float | None = Field(default=None, description="American odds for Over")
+    odds_under: float | None = Field(default=None, description="American odds for Under")
+    player_context: dict[str, Any] | None = Field(default=None, description="Player statistical context")
+    game_context: dict[str, Any] | None = Field(default=None, description="Game-level context (opponent, pace, etc.)")
     n_iterations: int = Field(default=5000, ge=100, le=100000)
-    seed: Optional[int] = Field(default=None, description="RNG seed for reproducible simulations")
+    seed: int | None = Field(default=None, description="RNG seed for reproducible simulations")
     # Required because persisted prop traces are graded by
     # (game_date, home_team, away_team). Without these fields the outcome
     # resolver cannot safely attach an ESPN box-score result.
@@ -141,7 +139,7 @@ class SimulationResult(BaseModel):
     iterations: int
     home_win_prob: float = Field(description="Home/Player-A win probability (0-100)")
     away_win_prob: float = Field(description="Away/Player-B win probability (0-100)")
-    draw_prob: Optional[float] = Field(default=None, description="Draw probability (0-100), for 3-way markets")
+    draw_prob: float | None = Field(default=None, description="Draw probability (0-100), for 3-way markets")
     predicted_spread: float = Field(description="Predicted spread (negative = home favored)")
     predicted_total: float = Field(description="Predicted combined score")
     predicted_home_score: float
@@ -161,7 +159,7 @@ class EdgeDetail(BaseModel):
     market_odds: float = Field(description="American odds used for this side")
     confidence_tier: str = Field(description="A (high), B (medium), C (low), or Pass")
     recommended_units: float = Field(default=0.0, description="Kelly-sized stake in units")
-    spread_coverage_prob: Optional[float] = Field(
+    spread_coverage_prob: float | None = Field(
         default=None,
         description="P(covers spread) when market is run-line/puck-line (0-1); None for moneyline edges",
     )
@@ -184,8 +182,8 @@ class AnalysisMetadata(BaseModel):
 
     engine_version: str = "2.0-dse"
     calibration_method: str = "combined"
-    data_sources: List[str] = Field(default_factory=lambda: ["simulation"])
-    archetype: Optional[str] = Field(default=None, description="Sport archetype used for simulation")
+    data_sources: list[str] = Field(default_factory=lambda: ["simulation"])
+    archetype: str | None = Field(default=None, description="Sport archetype used for simulation")
 
 
 # -- Top-Level Response Models -----------------------------------------------
@@ -198,15 +196,15 @@ class GameAnalysisResponse(BaseModel):
     league: str
     analyzed_at: str = Field(description="ISO 8601 timestamp")
     status: str = Field(description="'success', 'skipped', or 'error'")
-    skip_reason: Optional[str] = None
-    missing_requirements: Optional[List[str]] = Field(
+    skip_reason: str | None = None
+    missing_requirements: list[str] | None = Field(
         default=None,
         description="Machine-readable list of missing inputs the agent should fetch, e.g. ['home_context.off_rating', 'away_context.serve_win_pct']",
     )
 
-    simulation: Optional[SimulationResult] = None
-    edges: List[EdgeDetail] = Field(default_factory=list)
-    best_bet: Optional[BetSlip] = None
+    simulation: SimulationResult | None = None
+    edges: list[EdgeDetail] = Field(default_factory=list)
+    best_bet: BetSlip | None = None
     metadata: AnalysisMetadata = Field(default_factory=AnalysisMetadata)
 
 
@@ -218,7 +216,7 @@ class SlateAnalysisResponse(BaseModel):
     total_games: int
     games_analyzed: int
     games_with_edge: int
-    analyses: List[GameAnalysisResponse] = Field(default_factory=list)
+    analyses: list[GameAnalysisResponse] = Field(default_factory=list)
 
 
 class PlayerPropResponse(BaseModel):
@@ -229,16 +227,16 @@ class PlayerPropResponse(BaseModel):
     prop_type: str
     line: float
     status: str = Field(description="'success', 'skipped', or 'error'")
-    skip_reason: Optional[str] = None
-    missing_requirements: Optional[List[str]] = None
+    skip_reason: str | None = None
+    missing_requirements: list[str] | None = None
 
-    over_prob: Optional[float] = Field(default=None, description="Probability of Over (0-1)")
-    under_prob: Optional[float] = Field(default=None, description="Probability of Under (0-1)")
-    edge_over: Optional[float] = Field(default=None, description="Edge on Over in pct points")
-    edge_under: Optional[float] = Field(default=None, description="Edge on Under in pct points")
-    recommendation: Optional[str] = Field(default=None, description="'over', 'under', or 'pass'")
-    confidence_tier: Optional[str] = None
-    notes: List[str] = Field(
+    over_prob: float | None = Field(default=None, description="Probability of Over (0-1)")
+    under_prob: float | None = Field(default=None, description="Probability of Under (0-1)")
+    edge_over: float | None = Field(default=None, description="Edge on Over in pct points")
+    edge_under: float | None = Field(default=None, description="Edge on Under in pct points")
+    recommendation: str | None = Field(default=None, description="'over', 'under', or 'pass'")
+    confidence_tier: str | None = None
+    notes: list[str] = Field(
         default_factory=list,
         description=(
             "Machine-readable annotations: 'odds_unsourced_over', "
@@ -247,7 +245,7 @@ class PlayerPropResponse(BaseModel):
             "'distribution_override:<family>'."
         ),
     )
-    imputed_fraction: Optional[float] = Field(
+    imputed_fraction: float | None = Field(
         default=None,
         description="Fraction of observations marked as imputed (0..1); None when not reported.",
     )
@@ -258,9 +256,9 @@ class ErrorResponse(BaseModel):
 
     error_code: str = Field(description="Machine-readable code: SIM_FAILED, DATA_MISSING, INVALID_INPUT")
     message: str = Field(description="Human-readable error description")
-    context: Optional[Dict[str, Any]] = None
-    fallback_hint: Optional[str] = Field(default=None, description="Suggestion for the caller")
-    missing_requirements: Optional[List[str]] = Field(
+    context: dict[str, Any] | None = None
+    fallback_hint: str | None = Field(default=None, description="Suggestion for the caller")
+    missing_requirements: list[str] | None = Field(
         default=None,
         description="Machine-readable missing inputs for agent self-healing",
     )

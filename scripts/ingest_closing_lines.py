@@ -57,7 +57,7 @@ import sys
 import traceback
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -72,7 +72,7 @@ _REQUIRED_LINE_FIELDS = ("market", "selection_descriptor", "closing_odds")
 _ALLOWED_MARKET_PREFIXES = ("moneyline", "spread", "total", "player_prop:")
 
 
-def _validate_payload(payload: Dict[str, Any]) -> None:
+def _validate_payload(payload: dict[str, Any]) -> None:
     """Reject malformed payloads before any DB write. Raises ValueError."""
     if not isinstance(payload, dict):
         raise ValueError(f"Top-level JSON must be an object, got {type(payload).__name__}")
@@ -105,7 +105,7 @@ def _validate_payload(payload: Dict[str, Any]) -> None:
             raise ValueError(f"lines[{i}].closing_odds must be numeric")
 
 
-def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> Tuple[str, int]:
+def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> tuple[str, int]:
     """Ingest one file. Returns (trace_id, n_lines_attached). Raises on error.
 
     The file's `lines` array is applied as a single transaction. attach_closing_line
@@ -121,7 +121,7 @@ def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> Tuple[s
     trace_id = str(payload["trace_id"])
     captured_at = str(payload["captured_at"])
     source = str(payload["source"])
-    lines: List[Dict[str, Any]] = payload["lines"]
+    lines: list[dict[str, Any]] = payload["lines"]
 
     # Confirm the trace exists before touching closing_lines; otherwise
     # attach_closing_line will raise per row and leave us with a half-applied file.

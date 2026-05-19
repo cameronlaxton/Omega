@@ -20,23 +20,20 @@ Sport archetypes:
 """
 
 from __future__ import annotations
-import math
+
 import random
-from typing import Dict, List, Optional, Union
+from typing import Any
 
 try:
     import numpy as np
 except ImportError:
-    np = None
+    np = None  # type: ignore[assignment]
 
 from omega.core.config.leagues import get_league_config
 from omega.core.simulation.archetypes import (
     get_archetype,
     get_archetype_name,
-    get_required_inputs,
-    SportArchetype,
 )
-
 
 # ---------------------------------------------------------------------------
 # Distribution samplers
@@ -45,8 +42,8 @@ from omega.core.simulation.archetypes import (
 def select_distribution(
     metric_key: str,
     league: str,
-    mean: Optional[float] = None,
-    override: Optional[str] = None,
+    mean: float | None = None,
+    override: str | None = None,
 ) -> str:
     """
     Selects appropriate distribution (Normal vs Poisson) based on metric and league.
@@ -89,7 +86,7 @@ def select_distribution(
     return "normal"
 
 
-def _poisson_sample(lam: float, size: int) -> List[float]:
+def _poisson_sample(lam: float, size: int) -> list[float]:
     """Generate Poisson samples."""
     lam = max(0.01, lam)
     if np is not None:
@@ -105,7 +102,7 @@ def _poisson_sample(lam: float, size: int) -> List[float]:
     return samples
 
 
-def _normal_sample(mu: float, sigma: float, size: int) -> List[float]:
+def _normal_sample(mu: float, sigma: float, size: int) -> list[float]:
     """Generate Normal samples."""
     sigma = max(0.1, sigma)
     if np is not None:
@@ -113,7 +110,7 @@ def _normal_sample(mu: float, sigma: float, size: int) -> List[float]:
     return [random.gauss(mu, sigma) for _ in range(size)]
 
 
-def _bernoulli_sample(p: float, size: int) -> List[int]:
+def _bernoulli_sample(p: float, size: int) -> list[int]:
     """Generate Bernoulli samples (0 or 1)."""
     p = max(0.001, min(0.999, p))
     if np is not None:
@@ -130,8 +127,8 @@ def _skip_result(
     away_team: str,
     league: str,
     skip_reason: str,
-    missing_requirements: Optional[List[str]] = None,
-) -> Dict:
+    missing_requirements: list[str] | None = None,
+) -> dict:
     """Build a standard skip response."""
     return {
         "success": False,
@@ -145,8 +142,8 @@ def _skip_result(
 
 
 def _validate_required_keys(
-    context: Optional[Dict], side: str, required_keys: tuple, league: str
-) -> List[str]:
+    context: dict | None, side: str, required_keys: tuple, league: str
+) -> list[str]:
     """Return list of missing requirement strings for a context dict."""
     if context is None:
         # Enumerate all required keys so callers know exactly what to supply.
@@ -168,13 +165,13 @@ def _build_team_score_result(
     away_team: str,
     league: str,
     n_iterations: int,
-    home_scores: List[float],
-    away_scores: List[float],
-    home_context: Optional[Dict] = None,
-    away_context: Optional[Dict] = None,
-    archetype_name: Optional[str] = None,
-    spread_home: Optional[float] = None,
-) -> Dict:
+    home_scores: list[float],
+    away_scores: list[float],
+    home_context: dict | None = None,
+    away_context: dict | None = None,
+    archetype_name: str | None = None,
+    spread_home: float | None = None,
+) -> dict:
     """Build a standardized result dict from team score simulations."""
     home_wins = sum(1 for h, a in zip(home_scores, away_scores) if h > a)
     away_wins = sum(1 for h, a in zip(home_scores, away_scores) if a > h)
@@ -219,11 +216,11 @@ def _build_team_score_result(
 # ---------------------------------------------------------------------------
 
 def run_game_simulation(
-    projection: Dict,
+    projection: dict,
     n_iter: int = 10000,
-    seed: Optional[int] = None,
-    league: Optional[str] = None,
-) -> Dict:
+    seed: int | None = None,
+    league: str | None = None,
+) -> dict:
     """
     Simulates a game between two teams, returning win probabilities and score distributions.
     """
@@ -243,7 +240,12 @@ def run_game_simulation(
     off_b = projection["off_rating"][team_b]
     dist = select_distribution("score", resolved_league)
 
-    results = {"team_a_wins": 0, "team_b_wins": 0, "a_scores": [], "b_scores": []}
+    results: dict[str, Any] = {
+        "team_a_wins": 0,
+        "team_b_wins": 0,
+        "a_scores": [],
+        "b_scores": [],
+    }
 
     for _ in range(n_iter):
         if dist == "poisson":
@@ -273,7 +275,7 @@ def simulate_totals(
     market_total: float,
     dist: str,
     n_iter: int = 10000,
-) -> Dict:
+) -> dict:
     """Simulates totals (over/under) with explicit distribution selection."""
     sigma = max(0.1, variance ** 0.5)
     samples = _normal_sample(mean, sigma, n_iter) if dist == "normal" else _poisson_sample(mean, n_iter)
@@ -298,8 +300,8 @@ def simulate_totals_auto(
     metric_key: str,
     league: str,
     n_iter: int = 10000,
-    seed: Optional[int] = None,
-) -> Dict:
+    seed: int | None = None,
+) -> dict:
     """Automatically selects distribution and simulates totals."""
     if seed is not None:
         random.seed(seed)
@@ -310,10 +312,10 @@ def simulate_totals_auto(
 
 
 def run_player_simulation(
-    player_proj: Dict,
+    player_proj: dict,
     n_iter: int = 10000,
-    seed: Optional[int] = None,
-) -> Dict:
+    seed: int | None = None,
+) -> dict:
     """Simulates a single player stat vs a market line."""
     if seed is not None:
         random.seed(seed)
@@ -358,7 +360,7 @@ def run_player_simulation(
 # ---------------------------------------------------------------------------
 
 def _sim_basketball(
-    home_ctx: Dict, away_ctx: Dict, league: str, n_iter: int, config: Dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
 ) -> tuple:
     """Basketball: ORtg/DRtg/pace possession model (Normal distribution)."""
     home_off = home_ctx.get("off_rating", 110.0)
@@ -390,7 +392,7 @@ def _sim_basketball(
 
 
 def _sim_american_football(
-    home_ctx: Dict, away_ctx: Dict, league: str, n_iter: int, config: Dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
 ) -> tuple:
     """American Football: (PPG + opp PAPG) / 2 with Normal distribution."""
     home_off = home_ctx.get("off_rating", config.get("avg_total", 45.0) / 2)
@@ -415,7 +417,7 @@ def _sim_american_football(
 
 
 def _sim_baseball(
-    home_ctx: Dict, away_ctx: Dict, league: str, n_iter: int, config: Dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
 ) -> tuple:
     """Baseball: Poisson run environment model.
 
@@ -461,7 +463,7 @@ def _sim_baseball(
 
 
 def _sim_hockey(
-    home_ctx: Dict, away_ctx: Dict, league: str, n_iter: int, config: Dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
 ) -> tuple:
     """Hockey: Poisson goal model with goalie/shot-rate adjustments.
 
@@ -493,9 +495,7 @@ def _sim_hockey(
 
     # Special teams adjustment
     home_pp = home_ctx.get("pp_pct", 0.20)
-    away_pk = away_ctx.get("pk_pct", 0.80)
     away_pp = away_ctx.get("pp_pct", 0.20)
-    home_pk = home_ctx.get("pk_pct", 0.80)
 
     # ~3.5 power plays per game average; adjust goal expectation
     pp_goals_home = 3.5 * (home_pp - 0.20)
@@ -516,7 +516,7 @@ def _sim_hockey(
 
 
 def _sim_soccer(
-    home_ctx: Dict, away_ctx: Dict, league: str, n_iter: int, config: Dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
 ) -> tuple:
     """Soccer: Poisson goal model with xG integration.
 
@@ -551,7 +551,7 @@ def _sim_soccer(
 
 
 def _sim_tennis(
-    home_ctx: Dict, away_ctx: Dict, league: str, n_iter: int, config: Dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
 ) -> tuple:
     """Tennis: Point-level serve/return probability → simulate sets.
 
@@ -668,7 +668,7 @@ def _tennis_game_win_prob(p: float) -> float:
 
 
 def _sim_golf(
-    home_ctx: Dict, away_ctx: Dict, league: str, n_iter: int, config: Dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
 ) -> tuple:
     """Golf: Strokes-gained field probability model.
 
@@ -708,7 +708,7 @@ def _sim_golf(
 
 
 def _sim_fighting(
-    home_ctx: Dict, away_ctx: Dict, league: str, n_iter: int, config: Dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
 ) -> tuple:
     """Fighting: Win probability with method-of-victory modeling.
 
@@ -720,15 +720,10 @@ def _sim_fighting(
     """
     a_win_pct = home_ctx.get("win_pct", 0.5)
     b_win_pct = away_ctx.get("win_pct", 0.5)
-    a_finish = home_ctx.get("finish_rate", 0.5)
-    b_finish = away_ctx.get("finish_rate", 0.5)
     a_ko = home_ctx.get("ko_tko_rate", 0.3)
     b_ko = away_ctx.get("ko_tko_rate", 0.3)
     a_sub = home_ctx.get("submission_rate", 0.15)
     b_sub = away_ctx.get("submission_rate", 0.15)
-
-    rounds_scheduled = home_ctx.get("rounds_scheduled",
-                                    config.get("default_rounds", 3))
 
     # Implied win probability from both records (normalize)
     total = a_win_pct + b_win_pct
@@ -771,8 +766,7 @@ def _sim_fighting(
                 method_counts["decision"] += 1
 
     # Draw probability in boxing is ~2-3%, negligible in MMA
-    league_cfg = config
-    is_boxing = (league.upper() == "BOXING")
+    is_boxing = league.upper() == "BOXING"
     draw_rate = 0.025 if is_boxing else 0.005
     # Retroactively convert some decisions to draws
     for i in range(len(a_scores)):
@@ -786,7 +780,7 @@ def _sim_fighting(
 
 
 def _sim_esports(
-    home_ctx: Dict, away_ctx: Dict, league: str, n_iter: int, config: Dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
 ) -> tuple:
     """Esports: Map win probability with best-of-N simulation.
 
@@ -864,11 +858,11 @@ class OmegaSimulationEngine:
         away_team: str,
         league: str = "NBA",
         n_iterations: int = 100,
-        home_context: Optional[Dict] = None,
-        away_context: Optional[Dict] = None,
-        seed: Optional[int] = None,
-        spread_home: Optional[float] = None,
-    ) -> Dict:
+        home_context: dict | None = None,
+        away_context: dict | None = None,
+        seed: int | None = None,
+        spread_home: float | None = None,
+    ) -> dict:
         """
         Run a fast game simulation using team stats dispatched by sport archetype.
 
@@ -924,6 +918,8 @@ class OmegaSimulationEngine:
                 missing_requirements=["archetype_simulator"],
             )
 
+        assert home_context is not None
+        assert away_context is not None
         home_scores, away_scores = simulator(
             home_context, away_context, league, n_iterations, config
         )
@@ -943,23 +939,37 @@ class OmegaSimulationEngine:
         away_team: str,
         league: str = "NBA",
         n_iterations: int = 1000,
-        home_context: Optional[Dict] = None,
-        away_context: Optional[Dict] = None,
-        home_players: Optional[List[Dict]] = None,
-        away_players: Optional[List[Dict]] = None,
-    ) -> Dict:
+        home_context: dict | None = None,
+        away_context: dict | None = None,
+        home_players: list[dict] | None = None,
+        away_players: list[dict] | None = None,
+    ) -> dict:
         """
         Run a full game simulation using Markov engine + player projections.
 
         Architecture fix: callers must supply all context. No network calls.
         """
-        from omega.core.simulation.markov_engine import MarkovSimulator  # noqa: future module
-
         if home_context is None or away_context is None:
             return _skip_result(
                 home_team, away_team, league,
                 skip_reason="Missing home_context or away_context (caller must supply)",
                 missing_requirements=["home_context", "away_context"],
+            )
+
+        try:
+            import importlib
+
+            MarkovSimulator = importlib.import_module(
+                "omega.core.simulation.markov_engine"
+            ).MarkovSimulator
+        except ModuleNotFoundError:
+            return _skip_result(
+                home_team, away_team, league,
+                skip_reason=(
+                    "Markov simulator module is not available in this checkout; "
+                    "use run_fast_game_simulation() or the canonical analyze_game() path"
+                ),
+                missing_requirements=["omega.core.simulation.markov_engine"],
             )
 
         home_players = home_players or []
@@ -984,7 +994,7 @@ class OmegaSimulationEngine:
 
         home_scores = []
         away_scores = []
-        all_player_stats: Dict[str, Dict[str, List]] = {}
+        all_player_stats: dict[str, dict[str, list]] = {}
 
         n_possessions = simulator._base_n_possessions
 
@@ -1008,7 +1018,7 @@ class OmegaSimulationEngine:
         away_wins = sum(1 for h, a in zip(home_scores, away_scores) if a > h)
         draws = n_iterations - home_wins - away_wins
 
-        player_projections = {}
+        player_projections: dict[str, dict[str, dict[str, float]]] = {}
         for player_name, stats in all_player_stats.items():
             player_projections[player_name] = {}
             for stat_key, values in stats.items():
@@ -1057,15 +1067,13 @@ class OmegaSimulationEngine:
         prop_type: str = "pts",
         line: float = 20.0,
         n_iterations: int = 500,
-        game_context: Optional[Dict] = None,
-        player_context: Optional[Dict] = None,
-    ) -> Dict:
+        game_context: dict | None = None,
+        player_context: dict | None = None,
+    ) -> dict:
         """
         Run player prop simulation focused on a specific player's stats.
         Caller must supply game_context and player_context; engine does not fetch.
         """
-        from omega.core.simulation.markov_engine import MarkovSimulator  # noqa: future module
-
         archetype = get_archetype(league)
         if archetype is None:
             return {
@@ -1097,6 +1105,25 @@ class OmegaSimulationEngine:
                 "success": False,
                 "skip_reason": "Missing game_context or player_context (caller must supply; agent-only path for live data)",
                 "missing_requirements": missing,
+                "player": player_name,
+                "prop_type": prop_type,
+                "line": line,
+            }
+
+        try:
+            import importlib
+
+            MarkovSimulator = importlib.import_module(
+                "omega.core.simulation.markov_engine"
+            ).MarkovSimulator
+        except ModuleNotFoundError:
+            return {
+                "success": False,
+                "skip_reason": (
+                    "Markov simulator module is not available in this checkout; "
+                    "use run_player_simulation() or the canonical analyze_player_prop() path"
+                ),
+                "missing_requirements": ["omega.core.simulation.markov_engine"],
                 "player": player_name,
                 "prop_type": prop_type,
                 "line": line,

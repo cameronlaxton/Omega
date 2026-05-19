@@ -17,9 +17,7 @@ import sys
 import tempfile
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List
-
-import pytest
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -28,10 +26,10 @@ _SCRIPTS = _REPO_ROOT / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from omega.integrations.espn_nba import FinalGame  # noqa: E402
-from omega.trace.store import TraceStore  # noqa: E402
 import fetch_outcomes_props  # type: ignore  # noqa: E402
 
+from omega.integrations.espn_nba import FinalGame  # noqa: E402
+from omega.trace.store import TraceStore  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -56,7 +54,7 @@ def _make_prop_trace(
     timestamp: str = "2026-05-17T19:00:00Z",
     recommendation: str = "over",
     **snap_overrides: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     snap = {
         "player_name": player_name,
         "league": league,
@@ -93,7 +91,7 @@ def _make_prop_trace(
     }
 
 
-def _make_game_trace(trace_id: str) -> Dict[str, Any]:
+def _make_game_trace(trace_id: str) -> dict[str, Any]:
     return {
         "trace_id": trace_id,
         "run_id": trace_id,
@@ -116,7 +114,7 @@ def _make_game_trace(trace_id: str) -> Dict[str, Any]:
     }
 
 
-def _fake_scoreboard_factory(games_by_league_date: Dict[tuple, List[FinalGame]]):
+def _fake_scoreboard_factory(games_by_league_date: dict[tuple, list[FinalGame]]):
     """Return a (league, date) → games callable using the supplied map."""
 
     def _fetch(league: str, d: date):
@@ -125,8 +123,8 @@ def _fake_scoreboard_factory(games_by_league_date: Dict[tuple, List[FinalGame]])
     return _fetch
 
 
-def _fake_box_score_factory(payloads_by_event: Dict[str, Dict[str, Any]]):
-    def _fetch(league: str, event_id: str) -> Dict[str, Any]:
+def _fake_box_score_factory(payloads_by_event: dict[str, dict[str, Any]]):
+    def _fetch(league: str, event_id: str) -> dict[str, Any]:
         if event_id not in payloads_by_event:
             raise RuntimeError(f"no fixture for event {event_id}")
         return payloads_by_event[event_id]
@@ -134,7 +132,7 @@ def _fake_box_score_factory(payloads_by_event: Dict[str, Dict[str, Any]]):
     return _fetch
 
 
-def _nba_pts_payload(player: str, pts: float) -> Dict[str, Any]:
+def _nba_pts_payload(player: str, pts: float) -> dict[str, Any]:
     return {
         "boxscore": {
             "players": [

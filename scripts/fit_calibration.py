@@ -30,9 +30,7 @@ import hashlib
 import logging
 import random
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -50,10 +48,10 @@ _HOLDOUT_FRAC = 0.20
 
 
 def _deterministic_split(
-    predictions: List[float],
-    outcomes: List[int],
+    predictions: list[float],
+    outcomes: list[int],
     league: str,
-) -> Tuple[List[float], List[int], List[float], List[int]]:
+) -> tuple[list[float], list[int], list[float], list[int]]:
     """Split (predictions, outcomes) 80/20 with a deterministic seed.
 
     The seed is sha256(sorted(zip(predictions, outcomes)) + league), so the same
@@ -105,10 +103,10 @@ def fit_and_register(
     registry: CalibrationRegistry,
     league: str,
     method: str,
-    train_p: List[float],
-    train_o: List[int],
-    hold_p: List[float],
-    hold_o: List[int],
+    train_p: list[float],
+    train_o: list[int],
+    hold_p: list[float],
+    hold_o: list[int],
     dry_run: bool,
 ) -> CalibrationProfile:
     """Fit one method, evaluate on holdout, register as CANDIDATE. Returns profile."""

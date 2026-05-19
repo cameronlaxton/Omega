@@ -9,7 +9,7 @@ logic.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -52,10 +52,10 @@ PROMPT_NAMES = (
 
 
 def omega_analyze_game(
-    request: Dict[str, Any],
+    request: dict[str, Any],
     bankroll: float,
     session_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run deterministic single-game analysis through canonical core service."""
     from omega.core.contracts.schemas import GameAnalysisRequest
     from omega.core.contracts.service import analyze
@@ -73,10 +73,10 @@ def omega_analyze_game(
 
 
 def omega_analyze_prop(
-    request: Dict[str, Any],
+    request: dict[str, Any],
     bankroll: float,
     session_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run deterministic player-prop analysis through canonical core service."""
     from omega.core.contracts.schemas import PlayerPropRequest
     from omega.core.contracts.service import analyze
@@ -93,7 +93,7 @@ def omega_analyze_prop(
         return _error("omega_analyze_prop", "analysis_failed", str(exc))
 
 
-def omega_analyze_slate(request: Dict[str, Any], bankroll: float, session_id: str) -> Dict[str, Any]:
+def omega_analyze_slate(request: dict[str, Any], bankroll: float, session_id: str) -> dict[str, Any]:
     """Run deterministic slate analysis through canonical core service."""
     from omega.core.contracts.schemas import SlateAnalysisRequest
     from omega.core.contracts.service import analyze
@@ -110,7 +110,7 @@ def omega_analyze_slate(request: Dict[str, Any], bankroll: float, session_id: st
         return _error("omega_analyze_slate", "analysis_failed", str(exc))
 
 
-def omega_chat_orchestrate(prompt: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def omega_chat_orchestrate(prompt: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return a safe orchestration boundary response.
 
     The current source-of-truth repo does not have the stale orchestrator module
@@ -132,7 +132,7 @@ def omega_chat_orchestrate(prompt: str, context: Optional[Dict[str, Any]] = None
     )
 
 
-def omega_replay_bundle(bundle: Dict[str, Any], strict: bool = False) -> Dict[str, Any]:
+def omega_replay_bundle(bundle: dict[str, Any], strict: bool = False) -> dict[str, Any]:
     """Audit a frozen replay bundle with live evidence fetching disabled."""
     try:
         req = ReplayToolRequest(bundle=ReplayBundle(**bundle), strict=strict)
@@ -185,7 +185,7 @@ def omega_replay_bundle(bundle: Dict[str, Any], strict: bool = False) -> Dict[st
     return _ok("omega_replay_bundle", response=response)
 
 
-def omega_trace_get(trace_id: str, db_path: Optional[str] = None) -> Dict[str, Any]:
+def omega_trace_get(trace_id: str, db_path: str | None = None) -> dict[str, Any]:
     """Retrieve a persisted trace via TraceStore."""
     from omega.trace.store import TraceStore
 
@@ -202,14 +202,14 @@ def omega_trace_get(trace_id: str, db_path: Optional[str] = None) -> Dict[str, A
 
 
 def omega_trace_query(
-    db_path: Optional[str] = None,
-    league: Optional[str] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    has_outcome: Optional[bool] = None,
-    execution_mode: Optional[str] = None,
+    db_path: str | None = None,
+    league: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    has_outcome: bool | None = None,
+    execution_mode: str | None = None,
     limit: int = 100,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Query persisted traces with versioned filters."""
     from omega.trace.store import TraceStore
 
@@ -252,8 +252,8 @@ def omega_trace_attach_outcome(
     home_score: int,
     away_score: int,
     source: str = "mcp",
-    db_path: Optional[str] = None,
-) -> Dict[str, Any]:
+    db_path: str | None = None,
+) -> dict[str, Any]:
     """Attach an outcome after initial trace persistence."""
     from omega.trace.store import TraceStore
 
@@ -284,11 +284,11 @@ def omega_trace_attach_outcome(
 
 
 def omega_calibration_fit_preview(
-    db_path: Optional[str] = None,
-    league: Optional[str] = None,
+    db_path: str | None = None,
+    league: str | None = None,
     method: str = "isotonic",
     limit: int = 1000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Dry-run a calibration fit from graded traces without writing profiles."""
     from omega.core.calibration.fitter import CalibrationFitter
     from omega.core.calibration.registry import CalibrationRegistry
@@ -355,7 +355,7 @@ def omega_calibration_fit_preview(
         store.close()
 
 
-def omega_evidence_retrieve(slots: List[Dict[str, Any]]) -> Dict[str, Any]:
+def omega_evidence_retrieve(slots: list[dict[str, Any]]) -> dict[str, Any]:
     """Return an explicit no-live-fetch skipped response for evidence retrieval."""
     try:
         req = EvidenceRetrieveRequest(slots=slots)
@@ -375,16 +375,16 @@ def omega_evidence_retrieve(slots: List[Dict[str, Any]]) -> Dict[str, Any]:
 def omega_resolve_odds(
     kind: str,
     league: str,
-    home_team: Optional[str] = None,
-    away_team: Optional[str] = None,
-    player_name: Optional[str] = None,
-    prop_type: Optional[str] = None,
-    line: Optional[float] = None,
-    event_id: Optional[str] = None,
+    home_team: str | None = None,
+    away_team: str | None = None,
+    player_name: str | None = None,
+    prop_type: str | None = None,
+    line: float | None = None,
+    event_id: str | None = None,
     bookmaker: str = "betmgm",
     line_shopping: bool = False,
     all_books: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Resolve BetMGM-first Odds API markets into engine-ready odds inputs.
 
     This is an input-prep tool only. It does not compute protected Omega
@@ -457,7 +457,7 @@ def build_server():
         "omega://calibration/universal-latest",
         name="omega_calibration_universal_latest",
         description="Currently active universal calibration profile.",
-    )(lambda: _read_repo_file("omega/core/calibration/profiles.json"))
+    )(lambda: _read_repo_file("config/calibration/universal_latest.json"))
 
     mcp.prompt()(omega_runtime_prompt)
     mcp.prompt()(omega_missing_input_repair)
@@ -503,7 +503,7 @@ def omega_replay_review() -> str:
     )
 
 
-def _ok(tool: str, **payload: Any) -> Dict[str, Any]:
+def _ok(tool: str, **payload: Any) -> dict[str, Any]:
     return {
         "schema_version": MCP_SCHEMA_VERSION,
         "tool": tool,
@@ -512,7 +512,7 @@ def _ok(tool: str, **payload: Any) -> Dict[str, Any]:
     }
 
 
-def _error(tool: str, code: str, detail: Any) -> Dict[str, Any]:
+def _error(tool: str, code: str, detail: Any) -> dict[str, Any]:
     return {
         "schema_version": MCP_SCHEMA_VERSION,
         "tool": tool,

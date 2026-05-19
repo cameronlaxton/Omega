@@ -13,9 +13,8 @@ Usage:
 """
 from __future__ import annotations
 
-from pathlib import Path
 import json
-from typing import Optional
+from pathlib import Path
 
 from omega.skills.base import SkillBase, SkillObservation
 
@@ -44,7 +43,7 @@ def get_registry() -> dict:
     return dict(_registry)
 
 
-def get_skill(name: str) -> Optional[SkillBase]:
+def get_skill(name: str) -> SkillBase | None:
     """Return an instantiated skill by name, or None if not registered/enabled."""
     if not is_enabled(name):
         return None

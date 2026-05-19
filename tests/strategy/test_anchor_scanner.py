@@ -3,15 +3,13 @@
 Uses fixtures modeled after the user's real winning bets from 4/4-4/8/2026.
 """
 
-import pytest
 
+from omega.strategy.anchor.detector import scan_player
 from omega.strategy.anchor.scanner import (
     AnchorParlayConfig,
     build_parlays_for_game,
     scan_slate,
 )
-from omega.strategy.anchor.detector import scan_player
-
 
 # ---------------------------------------------------------------------------
 # Fixture: OKC @ LAC (4/8/26) — user's 4-leg winning parlay

@@ -4,13 +4,11 @@ import pytest
 
 from omega.core.betting.parlay import (
     ParlayLeg,
-    ParlaySlip,
     build_parlay,
     check_correlation,
     compute_parlay_odds,
     compute_parlay_probability,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures — modeled after user's real bets
