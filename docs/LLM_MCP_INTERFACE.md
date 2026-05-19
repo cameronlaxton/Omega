@@ -38,6 +38,14 @@ Quant benchmark evaluation belongs to frozen artifacts, frozen odds snapshots, n
 
 ## Local Server
 
+Before starting a local MCP server, the interpreter must be Python 3.12+ and
+the project must be installed with the MCP extra:
+
+```bash
+python -m pip install -e .[mcp]
+python scripts/cowork_preflight.py
+```
+
 For an MCP client that supports command-based local servers:
 
 ```json

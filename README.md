@@ -32,6 +32,8 @@ Formal numeric outputs require Python execution and a `sandbox-` trace ID return
 
 ## Quick Start
 
+Omega requires Python 3.12+.
+
 ```bash
 python -m venv .venv
 # Windows: .venv\Scripts\activate
@@ -44,6 +46,7 @@ Install optional MCP dependencies when running an MCP client:
 
 ```bash
 pip install -e .[mcp]
+python scripts/cowork_preflight.py
 python -m omega.mcp.server
 ```
 

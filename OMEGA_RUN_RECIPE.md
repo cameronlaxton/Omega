@@ -5,9 +5,14 @@ Omega now runs local VM / MCP-first. The retired lite bridge and standalone sand
 ## Preferred Path
 
 ```bash
+python --version
 pip install -e .[mcp]
+python scripts/cowork_preflight.py
 python -m omega.mcp.server
 ```
+
+Omega requires Python 3.12+. If preflight fails, repair the interpreter or
+dependency install before producing formal numeric outputs.
 
 Use the typed MCP analyze tools with explicit `session_id` and `bankroll`.
 

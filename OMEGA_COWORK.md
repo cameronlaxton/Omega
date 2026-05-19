@@ -14,7 +14,34 @@ The deterministic Python engine owns simulation, probability calibration, fair/n
 
 The LLM must never generate protected numeric outputs in prose. If the deterministic path cannot run, produce qualitative research only.
 
-## 2. Engine Invocation
+## 2. Runtime Preflight And Engine Invocation
+
+Omega Cowork requires Python 3.12+. This is a hard runtime contract, not an
+aspirational package metadata hint. At the start of every Cowork VM session,
+verify the interpreter and install the repo dependencies before trying MCP or
+direct engine imports:
+
+```bash
+python --version
+python -m pip install -e .[mcp]
+python scripts/cowork_preflight.py
+```
+
+If `python --version` is below 3.12, stop and switch to a Python 3.12+
+interpreter. Do not bypass the package install with `sys.path` plus ad hoc
+`pip install pydantic numpy`; that hides the wrong interpreter and leaves the
+agent to rediscover setup failures during engine execution.
+
+If `cowork_preflight.py` reports missing `pydantic`, `numpy`, `mcp`, or Omega
+package metadata, repair setup with:
+
+```bash
+python -m pip install -e .[mcp]
+python scripts/cowork_preflight.py
+```
+
+Only after the preflight prints `cowork_preflight_ready` may the agent render
+formal Omega numeric output from MCP or `analyze()`.
 
 Preferred path:
 
@@ -25,6 +52,11 @@ python -m omega.mcp.server
 MCP analyze tools call `omega.core.contracts.service.analyze()` directly. MCP is an adapter over the canonical core service, not a second betting engine.
 
 Direct smoke test when no MCP client is available:
+
+```bash
+python -m pip install -e .
+python scripts/cowork_preflight.py --direct-only
+```
 
 ```python
 import hashlib

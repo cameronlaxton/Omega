@@ -8,17 +8,24 @@
 
 ## 1. Python Version Gate Blocks Sandbox Execution
 
-**What happened:** The Linux sandbox (Cowork shell) has Python 3.10. `pyproject.toml` declares `requires-python = ">=3.11"`. Running `pip install -e .` (or any package-level install) fails with:
+**What happened:** The Linux sandbox (Cowork shell) has Python 3.10. `pyproject.toml` declares `requires-python = ">=3.12"`. Running `pip install -e .` (or any package-level install) fails with:
 
 ```
-ERROR: Package 'omega' requires a different Python: 3.10.12 not in '>=3.11'
+ERROR: Package 'omega' requires a different Python: 3.10.12 not in '>=3.12'
 ```
 
-**Root cause:** The version gate is enforced at install time by setuptools, not at runtime. The actual codebase uses no Python 3.11-specific syntax (no `match`, no `Self`, no `ExceptionGroup`, etc.). The runtime is fully compatible with 3.10.
+**Root cause:** The version gate is enforced at install time by setuptools. Python 3.12 is the intended Omega runtime floor, so a Python 3.10 Cowork shell is the wrong interpreter for formal engine execution.
 
-**Workaround used:** Import via `sys.path.insert(0, repo_root)` and install only the two real dependencies (`pydantic`, `numpy`) directly. This bypasses setup.py entirely and works fine.
+**Workaround used in the affected session:** Import via `sys.path.insert(0, repo_root)` and install only the two real dependencies (`pydantic`, `numpy`) directly. This bypasses setup.py and can make a single smoke test pass, but it is no longer an accepted Cowork runtime path.
 
-**Recommendation:** If the 3.11 floor is intentional (e.g., type-checking uses `Self` in stubs, or CI targets 3.11), document it explicitly in `OMEGA_COWORK.md`. If it's aspirational, lower to 3.10 or add a note that direct path imports work in sandbox environments that can't install the package.
+**Resolution:** `OMEGA_COWORK.md` now requires a Python 3.12+ preflight before MCP or direct engine execution:
+
+```bash
+python -m pip install -e .[mcp]
+python scripts/cowork_preflight.py
+```
+
+If preflight reports a lower Python version or missing `pydantic`, `numpy`, `mcp`, or Omega package metadata, repair setup first. Do not emit formal Omega numeric outputs until preflight passes.
 
 ---
 
