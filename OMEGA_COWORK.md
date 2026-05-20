@@ -16,7 +16,7 @@ The LLM must never generate protected numeric outputs in prose. If the determini
 
 ## 2. Runtime Preflight And Engine Invocation
 
-Omega Cowork requires Python 3.12+. This is a hard runtime contract, not an
+Omega Cowork requires Python 3.10+. This is a hard runtime contract, not an
 aspirational package metadata hint. At the start of every Cowork VM session,
 verify the interpreter and install the repo dependencies before trying MCP or
 direct engine imports:
@@ -27,7 +27,7 @@ python -m pip install -e .[mcp]
 python scripts/cowork_preflight.py
 ```
 
-If `python --version` is below 3.12, stop and switch to a Python 3.12+
+If `python --version` is below 3.10, stop and switch to a Python 3.10+
 interpreter. Do not bypass the package install with `sys.path` plus ad hoc
 `pip install pydantic numpy`; that hides the wrong interpreter and leaves the
 agent to rediscover setup failures during engine execution.

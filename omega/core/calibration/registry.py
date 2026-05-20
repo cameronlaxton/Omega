@@ -2,7 +2,13 @@
 Calibration profile registry — JSON file storage with promotion workflow.
 
 Stores versioned CalibrationProfiles and provides league-based lookup.
-At most ONE production profile exists per league at any time.
+At most ONE production profile exists per (league, context_slice) pair at any time.
+
+context_slice is an optional sub-population label ('playoff', 'regular',
+'back_to_back', etc.).  None means the base profile covering all contexts.
+get_production(league, context_slice) performs an exact-match lookup first,
+then falls back to the base profile (context_slice=None) so callers always
+get the best available profile.
 
 Storage: omega/core/calibration/profiles.json
 """
@@ -12,7 +18,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from pathlib import Path
 from typing import Any
 
@@ -73,14 +80,37 @@ class CalibrationRegistry:
         logger.info("Registered profile %s (league=%s, method=%s)",
                      profile.profile_id, profile.league, profile.method)
 
-    def get_production(self, league: str) -> CalibrationProfile | None:
-        """Return the active production profile for a league, or None."""
+    def get_production(
+        self,
+        league: str,
+        context_slice: str | None = None,
+    ) -> CalibrationProfile | None:
+        """Return the active production profile for (league, context_slice).
+
+        Lookup order:
+        1. Exact match on (league, context_slice, PRODUCTION).
+        2. If context_slice is not None and no exact match: fall back to the
+           base profile (context_slice=None, PRODUCTION) for the same league.
+        3. Returns None if no production profile exists at all.
+        """
         data = self._load()
+        league_uc = league.upper()
+        base_profile: CalibrationProfile | None = None
+        slice_profile: CalibrationProfile | None = None
+
         for p in data["profiles"]:
-            if (p.get("league", "").upper() == league.upper()
-                    and p.get("status") == ProfileStatus.PRODUCTION.value):
-                return CalibrationProfile(**p)
-        return None
+            if (p.get("league", "").upper() != league_uc
+                    or p.get("status") != ProfileStatus.PRODUCTION.value):
+                continue
+            p_slice = p.get("context_slice")  # None for base profiles
+            if context_slice is not None and p_slice == context_slice:
+                slice_profile = CalibrationProfile(**p)
+            elif p_slice is None:
+                base_profile = CalibrationProfile(**p)
+
+        if context_slice is not None and slice_profile is not None:
+            return slice_profile
+        return base_profile
 
     def get_profile(self, profile_id: str) -> CalibrationProfile | None:
         """Retrieve a profile by ID."""
@@ -108,15 +138,18 @@ class CalibrationRegistry:
             )
 
         league = target["league"]
+        target_slice = target.get("context_slice")  # None for base profiles
         now = datetime.now(UTC).isoformat()
 
-        # Archive existing production profile for this league
+        # Archive existing production profile for the same (league, context_slice).
+        # A playoff profile never archives the base profile, and vice versa.
         for p in data["profiles"]:
             if (p.get("league", "").upper() == league.upper()
-                    and p.get("status") == ProfileStatus.PRODUCTION.value):
+                    and p.get("status") == ProfileStatus.PRODUCTION.value
+                    and p.get("context_slice") == target_slice):
                 p["status"] = ProfileStatus.ARCHIVED.value
-                logger.info("Archived incumbent profile %s for league %s",
-                            p["profile_id"], league)
+                logger.info("Archived incumbent profile %s for league=%s slice=%s",
+                            p["profile_id"], league, target_slice)
 
         # Promote the target
         target["status"] = ProfileStatus.PRODUCTION.value
@@ -142,14 +175,23 @@ class CalibrationRegistry:
         self,
         league: str | None = None,
         status: str | None = None,
+        context_slice: str | None = ...,  # type: ignore[assignment]
     ) -> list[CalibrationProfile]:
-        """List profiles with optional league and status filters."""
+        """List profiles with optional filters.
+
+        context_slice=... (default sentinel) means no filter — all slices returned.
+        context_slice=None means return only base profiles (slice is None).
+        context_slice='playoff' means return only profiles with that slice label.
+        """
+        _UNSET = ...
         data = self._load()
         results = []
         for p in data["profiles"]:
             if league and p.get("league", "").upper() != league.upper():
                 continue
             if status and p.get("status") != status:
+                continue
+            if context_slice is not _UNSET and p.get("context_slice") != context_slice:
                 continue
             results.append(CalibrationProfile(**p))
         return results

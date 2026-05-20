@@ -11,7 +11,8 @@ All models are Pydantic v2 for validation and serialization.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
@@ -269,6 +270,7 @@ class ExecutionTrace(BaseModel):
     """
 
     # --- Identity ---
+    schema_version: int = 1  # increment when trace shape changes incompatibly
     trace_id: UUID = Field(default_factory=uuid4)
     run_id: str = Field(default_factory=lambda: uuid4().hex[:12])  # short, human-friendly
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -314,6 +316,11 @@ class ExecutionTrace(BaseModel):
     # Timing
     stage_timings: dict[str, float] = Field(default_factory=dict)  # stage → seconds
     total_duration_ms: float = 0.0
+
+    # Context labels — populated from game_context at trace write time.
+    # Enables context-slice partitioning in calibration fitting.
+    # Keys mirror canonical game_context fields: is_playoff, rest_days, etc.
+    context_labels: dict[str, Any] = Field(default_factory=dict)
 
     # Errors
     error: str | None = None

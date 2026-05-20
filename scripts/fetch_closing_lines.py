@@ -47,7 +47,8 @@ import importlib
 import logging
 import sys
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent

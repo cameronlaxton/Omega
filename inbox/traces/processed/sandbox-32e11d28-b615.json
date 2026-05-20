@@ -1,0 +1,46 @@
+{
+  "trace": {
+    "trace_id": "sandbox-32e11d28-b615",
+    "session_id": "sess-20260519-nyk1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-19T23:29:45.150930+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "James Harden",
+      "league": "NBA",
+      "prop_type": "3pm",
+      "line": 2.5,
+      "odds_over": -110.0,
+      "odds_under": -120.0,
+      "player_context": {
+        "3pm_mean": 3.0
+      },
+      "game_context": null,
+      "n_iterations": 20000,
+      "seed": 3456856650,
+      "home_team": "New York Knicks",
+      "away_team": "Cleveland Cavaliers",
+      "game_date": "2026-05-19"
+    },
+    "result": {
+      "player_name": "James Harden",
+      "league": "NBA",
+      "prop_type": "3pm",
+      "line": 2.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.691,
+      "under_prob": 0.309,
+      "edge_over": 16.72,
+      "edge_under": -23.65,
+      "recommendation": "over",
+      "confidence_tier": "A",
+      "notes": [],
+      "imputed_fraction": 0.0
+    },
+    "downgrades": []
+  },
+  "bet_record": null
+}

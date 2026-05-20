@@ -16,8 +16,9 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
-from datetime import UTC, datetime
-from typing import Any
+from datetime import datetime, timezone
+UTC = timezone.utc
+from typing import Any, Callable
 
 from omega.core.calibration.profiles import CalibrationProfile
 
@@ -130,6 +131,54 @@ class CalibrationFitter:
                 outcomes.append(actual)
 
         return predictions, outcomes
+
+    @staticmethod
+    def extract_pairs_by_context(
+        graded_traces: list[dict[str, Any]],
+        context_fn: Callable[[dict[str, Any]], str | None],
+        extractor: str = "game",
+    ) -> dict[str | None, tuple[list[float], list[int]]]:
+        """Partition (prediction, outcome) pairs by context slice.
+
+        Args:
+            graded_traces: Graded traces from TraceStore.
+            context_fn: Maps a single trace dict to a slice label (str) or
+                None (base slice). Example::
+
+                    lambda t: "playoff" if t.get("context_labels", {}).get("is_playoff") else "regular"
+
+            extractor: "game" (default) or "prop" — which extraction method
+                to apply within each partition.
+
+        Returns:
+            Dict keyed by slice label (or None for base). Each value is the
+            (predictions, outcomes) tuple for that slice. Slices with fewer
+            than _MIN_SAMPLES pairs are still returned; callers are responsible
+            for the minimum-sample gate before fitting.
+        """
+        partitions: dict[str | None, tuple[list[float], list[int]]] = {}
+        for trace in graded_traces:
+            label = context_fn(trace)
+            if label not in partitions:
+                partitions[label] = ([], [])
+            partitions[label][0].append(0.0)   # placeholder; replaced below
+            partitions[label][1].append(0)
+
+        # Re-partition cleanly: group traces first, then extract pairs per group.
+        grouped: dict[str | None, list[dict[str, Any]]] = {}
+        for trace in graded_traces:
+            label = context_fn(trace)
+            grouped.setdefault(label, []).append(trace)
+
+        fitter = CalibrationFitter()
+        result: dict[str | None, tuple[list[float], list[int]]] = {}
+        for label, traces in grouped.items():
+            if extractor == "prop":
+                preds, outcomes = fitter.extract_prop_pairs(traces)
+            else:
+                preds, outcomes = fitter.extract_pairs(traces)
+            result[label] = (preds, outcomes)
+        return result
 
     # ------------------------------------------------------------------
     # Isotonic fitting (PAV algorithm)

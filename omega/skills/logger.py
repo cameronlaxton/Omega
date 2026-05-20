@@ -3,7 +3,8 @@ This is intentionally minimal and sync; heavy workloads should replace with
 an async queue or external sink.
 """
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from pathlib import Path
 
 from . import config

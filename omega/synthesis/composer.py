@@ -7,7 +7,8 @@ and generates human-readable text summaries from simulation and edge data.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from typing import Any
 
 from omega.core.models import (

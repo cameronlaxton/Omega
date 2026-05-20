@@ -11,7 +11,8 @@ import hashlib
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from typing import Any
 
 from omega.core.betting.kelly import recommend_stake
@@ -172,6 +173,17 @@ def analyze(
             "Expected GameAnalysisRequest, PlayerPropRequest, or SlateAnalysisRequest."
         )
 
+    # Populate context_labels from game_context for calibration slice fitting.
+    context_labels: dict[str, Any] = {}
+    if isinstance(typed_req, PlayerPropRequest) and typed_req.game_context:
+        gc = typed_req.game_context
+        if gc.get("is_playoff") is not None:
+            context_labels["is_playoff"] = bool(gc["is_playoff"])
+        if gc.get("rest_days") is not None:
+            context_labels["rest_days"] = int(gc["rest_days"])
+        if gc.get("blowout_risk") is not None:
+            context_labels["blowout_risk"] = float(gc["blowout_risk"])
+
     return {
         "trace_id": trace_id,
         "model_version": MODEL_VERSION,
@@ -182,16 +194,21 @@ def analyze(
         "input_snapshot": _safe_dump(typed_req),
         "result": _safe_dump(result),
         "downgrades": _result_downgrades(result),
+        "context_labels": context_labels,
     }
 
 
-def _calibrate(raw_prob: float, league: str | None = None) -> float:
+def _calibrate(
+    raw_prob: float,
+    league: str | None = None,
+    context_hints: dict[str, Any] | None = None,
+) -> float:
     """Apply probability calibration via shared policy.
 
     Delegates to apply_calibration() — the single source of truth for
     calibration parameters. Do not add local overrides here.
     """
-    return apply_calibration(raw_prob, league=league)
+    return apply_calibration(raw_prob, league=league, context_hints=context_hints)
 
 
 def _build_edge(
@@ -450,6 +467,75 @@ def analyze_game(
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Context-adjusted input assembly
+# ---------------------------------------------------------------------------
+
+# Per-league, per-stat playoff suppression factors (conservative empirical defaults).
+# Missing league falls back to _DEFAULT_PLAYOFF_FACTOR; missing stat within a
+# known league also falls back to the default.
+_PLAYOFF_STAT_FACTORS: dict[str, dict[str, float]] = {
+    "NBA":  {"pts": 0.96, "reb": 0.97, "ast": 0.96, "3pm": 0.94, "stl": 0.95, "blk": 0.95},
+    "NHL":  {"goals": 0.94, "assists": 0.95, "shots": 0.94, "saves": 0.97},
+    "MLB":  {"hits": 0.97, "hr": 0.93, "rbis": 0.96, "strikeouts": 1.02, "total_bases": 0.95},
+    "NFL":  {"pass_yds": 0.97, "rush_yds": 0.97, "rec_yds": 0.97, "receptions": 0.97},
+    "EPL":  {"goals": 0.96, "assists": 0.97, "shots": 0.95},
+    "MLS":  {"goals": 0.96, "assists": 0.97, "shots": 0.95},
+}
+_DEFAULT_PLAYOFF_FACTOR = 0.97
+# Back-to-back fatigue — only meaningful in sports with consecutive-night scheduling.
+_B2B_FATIGUE: dict[str, float] = {"NBA": 0.94, "NHL": 0.95}
+# MLB park factor applies to power/extra-base counting stats only.
+_MLB_PARK_FACTOR_STATS = frozenset({"hr", "total_bases", "rbis"})
+
+
+def _apply_game_context(
+    player_context: dict[str, Any],
+    game_context: dict[str, Any],
+    prop_type: str,
+    league: str,
+) -> dict[str, Any]:
+    """Return an adjusted copy of player_context using game_context signals.
+
+    Applies sport-appropriate factors to {prop_type}_mean and {prop_type}_std.
+    Never mutates the input dict. Stores _context_factor_applied for audit.
+    Returns the original dict unchanged if mean_key is absent.
+    """
+    mean_key = f"{prop_type}_mean"
+    std_key = f"{prop_type}_std"
+    if mean_key not in player_context:
+        return player_context
+
+    ctx = dict(player_context)
+    league_uc = league.upper()
+    factor = 1.0
+
+    if game_context.get("is_playoff"):
+        league_factors = _PLAYOFF_STAT_FACTORS.get(league_uc, {})
+        factor *= league_factors.get(prop_type, _DEFAULT_PLAYOFF_FACTOR)
+
+    # B2B fatigue: rest_days=0 means the team played the previous night.
+    # Only applied for sports with consecutive-night schedules (NBA, NHL).
+    _rest_days = game_context.get("rest_days")
+    if _rest_days is not None and int(_rest_days) == 0 and league_uc in _B2B_FATIGUE:
+        factor *= _B2B_FATIGUE[league_uc]
+
+    # Pace scales counting stats proportionally (NBA, NHL, soccer).
+    if (paf := game_context.get("pace_adjustment_factor")) is not None:
+        factor *= float(paf)
+
+    # MLB park factor boosts/suppresses power stats in hitter/pitcher-friendly parks.
+    if league_uc == "MLB" and prop_type in _MLB_PARK_FACTOR_STATS:
+        if (park := game_context.get("park_factor")) is not None:
+            factor *= float(park)
+
+    ctx[mean_key] = ctx[mean_key] * factor
+    if std_key in ctx:
+        ctx[std_key] = ctx[std_key] * factor  # preserve coefficient of variation
+    ctx["_context_factor_applied"] = round(factor, 4)
+    return ctx
+
+
 # analyze_player_prop
 # ---------------------------------------------------------------------------
 
@@ -468,6 +554,11 @@ def analyze_player_prop(
     stat_key = request.prop_type
     mean_key = f"{stat_key}_mean"
     std_key = f"{stat_key}_std"
+
+    if request.game_context:
+        player_ctx = _apply_game_context(
+            player_ctx, request.game_context, stat_key, request.league
+        )
 
     mean = player_ctx.get(mean_key)
     if mean is None:
@@ -565,16 +656,17 @@ def analyze_player_prop(
     recommendation = "pass"
     tier: str | None = None
 
+    _ctx_hints = request.game_context or None
     if request.odds_over is not None:
         market_over = implied_probability(request.odds_over)
-        cal_over = _calibrate(over_prob, league=request.league)
+        cal_over = _calibrate(over_prob, league=request.league, context_hints=_ctx_hints)
         edge_over = round(edge_percentage(cal_over, market_over), 2)
     else:
         notes.append("odds_unsourced_over")
 
     if request.odds_under is not None:
         market_under = implied_probability(request.odds_under)
-        cal_under = _calibrate(under_prob, league=request.league)
+        cal_under = _calibrate(under_prob, league=request.league, context_hints=_ctx_hints)
         edge_under = round(edge_percentage(cal_under, market_under), 2)
     else:
         notes.append("odds_unsourced_under")

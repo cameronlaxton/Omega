@@ -460,9 +460,9 @@ class TestApplyCalibration:
             import omega.core.calibration.probability as prob_mod
             original = prob_mod._get_active_profile
 
-            def _patched_get(league):
+            def _patched_get(league, context_slice=None):
                 r = CalibrationRegistry(path=path)
-                return r.get_production(league)
+                return r.get_production(league, context_slice=context_slice)
 
             prob_mod._get_active_profile = _patched_get
             try:
@@ -496,3 +496,271 @@ class TestApplyCalibration:
             assert apply_calibration(p, league="NBA") == _calibrate(p, league="NBA"), (
                 f"League parity fail at {p}"
             )
+
+
+# ---------------------------------------------------------------------------
+# context_slice on CalibrationProfile
+# ---------------------------------------------------------------------------
+
+class TestContextSliceProfile:
+    def test_base_profile_has_none_slice(self):
+        from omega.core.calibration.profiles import CalibrationProfile
+        p = CalibrationProfile(
+            profile_id="iso_nba_v1",
+            version=1,
+            method="shrinkage",
+            league="NBA",
+            params={"shrink_factor": 0.7},
+            training_window="2025-01-01/2025-12-31",
+            sample_size=100,
+            dataset_hash="aaa",
+        )
+        assert p.context_slice is None
+
+    def test_playoff_profile_stores_slice(self):
+        from omega.core.calibration.profiles import CalibrationProfile
+        p = CalibrationProfile(
+            profile_id="iso_nba_playoff_v1",
+            version=1,
+            method="shrinkage",
+            league="NBA",
+            context_slice="playoff",
+            params={"shrink_factor": 0.65},
+            training_window="2025-01-01/2025-12-31",
+            sample_size=50,
+            dataset_hash="bbb",
+        )
+        assert p.context_slice == "playoff"
+        # Round-trip
+        dumped = p.model_dump()
+        p2 = CalibrationProfile(**dumped)
+        assert p2.context_slice == "playoff"
+
+    def test_mlb_regular_profile(self):
+        from omega.core.calibration.profiles import CalibrationProfile
+        p = CalibrationProfile(
+            profile_id="iso_mlb_regular_v1",
+            version=1,
+            method="isotonic",
+            league="MLB",
+            context_slice="regular",
+            params={"calibration_map": {"0.5": 0.5}},
+            training_window="2025-01-01/2025-12-31",
+            sample_size=80,
+            dataset_hash="ccc",
+        )
+        assert p.context_slice == "regular"
+        assert p.league == "MLB"
+
+
+# ---------------------------------------------------------------------------
+# Registry context_slice lookup and promotion
+# ---------------------------------------------------------------------------
+
+class TestRegistryContextSlice:
+    def test_get_production_returns_base_when_no_slice_profile(self):
+        """If no slice-specific profile exists, falls back to base."""
+        import tempfile, os
+        from omega.core.calibration.registry import CalibrationRegistry
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            reg = CalibrationRegistry(path=path)
+            base = _make_profile(profile_id="iso_nba_base", version=1, league="NBA")
+            reg.register(base)
+            reg.promote("iso_nba_base")
+
+            # Base lookup
+            assert reg.get_production("NBA") is not None
+            # Slice lookup falls back to base
+            result = reg.get_production("NBA", context_slice="playoff")
+            assert result is not None
+            assert result.profile_id == "iso_nba_base"
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_get_production_returns_slice_when_available(self):
+        """Slice-specific profile is preferred over base."""
+        import tempfile, os
+        from omega.core.calibration.registry import CalibrationRegistry
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            reg = CalibrationRegistry(path=path)
+            base = _make_profile(profile_id="iso_nba_base", version=1, league="NBA")
+            playoff = _make_profile(
+                profile_id="iso_nba_playoff_v1",
+                version=1,
+                league="NBA",
+                context_slice="playoff",
+            )
+            reg.register(base)
+            reg.promote("iso_nba_base")
+            reg.register(playoff)
+            reg.promote("iso_nba_playoff_v1")
+
+            # Exact slice match
+            result = reg.get_production("NBA", context_slice="playoff")
+            assert result is not None
+            assert result.profile_id == "iso_nba_playoff_v1"
+            # Base still accessible
+            base_result = reg.get_production("NBA")
+            assert base_result is not None
+            assert base_result.profile_id == "iso_nba_base"
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_promote_slice_does_not_archive_base(self):
+        """Promoting a playoff profile must not archive the base profile."""
+        import tempfile, os
+        from omega.core.calibration.profiles import ProfileStatus
+        from omega.core.calibration.registry import CalibrationRegistry
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            reg = CalibrationRegistry(path=path)
+            base = _make_profile(profile_id="iso_nba_base", version=1, league="NBA")
+            playoff = _make_profile(
+                profile_id="iso_nba_playoff_v1",
+                version=1,
+                league="NBA",
+                context_slice="playoff",
+            )
+            reg.register(base)
+            reg.promote("iso_nba_base")
+            reg.register(playoff)
+            reg.promote("iso_nba_playoff_v1")
+
+            # Base must still be PRODUCTION
+            base_result = reg.get_production("NBA")
+            assert base_result is not None
+            assert base_result.status == ProfileStatus.PRODUCTION
+
+            # Playoff must be PRODUCTION
+            playoff_result = reg.get_production("NBA", context_slice="playoff")
+            assert playoff_result is not None
+            assert playoff_result.status == ProfileStatus.PRODUCTION
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_list_profiles_filters_by_context_slice(self):
+        """list_profiles(context_slice='playoff') returns only playoff profiles."""
+        import tempfile, os
+        from omega.core.calibration.registry import CalibrationRegistry
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            reg = CalibrationRegistry(path=path)
+            base = _make_profile(profile_id="base_v1", version=1, league="NBA")
+            playoff = _make_profile(
+                profile_id="playoff_v1", version=1, league="NBA", context_slice="playoff"
+            )
+            b2b = _make_profile(
+                profile_id="b2b_v1", version=1, league="NBA", context_slice="back_to_back"
+            )
+            for p in [base, playoff, b2b]:
+                reg.register(p)
+
+            playoff_profiles = reg.list_profiles(league="NBA", context_slice="playoff")
+            assert len(playoff_profiles) == 1
+            assert playoff_profiles[0].profile_id == "playoff_v1"
+
+            base_profiles = reg.list_profiles(league="NBA", context_slice=None)
+            assert len(base_profiles) == 1
+            assert base_profiles[0].profile_id == "base_v1"
+
+            all_profiles = reg.list_profiles(league="NBA")
+            assert len(all_profiles) == 3
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# Fitter: extract_pairs_by_context
+# ---------------------------------------------------------------------------
+
+class TestExtractPairsByContext:
+    def _make_game_trace(self, is_playoff: bool, home_win_prob: float, result: str):
+        return {
+            "context_labels": {"is_playoff": is_playoff},
+            "predictions": {"home_win_prob": home_win_prob},
+            "_outcome": {"result": result},
+        }
+
+    def test_partitions_traces_by_context(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        traces = [
+            self._make_game_trace(True, 0.7, "home_win"),
+            self._make_game_trace(True, 0.6, "home_win"),
+            self._make_game_trace(False, 0.55, "away_win"),
+            self._make_game_trace(False, 0.52, "home_win"),
+        ]
+        fn = lambda t: "playoff" if t.get("context_labels", {}).get("is_playoff") else "regular"
+        result = CalibrationFitter.extract_pairs_by_context(traces, fn)
+
+        assert "playoff" in result
+        assert "regular" in result
+        assert len(result["playoff"][0]) == 2
+        assert len(result["regular"][0]) == 2
+
+    def test_empty_partition_returns_empty_lists(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        traces = [self._make_game_trace(False, 0.6, "home_win")]
+        fn = lambda t: "playoff" if t.get("context_labels", {}).get("is_playoff") else "regular"
+        result = CalibrationFitter.extract_pairs_by_context(traces, fn)
+
+        assert "regular" in result
+        assert "playoff" not in result
+
+    def test_all_traces_to_same_slice(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        traces = [
+            self._make_game_trace(True, 0.65, "home_win"),
+            self._make_game_trace(True, 0.55, "away_win"),
+        ]
+        fn = lambda _: None  # all go to base slice
+        result = CalibrationFitter.extract_pairs_by_context(traces, fn)
+        assert None in result
+        assert len(result[None][0]) == 2
+
+
+# ---------------------------------------------------------------------------
+# _derive_context_slice
+# ---------------------------------------------------------------------------
+
+class TestDeriveContextSlice:
+    def test_none_hints_returns_none(self):
+        from omega.core.calibration.probability import _derive_context_slice
+        assert _derive_context_slice(None) is None
+
+    def test_empty_hints_returns_none(self):
+        from omega.core.calibration.probability import _derive_context_slice
+        assert _derive_context_slice({}) is None
+
+    def test_playoff_true_returns_playoff(self):
+        from omega.core.calibration.probability import _derive_context_slice
+        assert _derive_context_slice({"is_playoff": True}) == "playoff"
+
+    def test_playoff_false_returns_none(self):
+        from omega.core.calibration.probability import _derive_context_slice
+        assert _derive_context_slice({"is_playoff": False}) is None
+
+    def test_b2b_returns_back_to_back(self):
+        from omega.core.calibration.probability import _derive_context_slice
+        assert _derive_context_slice({"rest_days": 0}) == "back_to_back"
+
+    def test_playoff_takes_precedence_over_b2b(self):
+        from omega.core.calibration.probability import _derive_context_slice
+        result = _derive_context_slice({"is_playoff": True, "rest_days": 0})
+        assert result == "playoff"  # playoff wins

@@ -1,0 +1,46 @@
+{
+  "trace": {
+    "trace_id": "sandbox-f82b6c0a-393e",
+    "session_id": "sess-20260519-nyk1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-19T23:29:45.179369+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Josh Hart",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 12.5,
+      "odds_over": -120.0,
+      "odds_under": -110.0,
+      "player_context": {
+        "pts_mean": 12.0
+      },
+      "game_context": null,
+      "n_iterations": 20000,
+      "seed": 1241167917,
+      "home_team": "New York Knicks",
+      "away_team": "Cleveland Cavaliers",
+      "game_date": "2026-05-19"
+    },
+    "result": {
+      "player_name": "Josh Hart",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 12.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.4319,
+      "under_prob": 0.5682,
+      "edge_over": -11.36,
+      "edge_under": 4.43,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "notes": [],
+      "imputed_fraction": 0.0
+    },
+    "downgrades": []
+  },
+  "bet_record": null
+}

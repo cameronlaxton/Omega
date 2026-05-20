@@ -78,7 +78,11 @@
       "Bash(cp omega_traces.db omega_traces_v7test.db)",
       "Bash(python -m py_compile C:\\\\Users\\\\camer\\\\OneDrive\\\\Documents\\\\GitHub\\\\Omega\\\\scripts\\\\ingest_traces.py)",
       "Read(//mnt/c/Users/camer/OneDrive/Documents/GitHub/**)",
-      "Bash(python -m py_compile scripts/ingest_traces.py)"
+      "Bash(python -m py_compile scripts/ingest_traces.py)",
+      "Bash(python -m pytest tests/core/test_calibration_profiles.py -x -q)",
+      "Bash(python -c \"import tests.core.test_contracts_service as t; print\\(dir\\(t\\)\\)\")",
+      "Bash(python -c \"import tests.core.test_contracts_service as t; import inspect; src = inspect.getsource\\(t\\); print\\(src[-200:]\\)\")",
+      "Bash(python -c \"import tests.core.test_calibration_profiles as t; import inspect; src = inspect.getsource\\(t\\); print\\(src[-300:]\\)\")"
     ]
   }
 }

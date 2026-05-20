@@ -119,7 +119,19 @@ class PlayerPropRequest(BaseModel):
     odds_over: float | None = Field(default=None, description="American odds for Over")
     odds_under: float | None = Field(default=None, description="American odds for Under")
     player_context: dict[str, Any] | None = Field(default=None, description="Player statistical context")
-    game_context: dict[str, Any] | None = Field(default=None, description="Game-level context (opponent, pace, etc.)")
+    game_context: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Game-level context used to adjust player_context means before simulation. "
+            "All keys optional; supply only what applies for the sport. "
+            "Universal: is_playoff (bool), rest_days (int; 0=B2B), "
+            "opponent_def_rank (int 1-30), blowout_risk (float 0-1), "
+            "pace_adjustment_factor (float ratio vs league baseline). "
+            "MLB: park_factor (float; >1=hitter-friendly), weather_wind_mph (float), "
+            "pitcher_k_rate (float), is_starter_probable (bool). "
+            "NFL: is_dome (bool), weather_temp_f (float), week_of_season (int)."
+        ),
+    )
     n_iterations: int = Field(default=5000, ge=100, le=100000)
     seed: int | None = Field(default=None, description="RNG seed for reproducible simulations")
     # Required because persisted prop traces are graded by

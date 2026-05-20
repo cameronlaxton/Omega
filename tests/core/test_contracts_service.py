@@ -20,6 +20,7 @@ from omega.core.contracts.schemas import (
     PlayerPropRequest,
 )
 from omega.core.contracts.service import (
+    _apply_game_context,
     _pick_best_bet,
     _resolve_game_market_odds,
     _stable_input_hash,
@@ -485,3 +486,139 @@ class TestRunLineCoverageProb:
         resp = analyze_game(req, bankroll=1000.0)
         for edge in resp.edges:
             assert edge.spread_coverage_prob is None
+
+
+# ---------------------------------------------------------------------------
+# _apply_game_context — context-adjusted input assembly
+# ---------------------------------------------------------------------------
+
+class TestApplyGameContext:
+    def test_no_game_context_returns_original_dict(self):
+        pc = {"pts_mean": 20.0, "pts_std": 5.0}
+        result = _apply_game_context(pc, {}, "pts", "NBA")
+        # No context signals → factor=1.0; mean unchanged
+        assert result["pts_mean"] == pytest.approx(20.0)
+        assert result["_context_factor_applied"] == pytest.approx(1.0)
+
+    def test_playoff_compresses_nba_pts_mean(self):
+        pc = {"pts_mean": 20.0, "pts_std": 4.0}
+        result = _apply_game_context(pc, {"is_playoff": True}, "pts", "NBA")
+        assert result["pts_mean"] < 20.0
+        assert result["pts_std"] < 4.0  # CV preserved
+        assert result["_context_factor_applied"] < 1.0
+
+    def test_playoff_compresses_nhl_goals(self):
+        pc = {"goals_mean": 0.5, "goals_std": 0.4}
+        result = _apply_game_context(pc, {"is_playoff": True}, "goals", "NHL")
+        assert result["goals_mean"] < 0.5
+        assert result["_context_factor_applied"] < 1.0
+
+    def test_mlb_park_factor_boosts_hr(self):
+        pc = {"hr_mean": 0.4, "hr_std": 0.3}
+        result = _apply_game_context(pc, {"park_factor": 1.15}, "hr", "MLB")
+        assert result["hr_mean"] > 0.4
+        assert result["_context_factor_applied"] > 1.0
+
+    def test_mlb_park_factor_ignored_for_non_power_stats(self):
+        pc = {"strikeouts_mean": 6.0}
+        result = _apply_game_context(pc, {"park_factor": 1.20}, "strikeouts", "MLB")
+        # park_factor not applied to strikeouts
+        assert result["strikeouts_mean"] == pytest.approx(6.0)
+
+    def test_b2b_fatigue_applied_nba(self):
+        pc = {"pts_mean": 20.0}
+        result = _apply_game_context(pc, {"rest_days": 0}, "pts", "NBA")
+        assert result["pts_mean"] < 20.0
+        assert result["_context_factor_applied"] < 1.0
+
+    def test_b2b_not_applied_for_mlb(self):
+        pc = {"hits_mean": 1.2}
+        result = _apply_game_context(pc, {"rest_days": 0}, "hits", "MLB")
+        # MLB has no B2B fatigue
+        assert result["hits_mean"] == pytest.approx(1.2)
+
+    def test_pace_adjustment_scales_mean(self):
+        pc = {"pts_mean": 20.0, "pts_std": 4.0}
+        result = _apply_game_context(pc, {"pace_adjustment_factor": 0.92}, "pts", "NBA")
+        assert result["pts_mean"] == pytest.approx(20.0 * 0.92)
+        assert result["pts_std"] == pytest.approx(4.0 * 0.92)
+
+    def test_unknown_league_falls_back_gracefully(self):
+        pc = {"goals_mean": 0.4}
+        result = _apply_game_context(pc, {"is_playoff": True}, "goals", "LIGUE1")
+        # Default playoff factor (0.97) applied; no KeyError
+        assert result["goals_mean"] < 0.4
+        assert "_context_factor_applied" in result
+
+    def test_missing_mean_key_returns_original(self):
+        pc = {"reb_mean": 8.0}
+        result = _apply_game_context(pc, {"is_playoff": True}, "pts", "NBA")
+        # pts_mean absent → returned unchanged
+        assert result is pc
+
+    def test_does_not_mutate_original(self):
+        pc = {"pts_mean": 20.0, "pts_std": 4.0}
+        _ = _apply_game_context(pc, {"is_playoff": True}, "pts", "NBA")
+        assert pc["pts_mean"] == pytest.approx(20.0)  # original untouched
+
+    def test_factors_compose_playoff_and_pace(self):
+        pc = {"pts_mean": 20.0}
+        result = _apply_game_context(
+            pc,
+            {"is_playoff": True, "pace_adjustment_factor": 0.90},
+            "pts",
+            "NBA",
+        )
+        # Should be 20.0 * playoff_factor * 0.90 — both applied
+        factor = result["_context_factor_applied"]
+        assert result["pts_mean"] == pytest.approx(20.0 * factor)
+        assert factor < 0.90  # combined is less than pace alone
+
+    def test_analyze_prop_uses_game_context(self):
+        """End-to-end: prop with playoff game_context produces lower over_prob on a high line."""
+        base_req = PlayerPropRequest(
+            player_name="Paul Reed Jr",
+            league="NBA",
+            prop_type="pts",
+            line=14.5,
+            home_team="Philadelphia 76ers",
+            away_team="New York Knicks",
+            game_date="2026-05-15",
+            odds_over=-110,
+            odds_under=-110,
+            n_iterations=2000,
+            seed=42,
+            player_context={"pts_mean": 12.0, "pts_std": 5.0},
+        )
+        playoff_req = base_req.model_copy(
+            update={"game_context": {"is_playoff": True}}
+        )
+        resp_base = analyze_player_prop(base_req)
+        resp_playoff = analyze_player_prop(playoff_req)
+        assert resp_base.status == "success"
+        assert resp_playoff.status == "success"
+        # Playoff context must reduce the over probability
+        assert resp_playoff.over_prob < resp_base.over_prob
+
+    def test_context_labels_in_analyze_trace(self):
+        """analyze() populates context_labels from game_context in the trace envelope."""
+        trace = analyze(
+            {
+                "player_name": "Test Player",
+                "league": "NBA",
+                "prop_type": "pts",
+                "line": 20.0,
+                "home_team": "Home",
+                "away_team": "Away",
+                "game_date": "2026-05-15",
+                "n_iterations": 200,
+                "seed": 1,
+                "player_context": {"pts_mean": 18.0, "pts_std": 4.0},
+                "game_context": {"is_playoff": True, "rest_days": 2},
+            },
+            session_id="sess-test",
+            bankroll=1000.0,
+        )
+        labels = trace.get("context_labels", {})
+        assert labels.get("is_playoff") is True
+        assert labels.get("rest_days") == 2

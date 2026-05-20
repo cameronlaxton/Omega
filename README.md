@@ -32,7 +32,7 @@ Formal numeric outputs require Python execution and a `sandbox-` trace ID return
 
 ## Quick Start
 
-Omega requires Python 3.12+.
+Omega requires Python 3.10+.
 
 ```bash
 python -m venv .venv

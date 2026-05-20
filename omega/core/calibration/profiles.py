@@ -10,7 +10,8 @@ Fitting is handled by CalibrationFitter (fitter.py).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from enum import Enum
 from typing import Any
 
@@ -37,11 +38,20 @@ class CalibrationProfile(BaseModel):
     """
 
     # Identity
-    profile_id: str = Field(description="Unique ID, e.g. 'iso_nba_v3'")
+    profile_id: str = Field(description="Unique ID, e.g. 'iso_nba_v3' or 'iso_nba_playoff_v1'")
     schema_version: int = 1
     version: int = Field(ge=1, description="Monotonically increasing per league")
     method: str = Field(description="shrinkage | cap | isotonic | combined | none")
     league: str = Field(description="League code, e.g. 'NBA'")
+    context_slice: str | None = Field(
+        default=None,
+        description=(
+            "Optional sub-population this profile was fitted on. "
+            "None = base profile (all contexts). "
+            "Examples: 'playoff', 'regular', 'back_to_back'. "
+            "Registry falls back to base profile when no slice-specific profile exists."
+        ),
+    )
     status: ProfileStatus = ProfileStatus.CANDIDATE
 
     # Method parameters — passed as kwargs to calibrate_probability()

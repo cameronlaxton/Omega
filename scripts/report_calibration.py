@@ -30,7 +30,8 @@ import argparse
 import json
 import logging
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+UTC = timezone.utc
 from pathlib import Path
 from typing import Any
 

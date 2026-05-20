@@ -30,7 +30,8 @@ import logging
 import sys
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+UTC = timezone.utc
 from pathlib import Path
 from typing import Any
 

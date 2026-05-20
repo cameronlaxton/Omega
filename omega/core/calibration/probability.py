@@ -177,17 +177,25 @@ _POLICY_CAP_MAX = 0.90
 _POLICY_CAP_MIN = 0.10
 
 
-def apply_calibration(raw_prob: float, league: str | None = None) -> float:
+def apply_calibration(
+    raw_prob: float,
+    league: str | None = None,
+    context_hints: dict[str, Any] | None = None,
+) -> float:
     """Apply the canonical calibration policy. Used by both service and backtest.
 
-    When a league is provided, attempts to use a learned production profile
-    for that league. Falls back to the static policy when no profile exists
-    or when league is None.
+    When a league is provided, attempts to use a learned production profile.
+    When context_hints is also provided, a context_slice is derived from the
+    hints and used to look up a slice-specific profile (e.g. 'playoff'). If
+    no slice-specific profile exists, falls back to the base league profile,
+    then to the static policy.
 
     Args:
         raw_prob: Raw model probability (0.0 to 1.0)
-        league: Optional league code (e.g. "NBA"). When provided, enables
-                profile-driven calibration.
+        league: Optional league code (e.g. "NBA").
+        context_hints: Optional dict with context signals used to derive a
+            context_slice. Recognised keys: is_playoff (bool),
+            rest_days (int; 0=B2B).
 
     Returns:
         Calibrated probability as a float.
@@ -196,7 +204,8 @@ def apply_calibration(raw_prob: float, league: str | None = None) -> float:
 
     # Profile-driven path (when league is provided)
     if league is not None:
-        profile = _get_active_profile(league)
+        context_slice = _derive_context_slice(context_hints)
+        profile = _get_active_profile(league, context_slice=context_slice)
         if profile is not None:
             result = calibrate_probability(raw_prob, method=profile.method, **profile.params)
             return result["calibrated"]
@@ -214,16 +223,33 @@ def apply_calibration(raw_prob: float, league: str | None = None) -> float:
     return result["calibrated"]
 
 
-def _get_active_profile(league: str):
-    """Look up the production calibration profile for a league.
+def _derive_context_slice(context_hints: dict[str, Any] | None) -> str | None:
+    """Derive a calibration context_slice string from context hints.
+
+    Returns None (base profile) when no recognized context signal is present.
+    Playoff takes precedence over B2B when both are set.
+    """
+    if not context_hints:
+        return None
+    if context_hints.get("is_playoff"):
+        return "playoff"
+    rest = context_hints.get("rest_days")
+    if rest is not None and int(rest) == 0:
+        return "back_to_back"
+    return None
+
+
+def _get_active_profile(league: str, context_slice: str | None = None):
+    """Look up the production calibration profile for (league, context_slice).
 
     Returns None on any failure (missing file, import error, etc.)
     so that callers always fall back to the static policy gracefully.
+    The registry get_production() already handles the slice→base fallback.
     """
     try:
         from omega.core.calibration.registry import CalibrationRegistry
 
         registry = CalibrationRegistry()
-        return registry.get_production(league)
+        return registry.get_production(league, context_slice=context_slice)
     except Exception:
         return None
