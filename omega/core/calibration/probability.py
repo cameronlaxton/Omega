@@ -244,7 +244,7 @@ def _get_active_profile(league: str, context_slice: str | None = None):
 
     Returns None on any failure (missing file, import error, etc.)
     so that callers always fall back to the static policy gracefully.
-    The registry get_production() already handles the slice→base fallback.
+    The registry get_production() already handles the slice->base fallback.
     """
     try:
         from omega.core.calibration.registry import CalibrationRegistry

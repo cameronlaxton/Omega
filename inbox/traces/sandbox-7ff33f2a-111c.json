@@ -1,0 +1,103 @@
+{
+  "trace": {
+    "trace_id": "sandbox-7ff33f2a-111c",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-20T21:16:29.093081+00:00",
+    "kind": "game",
+    "session_id": "sess-20260520-g001",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "San Antonio Spurs",
+      "league": "NBA",
+      "odds": {
+        "spread_home": -7.5,
+        "spread_home_price": -105.0,
+        "moneyline_home": -250.0,
+        "moneyline_away": 200.0,
+        "over_under": 216.5,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 10000,
+      "home_context": {
+        "off_rating": 124.4,
+        "def_rating": 110.0,
+        "pace": 94.7
+      },
+      "away_context": {
+        "off_rating": 117.3,
+        "def_rating": 103.5,
+        "pace": 98.3
+      },
+      "seed": 1181695689
+    },
+    "result": {
+      "matchup": "San Antonio Spurs @ Oklahoma City Thunder",
+      "league": "NBA",
+      "analyzed_at": "2026-05-20T21:16:29.093093",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 10000,
+        "home_win_prob": 83.8,
+        "away_win_prob": 16.2,
+        "draw_prob": 0.0,
+        "predicted_spread": 16.5,
+        "predicted_total": 218.8,
+        "predicted_home_score": 117.7,
+        "predicted_away_score": 101.1
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Oklahoma City Thunder",
+          "true_prob": 0.838,
+          "calibrated_prob": 0.838,
+          "market_implied": 0.5122,
+          "edge_pct": 32.58,
+          "ev_pct": 63.61,
+          "market_odds": -105.0,
+          "confidence_tier": "A",
+          "recommended_units": 5.0,
+          "spread_coverage_prob": null
+        },
+        {
+          "side": "away",
+          "team": "San Antonio Spurs",
+          "true_prob": 0.162,
+          "calibrated_prob": 0.162,
+          "market_implied": 0.3333,
+          "edge_pct": -17.13,
+          "ev_pct": -51.4,
+          "market_odds": 200.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null
+        }
+      ],
+      "best_bet": {
+        "selection": "Oklahoma City Thunder home",
+        "odds": -105.0,
+        "edge_pct": 32.58,
+        "ev_pct": 63.61,
+        "confidence_tier": "A",
+        "recommended_units": 5.0,
+        "kelly_fraction": 0.3339
+      },
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "calibration_method": "combined",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "basketball"
+      }
+    },
+    "downgrades": [],
+    "context_labels": {}
+  },
+  "bet_record": null
+}

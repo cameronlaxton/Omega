@@ -1,0 +1,52 @@
+{
+  "trace": {
+    "trace_id": "sandbox-5a11c7de-3c08",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-20T21:16:29.194321+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260520-g001",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "blk",
+      "line": 3.5,
+      "odds_over": -132.0,
+      "odds_under": 100.0,
+      "player_context": {
+        "blk_mean": 3.2,
+        "blk_std": 1.5
+      },
+      "game_context": {
+        "is_playoff": true
+      },
+      "n_iterations": 10000,
+      "seed": 664510265,
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "San Antonio Spurs",
+      "game_date": "2026-05-20"
+    },
+    "result": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "blk",
+      "line": 3.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.3681,
+      "under_prob": 0.6319,
+      "edge_over": -20.09,
+      "edge_under": 13.19,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "notes": [],
+      "imputed_fraction": 0.0
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true
+    }
+  },
+  "bet_record": null
+}
