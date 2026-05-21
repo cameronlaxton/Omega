@@ -10,6 +10,7 @@ It handles:
 
 Thread safety: uses one connection per TraceStore instance with WAL mode.
 """
+
 from __future__ import annotations
 
 import json
@@ -172,11 +173,14 @@ class TraceStore:
                 trace.get("simulation_seed"),
                 trace.get("aggregate_quality", 0.0),
                 json.dumps(trace.get("predictions"), default=str)
-                if trace.get("predictions") else None,
+                if trace.get("predictions")
+                else None,
                 json.dumps(trace.get("recommendations"), default=str)
-                if trace.get("recommendations") else None,
+                if trace.get("recommendations")
+                else None,
                 json.dumps(trace.get("odds_snapshot"), default=str)
-                if trace.get("odds_snapshot") else None,
+                if trace.get("odds_snapshot")
+                else None,
                 json.dumps(trace.get("downgrades", []), default=str),
                 full_trace,
                 CURRENT_VERSION,
@@ -789,9 +793,7 @@ class TraceStore:
 
     def schema_version(self) -> int:
         """Return the current schema version."""
-        row = self.conn.execute(
-            "SELECT MAX(version) as v FROM schema_versions"
-        ).fetchone()
+        row = self.conn.execute("SELECT MAX(version) as v FROM schema_versions").fetchone()
         return row["v"] if row and row["v"] else 0
 
     def count(self) -> int:

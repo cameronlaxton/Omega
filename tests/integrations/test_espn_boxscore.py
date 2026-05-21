@@ -9,6 +9,7 @@ Covers:
 - parse_box_score for MLB pitching (K, IP→outs conversion)
 - supported_prop_type recognizes the canonical set
 """
+
 from __future__ import annotations
 
 from omega.integrations.espn_boxscore import (

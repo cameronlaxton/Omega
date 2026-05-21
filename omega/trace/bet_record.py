@@ -10,22 +10,25 @@ still be graded for calibration but cannot contribute CLV signal.
 One row per (trace_id, market, selection_descriptor) — a slate trace may have
 multiple bets, each addressed by its descriptor.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
-UTC = timezone.utc
 from enum import Enum
 
 from pydantic import BaseModel, Field
 
+UTC = timezone.utc
+
 
 class BetStatus(str, Enum):
     """Lifecycle of a single bet."""
-    PENDING = "pending"   # Recorded, outcome not yet attached
+
+    PENDING = "pending"  # Recorded, outcome not yet attached
     WON = "won"
     LOST = "lost"
-    VOID = "void"         # Cancelled by book (rainout, etc.)
-    PUSH = "push"         # Tied to the line/total
+    VOID = "void"  # Cancelled by book (rainout, etc.)
+    PUSH = "push"  # Tied to the line/total
 
 
 class BetRecord(BaseModel):
@@ -39,7 +42,9 @@ class BetRecord(BaseModel):
 
     bet_id: str = Field(description="Unique within the local DB (uuid hex)")
     trace_id: str = Field(description="FK to traces.trace_id")
-    book: str = Field(description="DraftKings, FanDuel, BetMGM, Caesars, ESPN BET, Hard Rock, PointsBet, Fanatics, or other:<name>")
+    book: str = Field(
+        description="DraftKings, FanDuel, BetMGM, Caesars, ESPN BET, Hard Rock, PointsBet, Fanatics, or other:<name>"
+    )
     market: str = Field(description="moneyline | spread | total | player_prop:<stat>")
     selection: str = Field(description="Human-readable, e.g. 'Boston Celtics -3.5'")
     selection_descriptor: str = Field(
@@ -55,9 +60,7 @@ class BetRecord(BaseModel):
         description="ISO 8601 timestamp of when the user confirmed the bet"
     )
     status: BetStatus = BetStatus.PENDING
-    recorded_at: str = Field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    recorded_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     @classmethod
     def from_export_block(

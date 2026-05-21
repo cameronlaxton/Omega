@@ -23,6 +23,7 @@ Exit codes:
     0 — completed (may have unmatched; see log)
     1 — fatal error (bad args, ESPN unreachable on first fetch)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,9 +32,10 @@ import sys
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
-UTC = timezone.utc
 from pathlib import Path
 from typing import Any
+
+UTC = timezone.utc
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -57,6 +59,7 @@ _SUPPORTED_LEAGUES = ("NBA", "MLB")
 # Date parsing
 # ---------------------------------------------------------------------------
 
+
 def _parse_date_arg(s: str) -> date:
     s = s.strip().lower()
     if s == "today":
@@ -77,6 +80,7 @@ def _iter_dates(start: date, end: date):
 # Trace extraction
 # ---------------------------------------------------------------------------
 
+
 def _prop_fields(trace: dict[str, Any]) -> dict[str, Any] | None:
     """Pull the prop-grading fields out of a trace dict. Returns None when
     the trace is not a prop or required fields are missing."""
@@ -89,8 +93,9 @@ def _prop_fields(trace: dict[str, Any]) -> dict[str, Any] | None:
     home_team = snap.get("home_team")
     away_team = snap.get("away_team")
     game_date = snap.get("game_date")
-    if not (player_name and prop_type and line is not None
-            and home_team and away_team and game_date):
+    if not (
+        player_name and prop_type and line is not None and home_team and away_team and game_date
+    ):
         return None
     # Determine grading side: prefer the trace's own recommendation when present
     result = trace.get("result") or {}
@@ -132,6 +137,7 @@ def _canonical_pair(league: str, home: str, away: str) -> tuple[str, str] | None
 # Per-league scoreboard accessor (event_id resolution)
 # ---------------------------------------------------------------------------
 
+
 def _scoreboard_for(league: str, d: date):
     if league == "NBA":
         return espn_nba.fetch_scoreboard(d.isoformat())
@@ -143,6 +149,7 @@ def _scoreboard_for(league: str, d: date):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main(
     argv: list[str] | None = None,
@@ -159,12 +166,19 @@ def main(
     parser = argparse.ArgumentParser(
         description="Attach ESPN box-score player stats to NBA/MLB prop traces"
     )
-    parser.add_argument("--since", default="yesterday",
-                        help="Start date (YYYY-MM-DD | today | yesterday)")
+    parser.add_argument(
+        "--since", default="yesterday", help="Start date (YYYY-MM-DD | today | yesterday)"
+    )
     parser.add_argument("--until", default=None, help="End date inclusive (default = since)")
-    parser.add_argument("--league", default=None, choices=_SUPPORTED_LEAGUES,
-                        help="Restrict to one league (default: all supported)")
-    parser.add_argument("--db", default=None, help="SQLite path (default: repo-root omega_traces.db)")
+    parser.add_argument(
+        "--league",
+        default=None,
+        choices=_SUPPORTED_LEAGUES,
+        help="Restrict to one league (default: all supported)",
+    )
+    parser.add_argument(
+        "--db", default=None, help="SQLite path (default: repo-root omega_traces.db)"
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -227,7 +241,9 @@ def main(
                     seen_ids.add(bt.get("trace_id"))
 
             # Group prop traces for this game date by canonical (home, away)
-            grouped: dict[tuple[str, str], list[tuple[dict[str, Any], dict[str, Any]]]] = defaultdict(list)
+            grouped: dict[tuple[str, str], list[tuple[dict[str, Any], dict[str, Any]]]] = (
+                defaultdict(list)
+            )
             for trace in traces:
                 fields = _prop_fields(trace)
                 if fields is None:
@@ -280,9 +296,7 @@ def main(
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Box score fetch failed for event %s: %s", game.event_id, exc)
                     for trace, _fields in items:
-                        unmatched.append(
-                            f"{trace.get('trace_id', '?')} (box score fetch failed)"
-                        )
+                        unmatched.append(f"{trace.get('trace_id', '?')} (box score fetch failed)")
                     continue
                 stats_by_player = parse_box_score(payload, league)
 
@@ -306,9 +320,12 @@ def main(
                     if args.dry_run:
                         logger.info(
                             "DRY %s -> %s %s=%s vs %s (%s)",
-                            trace["trace_id"], fields["player_name"],
-                            fields["prop_type"], stat_value,
-                            fields["line"], fields["side"],
+                            trace["trace_id"],
+                            fields["player_name"],
+                            fields["prop_type"],
+                            stat_value,
+                            fields["line"],
+                            fields["side"],
                         )
                         attached += 1
                         continue
@@ -326,16 +343,22 @@ def main(
                         attached += 1
                         logger.info(
                             "ATTACHED %s -> %s %s=%s vs %s (%s)",
-                            trace["trace_id"], fields["player_name"],
-                            fields["prop_type"], stat_value,
-                            fields["line"], fields["side"],
+                            trace["trace_id"],
+                            fields["player_name"],
+                            fields["prop_type"],
+                            stat_value,
+                            fields["line"],
+                            fields["side"],
                         )
                     except ValueError as exc:
                         logger.warning("Skipped %s: %s", trace.get("trace_id"), exc)
 
     logger.info(
         "Done. attached=%d unmatched=%d unsupported=%d missing_fields=%d",
-        attached, len(unmatched), len(unsupported_prop), len(skipped_missing_fields),
+        attached,
+        len(unmatched),
+        len(unsupported_prop),
+        len(skipped_missing_fields),
     )
     if unmatched:
         logger.warning("Unmatched prop traces:")

@@ -31,6 +31,7 @@ MIN_GAMES_DEFAULT = 5
 # Models
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class AnchorThreshold:
     """A single stat threshold that qualifies as an anchor."""
@@ -40,7 +41,7 @@ class AnchorThreshold:
     threshold: float
     games_checked: int
     games_hit: int
-    hit_rate: float       # games_hit / games_checked
+    hit_rate: float  # games_hit / games_checked
 
 
 @dataclass(frozen=True)
@@ -53,15 +54,16 @@ class AnchorLeg:
     threshold: float
     hit_rate: float
     games_checked: int
-    odds_over: float | None    # American odds for over this threshold
-    implied_prob: float            # from odds (0-1)
-    empirical_prob: float          # = hit_rate (0-1)
-    edge_pct: float               # (empirical - implied) * 100
+    odds_over: float | None  # American odds for over this threshold
+    implied_prob: float  # from odds (0-1)
+    empirical_prob: float  # = hit_rate (0-1)
+    edge_pct: float  # (empirical - implied) * 100
 
 
 # ---------------------------------------------------------------------------
 # Core detection function
 # ---------------------------------------------------------------------------
+
 
 def compute_hit_rate(
     values: list[float],
@@ -116,14 +118,16 @@ def detect_anchors(
     for threshold in thresholds:
         games_checked, games_hit, hit_rate = compute_hit_rate(values, threshold)
         if hit_rate >= min_hit_rate:
-            anchors.append(AnchorThreshold(
-                player_name=player_name,
-                stat_key=stat_key,
-                threshold=threshold,
-                games_checked=games_checked,
-                games_hit=games_hit,
-                hit_rate=hit_rate,
-            ))
+            anchors.append(
+                AnchorThreshold(
+                    player_name=player_name,
+                    stat_key=stat_key,
+                    threshold=threshold,
+                    games_checked=games_checked,
+                    games_hit=games_hit,
+                    hit_rate=hit_rate,
+                )
+            )
 
     # Sort by threshold descending — higher thresholds are more valuable
     anchors.sort(key=lambda a: a.threshold, reverse=True)
@@ -203,30 +207,28 @@ def scan_player(
                 odds_map = prop_odds[stat_key]
                 # Look for exact threshold match or closest lower threshold
                 if anchor.threshold in odds_map:
-                    leg = match_anchor_to_odds(
-                        anchor, team, odds_map[anchor.threshold]
-                    )
+                    leg = match_anchor_to_odds(anchor, team, odds_map[anchor.threshold])
                     all_legs.append(leg)
                 # Sportsbook thresholds use X+ format matching our thresholds
                 # If no exact match, check for threshold - 0.5 (e.g., 19.5 for 20+)
                 elif (anchor.threshold - 0.5) in odds_map:
-                    leg = match_anchor_to_odds(
-                        anchor, team, odds_map[anchor.threshold - 0.5]
-                    )
+                    leg = match_anchor_to_odds(anchor, team, odds_map[anchor.threshold - 0.5])
                     all_legs.append(leg)
             else:
                 # No odds available — still report the anchor without edge
-                all_legs.append(AnchorLeg(
-                    player_name=player_name,
-                    team=team,
-                    stat_key=stat_key,
-                    threshold=anchor.threshold,
-                    hit_rate=anchor.hit_rate,
-                    games_checked=anchor.games_checked,
-                    odds_over=None,
-                    implied_prob=0.0,
-                    empirical_prob=anchor.hit_rate,
-                    edge_pct=0.0,
-                ))
+                all_legs.append(
+                    AnchorLeg(
+                        player_name=player_name,
+                        team=team,
+                        stat_key=stat_key,
+                        threshold=anchor.threshold,
+                        hit_rate=anchor.hit_rate,
+                        games_checked=anchor.games_checked,
+                        odds_over=None,
+                        implied_prob=0.0,
+                        empirical_prob=anchor.hit_rate,
+                        edge_pct=0.0,
+                    )
+                )
 
     return all_legs

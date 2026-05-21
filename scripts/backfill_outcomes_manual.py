@@ -30,6 +30,7 @@ Never mutates the trace blob itself — outcomes always land in the
 outcomes / prop_outcomes tables, preserving Phase 6's "outcome attachment
 must not mutate source records" invariant.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,9 +38,10 @@ import logging
 import sys
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
-UTC = timezone.utc
 from pathlib import Path
 from typing import Any
+
+UTC = timezone.utc
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -65,6 +67,7 @@ ConfirmFn = Callable[[str], str]
 # ---------------------------------------------------------------------------
 # Helpers shared with fetch_outcomes_props
 # ---------------------------------------------------------------------------
+
 
 def _interactive_confirm(description: str) -> str:
     """Prompt the operator. Returns 'y' (attach), 'n' (skip), or 'q' (quit)."""
@@ -105,6 +108,7 @@ def _source_label(d: date) -> str:
 # Trace classification
 # ---------------------------------------------------------------------------
 
+
 def _trace_game_pair(
     trace: dict[str, Any],
     league: str,
@@ -125,6 +129,7 @@ def _trace_game_pair(
 # ---------------------------------------------------------------------------
 # Workflow
 # ---------------------------------------------------------------------------
+
 
 def backfill_date(
     store: TraceStore,
@@ -151,8 +156,11 @@ def backfill_date(
     window_start = (d - timedelta(days=1)).isoformat() + "T00:00:00Z"
     window_end = (d + timedelta(days=1)).isoformat() + "T23:59:59Z"
     traces = store.query_traces(
-        league=league, start=window_start, end=window_end,
-        has_outcome=False, limit=1000,
+        league=league,
+        start=window_start,
+        end=window_end,
+        has_outcome=False,
+        limit=1000,
     )
 
     if not traces:
@@ -182,8 +190,9 @@ def backfill_date(
                 continue
             game = games_by_pair.get(pair)
             if game is None or game.status != "final":
-                logger.warning("UNMATCHED prop %s (no final game for %s @ %s on %s)",
-                               tid, pair[1], pair[0], d)
+                logger.warning(
+                    "UNMATCHED prop %s (no final game for %s @ %s on %s)", tid, pair[1], pair[0], d
+                )
                 counts["unmatched"] += 1
                 continue
             player_name = snap.get("player_name")
@@ -210,8 +219,9 @@ def backfill_date(
             stats = parse_box_score(payload, league)
             player_stats = stats.get(normalize_player_name(player_name))
             if not player_stats or prop_type not in player_stats:
-                logger.warning("UNMATCHED prop %s (player %r %r not in box score)",
-                               tid, player_name, prop_type)
+                logger.warning(
+                    "UNMATCHED prop %s (player %r %r not in box score)", tid, player_name, prop_type
+                )
                 counts["unmatched"] += 1
                 continue
             stat_value = player_stats[prop_type]
@@ -219,7 +229,11 @@ def backfill_date(
             result = trace.get("result") or {}
             side = (result.get("recommendation") or "").lower()
             if side not in ("over", "under"):
-                side = "over" if (result.get("over_prob") or 0) >= (result.get("under_prob") or 0) else "under"
+                side = (
+                    "over"
+                    if (result.get("over_prob") or 0) >= (result.get("under_prob") or 0)
+                    else "under"
+                )
 
             desc = (
                 f"PROP {tid}: {player_name} {prop_type} {line} ({side}) "
@@ -259,7 +273,8 @@ def backfill_date(
                     "SKIP %s: trace.kind=%r is not 'game'; refusing to attach "
                     "a game-shaped outcome. Grade props via the prop branch or "
                     "fix the trace's kind field.",
-                    tid, kind,
+                    tid,
+                    kind,
                 )
                 counts["skipped"] += 1
                 continue
@@ -270,8 +285,12 @@ def backfill_date(
                 continue
             game = games_by_pair.get(pair)
             if game is None or game.status != "final":
-                logger.warning("UNMATCHED game-kind trace %s (no final game for %s @ %s)",
-                               tid, pair[1], pair[0])
+                logger.warning(
+                    "UNMATCHED game-kind trace %s (no final game for %s @ %s)",
+                    tid,
+                    pair[1],
+                    pair[0],
+                )
                 counts["unmatched"] += 1
                 continue
             desc = (
@@ -330,7 +349,9 @@ def backfill_single_trace(
         return counts
 
     games = scoreboard_fetcher(league, game_date)
-    game = next((g for g in games if (g.home_team, g.away_team) == pair and g.status == "final"), None)
+    game = next(
+        (g for g in games if (g.home_team, g.away_team) == pair and g.status == "final"), None
+    )
     if game is None:
         logger.error("No final game for %s @ %s on %s", pair[1], pair[0], game_date)
         counts["unmatched"] += 1
@@ -368,7 +389,11 @@ def backfill_single_trace(
         result = trace.get("result") or {}
         side = (result.get("recommendation") or "").lower()
         if side not in ("over", "under"):
-            side = "over" if (result.get("over_prob") or 0) >= (result.get("under_prob") or 0) else "under"
+            side = (
+                "over"
+                if (result.get("over_prob") or 0) >= (result.get("under_prob") or 0)
+                else "under"
+            )
         desc = (
             f"PROP {trace_id}: {player_name} {prop_type} {line} ({side}) "
             f"=> actual={stat_value} [{pair[1]} @ {pair[0]} {game_date}]"
@@ -397,8 +422,9 @@ def backfill_single_trace(
         # game-shaped outcome attached.
         if kind != "game":
             logger.warning(
-                "SKIP %s: trace.kind=%r is not 'game'; refusing to attach a "
-                "game-shaped outcome.", trace_id, kind,
+                "SKIP %s: trace.kind=%r is not 'game'; refusing to attach a game-shaped outcome.",
+                trace_id,
+                kind,
             )
             counts["skipped"] += 1
             return counts
@@ -430,6 +456,7 @@ def backfill_single_trace(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def _parse_date_arg(s: str) -> date:
     s = s.strip().lower()
     if s == "today":
@@ -444,16 +471,22 @@ def main(argv: list[str] | None = None) -> int:
         description="Interactive ESPN-based grading for the ungraded trace backlog"
     )
     parser.add_argument("--league", required=True, choices=_SUPPORTED_LEAGUES)
-    parser.add_argument("--date", help="Walk all ungraded traces on this date (YYYY-MM-DD | today | yesterday)")
+    parser.add_argument(
+        "--date", help="Walk all ungraded traces on this date (YYYY-MM-DD | today | yesterday)"
+    )
     parser.add_argument("--trace-id", help="Single-trace mode: pin this trace to the supplied game")
     parser.add_argument("--game-date", help="(single-trace mode) Game date YYYY-MM-DD")
     parser.add_argument("--home", help="(single-trace mode) Home team string")
     parser.add_argument("--away", help="(single-trace mode) Away team string")
-    parser.add_argument("--db", default=None, help="SQLite path (default: repo-root omega_traces.db)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print what would attach but don't write")
-    parser.add_argument("--yes", action="store_true",
-                        help="Auto-confirm every prompt (non-interactive batch mode)")
+    parser.add_argument(
+        "--db", default=None, help="SQLite path (default: repo-root omega_traces.db)"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print what would attach but don't write"
+    )
+    parser.add_argument(
+        "--yes", action="store_true", help="Auto-confirm every prompt (non-interactive batch mode)"
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -496,8 +529,11 @@ def main(argv: list[str] | None = None) -> int:
 
     logger.info(
         "Done. game_attached=%d prop_attached=%d skipped=%d unmatched=%d quit=%d",
-        counts["game_attached"], counts["prop_attached"],
-        counts["skipped"], counts["unmatched"], counts["quit"],
+        counts["game_attached"],
+        counts["prop_attached"],
+        counts["skipped"],
+        counts["unmatched"],
+        counts["quit"],
     )
     return 0
 

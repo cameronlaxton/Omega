@@ -12,16 +12,18 @@ All models are Pydantic v2 for validation and serialization.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-UTC = timezone.utc
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
+UTC = timezone.utc
+
 # ---------------------------------------------------------------------------
 # Dimension A: Subject — what is the prompt about?
 # ---------------------------------------------------------------------------
+
 
 class Subject(str, Enum):
     GAME = "game"
@@ -39,66 +41,71 @@ class Subject(str, Enum):
 # Dimension B: User Goal — what does the user want?
 # ---------------------------------------------------------------------------
 
+
 class UserGoal(str, Enum):
-    DECIDE = "decide"       # "should I bet this?"
-    ANALYZE = "analyze"     # "break this game down"
-    COMPARE = "compare"     # "Lakers vs Warriors vs Celtics"
-    EXPLAIN = "explain"     # "why is this line moving?"
-    DISCUSS = "discuss"     # "what do you think about golf?"
-    SUMMARIZE = "summarize" # "catch me up on tonight"
-    LEARN = "learn"         # "how does Kelly criterion work?"
-    MONITOR = "monitor"     # "any value on the board right now?"
+    DECIDE = "decide"  # "should I bet this?"
+    ANALYZE = "analyze"  # "break this game down"
+    COMPARE = "compare"  # "Lakers vs Warriors vs Celtics"
+    EXPLAIN = "explain"  # "why is this line moving?"
+    DISCUSS = "discuss"  # "what do you think about golf?"
+    SUMMARIZE = "summarize"  # "catch me up on tonight"
+    LEARN = "learn"  # "how does Kelly criterion work?"
+    MONITOR = "monitor"  # "any value on the board right now?"
 
 
 # ---------------------------------------------------------------------------
 # Dimension C: Execution Mode — how should the system produce the answer?
 # ---------------------------------------------------------------------------
 
+
 class ExecutionMode(str, Enum):
-    NATIVE_SIM = "native_sim"       # full Monte Carlo + calibration + edges
-    RESEARCH = "research"           # fact gathering + LLM synthesis
+    NATIVE_SIM = "native_sim"  # full Monte Carlo + calibration + edges
+    RESEARCH = "research"  # fact gathering + LLM synthesis
     BANKROLL_CALC = "bankroll_calc"  # Kelly/staking math, no simulation
-    MIXED = "mixed"                 # sim for directional context + narrative
-    NARRATIVE = "narrative"         # pure discussion/explanation
+    MIXED = "mixed"  # sim for directional context + narrative
+    NARRATIVE = "narrative"  # pure discussion/explanation
 
 
 # ---------------------------------------------------------------------------
 # Dimension D: Output Package — what artifacts should the response contain?
 # ---------------------------------------------------------------------------
 
+
 class OutputPackage(str, Enum):
-    BET_CARD = "bet_card"                 # edges, staking, confidence tiers
-    GAME_BREAKDOWN = "game_breakdown"     # sim results + narrative analysis
+    BET_CARD = "bet_card"  # edges, staking, confidence tiers
+    GAME_BREAKDOWN = "game_breakdown"  # sim results + narrative analysis
     SCENARIO_ANALYSIS = "scenario_analysis"
-    KEY_FACTORS = "key_factors"           # top drivers, matchup advantages
+    KEY_FACTORS = "key_factors"  # top drivers, matchup advantages
     ALTERNATIVE_BETS = "alternative_bets"
     BANKROLL_GUIDANCE = "bankroll_guidance"
     NEWS_DIGEST = "news_digest"
-    RESEARCH_REPORT = "research_report"   # structured analysis without formal edges
+    RESEARCH_REPORT = "research_report"  # structured analysis without formal edges
     PLAIN_EXPLANATION = "plain_explanation"
     COMPACT_SUMMARY = "compact_summary"
     LIMITED_CONTEXT_ANSWER = "limited_context_answer"  # ultra-low-data fallback
-    ANCHOR_PARLAYS = "anchor_parlays"                  # ranked anchor parlay recommendations
+    ANCHOR_PARLAYS = "anchor_parlays"  # ranked anchor parlay recommendations
 
 
 # ---------------------------------------------------------------------------
 # Input importance tiers for quality gating
 # ---------------------------------------------------------------------------
 
+
 class InputImportance(str, Enum):
-    CRITICAL = "critical"     # missing → no formal edges
-    IMPORTANT = "important"   # missing → confidence capped at C
-    OPTIONAL = "optional"     # missing → still valid, less nuanced
+    CRITICAL = "critical"  # missing → no formal edges
+    IMPORTANT = "important"  # missing → confidence capped at C
+    OPTIONAL = "optional"  # missing → still valid, less nuanced
 
 
 # ---------------------------------------------------------------------------
 # Entity reference within a query
 # ---------------------------------------------------------------------------
 
+
 class EntityRole(str, Enum):
     HOME = "home"
     AWAY = "away"
-    SUBJECT = "subject"       # player for props, team for research
+    SUBJECT = "subject"  # player for props, team for research
     OPPONENT = "opponent"
 
 
@@ -114,6 +121,7 @@ class Entity(BaseModel):
 # ---------------------------------------------------------------------------
 # QueryUnderstanding — output of the intent understanding stage
 # ---------------------------------------------------------------------------
+
 
 class QueryUnderstanding(BaseModel):
     """Multi-dimensional classification of a user prompt.
@@ -147,6 +155,7 @@ class QueryUnderstanding(BaseModel):
 # AnswerPlan — output of the answer strategist
 # ---------------------------------------------------------------------------
 
+
 class AnswerPlan(BaseModel):
     """Decides what execution modes and output packages the response requires.
 
@@ -164,12 +173,15 @@ class AnswerPlan(BaseModel):
 
     clarification_needed: bool = False
     clarification_question: str | None = None
-    downgrades: list[str] = Field(default_factory=list)  # e.g. ["dropped_bet_card", "native_sim_to_mixed"]
+    downgrades: list[str] = Field(
+        default_factory=list
+    )  # e.g. ["dropped_bet_card", "native_sim_to_mixed"]
 
 
 # ---------------------------------------------------------------------------
 # GatherSlot — a single data value that needs to be gathered
 # ---------------------------------------------------------------------------
+
 
 class GatherSlot(BaseModel):
     """A typed slot representing a data value the system must gather.
@@ -178,19 +190,20 @@ class GatherSlot(BaseModel):
     and fact gatherer.
     """
 
-    key: str                           # e.g. "home_team.off_rating"
-    data_type: str                     # "team_stat", "odds", "injury", "schedule", "player_stat"
-    entity: str                        # team or player name
+    key: str  # e.g. "home_team.off_rating"
+    data_type: str  # "team_stat", "odds", "injury", "schedule", "player_stat"
+    entity: str  # team or player name
     league: str
     importance: InputImportance = InputImportance.IMPORTANT
-    freshness_max: float = 86400.0     # seconds; default 24h
+    freshness_max: float = 86400.0  # seconds; default 24h
     providers: list[str] = Field(default_factory=list)  # preferred provider names
-    focus_hint: str | None = None   # e.g. "defense", "rushing" — signals query focus for composition
+    focus_hint: str | None = None  # e.g. "defense", "rushing" — signals query focus for composition
 
 
 # ---------------------------------------------------------------------------
 # ProviderResult — what a provider returns for a gather slot
 # ---------------------------------------------------------------------------
+
 
 class ProviderResult(BaseModel):
     """Result from a data provider for a single gather slot.
@@ -199,16 +212,17 @@ class ProviderResult(BaseModel):
     """
 
     data: dict[str, Any]
-    source: str                        # provider name: "espn", "bbref", etc.
-    source_url: str | None = None   # attribution URL
+    source: str  # provider name: "espn", "bbref", etc.
+    source_url: str | None = None  # attribution URL
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    confidence: float = 1.0            # 1.0 = primary API, 0.5 = LLM-extracted, 0.3 = stale cache
-    method: str = "unknown"            # "structured_api", "llm_extraction", "web_scrape", "cache_hit"
+    confidence: float = 1.0  # 1.0 = primary API, 0.5 = LLM-extracted, 0.3 = stale cache
+    method: str = "unknown"  # "structured_api", "llm_extraction", "web_scrape", "cache_hit"
 
 
 # ---------------------------------------------------------------------------
 # GatheredFact — a filled slot with provenance
 # ---------------------------------------------------------------------------
+
 
 class GatheredFact(BaseModel):
     """A gather slot that has been filled with a provider result."""
@@ -216,12 +230,13 @@ class GatheredFact(BaseModel):
     slot: GatherSlot
     result: ProviderResult | None = None
     filled: bool = False
-    quality_score: float = 0.0         # 0.0–1.0 composite quality
+    quality_score: float = 0.0  # 0.0–1.0 composite quality
 
 
 # ---------------------------------------------------------------------------
 # ExecutionResult — output from the deterministic engine
 # ---------------------------------------------------------------------------
+
 
 class ExecutionResult(BaseModel):
     """Wrapper around whatever the execution engine produced.
@@ -236,8 +251,12 @@ class ExecutionResult(BaseModel):
     best_bet: dict[str, Any] | None = None
     research_facts: list[GatheredFact] = Field(default_factory=list)
     data_quality_score: float = 0.0
-    data_completeness: dict[str, str] = Field(default_factory=dict)  # key → "real" | "defaulted" | "missing"
-    extra: dict[str, Any] = Field(default_factory=dict, description="Mode-specific output (e.g., parlay scan results)")
+    data_completeness: dict[str, str] = Field(
+        default_factory=dict
+    )  # key → "real" | "defaulted" | "missing"
+    extra: dict[str, Any] = Field(
+        default_factory=dict, description="Mode-specific output (e.g., parlay scan results)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -245,19 +264,20 @@ class ExecutionResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 FRESHNESS_RULES: dict[str, float] = {
-    "team_stat": 86400.0,       # 24 hours
-    "player_stat": 86400.0,     # 24 hours
-    "player_game_log": 86400.0, # 24 hours
-    "odds": 900.0,              # 15 minutes
-    "injury": 7200.0,           # 2 hours
-    "schedule": 3600.0,         # 1 hour
-    "environment": 14400.0,     # 4 hours
+    "team_stat": 86400.0,  # 24 hours
+    "player_stat": 86400.0,  # 24 hours
+    "player_game_log": 86400.0,  # 24 hours
+    "odds": 900.0,  # 15 minutes
+    "injury": 7200.0,  # 2 hours
+    "schedule": 3600.0,  # 1 hour
+    "environment": 14400.0,  # 4 hours
 }
 
 
 # ---------------------------------------------------------------------------
 # Execution Trace — end-to-end provenance for a single query
 # ---------------------------------------------------------------------------
+
 
 class ExecutionTrace(BaseModel):
     """Full provenance chain from prompt to output.
@@ -290,7 +310,9 @@ class ExecutionTrace(BaseModel):
     # Stage 4: Evidence collection
     gathered_facts: list[dict[str, Any]] = Field(default_factory=list)
     aggregate_quality: float = 0.0
-    facts_summary: dict[str, Any] | None = None  # {total_slots, filled, critical_filled, sources_used}
+    facts_summary: dict[str, Any] | None = (
+        None  # {total_slots, filled, critical_filled, sources_used}
+    )
 
     # Stage 5: Quality gate
     revised_plan: dict[str, Any] | None = None
@@ -307,9 +329,15 @@ class ExecutionTrace(BaseModel):
 
     # --- Backtest-ready fields ---
     # Final predictions (what the system recommended)
-    predictions: dict[str, Any] | None = None  # {home_win_prob, away_win_prob, predicted_spread, predicted_total}
-    recommendations: list[dict[str, Any]] = Field(default_factory=list)  # [{side, edge_pct, confidence_tier, units}]
-    odds_snapshot: dict[str, Any] | None = None  # {moneyline_home, moneyline_away, spread_home, over_under}
+    predictions: dict[str, Any] | None = (
+        None  # {home_win_prob, away_win_prob, predicted_spread, predicted_total}
+    )
+    recommendations: list[dict[str, Any]] = Field(
+        default_factory=list
+    )  # [{side, edge_pct, confidence_tier, units}]
+    odds_snapshot: dict[str, Any] | None = (
+        None  # {moneyline_home, moneyline_away, spread_home, over_under}
+    )
     league: str | None = None
     matchup: str | None = None  # "Away @ Home"
 

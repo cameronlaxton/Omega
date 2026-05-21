@@ -100,14 +100,16 @@ def test_analyze_prop_tool_returns_validation_errors():
 
 
 def test_replay_bundle_tool_marks_replay_mode_without_live_fetch():
-    result = omega_replay_bundle({
-        "prompt": "Audit an NBA prop decision",
-        "facts": [{"key": "injury_status", "filled": True, "source": "fixture"}],
-        "source_trace_id": "trace-fixture",
-        "decision_date": "2026-05-01",
-        "simulation_seed": 123,
-        "expected_outputs": ["downgrade_discipline", "trace_completeness"],
-    })
+    result = omega_replay_bundle(
+        {
+            "prompt": "Audit an NBA prop decision",
+            "facts": [{"key": "injury_status", "filled": True, "source": "fixture"}],
+            "source_trace_id": "trace-fixture",
+            "decision_date": "2026-05-01",
+            "simulation_seed": 123,
+            "expected_outputs": ["downgrade_discipline", "trace_completeness"],
+        }
+    )
 
     assert result["status"] == "success"
     response = result["response"]
@@ -120,10 +122,12 @@ def test_replay_bundle_tool_marks_replay_mode_without_live_fetch():
 
 
 def test_replay_bundle_rejects_live_fetch_flags():
-    result = omega_replay_bundle({
-        "prompt": "Bad replay",
-        "facts": [{"key": "odds", "live_fetch": True}],
-    })
+    result = omega_replay_bundle(
+        {
+            "prompt": "Bad replay",
+            "facts": [{"key": "odds", "live_fetch": True}],
+        }
+    )
 
     assert result["status"] == "error"
     assert result["error_code"] == "invalid_replay_bundle"
@@ -191,4 +195,3 @@ def test_resolve_odds_tool_returns_input_prep_result(monkeypatch):
 
     assert result["status"] == "success"
     assert result["result"]["status"] == "unavailable"
-

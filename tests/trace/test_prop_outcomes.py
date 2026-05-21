@@ -9,6 +9,7 @@ Covers:
 - Separation invariant: prop_outcomes rows do not appear in the game outcomes
   table and vice versa
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -62,10 +63,7 @@ class TestSchemaV6:
 
     def test_prop_outcomes_table_exists(self):
         store = _tmp_store()
-        cols = {
-            row[1]
-            for row in store.conn.execute("PRAGMA table_info(prop_outcomes)").fetchall()
-        }
+        cols = {row[1] for row in store.conn.execute("PRAGMA table_info(prop_outcomes)").fetchall()}
         assert {
             "prop_outcome_id",
             "trace_id",
@@ -85,8 +83,7 @@ class TestSchemaV6:
         idx_names = {
             row[0]
             for row in store.conn.execute(
-                "SELECT name FROM sqlite_master "
-                "WHERE type='index' AND tbl_name='prop_outcomes'"
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='prop_outcomes'"
             ).fetchall()
         }
         assert "idx_prop_outcomes_trace_id" in idx_names
@@ -108,9 +105,7 @@ class TestSchemaV6:
         """UNIQUE (trace_id, player_name, stat_type) prevents duplicate grading."""
         store = _tmp_store()
         store.persist(_make_prop_trace())
-        store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "points", 28.0, 24.5, "over"
-        )
+        store.attach_prop_outcome("t-prop-001", "LeBron James", "points", 28.0, 24.5, "over")
         # Try a raw INSERT bypassing the idempotent helper to confirm the constraint
         with pytest.raises(sqlite3.IntegrityError):
             store.conn.execute(
@@ -118,8 +113,17 @@ class TestSchemaV6:
                    (prop_outcome_id, trace_id, player_name, stat_type,
                     stat_value, line, side, result, source)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                ("dup-id", "t-prop-001", "LeBron James", "points",
-                 28.0, 24.5, "over", "win", "manual"),
+                (
+                    "dup-id",
+                    "t-prop-001",
+                    "LeBron James",
+                    "points",
+                    28.0,
+                    24.5,
+                    "over",
+                    "win",
+                    "manual",
+                ),
             )
         store.close()
 
@@ -128,9 +132,7 @@ class TestAttachPropOutcome:
     def test_over_win(self):
         store = _tmp_store()
         store.persist(_make_prop_trace())
-        pid = store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "points", 28.0, 24.5, "over"
-        )
+        pid = store.attach_prop_outcome("t-prop-001", "LeBron James", "points", 28.0, 24.5, "over")
         assert pid
         rows = store.get_prop_outcomes("t-prop-001")
         assert len(rows) == 1
@@ -143,9 +145,7 @@ class TestAttachPropOutcome:
     def test_over_loss(self):
         store = _tmp_store()
         store.persist(_make_prop_trace())
-        store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "points", 18.0, 24.5, "over"
-        )
+        store.attach_prop_outcome("t-prop-001", "LeBron James", "points", 18.0, 24.5, "over")
         rows = store.get_prop_outcomes("t-prop-001")
         assert rows[0]["result"] == "loss"
         store.close()
@@ -153,9 +153,7 @@ class TestAttachPropOutcome:
     def test_under_win(self):
         store = _tmp_store()
         store.persist(_make_prop_trace())
-        store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "points", 18.0, 24.5, "under"
-        )
+        store.attach_prop_outcome("t-prop-001", "LeBron James", "points", 18.0, 24.5, "under")
         rows = store.get_prop_outcomes("t-prop-001")
         assert rows[0]["result"] == "win"
         assert rows[0]["side"] == "under"
@@ -164,9 +162,7 @@ class TestAttachPropOutcome:
     def test_under_loss(self):
         store = _tmp_store()
         store.persist(_make_prop_trace())
-        store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "points", 28.0, 24.5, "under"
-        )
+        store.attach_prop_outcome("t-prop-001", "LeBron James", "points", 28.0, 24.5, "under")
         rows = store.get_prop_outcomes("t-prop-001")
         assert rows[0]["result"] == "loss"
         store.close()
@@ -175,9 +171,7 @@ class TestAttachPropOutcome:
         """Integer-line props (whole-number lines) can push when stat == line."""
         store = _tmp_store()
         store.persist(_make_prop_trace(prop_type="hits", line=2.0))
-        store.attach_prop_outcome(
-            "t-prop-001", "Aaron Judge", "hits", 2.0, 2.0, "over"
-        )
+        store.attach_prop_outcome("t-prop-001", "Aaron Judge", "hits", 2.0, 2.0, "over")
         rows = store.get_prop_outcomes("t-prop-001")
         assert rows[0]["result"] == "push"
         store.close()
@@ -186,11 +180,14 @@ class TestAttachPropOutcome:
         """Re-attaching same (trace, player, stat) returns same row id."""
         store = _tmp_store()
         store.persist(_make_prop_trace())
-        pid1 = store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "points", 28.0, 24.5, "over"
-        )
+        pid1 = store.attach_prop_outcome("t-prop-001", "LeBron James", "points", 28.0, 24.5, "over")
         pid2 = store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "points", 30.0, 24.5, "over",
+            "t-prop-001",
+            "LeBron James",
+            "points",
+            30.0,
+            24.5,
+            "over",
             source="api:espn_boxscore",
         )
         assert pid1 == pid2
@@ -205,12 +202,8 @@ class TestAttachPropOutcome:
         """Same player, different stat_type on same trace can coexist."""
         store = _tmp_store()
         store.persist(_make_prop_trace())
-        store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "points", 28.0, 24.5, "over"
-        )
-        store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "rebounds", 6.0, 7.5, "under"
-        )
+        store.attach_prop_outcome("t-prop-001", "LeBron James", "points", 28.0, 24.5, "over")
+        store.attach_prop_outcome("t-prop-001", "LeBron James", "rebounds", 6.0, 7.5, "under")
         rows = store.get_prop_outcomes("t-prop-001")
         assert len(rows) == 2
         stats = {r["stat_type"] for r in rows}
@@ -220,26 +213,20 @@ class TestAttachPropOutcome:
     def test_attach_to_missing_trace_raises(self):
         store = _tmp_store()
         with pytest.raises(ValueError, match="No trace found"):
-            store.attach_prop_outcome(
-                "nonexistent", "LeBron James", "points", 28.0, 24.5, "over"
-            )
+            store.attach_prop_outcome("nonexistent", "LeBron James", "points", 28.0, 24.5, "over")
         store.close()
 
     def test_invalid_side_raises(self):
         store = _tmp_store()
         store.persist(_make_prop_trace())
         with pytest.raises(ValueError, match="over.*under"):
-            store.attach_prop_outcome(
-                "t-prop-001", "LeBron James", "points", 28.0, 24.5, "yes"
-            )
+            store.attach_prop_outcome("t-prop-001", "LeBron James", "points", 28.0, 24.5, "yes")
         store.close()
 
     def test_side_case_insensitive(self):
         store = _tmp_store()
         store.persist(_make_prop_trace())
-        store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "points", 28.0, 24.5, "OVER"
-        )
+        store.attach_prop_outcome("t-prop-001", "LeBron James", "points", 28.0, 24.5, "OVER")
         rows = store.get_prop_outcomes("t-prop-001")
         assert rows[0]["side"] == "over"
         store.close()
@@ -268,9 +255,7 @@ class TestSeparationFromGameOutcomes:
     def test_prop_outcome_does_not_create_game_outcome(self):
         store = _tmp_store()
         store.persist(_make_prop_trace())
-        store.attach_prop_outcome(
-            "t-prop-001", "LeBron James", "points", 28.0, 24.5, "over"
-        )
+        store.attach_prop_outcome("t-prop-001", "LeBron James", "points", 28.0, 24.5, "over")
         game_outcomes = store.conn.execute(
             "SELECT outcome_id FROM outcomes WHERE trace_id = ?", ("t-prop-001",)
         ).fetchall()
@@ -300,9 +285,7 @@ class TestQueryTracesUnifiedOutcomeFilter:
         store = _tmp_store()
         store.persist(_make_prop_trace(trace_id="t-prop-A"))
         store.persist(_make_prop_trace(trace_id="t-ungraded-B"))
-        store.attach_prop_outcome(
-            "t-prop-A", "LeBron James", "points", 28.0, 24.5, "over"
-        )
+        store.attach_prop_outcome("t-prop-A", "LeBron James", "points", 28.0, 24.5, "over")
 
         graded = store.query_traces(has_outcome=True)
         assert len(graded) == 1
@@ -313,9 +296,7 @@ class TestQueryTracesUnifiedOutcomeFilter:
         store = _tmp_store()
         store.persist(_make_prop_trace(trace_id="t-prop-A"))
         store.persist(_make_prop_trace(trace_id="t-ungraded-B"))
-        store.attach_prop_outcome(
-            "t-prop-A", "LeBron James", "points", 28.0, 24.5, "over"
-        )
+        store.attach_prop_outcome("t-prop-A", "LeBron James", "points", 28.0, 24.5, "over")
 
         ungraded = store.query_traces(has_outcome=False)
         assert len(ungraded) == 1
@@ -337,15 +318,9 @@ class TestQueryTracesUnifiedOutcomeFilter:
         """A trace with N prop outcomes must still appear exactly once in query results."""
         store = _tmp_store()
         store.persist(_make_prop_trace(trace_id="t-multi"))
-        store.attach_prop_outcome(
-            "t-multi", "LeBron James", "points", 28.0, 24.5, "over"
-        )
-        store.attach_prop_outcome(
-            "t-multi", "LeBron James", "rebounds", 6.0, 7.5, "under"
-        )
-        store.attach_prop_outcome(
-            "t-multi", "LeBron James", "assists", 9.0, 8.5, "over"
-        )
+        store.attach_prop_outcome("t-multi", "LeBron James", "points", 28.0, 24.5, "over")
+        store.attach_prop_outcome("t-multi", "LeBron James", "rebounds", 6.0, 7.5, "under")
+        store.attach_prop_outcome("t-multi", "LeBron James", "assists", 9.0, 8.5, "over")
 
         results = store.query_traces(has_outcome=True)
         assert len(results) == 1
@@ -358,7 +333,12 @@ class TestQueryTracesUnifiedOutcomeFilter:
         store = _tmp_store()
         store.persist(_make_prop_trace(trace_id="t-prop-A"))
         store.attach_prop_outcome(
-            "t-prop-A", "LeBron James", "points", 28.0, 24.5, "over",
+            "t-prop-A",
+            "LeBron James",
+            "points",
+            28.0,
+            24.5,
+            "over",
             source="api:espn_boxscore",
         )
 

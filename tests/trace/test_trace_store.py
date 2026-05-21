@@ -8,6 +8,7 @@ Covers:
 - Query: by league, time range, outcome status, execution mode
 - Graded traces: join traces with outcomes for calibration
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -21,6 +22,7 @@ from omega.trace.store import TraceStore
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _tmp_store() -> TraceStore:
     """Create a TraceStore backed by a temp file."""
@@ -65,6 +67,7 @@ def _make_trace(
 # Schema
 # ---------------------------------------------------------------------------
 
+
 class TestSchema:
     def test_schema_version_recorded(self):
         store = _tmp_store()
@@ -82,6 +85,7 @@ class TestSchema:
 # ---------------------------------------------------------------------------
 # Persist
 # ---------------------------------------------------------------------------
+
 
 class TestPersist:
     def test_round_trip(self):
@@ -140,6 +144,7 @@ class TestPersist:
 # ---------------------------------------------------------------------------
 # Outcome attachment
 # ---------------------------------------------------------------------------
+
 
 class TestOutcomeAttachment:
     def test_attach_and_retrieve(self):
@@ -203,15 +208,37 @@ class TestOutcomeAttachment:
 # Query
 # ---------------------------------------------------------------------------
 
+
 class TestQuery:
     def _seed_store(self) -> TraceStore:
         store = _tmp_store()
-        store.persist(_make_trace("t-nba-1", league="NBA", execution_mode="native_sim",
-                                   matchup="Celtics @ Lakers", timestamp="2026-03-20T10:00:00Z"))
-        store.persist(_make_trace("t-nba-2", league="NBA", execution_mode="research",
-                                   matchup="Heat @ Bucks", timestamp="2026-03-21T10:00:00Z"))
-        store.persist(_make_trace("t-nfl-1", league="NFL", execution_mode="native_sim",
-                                   matchup="Chiefs @ Bills", timestamp="2026-03-21T15:00:00Z"))
+        store.persist(
+            _make_trace(
+                "t-nba-1",
+                league="NBA",
+                execution_mode="native_sim",
+                matchup="Celtics @ Lakers",
+                timestamp="2026-03-20T10:00:00Z",
+            )
+        )
+        store.persist(
+            _make_trace(
+                "t-nba-2",
+                league="NBA",
+                execution_mode="research",
+                matchup="Heat @ Bucks",
+                timestamp="2026-03-21T10:00:00Z",
+            )
+        )
+        store.persist(
+            _make_trace(
+                "t-nfl-1",
+                league="NFL",
+                execution_mode="native_sim",
+                matchup="Chiefs @ Bills",
+                timestamp="2026-03-21T15:00:00Z",
+            )
+        )
         return store
 
     def test_query_all(self):
@@ -266,6 +293,7 @@ class TestQuery:
 # ---------------------------------------------------------------------------
 # Graded traces (calibration input)
 # ---------------------------------------------------------------------------
+
 
 class TestGradedTraces:
     def test_graded_traces_joins_outcome(self):
@@ -337,6 +365,7 @@ class TestSessionSummary:
 # ---------------------------------------------------------------------------
 # Schema V4 — session_id column
 # ---------------------------------------------------------------------------
+
 
 class TestSchemaV4SessionId:
     def test_session_id_column_present(self):

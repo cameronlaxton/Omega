@@ -24,6 +24,7 @@ Exit codes:
     0 — completed (may have unmatched; see log)
     1 — fatal error (API key missing, bad args)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -32,8 +33,9 @@ import logging
 import sys
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-UTC = timezone.utc
 from pathlib import Path
+
+UTC = timezone.utc
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -58,13 +60,17 @@ _DEFAULT_CLOSE_OFFSET_HOURS = 6  # added to decision_timestamp when --close-time
 # self-contained; extract to omega.integrations.match if they grow)
 # ---------------------------------------------------------------------------
 
+
 def _identity(name: str) -> str | None:
     return name or None
 
 
 def _load_canonicalizer(league: str) -> Callable[[str], str | None]:
     league_lc = league.lower()
-    for mod_path in (f"omega.integrations.espn_{league_lc}", f"omega.integrations.team_aliases_{league_lc}"):
+    for mod_path in (
+        f"omega.integrations.espn_{league_lc}",
+        f"omega.integrations.team_aliases_{league_lc}",
+    ):
         try:
             mod = importlib.import_module(mod_path)
         except ImportError:
@@ -156,6 +162,7 @@ def _match_prop_outcome(bet: dict, books):
 # Bet selection
 # ---------------------------------------------------------------------------
 
+
 def _pending_bets_needing_close(
     store: TraceStore,
     league_filter: str | None,
@@ -198,6 +205,7 @@ def _pending_bets_needing_close(
 # Historical timestamp derivation
 # ---------------------------------------------------------------------------
 
+
 def _close_timestamp_for_bet(bet: dict, explicit_at: str | None, close_offset_hours: int) -> str:
     """Return an ISO-8601 UTC timestamp to pass to the historical endpoint.
 
@@ -218,6 +226,7 @@ def _close_timestamp_for_bet(bet: dict, explicit_at: str | None, close_offset_ho
 # ---------------------------------------------------------------------------
 # Per-league processing
 # ---------------------------------------------------------------------------
+
 
 def _process_league(
     league: str,
@@ -259,8 +268,13 @@ def _process_league(
             continue
 
         actual_ts = snapshot.timestamp or ts
-        logger.info("[%s] snapshot timestamp=%s, events=%d, remaining budget=%d",
-                    league, actual_ts, len(snapshot.events), client.remaining_budget())
+        logger.info(
+            "[%s] snapshot timestamp=%s, events=%d, remaining budget=%d",
+            league,
+            actual_ts,
+            len(snapshot.events),
+            client.remaining_budget(),
+        )
 
         events_by_pair: dict[tuple[str, str], EventOdds] = {
             (canonicalize(e.home_team) or e.home_team, canonicalize(e.away_team) or e.away_team): e
@@ -273,8 +287,9 @@ def _process_league(
                 continue
 
             import json as _json
+
             try:
-                input_snap = (_json.loads(bet["full_trace"]).get("input_snapshot") or {})
+                input_snap = _json.loads(bet["full_trace"]).get("input_snapshot") or {}
             except Exception:  # noqa: BLE001
                 input_snap = {}
             home = canonicalize(input_snap.get("home_team", ""))
@@ -304,7 +319,9 @@ def _process_league(
                     )
                     event = prop_snapshot.events[0] if prop_snapshot.events else None
                     if event is None:
-                        skipped.append(f"{bet['bet_id']} (historical event odds returned no events)")
+                        skipped.append(
+                            f"{bet['bet_id']} (historical event odds returned no events)"
+                        )
                         continue
                 except Exception as exc:  # noqa: BLE001
                     skipped.append(f"{bet['bet_id']} (prop historical fetch failed: {exc})")
@@ -322,13 +339,22 @@ def _process_league(
                 )
 
             if outcome is None:
-                skipped.append(f"{bet['bet_id']} (no book matched market+descriptor in historical snapshot)")
+                skipped.append(
+                    f"{bet['bet_id']} (no book matched market+descriptor in historical snapshot)"
+                )
                 continue
 
             if dry_run:
-                logger.info("DRY [%s] %s -> %s %s @ %s pt=%s (snapshot=%s)",
-                            league, bet["bet_id"], outcome.bookmaker, outcome.market,
-                            outcome.price, outcome.point, actual_ts)
+                logger.info(
+                    "DRY [%s] %s -> %s %s @ %s pt=%s (snapshot=%s)",
+                    league,
+                    bet["bet_id"],
+                    outcome.bookmaker,
+                    outcome.market,
+                    outcome.price,
+                    outcome.point,
+                    actual_ts,
+                )
                 attached += 1
                 continue
 
@@ -342,9 +368,16 @@ def _process_league(
                 source=f"the-odds-api-historical:{outcome.bookmaker}",
             )
             attached += 1
-            logger.info("ATTACHED [%s] %s -> %s %s pt=%s (snapshot=%s book=%s)",
-                        league, bet["bet_id"], outcome.price, bet["market"],
-                        outcome.point, actual_ts, outcome.bookmaker)
+            logger.info(
+                "ATTACHED [%s] %s -> %s %s pt=%s (snapshot=%s book=%s)",
+                league,
+                bet["bet_id"],
+                outcome.price,
+                bet["market"],
+                outcome.point,
+                actual_ts,
+                outcome.bookmaker,
+            )
 
     return attached, skipped
 
@@ -353,26 +386,40 @@ def _process_league(
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Backfill missed closing-line windows via the paid Odds API historical endpoint"
     )
     parser.add_argument("--league", default=None, help="Restrict to one league (NBA, MLB, NFL, …)")
-    parser.add_argument("--since", default=None, help="Earliest decision_timestamp to consider (ISO-8601 or YYYY-MM-DD)")
-    parser.add_argument("--until", default=None, help="Latest decision_timestamp to consider (ISO-8601 or YYYY-MM-DD)")
+    parser.add_argument(
+        "--since",
+        default=None,
+        help="Earliest decision_timestamp to consider (ISO-8601 or YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--until",
+        default=None,
+        help="Latest decision_timestamp to consider (ISO-8601 or YYYY-MM-DD)",
+    )
     parser.add_argument("--trace-id", dest="trace_id", default=None, help="Backfill a single trace")
     parser.add_argument(
-        "--at", default=None,
+        "--at",
+        default=None,
         help="Exact ISO-8601 UTC timestamp to pass to the historical endpoint for all matched bets. "
-             "If omitted, defaults to decision_timestamp + --close-offset-hours.",
+        "If omitted, defaults to decision_timestamp + --close-offset-hours.",
     )
     parser.add_argument(
-        "--close-offset-hours", dest="close_offset_hours", type=int,
+        "--close-offset-hours",
+        dest="close_offset_hours",
+        type=int,
         default=_DEFAULT_CLOSE_OFFSET_HOURS,
         help=f"Hours to add to decision_timestamp to infer the close time (default: {_DEFAULT_CLOSE_OFFSET_HOURS}). "
-             "Ignored when --at is provided.",
+        "Ignored when --at is provided.",
     )
-    parser.add_argument("--db", default=None, help="SQLite path (default: repo-root omega_traces.db)")
+    parser.add_argument(
+        "--db", default=None, help="SQLite path (default: repo-root omega_traces.db)"
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
@@ -402,7 +449,9 @@ def main() -> int:
 
     logger.info(
         "Found %d pending bet(s) across %d league(s): %s",
-        len(pending), len(by_league), sorted(by_league),
+        len(pending),
+        len(by_league),
+        sorted(by_league),
     )
 
     try:

@@ -4,6 +4,7 @@ Load a local .env file for developer convenience. Production deployments should
 supply environment variables through a secure mechanism and not rely on .env
 files.
 """
+
 from __future__ import annotations
 
 import os

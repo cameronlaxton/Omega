@@ -17,6 +17,7 @@ source_attribution:
 These checks catch the primary path by which bad sim inputs enter: a slot
 reports filled=True but the underlying data is absent, synthetic, or unattributed.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -48,8 +49,7 @@ class EvidenceValidator(SkillBase):
             if fact.filled and fact.result is not None:
                 if is_critical and fact.result.confidence < _LOW_CONFIDENCE_THRESHOLD:
                     findings.append(
-                        f"evidence_integrity.low_confidence:{slot_key}"
-                        f":{fact.result.confidence:.2f}"
+                        f"evidence_integrity.low_confidence:{slot_key}:{fact.result.confidence:.2f}"
                     )
                 if is_critical and not fact.result.data:
                     findings.append(f"evidence_integrity.empty_data:{slot_key}")

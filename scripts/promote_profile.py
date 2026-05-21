@@ -35,6 +35,7 @@ Exit codes:
     1 — any gate failed and --force was not supplied
     2 — fatal error (unknown candidate, etc.)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -73,9 +74,7 @@ def _evaluate_gates(
     # Gate 1: sample size
     n = candidate.sample_size
     passed = n >= min_samples
-    results.append(
-        ("SAMPLE_SIZE", passed, f"candidate.sample_size={n}, required>={min_samples}")
-    )
+    results.append(("SAMPLE_SIZE", passed, f"candidate.sample_size={n}, required>={min_samples}"))
 
     # Gate 2: Brier improvement
     cand_brier = candidate.metrics.get("brier_score")
@@ -158,7 +157,9 @@ def main() -> int:
     parser.add_argument("--candidate-id", help="profile_id of the CANDIDATE to promote")
     parser.add_argument("--auto", action="store_true", help="Promote iff ALL gates pass")
     parser.add_argument("--force", action="store_true", help="Promote regardless of gate status")
-    parser.add_argument("--list-candidates", action="store_true", help="List CANDIDATE profiles and exit")
+    parser.add_argument(
+        "--list-candidates", action="store_true", help="List CANDIDATE profiles and exit"
+    )
     parser.add_argument("--league", help="Filter for --list-candidates")
     parser.add_argument("--min-samples", type=int, default=_DEFAULT_MIN_SAMPLES)
     parser.add_argument("--brier-improvement", type=float, default=_DEFAULT_BRIER_IMPROVEMENT)
@@ -202,7 +203,12 @@ def main() -> int:
         return 2
 
     incumbent = registry.get_production(candidate.league)
-    logger.info("Candidate: %s (league=%s, method=%s)", candidate.profile_id, candidate.league, candidate.method)
+    logger.info(
+        "Candidate: %s (league=%s, method=%s)",
+        candidate.profile_id,
+        candidate.league,
+        candidate.method,
+    )
     if incumbent is not None:
         logger.info("Incumbent: %s (method=%s)", incumbent.profile_id, incumbent.method)
     else:

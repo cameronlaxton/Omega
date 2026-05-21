@@ -13,9 +13,9 @@ from omega.core.betting.odds import american_to_decimal
 # Full Kelly is mathematically optimal but volatile;
 # fractional Kelly trades expected growth for lower variance.
 _TIER_MULTIPLIERS: dict[str, float] = {
-    "A": 0.50,   # High confidence: half Kelly
-    "B": 0.25,   # Medium confidence: quarter Kelly
-    "C": 0.10,   # Low confidence: tenth Kelly
+    "A": 0.50,  # High confidence: half Kelly
+    "B": 0.25,  # Medium confidence: quarter Kelly
+    "C": 0.10,  # Low confidence: tenth Kelly
 }
 
 

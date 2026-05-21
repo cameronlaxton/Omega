@@ -1,6 +1,5 @@
 """Tests for the anchor bet result tracker."""
 
-
 import pytest
 
 from omega.strategy.anchor.tracker import (
@@ -27,10 +26,38 @@ def sample_bet():
         scan_date="2026-04-08",
         game="Thunder @ Clippers",
         legs=[
-            AnchorBetLeg(player="Chet Holmgren", team="OKC", stat="pts", threshold=10, hit_rate=1.0, odds_over=-350),
-            AnchorBetLeg(player="Shai Gilgeous-Alexander", team="OKC", stat="ast", threshold=5, hit_rate=0.9, odds_over=-200),
-            AnchorBetLeg(player="Kris Dunn", team="LAC", stat="ast", threshold=3, hit_rate=0.8, odds_over=-150),
-            AnchorBetLeg(player="Brook Lopez", team="LAC", stat="reb", threshold=3, hit_rate=0.9, odds_over=-180),
+            AnchorBetLeg(
+                player="Chet Holmgren",
+                team="OKC",
+                stat="pts",
+                threshold=10,
+                hit_rate=1.0,
+                odds_over=-350,
+            ),
+            AnchorBetLeg(
+                player="Shai Gilgeous-Alexander",
+                team="OKC",
+                stat="ast",
+                threshold=5,
+                hit_rate=0.9,
+                odds_over=-200,
+            ),
+            AnchorBetLeg(
+                player="Kris Dunn",
+                team="LAC",
+                stat="ast",
+                threshold=3,
+                hit_rate=0.8,
+                odds_over=-150,
+            ),
+            AnchorBetLeg(
+                player="Brook Lopez",
+                team="LAC",
+                stat="reb",
+                threshold=3,
+                hit_rate=0.9,
+                odds_over=-180,
+            ),
         ],
         odds_taken=2.20,
         modeled_true_p=0.52,
@@ -97,7 +124,9 @@ class TestAnchorBetTracker:
             scan_date="2026-04-09",
             game="Heat vs Raptors",
             legs=[
-                AnchorBetLeg(player="Tyler Herro", team="MIA", stat="pts", threshold=15, hit_rate=0.85),
+                AnchorBetLeg(
+                    player="Tyler Herro", team="MIA", stat="pts", threshold=15, hit_rate=0.85
+                ),
             ],
             odds_taken=2.13,
             result="WIN",
@@ -116,19 +145,30 @@ class TestAnchorBetTracker:
         """Summary stats compute correctly."""
         bets = [
             AnchorBetRecord(
-                bet_id="w1", scan_date="2026-04-08", game="Game A",
+                bet_id="w1",
+                scan_date="2026-04-08",
+                game="Game A",
                 legs=[AnchorBetLeg(player="P1", team="T1", stat="pts", threshold=10, hit_rate=0.9)],
-                odds_taken=2.20, result="WIN",
+                odds_taken=2.20,
+                result="WIN",
             ),
             AnchorBetRecord(
-                bet_id="w2", scan_date="2026-04-08", game="Game B",
-                legs=[AnchorBetLeg(player="P2", team="T2", stat="pts", threshold=15, hit_rate=0.85)],
-                odds_taken=2.10, result="WIN",
+                bet_id="w2",
+                scan_date="2026-04-08",
+                game="Game B",
+                legs=[
+                    AnchorBetLeg(player="P2", team="T2", stat="pts", threshold=15, hit_rate=0.85)
+                ],
+                odds_taken=2.10,
+                result="WIN",
             ),
             AnchorBetRecord(
-                bet_id="l1", scan_date="2026-04-09", game="Game C",
+                bet_id="l1",
+                scan_date="2026-04-09",
+                game="Game C",
                 legs=[AnchorBetLeg(player="P3", team="T3", stat="ast", threshold=5, hit_rate=0.8)],
-                odds_taken=2.00, result="LOSS",
+                odds_taken=2.00,
+                result="LOSS",
             ),
         ]
         for b in bets:
@@ -158,8 +198,12 @@ class TestAnchorBetRecord:
     def test_compute_clv_positive(self):
         """Positive CLV when close odds are shorter."""
         record = AnchorBetRecord(
-            bet_id="t1", scan_date="2026-04-08", game="G",
-            legs=[], odds_taken=2.20, odds_close=2.05,
+            bet_id="t1",
+            scan_date="2026-04-08",
+            game="G",
+            legs=[],
+            odds_taken=2.20,
+            odds_close=2.05,
         )
         clv = record.compute_clv()
         assert clv is not None
@@ -168,8 +212,12 @@ class TestAnchorBetRecord:
     def test_compute_clv_negative(self):
         """Negative CLV when line moved in our favor (we got worse price)."""
         record = AnchorBetRecord(
-            bet_id="t2", scan_date="2026-04-08", game="G",
-            legs=[], odds_taken=2.00, odds_close=2.30,
+            bet_id="t2",
+            scan_date="2026-04-08",
+            game="G",
+            legs=[],
+            odds_taken=2.00,
+            odds_close=2.30,
         )
         clv = record.compute_clv()
         assert clv is not None
@@ -177,8 +225,11 @@ class TestAnchorBetRecord:
 
     def test_compute_clv_no_close(self):
         record = AnchorBetRecord(
-            bet_id="t3", scan_date="2026-04-08", game="G",
-            legs=[], odds_taken=2.00,
+            bet_id="t3",
+            scan_date="2026-04-08",
+            game="G",
+            legs=[],
+            odds_taken=2.00,
         )
         assert record.compute_clv() is None
 

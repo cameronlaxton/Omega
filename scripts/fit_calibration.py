@@ -24,6 +24,7 @@ Exit codes:
     0 — at least one candidate registered (or dry-run completed)
     1 — fatal error or no candidates met --min-samples
 """
+
 from __future__ import annotations
 
 import argparse
@@ -169,7 +170,9 @@ def main() -> int:
         help=f"Refuse to fit with fewer total graded samples (default: {_DEFAULT_MIN_SAMPLES})",
     )
     parser.add_argument("--db", type=str, default=None, help="SQLite path")
-    parser.add_argument("--dry-run", action="store_true", help="Fit and evaluate but do not register")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Fit and evaluate but do not register"
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -246,7 +249,9 @@ def main() -> int:
         logger.error("No profiles registered (all fits failed).")
         return 1
 
-    logger.info("Done. %d candidate(s) %s.", len(registered), "evaluated" if args.dry_run else "registered")
+    logger.info(
+        "Done. %d candidate(s) %s.", len(registered), "evaluated" if args.dry_run else "registered"
+    )
     return 0
 
 

@@ -8,6 +8,7 @@ Covers:
 - transaction rollback on partial-fail within a file's lines array
 - idempotent re-ingest (same file twice = no duplicates)
 """
+
 from __future__ import annotations
 
 import json

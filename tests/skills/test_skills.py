@@ -7,6 +7,7 @@ Covers:
 - evidence-validator: happy path + null result + low confidence + empty data + no source
 - data-quality-grader: happy path + under-downgrade + sanity bounds
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -29,6 +30,7 @@ from omega.trace.schema import CURRENT_VERSION
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_slot(
     key: str = "home.off_rating",
@@ -95,12 +97,15 @@ def _make_plan(
 # SkillBase / SkillObservation contract
 # ---------------------------------------------------------------------------
 
+
 class TestSkillBase:
     def test_observe_wraps_exception(self):
         """observe() must never raise even if _run() raises."""
+
         class BrokenSkill(SkillBase):
             name = "broken"
             stage = "test"
+
             def _run(self, **kwargs):
                 raise RuntimeError("unexpected crash")
 
@@ -111,9 +116,7 @@ class TestSkillBase:
         assert "crash" in obs.error
 
     def test_observation_to_dict(self):
-        obs = SkillObservation(
-            skill="test", stage="s", ok=True, findings=["a"], error=None
-        )
+        obs = SkillObservation(skill="test", stage="s", ok=True, findings=["a"], error=None)
         d = obs.to_dict()
         assert d["skill"] == "test"
         assert d["ok"] is True
@@ -130,9 +133,11 @@ class TestSkillBase:
 # trace-recorder
 # ---------------------------------------------------------------------------
 
+
 class TestTraceRecorder:
     def _skill(self):
         from omega.skills.trace_recorder import TraceRecorder
+
         return TraceRecorder()
 
     def _valid_trace(self) -> dict[str, Any]:
@@ -198,9 +203,11 @@ class TestTraceRecorder:
 # evidence-validator
 # ---------------------------------------------------------------------------
 
+
 class TestEvidenceValidator:
     def _skill(self):
         from omega.skills.evidence_validator import EvidenceValidator
+
         return EvidenceValidator()
 
     def test_happy_path_all_good(self):
@@ -275,9 +282,11 @@ class TestEvidenceValidator:
 # data-quality-grader
 # ---------------------------------------------------------------------------
 
+
 class TestDataQualityGrader:
     def _skill(self):
         from omega.skills.data_quality_grader import DataQualityGrader
+
         return DataQualityGrader()
 
     def _good_facts(self) -> list[GatheredFact]:

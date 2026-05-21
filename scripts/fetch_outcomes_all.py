@@ -14,6 +14,7 @@ Exit codes:
     0 — all dispatched successfully
     1 — at least one sub-script failed
 """
+
 from __future__ import annotations
 
 import argparse

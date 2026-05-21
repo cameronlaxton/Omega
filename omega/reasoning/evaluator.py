@@ -66,7 +66,9 @@ def apply_quality_gate(
         if not has_critical or aggregate_quality < bet_card_threshold:
             logger.info(
                 "Quality gate: dropping bet_card (critical_filled=%s, quality=%.2f, threshold=%.2f)",
-                has_critical, aggregate_quality, bet_card_threshold,
+                has_critical,
+                aggregate_quality,
+                bet_card_threshold,
             )
             packages = [p for p in packages if p != OutputPackage.BET_CARD]
             betting_included = False
@@ -100,15 +102,20 @@ def apply_quality_gate(
     if ExecutionMode.NATIVE_SIM in modes:
         if not has_critical:
             # Count what percentage of critical+important we have
-            crit_important = [f for f in facts
-                              if f.slot.importance in (InputImportance.CRITICAL, InputImportance.IMPORTANT)]
+            crit_important = [
+                f
+                for f in facts
+                if f.slot.importance in (InputImportance.CRITICAL, InputImportance.IMPORTANT)
+            ]
             filled_count = sum(1 for f in crit_important if f.filled)
             total_count = len(crit_important) if crit_important else 1
             fill_rate = filled_count / total_count
 
             if fill_rate >= 0.5:
                 # Directional sim only — switch to MIXED
-                logger.info("Quality gate: downgrading native_sim to mixed (fill_rate=%.2f)", fill_rate)
+                logger.info(
+                    "Quality gate: downgrading native_sim to mixed (fill_rate=%.2f)", fill_rate
+                )
                 modes = [ExecutionMode.MIXED if m == ExecutionMode.NATIVE_SIM else m for m in modes]
                 sim_required = False  # no formal edges
                 betting_included = False
@@ -117,8 +124,12 @@ def apply_quality_gate(
                 downgrades.append("native_sim_to_mixed")
             else:
                 # Not enough data for any simulation
-                logger.info("Quality gate: downgrading native_sim to research (fill_rate=%.2f)", fill_rate)
-                modes = [ExecutionMode.RESEARCH if m == ExecutionMode.NATIVE_SIM else m for m in modes]
+                logger.info(
+                    "Quality gate: downgrading native_sim to research (fill_rate=%.2f)", fill_rate
+                )
+                modes = [
+                    ExecutionMode.RESEARCH if m == ExecutionMode.NATIVE_SIM else m for m in modes
+                ]
                 sim_required = False
                 betting_included = False
                 packages = [p for p in packages if p != OutputPackage.BET_CARD]
@@ -129,19 +140,28 @@ def apply_quality_gate(
         elif not has_important:
             # Critical inputs present but some important missing — sim runs
             # but confidence is capped at C. Keep native_sim, just log it.
-            logger.info("Quality gate: native_sim allowed with confidence cap (important inputs missing)")
+            logger.info(
+                "Quality gate: native_sim allowed with confidence cap (important inputs missing)"
+            )
 
     # -----------------------------------------------------------------
     # Gate 4: Ultra-low data — switch to limited_context_answer
     # -----------------------------------------------------------------
     filled_facts = [f for f in facts if f.filled]
     if len(filled_facts) < 3 and aggregate_quality < 0.3:
-        logger.info("Quality gate: ultra-low data (filled=%d, quality=%.2f), switching to limited_context_answer",
-                     len(filled_facts), aggregate_quality)
+        logger.info(
+            "Quality gate: ultra-low data (filled=%d, quality=%.2f), switching to limited_context_answer",
+            len(filled_facts),
+            aggregate_quality,
+        )
         packages = [OutputPackage.LIMITED_CONTEXT_ANSWER]
         if ExecutionMode.NATIVE_SIM in modes or ExecutionMode.MIXED in modes:
-            modes = [ExecutionMode.RESEARCH if m in (ExecutionMode.NATIVE_SIM, ExecutionMode.MIXED) else m
-                     for m in modes]
+            modes = [
+                ExecutionMode.RESEARCH
+                if m in (ExecutionMode.NATIVE_SIM, ExecutionMode.MIXED)
+                else m
+                for m in modes
+            ]
         sim_required = False
         betting_included = False
         downgrades.append("ultra_low_data")
@@ -161,8 +181,10 @@ def apply_quality_gate(
     )
 
     if revised != plan:
-        logger.info("Quality gate revised the answer plan: modes=%s, packages=%s",
-                     [m.value for m in revised.execution_modes],
-                     [p.value for p in revised.output_packages])
+        logger.info(
+            "Quality gate revised the answer plan: modes=%s, packages=%s",
+            [m.value for m in revised.execution_modes],
+            [p.value for p in revised.output_packages],
+        )
 
     return revised

@@ -12,6 +12,7 @@ locations, scores, and status. We expose two things:
 Stale aliases are the most common source of unmatched outcomes. When the
 weekly health report flags an unmapped team string, add it to TEAM_ALIASES.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,45 +23,43 @@ from dataclasses import dataclass
 
 logger = logging.getLogger("omega.integrations.espn_nba")
 
-_SCOREBOARD_URL = (
-    "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
-)
+_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
 _REQUEST_TIMEOUT_SECONDS = 15
 
 
 # Canonical team names (left side = canonical, right side = aliases)
 # Canonical name matches the official label used by the core contracts.
 NBA_TEAMS: dict[str, list[str]] = {
-    "Atlanta Hawks":        ["atl", "hawks", "atlanta"],
-    "Boston Celtics":       ["bos", "celtics", "boston"],
-    "Brooklyn Nets":        ["bkn", "bro", "nets", "brooklyn"],
-    "Charlotte Hornets":    ["cha", "hornets", "charlotte"],
-    "Chicago Bulls":        ["chi", "bulls", "chicago"],
-    "Cleveland Cavaliers":  ["cle", "cavs", "cavaliers", "cleveland"],
-    "Dallas Mavericks":     ["dal", "mavs", "mavericks", "dallas"],
-    "Denver Nuggets":       ["den", "nuggets", "denver"],
-    "Detroit Pistons":      ["det", "pistons", "detroit"],
+    "Atlanta Hawks": ["atl", "hawks", "atlanta"],
+    "Boston Celtics": ["bos", "celtics", "boston"],
+    "Brooklyn Nets": ["bkn", "bro", "nets", "brooklyn"],
+    "Charlotte Hornets": ["cha", "hornets", "charlotte"],
+    "Chicago Bulls": ["chi", "bulls", "chicago"],
+    "Cleveland Cavaliers": ["cle", "cavs", "cavaliers", "cleveland"],
+    "Dallas Mavericks": ["dal", "mavs", "mavericks", "dallas"],
+    "Denver Nuggets": ["den", "nuggets", "denver"],
+    "Detroit Pistons": ["det", "pistons", "detroit"],
     "Golden State Warriors": ["gs", "gsw", "warriors", "golden state"],
-    "Houston Rockets":      ["hou", "rockets", "houston"],
-    "Indiana Pacers":       ["ind", "pacers", "indiana"],
-    "LA Clippers":          ["lac", "clippers", "los angeles clippers"],
-    "Los Angeles Lakers":   ["lal", "lakers", "la lakers"],
-    "Memphis Grizzlies":    ["mem", "grizzlies", "memphis"],
-    "Miami Heat":           ["mia", "heat", "miami"],
-    "Milwaukee Bucks":      ["mil", "bucks", "milwaukee"],
+    "Houston Rockets": ["hou", "rockets", "houston"],
+    "Indiana Pacers": ["ind", "pacers", "indiana"],
+    "LA Clippers": ["lac", "clippers", "los angeles clippers"],
+    "Los Angeles Lakers": ["lal", "lakers", "la lakers"],
+    "Memphis Grizzlies": ["mem", "grizzlies", "memphis"],
+    "Miami Heat": ["mia", "heat", "miami"],
+    "Milwaukee Bucks": ["mil", "bucks", "milwaukee"],
     "Minnesota Timberwolves": ["min", "wolves", "timberwolves", "minnesota"],
     "New Orleans Pelicans": ["nop", "no", "pelicans", "new orleans"],
-    "New York Knicks":      ["ny", "nyk", "knicks", "new york"],
+    "New York Knicks": ["ny", "nyk", "knicks", "new york"],
     "Oklahoma City Thunder": ["okc", "thunder", "oklahoma city"],
-    "Orlando Magic":        ["orl", "magic", "orlando"],
-    "Philadelphia 76ers":   ["phi", "sixers", "76ers", "philadelphia"],
-    "Phoenix Suns":         ["phx", "pho", "suns", "phoenix"],
+    "Orlando Magic": ["orl", "magic", "orlando"],
+    "Philadelphia 76ers": ["phi", "sixers", "76ers", "philadelphia"],
+    "Phoenix Suns": ["phx", "pho", "suns", "phoenix"],
     "Portland Trail Blazers": ["por", "blazers", "trail blazers", "portland"],
-    "Sacramento Kings":     ["sac", "kings", "sacramento"],
-    "San Antonio Spurs":    ["sa", "sas", "spurs", "san antonio"],
-    "Toronto Raptors":      ["tor", "raptors", "toronto"],
-    "Utah Jazz":            ["uta", "jazz", "utah"],
-    "Washington Wizards":   ["was", "wsh", "wizards", "washington"],
+    "Sacramento Kings": ["sac", "kings", "sacramento"],
+    "San Antonio Spurs": ["sa", "sas", "spurs", "san antonio"],
+    "Toronto Raptors": ["tor", "raptors", "toronto"],
+    "Utah Jazz": ["uta", "jazz", "utah"],
+    "Washington Wizards": ["was", "wsh", "wizards", "washington"],
 }
 
 # Reverse map: alias (lowercased) → canonical name
@@ -74,18 +73,20 @@ for _canonical, _aliases in NBA_TEAMS.items():
 @dataclass(frozen=True)
 class FinalGame:
     """A completed NBA game with attributed final scores."""
-    event_id: str               # ESPN event id
-    date: str                   # YYYY-MM-DD (Eastern game date)
-    home_team: str              # canonical name
-    away_team: str              # canonical name
+
+    event_id: str  # ESPN event id
+    date: str  # YYYY-MM-DD (Eastern game date)
+    home_team: str  # canonical name
+    away_team: str  # canonical name
     home_score: int
     away_score: int
-    status: str                 # "final", "in_progress", "scheduled", "postponed", ...
+    status: str  # "final", "in_progress", "scheduled", "postponed", ...
 
 
 # ---------------------------------------------------------------------------
 # Alias resolution
 # ---------------------------------------------------------------------------
+
 
 def canonical_team(name_or_alias: str) -> str | None:
     """Resolve a team string to its canonical NBA team name.
@@ -109,6 +110,7 @@ def canonical_team(name_or_alias: str) -> str | None:
 # ---------------------------------------------------------------------------
 # HTTP
 # ---------------------------------------------------------------------------
+
 
 def fetch_scoreboard(
     date: str,
@@ -160,9 +162,13 @@ def parse_scoreboard(payload: dict) -> list[FinalGame]:
         for competitor in comp.get("competitors") or []:
             team_blob = competitor.get("team") or {}
             display_name = team_blob.get("displayName") or team_blob.get("name") or ""
-            canonical = canonical_team(display_name) or canonical_team(team_blob.get("abbreviation", ""))
+            canonical = canonical_team(display_name) or canonical_team(
+                team_blob.get("abbreviation", "")
+            )
             if not canonical:
-                logger.warning("Unmapped ESPN team: %r (abbr=%r)", display_name, team_blob.get("abbreviation"))
+                logger.warning(
+                    "Unmapped ESPN team: %r (abbr=%r)", display_name, team_blob.get("abbreviation")
+                )
                 canonical = display_name  # preserve raw so caller can flag
             score = int(competitor.get("score") or 0)
             if competitor.get("homeAway") == "home":
@@ -174,14 +180,16 @@ def parse_scoreboard(payload: dict) -> list[FinalGame]:
             logger.debug("skipping event %s — missing home/away", event_id)
             continue
 
-        results.append(FinalGame(
-            event_id=event_id,
-            date=iso_date,
-            home_team=home,
-            away_team=away,
-            home_score=home_score,
-            away_score=away_score,
-            status=status_short,
-        ))
+        results.append(
+            FinalGame(
+                event_id=event_id,
+                date=iso_date,
+                home_team=home,
+                away_team=away,
+                home_score=home_score,
+                away_score=away_score,
+                status=status_short,
+            )
+        )
 
     return results

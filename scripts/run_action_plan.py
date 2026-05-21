@@ -34,6 +34,7 @@ Exit codes:
     1 — at least one action failed
     2 — fatal validation error (file missing, unknown action type, bad args)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -64,9 +65,12 @@ def _validate_fit_calibration(args: dict[str, Any]) -> list[str]:
     cmd = [
         sys.executable,
         str(_REPO_ROOT / "scripts" / "fit_calibration.py"),
-        "--league", args["league"],
-        "--method", method,
-        "--min-samples", str(min_samples),
+        "--league",
+        args["league"],
+        "--method",
+        method,
+        "--min-samples",
+        str(min_samples),
     ]
     return cmd
 
@@ -81,7 +85,8 @@ def _validate_promote_profile(args: dict[str, Any]) -> list[str]:
     cmd = [
         sys.executable,
         str(_REPO_ROOT / "scripts" / "promote_profile.py"),
-        "--candidate-id", args["candidate_id"],
+        "--candidate-id",
+        args["candidate_id"],
     ]
     if auto:
         cmd.append("--auto")
@@ -98,8 +103,10 @@ def _validate_report_calibration(args: dict[str, Any]) -> list[str]:
     cmd = [
         sys.executable,
         str(_REPO_ROOT / "scripts" / "report_calibration.py"),
-        "--league", args["league"],
-        "--window-days", str(window_days),
+        "--league",
+        args["league"],
+        "--window-days",
+        str(window_days),
     ]
     return cmd
 
@@ -107,7 +114,7 @@ def _validate_report_calibration(args: dict[str, Any]) -> list[str]:
 def _validate_fetch_outcomes(args: dict[str, Any]) -> list[str]:
     _VALID_LEAGUES = {"nba", "mlb", "props"}
     leagues = args.get("leagues", ["nba", "mlb", "props"])
-    if not isinstance(leagues, list) or not all(isinstance(l, str) for l in leagues):
+    if not isinstance(leagues, list) or not all(isinstance(league, str) for league in leagues):
         raise ValueError("fetch_outcomes.args.leagues must be a list of strings")
     unknown = set(leagues) - _VALID_LEAGUES
     if unknown:
@@ -122,7 +129,8 @@ def _validate_fetch_outcomes(args: dict[str, Any]) -> list[str]:
     cmd = [
         sys.executable,
         str(_REPO_ROOT / "scripts" / "fetch_outcomes_all.py"),
-        "--leagues", *leagues,
+        "--leagues",
+        *leagues,
     ]
     if since:
         cmd += ["--since", since]
@@ -158,9 +166,7 @@ def _validate_all(plan: dict[str, Any]) -> list[tuple[str, list[str]]]:
             raise ValueError(f"actions[{i}] must be an object")
         atype = action.get("type")
         if atype not in _DISPATCH:
-            raise ValueError(
-                f"actions[{i}].type={atype!r} not in allowlist {sorted(_DISPATCH)}"
-            )
+            raise ValueError(f"actions[{i}].type={atype!r} not in allowlist {sorted(_DISPATCH)}")
         args = action.get("args", {})
         if not isinstance(args, dict):
             raise ValueError(f"actions[{i}].args must be an object")
@@ -175,7 +181,9 @@ def _validate_all(plan: dict[str, Any]) -> list[tuple[str, list[str]]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Dispatch an action-plan JSON file.")
     parser.add_argument("plan", type=Path, help="Path to the action-plan JSON file")
-    parser.add_argument("--dry-run", action="store_true", help="Validate and print commands but do not execute")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Validate and print commands but do not execute"
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 

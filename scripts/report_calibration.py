@@ -24,15 +24,17 @@ Exit codes:
     0 — report written
     1 — fatal error (DB missing, --out parent dir cannot be created)
 """
+
 from __future__ import annotations
 
 import argparse
 import logging
 import sys
 from datetime import datetime, timedelta, timezone
-UTC = timezone.utc
 from pathlib import Path
 from typing import Any
+
+UTC = timezone.utc
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -133,11 +135,15 @@ def _section_realized_metrics(
     n = len(predictions)
     brier = sum((p - o) ** 2 for p, o in zip(predictions, outcomes)) / n
     from math import log
+
     eps = 1e-15
-    log_loss = -sum(
-        o * log(max(eps, min(1 - eps, p))) + (1 - o) * log(max(eps, min(1 - eps, 1 - p)))
-        for p, o in zip(predictions, outcomes)
-    ) / n
+    log_loss = (
+        -sum(
+            o * log(max(eps, min(1 - eps, p))) + (1 - o) * log(max(eps, min(1 - eps, 1 - p)))
+            for p, o in zip(predictions, outcomes)
+        )
+        / n
+    )
 
     # ECE
     n_bins = 10
@@ -152,7 +158,11 @@ def _section_realized_metrics(
     ece = 0.0
     for i in range(n_bins):
         if bin_counts[i] > 0:
-            ece += abs(bin_pred_sum[i] / bin_counts[i] - bin_out_sum[i] / bin_counts[i]) * bin_counts[i] / n
+            ece += (
+                abs(bin_pred_sum[i] / bin_counts[i] - bin_out_sum[i] / bin_counts[i])
+                * bin_counts[i]
+                / n
+            )
 
     return {
         "n": float(n),
@@ -181,11 +191,15 @@ def _section_prop_realized_metrics(
     n = len(predictions)
     brier = sum((p - o) ** 2 for p, o in zip(predictions, outcomes)) / n
     from math import log
+
     eps = 1e-15
-    log_loss = -sum(
-        o * log(max(eps, min(1 - eps, p))) + (1 - o) * log(max(eps, min(1 - eps, 1 - p)))
-        for p, o in zip(predictions, outcomes)
-    ) / n
+    log_loss = (
+        -sum(
+            o * log(max(eps, min(1 - eps, p))) + (1 - o) * log(max(eps, min(1 - eps, 1 - p)))
+            for p, o in zip(predictions, outcomes)
+        )
+        / n
+    )
 
     n_bins = 10
     bin_counts = [0] * n_bins
@@ -199,7 +213,11 @@ def _section_prop_realized_metrics(
     ece = 0.0
     for i in range(n_bins):
         if bin_counts[i] > 0:
-            ece += abs(bin_pred_sum[i] / bin_counts[i] - bin_out_sum[i] / bin_counts[i]) * bin_counts[i] / n
+            ece += (
+                abs(bin_pred_sum[i] / bin_counts[i] - bin_out_sum[i] / bin_counts[i])
+                * bin_counts[i]
+                / n
+            )
 
     return {
         "n": float(n),
@@ -235,7 +253,9 @@ def _section_clv(store: TraceStore, league: str, cutoff: str) -> dict[str, Any]:
                 odds_taken=float(row["odds_taken"]),
                 closing_odds=float(row["closing_odds"]),
                 line_taken=float(row["line_taken"]) if row["line_taken"] is not None else None,
-                closing_line=float(row["closing_line"]) if row["closing_line"] is not None else None,
+                closing_line=float(row["closing_line"])
+                if row["closing_line"] is not None
+                else None,
                 side=str(row["selection"]).split()[0].lower() if row["selection"] else None,
             )
         except Exception as exc:  # noqa: BLE001
@@ -337,7 +357,9 @@ def _render(
     lines.append("## 3. Realized metrics — game plane (graded game traces in window)")
     lines.append("")
     if realized is None:
-        lines.append("_Fewer than 10 game-graded traces in window — metrics suppressed (noise dominates)._")
+        lines.append(
+            "_Fewer than 10 game-graded traces in window — metrics suppressed (noise dominates)._"
+        )
     else:
         lines.append(f"- n: {int(realized['n'])}")
         lines.append(f"- Brier: {realized['brier']:.4f}")
@@ -345,13 +367,17 @@ def _render(
         lines.append(f"- Log loss: {realized['log_loss']:.4f}")
         if realized["ece"] > 0.05:
             lines.append("")
-            lines.append("> **FLAG — ECE > 0.05 on game plane.** Investigate which probability quintile is miscalibrated.")
+            lines.append(
+                "> **FLAG — ECE > 0.05 on game plane.** Investigate which probability quintile is miscalibrated."
+            )
     lines.append("")
 
     lines.append("## 3B. Realized metrics — prop plane (graded prop traces in window)")
     lines.append("")
     if realized_prop is None:
-        lines.append("_Fewer than 10 prop (prediction, outcome) pairs in window — metrics suppressed._")
+        lines.append(
+            "_Fewer than 10 prop (prediction, outcome) pairs in window — metrics suppressed._"
+        )
     else:
         lines.append(f"- n: {int(realized_prop['n'])}")
         lines.append(f"- Brier: {realized_prop['brier']:.4f}")
@@ -359,7 +385,9 @@ def _render(
         lines.append(f"- Log loss: {realized_prop['log_loss']:.4f}")
         if realized_prop["ece"] > 0.05:
             lines.append("")
-            lines.append("> **FLAG — ECE > 0.05 on prop plane.** Prop calibration is separately tunable; consider a prop-specific shrinkage profile.")
+            lines.append(
+                "> **FLAG — ECE > 0.05 on prop plane.** Prop calibration is separately tunable; consider a prop-specific shrinkage profile."
+            )
     lines.append("")
 
     lines.append("## 4. CLV (bets with attached closing lines)")
@@ -372,7 +400,9 @@ def _render(
         lines.append(f"- Beat-close rate: {clv['beat_close_pct']:.1f}%")
         if clv["mean_clv_cents"] is not None and clv["mean_clv_cents"] < -0.5:
             lines.append("")
-            lines.append("> **FLAG — Mean CLV regressing below -0.5 cents.** Review line-sourcing recipes (§6.1.5).")
+            lines.append(
+                "> **FLAG — Mean CLV regressing below -0.5 cents.** Review line-sourcing recipes (§6.1.5)."
+            )
     lines.append("")
 
     lines.append("## 5. Sessions (most recent)")
@@ -424,7 +454,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Emit a markdown calibration health report.")
     parser.add_argument("--league", required=True)
     parser.add_argument("--window-days", type=int, default=30)
-    parser.add_argument("--out", type=Path, default=None, help="Output path (default: reports/latest.md)")
+    parser.add_argument(
+        "--out", type=Path, default=None, help="Output path (default: reports/latest.md)"
+    )
     parser.add_argument("--db", type=str, default=None)
     parser.add_argument(
         "--sessions-inbox",
@@ -475,8 +507,13 @@ def main() -> int:
     )
 
     out_path.write_text(rendered, encoding="utf-8")
-    logger.info("Wrote %s (%d traces, %d sessions, %d candidates).",
-                out_path, counts["traces"], len(sessions), len(candidates))
+    logger.info(
+        "Wrote %s (%d traces, %d sessions, %d candidates).",
+        out_path,
+        counts["traces"],
+        len(sessions),
+        len(candidates),
+    )
     return 0
 
 

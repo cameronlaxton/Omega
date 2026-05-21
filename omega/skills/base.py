@@ -10,6 +10,7 @@ Contract rules:
 - observe() must always return a SkillObservation
 - Skills may log events but must not mutate pipeline state
 """
+
 from __future__ import annotations
 
 import logging
@@ -84,7 +85,9 @@ class SkillBase(ABC):
         except Exception as exc:
             logger.warning(
                 "Skill %r internal error at stage %r: %s",
-                self.name, self.stage, exc,
+                self.name,
+                self.stage,
+                exc,
             )
             return SkillObservation(
                 skill=self.name,

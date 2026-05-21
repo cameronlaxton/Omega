@@ -424,7 +424,4 @@ def get_all_leagues() -> list[str]:
 
 def get_leagues_for_archetype(archetype: str) -> list[str]:
     """Return all league codes that use a given archetype."""
-    return [
-        league for league, cfg in _LEAGUE_CONFIGS.items()
-        if cfg.get("archetype") == archetype
-    ]
+    return [league for league, cfg in _LEAGUE_CONFIGS.items() if cfg.get("archetype") == archetype]

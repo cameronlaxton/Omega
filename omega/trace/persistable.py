@@ -77,7 +77,9 @@ class PersistableTrace(BaseModel):
             simulation_seed=input_snap.get("seed"),
             aggregate_quality=gate.get("aggregate_quality"),
             predictions=_derive_predictions(kind, result),
-            recommendations=result.get("edges") or result.get("best_bet") or _prop_recommendation(result),
+            recommendations=result.get("edges")
+            or result.get("best_bet")
+            or _prop_recommendation(result),
             odds_snapshot=input_snap.get("odds") or _prop_odds_snapshot(input_snap),
             model_version=analyze_out.get("model_version"),
             bankroll=analyze_out.get("bankroll"),
@@ -118,9 +120,7 @@ def _derive_predictions(kind: str, result: dict[str, Any]) -> dict[str, Any] | N
     if kind == "game":
         return result.get("simulation")
     prop_predictions = {
-        k: result.get(k)
-        for k in ("over_prob", "under_prob")
-        if result.get(k) is not None
+        k: result.get(k) for k in ("over_prob", "under_prob") if result.get(k) is not None
     }
     return prop_predictions or None
 

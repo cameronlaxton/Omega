@@ -34,7 +34,7 @@ def _score_result(slot: GatherSlot, result: ProviderResult) -> float:
     score = result.confidence
 
     # Freshness penalty: if data is older than half the freshness window, start penalizing
-    age_seconds = (time.time() - result.fetched_at.timestamp())
+    age_seconds = time.time() - result.fetched_at.timestamp()
     if age_seconds < 0:
         age_seconds = 0
     half_life = slot.freshness_max / 2
@@ -56,6 +56,7 @@ def gather_facts(slots: list[GatherSlot]) -> list[GatheredFact]:
     Unfilled slots have filled=False and result=None.
     """
     from omega.evidence.pipeline.retrieval import retrieve_facts
+
     return retrieve_facts(slots)
 
 

@@ -37,6 +37,7 @@ The boxscore JSON shape (paraphrased):
 Unmapped prop_types are logged at WARNING and surfaced to the caller as
 unresolved — we never silently zero them out.
 """
+
 from __future__ import annotations
 
 import json
@@ -65,46 +66,46 @@ _SUMMARY_URLS = {
 # the `keys` array in the boxscore category). Multiple aliases per stat are
 # allowed; the first key found in the category wins.
 NBA_STAT_KEYS: dict[str, tuple[str, ...]] = {
-    "pts":      ("PTS", "points"),
-    "points":   ("PTS", "points"),
-    "reb":      ("REB", "rebounds"),
+    "pts": ("PTS", "points"),
+    "points": ("PTS", "points"),
+    "reb": ("REB", "rebounds"),
     "rebounds": ("REB", "rebounds"),
-    "ast":      ("AST", "assists"),
-    "assists":  ("AST", "assists"),
-    "stl":      ("STL", "steals"),
-    "steals":   ("STL", "steals"),
-    "blk":      ("BLK", "blocks"),
-    "blocks":   ("BLK", "blocks"),
-    "3pm":      ("3PTM", "3PM", "threePointFieldGoalsMade-threePointFieldGoalsAttempted"),
-    "threes":   ("3PTM", "3PM", "threePointFieldGoalsMade-threePointFieldGoalsAttempted"),
-    "pra":      ("PRA",),
+    "ast": ("AST", "assists"),
+    "assists": ("AST", "assists"),
+    "stl": ("STL", "steals"),
+    "steals": ("STL", "steals"),
+    "blk": ("BLK", "blocks"),
+    "blocks": ("BLK", "blocks"),
+    "3pm": ("3PTM", "3PM", "threePointFieldGoalsMade-threePointFieldGoalsAttempted"),
+    "threes": ("3PTM", "3PM", "threePointFieldGoalsMade-threePointFieldGoalsAttempted"),
+    "pra": ("PRA",),
 }
 
 # Batting and pitching live under separate categories — we surface them
 # both and let the caller pick by prop_type semantics.
 MLB_BATTING_KEYS: dict[str, tuple[str, ...]] = {
-    "hits":          ("H", "hits"),
-    "runs":          ("R", "runs"),
-    "rbi":           ("RBI", "RBIs"),
-    "rbis":          ("RBI", "RBIs"),
-    "hr":            ("HR", "homeRuns"),
-    "home_runs":     ("HR", "homeRuns"),
-    "sb":            ("SB", "stolenBases"),
-    "stolen_bases":  ("SB", "stolenBases"),
-    "bb":            ("BB", "walks"),
-    "walks":         ("BB", "walks"),
+    "hits": ("H", "hits"),
+    "runs": ("R", "runs"),
+    "rbi": ("RBI", "RBIs"),
+    "rbis": ("RBI", "RBIs"),
+    "hr": ("HR", "homeRuns"),
+    "home_runs": ("HR", "homeRuns"),
+    "sb": ("SB", "stolenBases"),
+    "stolen_bases": ("SB", "stolenBases"),
+    "bb": ("BB", "walks"),
+    "walks": ("BB", "walks"),
 }
 
 MLB_PITCHING_KEYS: dict[str, tuple[str, ...]] = {
-    "strikeouts":          ("K", "strikeouts"),
-    "strikeouts_pitched":  ("K", "strikeouts"),
-    "k":                   ("K", "strikeouts"),
-    "pitching_outs":       ("IP", "fullInnings.partInnings"),
-    "outs_recorded":       ("IP", "fullInnings.partInnings"),
-    "earned_runs":         ("ER", "earnedRuns"),
-    "er":                  ("ER", "earnedRuns"),
-    "hits_allowed":        ("H", "hits"),
-    "walks_allowed":       ("BB", "walks"),
+    "strikeouts": ("K", "strikeouts"),
+    "strikeouts_pitched": ("K", "strikeouts"),
+    "k": ("K", "strikeouts"),
+    "pitching_outs": ("IP", "fullInnings.partInnings"),
+    "outs_recorded": ("IP", "fullInnings.partInnings"),
+    "earned_runs": ("ER", "earnedRuns"),
+    "er": ("ER", "earnedRuns"),
+    "hits_allowed": ("H", "hits"),
+    "walks_allowed": ("BB", "walks"),
 }
 
 
@@ -137,6 +138,7 @@ def normalize_player_name(name: str | None) -> str:
 # ---------------------------------------------------------------------------
 # Box score parsing
 # ---------------------------------------------------------------------------
+
 
 def _stat_key_map_for(
     league: str,
@@ -229,7 +231,7 @@ def parse_box_score(
                 continue
 
             for athlete_blob in category.get("athletes") or []:
-                athlete = (athlete_blob.get("athlete") or {})
+                athlete = athlete_blob.get("athlete") or {}
                 display = athlete.get("displayName") or athlete.get("shortName") or ""
                 player_norm = normalize_player_name(display)
                 if not player_norm:
@@ -267,6 +269,7 @@ def parse_box_score(
 # ---------------------------------------------------------------------------
 # HTTP fetch
 # ---------------------------------------------------------------------------
+
 
 def fetch_box_score(
     league: str,

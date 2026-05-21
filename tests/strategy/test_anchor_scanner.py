@@ -3,7 +3,6 @@
 Uses fixtures modeled after the user's real winning bets from 4/4-4/8/2026.
 """
 
-
 from omega.strategy.anchor.detector import scan_player
 from omega.strategy.anchor.scanner import (
     AnchorParlayConfig,
@@ -106,8 +105,10 @@ class TestBuildParlaysForGame:
         all_legs = []
         for player in OKC_LAC_GAME["players"]:
             legs = scan_player(
-                player["name"], player["team"],
-                player["game_logs"], player.get("prop_odds"),
+                player["name"],
+                player["team"],
+                player["game_logs"],
+                player.get("prop_odds"),
                 min_hit_rate=config.min_hit_rate,
             )
             all_legs.extend(legs)
@@ -123,8 +124,10 @@ class TestBuildParlaysForGame:
         all_legs = []
         for player in OKC_LAC_GAME["players"]:
             legs = scan_player(
-                player["name"], player["team"],
-                player["game_logs"], player.get("prop_odds"),
+                player["name"],
+                player["team"],
+                player["game_logs"],
+                player.get("prop_odds"),
             )
             all_legs.extend(legs)
 
@@ -167,7 +170,8 @@ class TestScanSlate:
         result = scan_slate([HOU_GSW_GAME], config)
         # Find parlays with both KD legs
         kd_parlays = [
-            p for p in result.parlays
+            p
+            for p in result.parlays
             if sum(1 for leg in p.legs if leg.player_name == "Kevin Durant") >= 2
         ]
         # KD pts + KD ast: no correlation warning (not in correlated pairs)

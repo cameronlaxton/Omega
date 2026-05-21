@@ -6,6 +6,7 @@ Usage:
     python -m omega.strategy.anchor.cli --league NBA --json
     python -m omega.strategy.anchor.cli --league NBA --min-hit-rate 0.75 --max-legs 3
 """
+
 from __future__ import annotations
 
 import argparse
@@ -67,43 +68,62 @@ def build_parser() -> argparse.ArgumentParser:
         description="Scan today's slate for anchor parlay opportunities.",
     )
     parser.add_argument(
-        "--league", default="NBA",
+        "--league",
+        default="NBA",
         help="League to scan (default: NBA)",
     )
     parser.add_argument(
-        "--json", action="store_true", dest="json_output",
+        "--json",
+        action="store_true",
+        dest="json_output",
         help="Output as JSON instead of formatted text",
     )
     parser.add_argument(
-        "--min-hit-rate", type=float, default=0.70,
+        "--min-hit-rate",
+        type=float,
+        default=0.70,
         help="Minimum empirical hit rate for anchors (default: 0.70)",
     )
     parser.add_argument(
-        "--min-legs", type=int, default=2,
+        "--min-legs",
+        type=int,
+        default=2,
         help="Minimum legs per parlay (default: 2)",
     )
     parser.add_argument(
-        "--max-legs", type=int, default=4,
+        "--max-legs",
+        type=int,
+        default=4,
         help="Maximum legs per parlay (default: 4)",
     )
     parser.add_argument(
-        "--target-min-odds", type=float, default=1.80,
+        "--target-min-odds",
+        type=float,
+        default=1.80,
         help="Minimum combined decimal odds (default: 1.80)",
     )
     parser.add_argument(
-        "--target-max-odds", type=float, default=3.00,
+        "--target-max-odds",
+        type=float,
+        default=3.00,
         help="Maximum combined decimal odds (default: 3.00)",
     )
     parser.add_argument(
-        "--bankroll", type=float, default=1000.0,
+        "--bankroll",
+        type=float,
+        default=1000.0,
         help="Bankroll for stake sizing (default: 1000)",
     )
     parser.add_argument(
-        "--max-results", type=int, default=20,
+        "--max-results",
+        type=int,
+        default=20,
         help="Maximum parlays to return (default: 20)",
     )
     parser.add_argument(
-        "--verbose", "-v", action="store_true",
+        "--verbose",
+        "-v",
+        action="store_true",
         help="Enable debug logging",
     )
     return parser

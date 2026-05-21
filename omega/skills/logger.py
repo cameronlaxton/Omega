@@ -2,12 +2,14 @@
 This is intentionally minimal and sync; heavy workloads should replace with
 an async queue or external sink.
 """
+
 import json
 from datetime import datetime, timezone
-UTC = timezone.utc
 from pathlib import Path
 
 from . import config
+
+UTC = timezone.utc
 
 
 def _ensure_log_dir():

@@ -21,6 +21,7 @@ Endpoint reference:
 API key is read from OMEGA_ODDS_API_KEY. Fetch methods raise
 OddsApiKeyMissing if the key is absent.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,9 +32,10 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-UTC = timezone.utc
 from pathlib import Path
 from typing import Any
+
+UTC = timezone.utc
 
 logger = logging.getLogger("omega.integrations.odds_api")
 

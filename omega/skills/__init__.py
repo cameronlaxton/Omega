@@ -11,6 +11,7 @@ Usage:
         stage = "gathering"
         def _run(self, **kwargs): ...
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,15 @@ from pathlib import Path
 
 from omega.skills.base import SkillBase, SkillObservation
 
-__all__ = ["SkillBase", "SkillObservation", "register", "get_registry", "get_skill", "is_enabled", "config"]
+__all__ = [
+    "SkillBase",
+    "SkillObservation",
+    "register",
+    "get_registry",
+    "get_skill",
+    "is_enabled",
+    "config",
+]
 
 PACKAGE_ROOT = Path(__file__).parent
 _CONFIG_PATH = PACKAGE_ROOT / "config.json"
@@ -33,9 +42,11 @@ def register(name: str):
         @register("trace-recorder")
         class TraceRecorder(SkillBase): ...
     """
+
     def _decorator(obj):
         _registry[name] = obj
         return obj
+
     return _decorator
 
 
@@ -74,6 +85,7 @@ def config() -> dict:
 def _auto_import_skills() -> None:
     """Import all skill modules so their @register decorators fire."""
     import importlib
+
     _skill_modules = [
         "omega.skills.trace_recorder",
         "omega.skills.evidence_validator",

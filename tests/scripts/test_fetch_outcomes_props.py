@@ -11,6 +11,7 @@ Covers:
 - Game-kind traces are not touched (handled by fetch_outcomes_nba/mlb)
 - Re-run is idempotent (existing prop_outcome is preserved)
 """
+
 from __future__ import annotations
 
 import sys
@@ -34,6 +35,7 @@ from omega.trace.store import TraceStore  # noqa: E402
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _tmp_store_path() -> str:
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
@@ -160,6 +162,7 @@ def _nba_pts_payload(player: str, pts: float) -> dict[str, Any]:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestFetchOutcomesPropsHappyPath:
     def test_grades_a_prop_trace(self):
         db = _tmp_store_path()
@@ -167,15 +170,17 @@ class TestFetchOutcomesPropsHappyPath:
         store.persist(_make_prop_trace("sandbox-prop-1"))
         store.close()
 
-        games = [FinalGame(
-            event_id="EV-1",
-            date="2026-05-17",
-            home_team="Miami Heat",
-            away_team="Boston Celtics",
-            home_score=0,
-            away_score=0,
-            status="final",
-        )]
+        games = [
+            FinalGame(
+                event_id="EV-1",
+                date="2026-05-17",
+                home_team="Miami Heat",
+                away_team="Boston Celtics",
+                home_score=0,
+                away_score=0,
+                status="final",
+            )
+        ]
         sb = _fake_scoreboard_factory({("NBA", "2026-05-17"): games})
         bs = _fake_box_score_factory({"EV-1": _nba_pts_payload("Jayson Tatum", 31)})
 
@@ -203,11 +208,17 @@ class TestFetchOutcomesPropsHappyPath:
         store.persist(_make_prop_trace("sandbox-prop-dry"))
         store.close()
 
-        games = [FinalGame(
-            event_id="EV-1", date="2026-05-17",
-            home_team="Miami Heat", away_team="Boston Celtics",
-            home_score=0, away_score=0, status="final",
-        )]
+        games = [
+            FinalGame(
+                event_id="EV-1",
+                date="2026-05-17",
+                home_team="Miami Heat",
+                away_team="Boston Celtics",
+                home_score=0,
+                away_score=0,
+                status="final",
+            )
+        ]
         sb = _fake_scoreboard_factory({("NBA", "2026-05-17"): games})
         bs = _fake_box_score_factory({"EV-1": _nba_pts_payload("Jayson Tatum", 31)})
 
@@ -228,11 +239,17 @@ class TestFetchOutcomesPropsHappyPath:
         store.persist(_make_prop_trace("sandbox-prop-idem"))
         store.close()
 
-        games = [FinalGame(
-            event_id="EV-1", date="2026-05-17",
-            home_team="Miami Heat", away_team="Boston Celtics",
-            home_score=0, away_score=0, status="final",
-        )]
+        games = [
+            FinalGame(
+                event_id="EV-1",
+                date="2026-05-17",
+                home_team="Miami Heat",
+                away_team="Boston Celtics",
+                home_score=0,
+                away_score=0,
+                status="final",
+            )
+        ]
         sb = _fake_scoreboard_factory({("NBA", "2026-05-17"): games})
         bs = _fake_box_score_factory({"EV-1": _nba_pts_payload("Jayson Tatum", 31)})
 
@@ -286,11 +303,13 @@ class TestFetchOutcomesPropsSkips:
     def test_unsupported_prop_type_is_skipped(self):
         db = _tmp_store_path()
         store = TraceStore(db_path=db)
-        store.persist(_make_prop_trace(
-            "sandbox-prop-unsup",
-            prop_type="double_double",
-            line=0.5,
-        ))
+        store.persist(
+            _make_prop_trace(
+                "sandbox-prop-unsup",
+                prop_type="double_double",
+                line=0.5,
+            )
+        )
         store.close()
 
         sb = _fake_scoreboard_factory({})  # never reached
@@ -339,17 +358,25 @@ class TestFetchOutcomesPropsSkips:
         """Side='under' with stat_value > line should resolve to 'loss'."""
         db = _tmp_store_path()
         store = TraceStore(db_path=db)
-        store.persist(_make_prop_trace(
-            "sandbox-prop-under",
-            recommendation="under",
-        ))
+        store.persist(
+            _make_prop_trace(
+                "sandbox-prop-under",
+                recommendation="under",
+            )
+        )
         store.close()
 
-        games = [FinalGame(
-            event_id="EV-1", date="2026-05-17",
-            home_team="Miami Heat", away_team="Boston Celtics",
-            home_score=0, away_score=0, status="final",
-        )]
+        games = [
+            FinalGame(
+                event_id="EV-1",
+                date="2026-05-17",
+                home_team="Miami Heat",
+                away_team="Boston Celtics",
+                home_score=0,
+                away_score=0,
+                status="final",
+            )
+        ]
         sb = _fake_scoreboard_factory({("NBA", "2026-05-17"): games})
         bs = _fake_box_score_factory({"EV-1": _nba_pts_payload("Jayson Tatum", 31)})
 
@@ -370,19 +397,27 @@ class TestFetchOutcomesPropsSkips:
         """Trace says 'Luka Doncic', ESPN box score says 'Luka Dončić' — should still grade."""
         db = _tmp_store_path()
         store = TraceStore(db_path=db)
-        store.persist(_make_prop_trace(
-            "sandbox-prop-luka",
-            player_name="Luka Doncic",
-            home_team="Miami Heat",
-            away_team="Boston Celtics",
-        ))
+        store.persist(
+            _make_prop_trace(
+                "sandbox-prop-luka",
+                player_name="Luka Doncic",
+                home_team="Miami Heat",
+                away_team="Boston Celtics",
+            )
+        )
         store.close()
 
-        games = [FinalGame(
-            event_id="EV-1", date="2026-05-17",
-            home_team="Miami Heat", away_team="Boston Celtics",
-            home_score=0, away_score=0, status="final",
-        )]
+        games = [
+            FinalGame(
+                event_id="EV-1",
+                date="2026-05-17",
+                home_team="Miami Heat",
+                away_team="Boston Celtics",
+                home_score=0,
+                away_score=0,
+                status="final",
+            )
+        ]
         sb = _fake_scoreboard_factory({("NBA", "2026-05-17"): games})
         bs = _fake_box_score_factory({"EV-1": _nba_pts_payload("Luka Dončić", 30)})
 

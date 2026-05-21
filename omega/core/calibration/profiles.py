@@ -11,19 +11,21 @@ Fitting is handled by CalibrationFitter (fitter.py).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-UTC = timezone.utc
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+UTC = timezone.utc
+
 
 class ProfileStatus(str, Enum):
     """Lifecycle status of a calibration profile."""
-    CANDIDATE = "candidate"      # Newly fitted, not yet evaluated
-    PRODUCTION = "production"    # Active — used for calibration
-    ARCHIVED = "archived"        # Replaced by a newer production profile
-    REJECTED = "rejected"        # Failed evaluation or manually rejected
+
+    CANDIDATE = "candidate"  # Newly fitted, not yet evaluated
+    PRODUCTION = "production"  # Active — used for calibration
+    ARCHIVED = "archived"  # Replaced by a newer production profile
+    REJECTED = "rejected"  # Failed evaluation or manually rejected
 
 
 # Sentinel ID for the hardcoded static policy (pre-Phase-6c behavior)
@@ -72,9 +74,7 @@ class CalibrationProfile(BaseModel):
     )
 
     # Lifecycle timestamps
-    created_at: str = Field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     promoted_at: str | None = None
     rejected_at: str | None = None
     reject_reason: str | None = None

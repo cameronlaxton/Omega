@@ -18,6 +18,7 @@ These checks detect misconfiguration or bugs in the quality gate that would
 silently let bad-evidence queries produce betting recommendations, or
 unnecessarily suppress good-evidence queries.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -68,9 +69,7 @@ class DataQualityGrader(SkillBase):
             findings.append("under_downgrade.bet_card_without_critical_inputs")
 
         if quality < _LOW_QUALITY_THRESHOLD and not has_downgrades:
-            findings.append(
-                f"under_downgrade.no_downgrades_on_low_quality:{quality:.2f}"
-            )
+            findings.append(f"under_downgrade.no_downgrades_on_low_quality:{quality:.2f}")
 
         # --- over_downgrade ---
         if not has_bet_card and has_critical and quality > bet_card_threshold:

@@ -7,6 +7,7 @@ Covers:
   - analyze_player_prop(): missing-mean skip, success path
   - _resolve_game_market_odds(): normalized markets vs. legacy fields
 """
+
 from __future__ import annotations
 
 import pytest
@@ -33,6 +34,7 @@ from omega.core.contracts.service import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _edge(side="home", team="Lakers", edge_pct=8.0, ev_pct=5.0, tier="A", odds=-130.0):
     return EdgeDetail(
         side=side,
@@ -55,6 +57,7 @@ _NBA_AWAY_CTX = {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0}
 # _pick_best_bet
 # ---------------------------------------------------------------------------
 
+
 class TestPickBestBet:
     def test_returns_betslip_for_actionable_edge(self):
         result = _pick_best_bet([_edge(tier="A")], bankroll=1000.0)
@@ -65,7 +68,9 @@ class TestPickBestBet:
         assert isinstance(result, BetSlip)
 
     def test_returns_none_when_all_pass(self):
-        result = _pick_best_bet([_edge(tier="Pass"), _edge(tier="Pass", side="away")], bankroll=1000.0)
+        result = _pick_best_bet(
+            [_edge(tier="Pass"), _edge(tier="Pass", side="away")], bankroll=1000.0
+        )
         assert result is None
 
     def test_returns_none_for_empty_edges(self):
@@ -107,6 +112,7 @@ class TestPickBestBet:
 # ---------------------------------------------------------------------------
 # analyze_game
 # ---------------------------------------------------------------------------
+
 
 class TestAnalyzeGame:
     def test_returns_success_with_valid_context(self):
@@ -282,6 +288,7 @@ class TestAnalyzeTraceEnvelope:
 # analyze_player_prop
 # ---------------------------------------------------------------------------
 
+
 class TestAnalyzePlayerProp:
     def test_skipped_when_missing_mean(self):
         req = PlayerPropRequest(
@@ -412,6 +419,7 @@ class TestAnalyzePlayerProp:
 # _resolve_game_market_odds
 # ---------------------------------------------------------------------------
 
+
 class TestResolveGameMarketOdds:
     def test_uses_normalized_markets_over_legacy(self):
         odds = OddsInput(
@@ -455,6 +463,7 @@ class TestResolveGameMarketOdds:
 # Issue #4 regression: EdgeDetail must serialize recommended_units
 # ---------------------------------------------------------------------------
 
+
 class TestEdgeDetailRecommendedUnits:
     def test_edge_detail_has_recommended_units(self):
         req = GameAnalysisRequest(
@@ -495,6 +504,7 @@ class TestEdgeDetailRecommendedUnits:
 # ---------------------------------------------------------------------------
 # Issue #5 regression: run-line edge must use coverage prob, not win prob
 # ---------------------------------------------------------------------------
+
 
 class TestRunLineCoverageProb:
     _MLB_HOME_CTX = {"off_rating": 4.5, "def_rating": 3.5}
@@ -538,6 +548,7 @@ class TestRunLineCoverageProb:
 # ---------------------------------------------------------------------------
 # _apply_game_context — context-adjusted input assembly
 # ---------------------------------------------------------------------------
+
 
 class TestApplyGameContext:
     def test_no_game_context_returns_original_dict(self):
@@ -637,9 +648,7 @@ class TestApplyGameContext:
             seed=42,
             player_context={"pts_mean": 12.0, "pts_std": 5.0},
         )
-        playoff_req = base_req.model_copy(
-            update={"game_context": {"is_playoff": True}}
-        )
+        playoff_req = base_req.model_copy(update={"game_context": {"is_playoff": True}})
         resp_base = analyze_player_prop(base_req)
         resp_playoff = analyze_player_prop(playoff_req)
         assert resp_base.status == "success"

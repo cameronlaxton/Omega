@@ -15,16 +15,17 @@ from omega.core.betting.odds import american_to_decimal
 # Models
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ParlayLeg:
     """A single leg in a parlay."""
 
-    selection: str                # e.g. "SGA Over 5 Assists"
-    decimal_odds: float           # e.g. 1.30
-    win_probability: float        # empirical or model-based (0-1)
-    player: str = ""              # player name for correlation checking
-    stat_key: str = ""            # stat category for correlation checking
-    team: str = ""                # team name for correlation checking
+    selection: str  # e.g. "SGA Over 5 Assists"
+    decimal_odds: float  # e.g. 1.30
+    win_probability: float  # empirical or model-based (0-1)
+    player: str = ""  # player name for correlation checking
+    stat_key: str = ""  # stat category for correlation checking
+    team: str = ""  # team name for correlation checking
 
     @classmethod
     def from_american(
@@ -54,9 +55,9 @@ class ParlaySlip:
     legs: list[ParlayLeg]
     combined_decimal_odds: float
     combined_win_probability: float
-    implied_probability: float        # from combined odds
-    combined_edge_pct: float          # empirical - implied, in pct points
-    ev_pct: float                     # expected value as % of stake
+    implied_probability: float  # from combined odds
+    combined_edge_pct: float  # empirical - implied, in pct points
+    ev_pct: float  # expected value as % of stake
     correlation_warnings: list[str] = field(default_factory=list)
 
 
@@ -91,14 +92,12 @@ def check_correlation(legs: list[ParlayLeg]) -> list[str]:
     correlated_pairs = {frozenset(p) for p in _SAME_PLAYER_CORRELATED}
 
     for i, a in enumerate(legs):
-        for b in legs[i + 1:]:
+        for b in legs[i + 1 :]:
             # Same player checks
             if a.player and b.player and a.player == b.player:
                 pair = frozenset((a.stat_key, b.stat_key))
                 if a.stat_key == b.stat_key:
-                    warnings.append(
-                        f"Redundant: {a.player} has two {a.stat_key} legs"
-                    )
+                    warnings.append(f"Redundant: {a.player} has two {a.stat_key} legs")
                 elif pair in correlated_pairs:
                     warnings.append(
                         f"Correlated: {a.player} {a.stat_key} + {b.stat_key} "
@@ -107,14 +106,14 @@ def check_correlation(legs: list[ParlayLeg]) -> list[str]:
 
             # Same team, same stat
             if (
-                a.team and b.team
+                a.team
+                and b.team
                 and a.team == b.team
                 and a.stat_key == b.stat_key
                 and a.player != b.player
             ):
                 warnings.append(
-                    f"Team correlation: {a.player} and {b.player} "
-                    f"({a.team}) both on {a.stat_key}"
+                    f"Team correlation: {a.player} and {b.player} ({a.team}) both on {a.stat_key}"
                 )
 
     return warnings
@@ -123,6 +122,7 @@ def check_correlation(legs: list[ParlayLeg]) -> list[str]:
 # ---------------------------------------------------------------------------
 # Parlay math
 # ---------------------------------------------------------------------------
+
 
 def compute_parlay_odds(legs: list[ParlayLeg]) -> float:
     """Compute combined decimal odds for a parlay (product of leg odds)."""

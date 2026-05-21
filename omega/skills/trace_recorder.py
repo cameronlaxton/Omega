@@ -10,6 +10,7 @@ Invariants:
   SkillObservation. No silent JSONL fallback (Phase 6h: favor visible
   failure over a fallback path that has no consumer).
 """
+
 from __future__ import annotations
 
 import logging
@@ -37,7 +38,10 @@ class TraceRecorder(SkillBase):
         if missing:
             findings.extend(f"missing_field:{f}" for f in sorted(missing))
             return SkillObservation(
-                skill=self.name, stage=self.stage, ok=False, findings=findings,
+                skill=self.name,
+                stage=self.stage,
+                ok=False,
+                findings=findings,
             )
 
         # Inject schema version (matches the table's current migration version
@@ -50,7 +54,10 @@ class TraceRecorder(SkillBase):
         if write_error:
             findings.append(f"write_failed:{write_error}")
             return SkillObservation(
-                skill=self.name, stage=self.stage, ok=False, findings=findings,
+                skill=self.name,
+                stage=self.stage,
+                ok=False,
+                findings=findings,
             )
 
         return SkillObservation(skill=self.name, stage=self.stage, ok=True)
@@ -61,6 +68,7 @@ def _write_trace(record: dict[str, Any]) -> str:
     on failure."""
     try:
         from omega.trace.store import TraceStore
+
         store = TraceStore()
         store.persist(record)
         store.close()

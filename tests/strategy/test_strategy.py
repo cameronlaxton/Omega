@@ -10,8 +10,10 @@ import pytest
 # Fixtures
 # -----------------------------------------------------------------------
 
+
 def _make_registry():
     from omega.strategy.versioning.registry import StrategyRegistry
+
     return StrategyRegistry()  # in-memory only, no file
 
 
@@ -21,38 +23,50 @@ def _make_historical_games():
 
     games = []
     # Game 1: Home team stronger, wins
-    games.append(HistoricalGame({
-        "home_team": "Celtics",
-        "away_team": "Pacers",
-        "league": "NBA",
-        "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
-        "away_context": {"off_rating": 112.0, "def_rating": 112.0, "pace": 98.0},
-        "odds": {"moneyline_home": -180, "moneyline_away": 155},
-        "outcome": {"home_score": 112, "away_score": 101},
-        "closing_odds": {"moneyline_home": -190, "moneyline_away": 165},
-    }))
+    games.append(
+        HistoricalGame(
+            {
+                "home_team": "Celtics",
+                "away_team": "Pacers",
+                "league": "NBA",
+                "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+                "away_context": {"off_rating": 112.0, "def_rating": 112.0, "pace": 98.0},
+                "odds": {"moneyline_home": -180, "moneyline_away": 155},
+                "outcome": {"home_score": 112, "away_score": 101},
+                "closing_odds": {"moneyline_home": -190, "moneyline_away": 165},
+            }
+        )
+    )
 
     # Game 2: Away underdog wins (upset)
-    games.append(HistoricalGame({
-        "home_team": "Lakers",
-        "away_team": "Magic",
-        "league": "NBA",
-        "home_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 99.0},
-        "away_context": {"off_rating": 108.0, "def_rating": 114.0, "pace": 96.0},
-        "odds": {"moneyline_home": -250, "moneyline_away": 210},
-        "outcome": {"home_score": 95, "away_score": 102},
-    }))
+    games.append(
+        HistoricalGame(
+            {
+                "home_team": "Lakers",
+                "away_team": "Magic",
+                "league": "NBA",
+                "home_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 99.0},
+                "away_context": {"off_rating": 108.0, "def_rating": 114.0, "pace": 96.0},
+                "odds": {"moneyline_home": -250, "moneyline_away": 210},
+                "outcome": {"home_score": 95, "away_score": 102},
+            }
+        )
+    )
 
     # Game 3: Close game, home wins
-    games.append(HistoricalGame({
-        "home_team": "Nuggets",
-        "away_team": "Suns",
-        "league": "NBA",
-        "home_context": {"off_rating": 116.0, "def_rating": 109.0, "pace": 100.0},
-        "away_context": {"off_rating": 114.0, "def_rating": 110.0, "pace": 99.0},
-        "odds": {"moneyline_home": -130, "moneyline_away": 110},
-        "outcome": {"home_score": 108, "away_score": 105},
-    }))
+    games.append(
+        HistoricalGame(
+            {
+                "home_team": "Nuggets",
+                "away_team": "Suns",
+                "league": "NBA",
+                "home_context": {"off_rating": 116.0, "def_rating": 109.0, "pace": 100.0},
+                "away_context": {"off_rating": 114.0, "def_rating": 110.0, "pace": 99.0},
+                "odds": {"moneyline_home": -130, "moneyline_away": 110},
+                "outcome": {"home_score": 108, "away_score": 105},
+            }
+        )
+    )
 
     return games
 
@@ -61,11 +75,13 @@ def _make_historical_games():
 # Registry tests
 # -----------------------------------------------------------------------
 
+
 class TestStrategyRegistry:
     """Test strategy registration, querying, and versioning."""
 
     def test_register_strategy(self):
         from omega.strategy.models import StrategyStatus
+
         registry = _make_registry()
 
         entry = registry.register(
@@ -141,6 +157,7 @@ class TestStrategyRegistry:
 # -----------------------------------------------------------------------
 # Backtest tests
 # -----------------------------------------------------------------------
+
 
 class TestBacktestEngine:
     """Test the backtest engine."""
@@ -230,8 +247,8 @@ class TestBacktestEngine:
         assert isinstance(result.rejection_reasons, list)
 
     def test_backtest_passes_game_context_to_calibration(self, monkeypatch):
-        from omega.strategy.artifacts import FrozenArtifact
         import omega.strategy.backtest.engine as engine_mod
+        from omega.strategy.artifacts import FrozenArtifact
         from omega.strategy.backtest.engine import BacktestEngine
         from omega.strategy.models import StrategyEntry
 
@@ -273,6 +290,7 @@ class TestBacktestEngine:
 # -----------------------------------------------------------------------
 # Promotion tests
 # -----------------------------------------------------------------------
+
 
 class TestPromotion:
     """Test the promotion workflow."""
@@ -335,18 +353,26 @@ class TestPromotion:
 
         # Promote v1
         result_v1 = BacktestResult(
-            strategy_id="evolve", strategy_version=1, run_id="bt-1",
-            started_at="2026-01-01T00:00:00Z", passed=True,
-            total_bets_placed=30, roi_pct=3.0,
+            strategy_id="evolve",
+            strategy_version=1,
+            run_id="bt-1",
+            started_at="2026-01-01T00:00:00Z",
+            passed=True,
+            total_bets_placed=30,
+            roi_pct=3.0,
         )
         registry.record_backtest("evolve", 1, result_v1)
         registry.promote("evolve", 1)
 
         # Promote v2 — should archive v1
         result_v2 = BacktestResult(
-            strategy_id="evolve", strategy_version=2, run_id="bt-2",
-            started_at="2026-02-01T00:00:00Z", passed=True,
-            total_bets_placed=40, roi_pct=6.0,
+            strategy_id="evolve",
+            strategy_version=2,
+            run_id="bt-2",
+            started_at="2026-02-01T00:00:00Z",
+            passed=True,
+            total_bets_placed=40,
+            roi_pct=6.0,
         )
         registry.record_backtest("evolve", 2, result_v2)
         registry.promote("evolve", 2)
@@ -386,16 +412,27 @@ class TestPromotion:
 
         # Good result — should auto-promote
         result = BacktestResult(
-            strategy_id="auto", strategy_version=1, run_id="bt-auto",
-            started_at="2026-01-01T00:00:00Z", passed=True,
-            total_bets_placed=50, win_count=28, loss_count=22,
-            win_rate=0.56, roi_pct=8.0, net_units=40.0,
-            max_drawdown_units=10.0, avg_edge_pct=5.0,
+            strategy_id="auto",
+            strategy_version=1,
+            run_id="bt-auto",
+            started_at="2026-01-01T00:00:00Z",
+            passed=True,
+            total_bets_placed=50,
+            win_count=28,
+            loss_count=22,
+            win_rate=0.56,
+            roi_pct=8.0,
+            net_units=40.0,
+            max_drawdown_units=10.0,
+            avg_edge_pct=5.0,
             avg_closing_line_value=2.0,
         )
 
         entry = auto_promote_or_reject(
-            registry, "auto", 1, result,
+            registry,
+            "auto",
+            1,
+            result,
             criteria=PromotionCriteria(min_roi_pct=2.0),
         )
         assert entry.status == StrategyStatus.PRODUCTION
@@ -411,15 +448,24 @@ class TestPromotion:
         registry.register(strategy_id="bad-auto", name="Bad Auto")
 
         result = BacktestResult(
-            strategy_id="bad-auto", strategy_version=1, run_id="bt-bad",
-            started_at="2026-01-01T00:00:00Z", passed=True,
-            total_bets_placed=50, win_rate=0.50, roi_pct=0.5,
-            net_units=2.5, max_drawdown_units=5.0,
+            strategy_id="bad-auto",
+            strategy_version=1,
+            run_id="bt-bad",
+            started_at="2026-01-01T00:00:00Z",
+            passed=True,
+            total_bets_placed=50,
+            win_rate=0.50,
+            roi_pct=0.5,
+            net_units=2.5,
+            max_drawdown_units=5.0,
             avg_closing_line_value=0.5,
         )
 
         entry = auto_promote_or_reject(
-            registry, "bad-auto", 1, result,
+            registry,
+            "bad-auto",
+            1,
+            result,
             criteria=PromotionCriteria(min_roi_pct=3.0),
         )
         assert entry.status == StrategyStatus.REJECTED
@@ -433,10 +479,16 @@ class TestPromotionCriteria:
         from omega.strategy.versioning.promotion import evaluate_for_promotion
 
         result = BacktestResult(
-            strategy_id="x", strategy_version=1, run_id="r",
-            started_at="t", passed=True,
-            total_bets_placed=50, win_rate=0.55, roi_pct=6.0,
-            max_drawdown_units=8.0, avg_closing_line_value=1.5,
+            strategy_id="x",
+            strategy_version=1,
+            run_id="r",
+            started_at="t",
+            passed=True,
+            total_bets_placed=50,
+            win_rate=0.55,
+            roi_pct=6.0,
+            max_drawdown_units=8.0,
+            avg_closing_line_value=1.5,
         )
 
         should, reasons = evaluate_for_promotion(result)
@@ -448,8 +500,11 @@ class TestPromotionCriteria:
         from omega.strategy.versioning.promotion import evaluate_for_promotion
 
         result = BacktestResult(
-            strategy_id="x", strategy_version=1, run_id="r",
-            started_at="t", passed=True,
+            strategy_id="x",
+            strategy_version=1,
+            run_id="r",
+            started_at="t",
+            passed=True,
             total_bets_placed=10,  # too few
             win_rate=0.30,  # too low
             roi_pct=-5.0,  # negative
@@ -465,6 +520,7 @@ class TestPromotionCriteria:
 # -----------------------------------------------------------------------
 # File persistence test
 # -----------------------------------------------------------------------
+
 
 class TestRegistryPersistence:
     """Test JSON file persistence."""

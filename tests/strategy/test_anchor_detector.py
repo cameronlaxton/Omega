@@ -103,15 +103,15 @@ class TestDetectAnchors:
 
     def test_custom_min_hit_rate(self):
         # At 60% threshold, 25+ should now qualify (6/10 = 60%)
-        anchors = detect_anchors(
-            "Donovan Mitchell", "pts", MITCHELL_PTS, min_hit_rate=0.60
-        )
+        anchors = detect_anchors("Donovan Mitchell", "pts", MITCHELL_PTS, min_hit_rate=0.60)
         thresholds_found = {a.threshold for a in anchors}
         assert 25 in thresholds_found
 
     def test_custom_thresholds(self):
         anchors = detect_anchors(
-            "Test", "pts", [15, 16, 14, 17, 15],
+            "Test",
+            "pts",
+            [15, 16, 14, 17, 15],
             thresholds=[14, 15, 16],
         )
         anchor_map = {a.threshold: a for a in anchors}
@@ -170,9 +170,7 @@ class TestScanPlayer:
             "pts": {20: -300, 25: +110},
             "ast": {3: -400, 5: -150},
         }
-        legs = scan_player(
-            "Donovan Mitchell", "CLE", game_logs, prop_odds
-        )
+        legs = scan_player("Donovan Mitchell", "CLE", game_logs, prop_odds)
         # Should find pts anchors at 10, 15, 20 (but only 20 has odds)
         # And ast anchors at 3 (if hit rate >= 70%)
         assert len(legs) > 0

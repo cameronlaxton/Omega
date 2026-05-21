@@ -13,6 +13,7 @@ Covers:
   when the operator supplies it
 - source label format: manual:espn_boxscore_YYYYMMDD
 """
+
 from __future__ import annotations
 
 import sys
@@ -96,7 +97,9 @@ def _make_prop_trace(
         "timestamp": "2026-05-17T19:00:00Z",
         "prompt": "prop",
         "league": "NBA",
-        "matchup": f"{away_team} @ {home_team}" if include_game_fields else f"{player_name} {prop_type} {line}",
+        "matchup": f"{away_team} @ {home_team}"
+        if include_game_fields
+        else f"{player_name} {prop_type} {line}",
         "execution_mode": "sandbox_prop",
         "kind": "prop",
         "predictions": {"over_prob": 0.55, "under_prob": 0.45},
@@ -156,7 +159,9 @@ class TestBackfillDate:
         store.persist(_make_game_trace())
 
         counts = backfill.backfill_date(
-            store, league="NBA", d=date(2026, 5, 17),
+            store,
+            league="NBA",
+            d=date(2026, 5, 17),
             confirm=lambda _desc: "y",
             scoreboard_fetcher=lambda _l, _d: [_final_game()],
             box_score_fetcher=lambda _l, _e: {},
@@ -179,7 +184,9 @@ class TestBackfillDate:
         store.persist(_make_prop_trace())
 
         counts = backfill.backfill_date(
-            store, league="NBA", d=date(2026, 5, 17),
+            store,
+            league="NBA",
+            d=date(2026, 5, 17),
             confirm=lambda _desc: "y",
             scoreboard_fetcher=lambda _l, _d: [_final_game()],
             box_score_fetcher=lambda _l, _e: _nba_box_score("Jayson Tatum", 31),
@@ -198,7 +205,9 @@ class TestBackfillDate:
         store.persist(_make_game_trace())
 
         counts = backfill.backfill_date(
-            store, league="NBA", d=date(2026, 5, 17),
+            store,
+            league="NBA",
+            d=date(2026, 5, 17),
             confirm=lambda _desc: "n",
             scoreboard_fetcher=lambda _l, _d: [_final_game()],
             box_score_fetcher=lambda _l, _e: {},
@@ -218,7 +227,9 @@ class TestBackfillDate:
 
         # Quit on first prompt
         counts = backfill.backfill_date(
-            store, league="NBA", d=date(2026, 5, 17),
+            store,
+            league="NBA",
+            d=date(2026, 5, 17),
             confirm=lambda _desc: "q",
             scoreboard_fetcher=lambda _l, _d: [_final_game()],
             box_score_fetcher=lambda _l, _e: {},
@@ -236,7 +247,9 @@ class TestBackfillDate:
         store.persist(_make_prop_trace())
 
         counts = backfill.backfill_date(
-            store, league="NBA", d=date(2026, 5, 17),
+            store,
+            league="NBA",
+            d=date(2026, 5, 17),
             confirm=lambda _desc: "y",
             scoreboard_fetcher=lambda _l, _d: [_final_game()],
             box_score_fetcher=lambda _l, _e: _nba_box_score("Jayson Tatum", 31),
@@ -252,10 +265,12 @@ class TestBackfillSingleTrace:
         db = _tmp_db()
         store = TraceStore(db_path=db)
         # Legacy prop trace: no home_team/away_team/game_date on input_snapshot
-        store.persist(_make_prop_trace(
-            "sandbox-prop-legacy",
-            include_game_fields=False,
-        ))
+        store.persist(
+            _make_prop_trace(
+                "sandbox-prop-legacy",
+                include_game_fields=False,
+            )
+        )
 
         counts = backfill.backfill_single_trace(
             store,

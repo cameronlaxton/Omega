@@ -16,11 +16,13 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+from collections.abc import Callable
 from datetime import datetime, timezone
-UTC = timezone.utc
-from typing import Any, Callable
+from typing import Any
 
 from omega.core.calibration.profiles import CalibrationProfile
+
+UTC = timezone.utc
 
 logger = logging.getLogger("omega.core.calibration.fitter")
 
@@ -161,7 +163,7 @@ class CalibrationFitter:
             label = context_fn(trace)
             if label not in partitions:
                 partitions[label] = ([], [])
-            partitions[label][0].append(0.0)   # placeholder; replaced below
+            partitions[label][0].append(0.0)  # placeholder; replaced below
             partitions[label][1].append(0)
 
         # Re-partition cleanly: group traces first, then extract pairs per group.
@@ -405,6 +407,7 @@ class CalibrationFitter:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _pool_adjacent_violators(
     values: list[float],

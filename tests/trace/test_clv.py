@@ -8,6 +8,7 @@ Covers:
 - Line movement scoring for Over/Under and home/away spread.
 - Sanity: pushing identical inputs returns clv_cents == 0.
 """
+
 from __future__ import annotations
 
 import math
@@ -76,8 +77,10 @@ class TestLineValue:
     def test_over_line_dropped_is_favorable(self):
         # Took Over 226.5, line closed at 224.5 → favorable for Over (lower line)
         result = compute_clv(
-            odds_taken=-110, closing_odds=-110,
-            line_taken=226.5, closing_line=224.5,
+            odds_taken=-110,
+            closing_odds=-110,
+            line_taken=226.5,
+            closing_line=224.5,
             side="over",
         )
         assert result.line_value == pytest.approx(2.0)
@@ -85,8 +88,10 @@ class TestLineValue:
     def test_under_line_rose_is_favorable(self):
         # Took Under 226.5, line closed at 228.5 → favorable for Under (higher line)
         result = compute_clv(
-            odds_taken=-110, closing_odds=-110,
-            line_taken=226.5, closing_line=228.5,
+            odds_taken=-110,
+            closing_odds=-110,
+            line_taken=226.5,
+            closing_line=228.5,
             side="under",
         )
         assert result.line_value == pytest.approx(2.0)
@@ -96,8 +101,10 @@ class TestLineValue:
         # so favorable line_value is the magnitude shift you BEAT. Took -3.5 vs
         # closing -5.5: you took the shorter spread (better) → favorable.
         result = compute_clv(
-            odds_taken=-110, closing_odds=-110,
-            line_taken=-3.5, closing_line=-5.5,
+            odds_taken=-110,
+            closing_odds=-110,
+            line_taken=-3.5,
+            closing_line=-5.5,
             side="home",
         )
         # delta = -5.5 - (-3.5) = -2.0; for "home" side our convention is -delta
@@ -106,8 +113,10 @@ class TestLineValue:
 
     def test_line_value_requires_side(self):
         result = compute_clv(
-            odds_taken=-110, closing_odds=-110,
-            line_taken=226.5, closing_line=224.5,
+            odds_taken=-110,
+            closing_odds=-110,
+            line_taken=226.5,
+            closing_line=224.5,
             side=None,
         )
         assert result.line_value is None

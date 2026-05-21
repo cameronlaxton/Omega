@@ -37,9 +37,7 @@ def test_plugin_mcp_config_uses_installed_package_not_relative_escape():
     """No relative-escape cwd; Claude copies plugins to a cache where ../.. is invalid."""
     import json
 
-    text = (ROOT / "plugins" / "omega-llm-interface" / ".mcp.json").read_text(
-        encoding="utf-8"
-    )
+    text = (ROOT / "plugins" / "omega-llm-interface" / ".mcp.json").read_text(encoding="utf-8")
     config = json.loads(text)
 
     assert '"cwd": "../"' not in text
@@ -55,9 +53,7 @@ def test_claude_plugin_manifest_exists_and_is_well_formed():
     """Plugin must ship a .claude-plugin/plugin.json for Claude Code discovery."""
     import json
 
-    manifest_path = (
-        ROOT / "plugins" / "omega-llm-interface" / ".claude-plugin" / "plugin.json"
-    )
+    manifest_path = ROOT / "plugins" / "omega-llm-interface" / ".claude-plugin" / "plugin.json"
     assert manifest_path.exists(), f"missing {manifest_path}"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["name"] == "omega-llm-interface"

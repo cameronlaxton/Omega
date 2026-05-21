@@ -20,6 +20,7 @@ Exit codes:
     0 — all files processed (some may have failed; check failed/)
     1 — fatal error before scanning (bad args, inbox missing)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -48,6 +49,7 @@ logger = logging.getLogger("ingest_traces")
 # Adapters: engine analyze() output → TraceStore.persist() shape
 # ---------------------------------------------------------------------------
 
+
 def _adapt_sandbox_trace(analyze_out: dict[str, Any]) -> dict[str, Any]:
     """Backward-compatible wrapper around the explicit persistable trace contract."""
     return PersistableTrace.from_analyze_output(analyze_out).to_store_record()
@@ -56,6 +58,7 @@ def _adapt_sandbox_trace(analyze_out: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # File-level ingest
 # ---------------------------------------------------------------------------
+
 
 def _load_payload(path: Path) -> dict[str, Any]:
     """Parse the JSON file and return the export-block dict.
@@ -75,7 +78,9 @@ def _load_payload(path: Path) -> dict[str, Any]:
         return payload  # shape A
     if "trace_id" in payload and "kind" in payload:
         return {"trace": payload, "bet_record": None}  # shape B
-    raise ValueError("JSON must contain either 'trace' (export block) or top-level 'trace_id'+'kind'")
+    raise ValueError(
+        "JSON must contain either 'trace' (export block) or top-level 'trace_id'+'kind'"
+    )
 
 
 # Drift thresholds for the BUG-5 consistency check. Anything beyond these
@@ -97,10 +102,7 @@ def _validate_bet_with_prop_identity(
     """
     if kind != "prop":
         return
-    missing = [
-        f for f in ("home_team", "away_team", "game_date")
-        if not input_snap.get(f)
-    ]
+    missing = [f for f in ("home_team", "away_team", "game_date") if not input_snap.get(f)]
     if missing:
         raise ValueError(
             f"prop trace {trace_id} carries a bet_record but is missing "
@@ -110,9 +112,7 @@ def _validate_bet_with_prop_identity(
         )
 
 
-def _warn_drift(
-    trace_id: str, input_snap: dict[str, Any], bet_block: dict[str, Any]
-) -> None:
+def _warn_drift(trace_id: str, input_snap: dict[str, Any], bet_block: dict[str, Any]) -> None:
     """BUG-5 defense: log a warning when bet_record.line_taken or odds_taken
     diverge meaningfully from the analysis trace's snapshot. Warnings only —
     line/odds shopping is legitimate; we just want the audit trail."""
@@ -126,7 +126,10 @@ def _warn_drift(
         if delta > _LINE_DRIFT_WARN:
             logger.warning(
                 "line drift trace=%s analysis_line=%s bet_line=%s delta=%.2f",
-                trace_id, analysis_line, line_taken, delta,
+                trace_id,
+                analysis_line,
+                line_taken,
+                delta,
             )
 
     odds_taken = bet_block.get("odds_taken")
@@ -149,7 +152,10 @@ def _warn_drift(
             if odds_delta > _ODDS_DRIFT_WARN_AMERICAN:
                 logger.warning(
                     "odds drift trace=%s analysis_odds=%s bet_odds=%s delta=%.0f",
-                    trace_id, snap_odds, odds_taken, odds_delta,
+                    trace_id,
+                    snap_odds,
+                    odds_taken,
+                    odds_delta,
                 )
 
 
@@ -175,8 +181,10 @@ def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> tuple[s
     bet_block = payload.get("bet_record")
     if isinstance(bet_block, dict):
         _validate_bet_with_prop_identity(
-            adapted["trace_id"], adapted.get("kind", ""),
-            adapted.get("input_snapshot") or {}, bet_block,
+            adapted["trace_id"],
+            adapted.get("kind", ""),
+            adapted.get("input_snapshot") or {},
+            bet_block,
         )
         _warn_drift(adapted["trace_id"], adapted.get("input_snapshot") or {}, bet_block)
 
@@ -209,6 +217,7 @@ def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> tuple[s
 # Main
 # ---------------------------------------------------------------------------
 
+
 def _move_to(src: Path, dst_dir: Path) -> Path:
     dst_dir.mkdir(parents=True, exist_ok=True)
     dst = dst_dir / src.name
@@ -220,7 +229,9 @@ def _move_to(src: Path, dst_dir: Path) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Ingest sandbox trace exports into omega_traces.db")
+    parser = argparse.ArgumentParser(
+        description="Ingest sandbox trace exports into omega_traces.db"
+    )
     parser.add_argument(
         "--inbox",
         type=Path,
@@ -254,10 +265,7 @@ def main() -> int:
     processed_dir = inbox / "processed"
     failed_dir = inbox / "failed"
 
-    files = sorted(
-        p for p in inbox.glob("*.json")
-        if p.is_file()
-    )
+    files = sorted(p for p in inbox.glob("*.json") if p.is_file())
     if not files:
         logger.info("No new trace files in %s", inbox)
         return 0

@@ -7,6 +7,7 @@ prop_outcomes attached to the analysis trace never reached the bet.
 The sweep ensures bet-trace candidates flow through the same grading path
 and prop_outcomes land under the bet's trace_id (which report tooling joins on).
 """
+
 from __future__ import annotations
 
 import sys
@@ -61,7 +62,8 @@ def _make_prop_trace(
         "timestamp": timestamp,
         "prompt": f"NBA {player} {prop_type} {line}",
         "league": "NBA",
-        "matchup": "Boston Celtics @ Miami Heat" if include_identity
+        "matchup": "Boston Celtics @ Miami Heat"
+        if include_identity
         else f"{player} {prop_type} {line}",
         "execution_mode": "sandbox_prop",
         "kind": "prop",
@@ -98,15 +100,17 @@ def _make_bet(trace_id: str, descriptor: str = "tatum_over_24.5_pts") -> BetReco
 
 
 def _scoreboard():
-    games = [FinalGame(
-        event_id="EV-1",
-        date="2026-05-17",
-        home_team="Miami Heat",
-        away_team="Boston Celtics",
-        home_score=0,
-        away_score=0,
-        status="final",
-    )]
+    games = [
+        FinalGame(
+            event_id="EV-1",
+            date="2026-05-17",
+            home_team="Miami Heat",
+            away_team="Boston Celtics",
+            home_score=0,
+            away_score=0,
+            status="final",
+        )
+    ]
 
     def _fetch(league: str, d: date):
         return games
@@ -117,17 +121,23 @@ def _scoreboard():
 def _box_score():
     payload = {
         "boxscore": {
-            "players": [{
-                "team": {"displayName": "Boston Celtics"},
-                "statistics": [{
-                    "name": "starters",
-                    "keys": ["MIN", "PTS", "REB", "AST"],
-                    "athletes": [{
-                        "athlete": {"displayName": "Jayson Tatum"},
-                        "stats": ["35", "31", "5", "4"],
-                    }],
-                }],
-            }]
+            "players": [
+                {
+                    "team": {"displayName": "Boston Celtics"},
+                    "statistics": [
+                        {
+                            "name": "starters",
+                            "keys": ["MIN", "PTS", "REB", "AST"],
+                            "athletes": [
+                                {
+                                    "athlete": {"displayName": "Jayson Tatum"},
+                                    "stats": ["35", "31", "5", "4"],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
         }
     }
 

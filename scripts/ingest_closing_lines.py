@@ -47,6 +47,7 @@ Exit codes:
     0 — all files processed (some may have failed; check failed/)
     1 — fatal error before scanning (bad args, inbox missing)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -91,14 +92,11 @@ def _validate_payload(payload: dict[str, Any]) -> None:
         market = str(entry["market"])
         if not any(market == p or market.startswith(p) for p in _ALLOWED_MARKET_PREFIXES):
             raise ValueError(
-                f"lines[{i}].market={market!r} not in allowed set "
-                f"{_ALLOWED_MARKET_PREFIXES}"
+                f"lines[{i}].market={market!r} not in allowed set {_ALLOWED_MARKET_PREFIXES}"
             )
         # closing_line is required for spread/total/player_prop, optional for moneyline
         if market != "moneyline" and entry.get("closing_line") is None:
-            raise ValueError(
-                f"lines[{i}].closing_line is required for market={market!r}"
-            )
+            raise ValueError(f"lines[{i}].closing_line is required for market={market!r}")
         try:
             float(entry["closing_odds"])
         except (TypeError, ValueError):
@@ -142,9 +140,7 @@ def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> tuple[s
             selection_descriptor = str(entry["selection_descriptor"])
             closing_odds = float(entry["closing_odds"])
             closing_line = (
-                float(entry["closing_line"])
-                if entry.get("closing_line") is not None
-                else None
+                float(entry["closing_line"]) if entry.get("closing_line") is not None else None
             )
             store.attach_closing_line(
                 trace_id=trace_id,

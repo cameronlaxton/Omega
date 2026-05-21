@@ -16,6 +16,7 @@ Conventions:
   ultimately settled at. We express CLV in implied-probability cents (negative
   is bad, positive is good).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -45,18 +46,19 @@ def american_to_implied_prob(american_odds: float) -> float:
 @dataclass(frozen=True)
 class CLVResult:
     """Output of compute_clv()."""
+
     odds_taken: float
     closing_odds: float
-    implied_taken: float            # 0..1
-    implied_closing: float          # 0..1
-    clv_cents: float                # implied_closing - implied_taken, in implied-prob percentage points
+    implied_taken: float  # 0..1
+    implied_closing: float  # 0..1
+    clv_cents: float  # implied_closing - implied_taken, in implied-prob percentage points
     decimal_taken: float
     decimal_closing: float
-    decimal_gain: float             # decimal_taken - decimal_closing (positive = beat close)
+    decimal_gain: float  # decimal_taken - decimal_closing (positive = beat close)
     line_taken: float | None
     closing_line: float | None
-    line_value: float | None     # for spread/total, signed line movement in your favor
-    beat_close: bool                # True iff implied_taken < implied_closing
+    line_value: float | None  # for spread/total, signed line movement in your favor
+    beat_close: bool  # True iff implied_taken < implied_closing
 
 
 def compute_clv(

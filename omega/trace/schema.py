@@ -55,6 +55,7 @@ Design rules:
 - Outcomes are a separate table, never mutated into the trace record
 - Schema migrations are forward-additive (CREATE TABLE IF NOT EXISTS, ALTER ADD COLUMN)
 """
+
 from __future__ import annotations
 
 import logging
@@ -212,10 +213,7 @@ def apply_v4_migration(conn) -> None:
 
 
 V7_ADD_COLUMN_SQL = "ALTER TABLE bet_records ADD COLUMN session_id TEXT"
-V7_INDEX_SQL = (
-    "CREATE INDEX IF NOT EXISTS idx_bet_records_session_id "
-    "ON bet_records(session_id)"
-)
+V7_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_bet_records_session_id ON bet_records(session_id)"
 V7_BACKFILL_SQL = (
     "UPDATE bet_records "
     "SET session_id = (SELECT t.session_id FROM traces t "
@@ -253,20 +251,17 @@ def apply_v7_migration(conn) -> int:
     if deleted:
         _logger.warning(
             "V7 cleanup removed %d binary-placeholder outcome rows attached to "
-            "prop-kind traces (BUG-3).", deleted,
+            "prop-kind traces (BUG-3).",
+            deleted,
         )
     return deleted
 
 
 V8_DEDUP_OUTCOMES_SQL = (
-    "DELETE FROM outcomes "
-    "WHERE rowid NOT IN ("
-    "  SELECT MIN(rowid) FROM outcomes GROUP BY trace_id"
-    ")"
+    "DELETE FROM outcomes WHERE rowid NOT IN (  SELECT MIN(rowid) FROM outcomes GROUP BY trace_id)"
 )
 V8_UNIQUE_OUTCOME_SQL = (
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_outcomes_trace_id_unique "
-    "ON outcomes(trace_id)"
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_outcomes_trace_id_unique ON outcomes(trace_id)"
 )
 
 

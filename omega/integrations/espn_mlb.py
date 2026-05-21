@@ -12,6 +12,7 @@ locations, scores, and status. We expose two things:
 Stale aliases are the most common source of unmatched outcomes. When the
 weekly health report flags an unmapped team string, add it to MLB_TEAMS.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,9 +23,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger("omega.integrations.espn_mlb")
 
-_SCOREBOARD_URL = (
-    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"
-)
+_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"
 _REQUEST_TIMEOUT_SECONDS = 15
 
 
@@ -32,41 +31,48 @@ _REQUEST_TIMEOUT_SECONDS = 15
 # Canonical name matches the official label used by the core contracts.
 MLB_TEAMS: dict[str, list[str]] = {
     # American League East
-    "Baltimore Orioles":       ["bal", "orioles", "baltimore", "o's"],
-    "Boston Red Sox":          ["bos", "red sox", "boston"],
-    "New York Yankees":        ["nyy", "ny yankees", "yankees", "new york yankees", "bronx bombers"],
-    "Tampa Bay Rays":          ["tb", "tba", "rays", "tampa bay"],
-    "Toronto Blue Jays":       ["tor", "blue jays", "toronto"],
+    "Baltimore Orioles": ["bal", "orioles", "baltimore", "o's"],
+    "Boston Red Sox": ["bos", "red sox", "boston"],
+    "New York Yankees": ["nyy", "ny yankees", "yankees", "new york yankees", "bronx bombers"],
+    "Tampa Bay Rays": ["tb", "tba", "rays", "tampa bay"],
+    "Toronto Blue Jays": ["tor", "blue jays", "toronto"],
     # American League Central
-    "Chicago White Sox":       ["cws", "chw", "white sox", "chicago white sox"],
-    "Cleveland Guardians":     ["cle", "guardians", "cleveland"],
-    "Detroit Tigers":          ["det", "tigers", "detroit"],
-    "Kansas City Royals":      ["kc", "kcr", "royals", "kansas city"],
-    "Minnesota Twins":         ["min", "twins", "minnesota"],
+    "Chicago White Sox": ["cws", "chw", "white sox", "chicago white sox"],
+    "Cleveland Guardians": ["cle", "guardians", "cleveland"],
+    "Detroit Tigers": ["det", "tigers", "detroit"],
+    "Kansas City Royals": ["kc", "kcr", "royals", "kansas city"],
+    "Minnesota Twins": ["min", "twins", "minnesota"],
     # American League West
-    "Houston Astros":          ["hou", "astros", "houston"],
-    "Los Angeles Angels":      ["laa", "angels", "los angeles angels", "anaheim", "anaheim angels"],
-    "Athletics":               ["oak", "a's", "oakland", "oakland athletics", "sacramento athletics", "sacramento"],
-    "Seattle Mariners":        ["sea", "mariners", "seattle"],
-    "Texas Rangers":           ["tex", "rangers", "texas"],
+    "Houston Astros": ["hou", "astros", "houston"],
+    "Los Angeles Angels": ["laa", "angels", "los angeles angels", "anaheim", "anaheim angels"],
+    "Athletics": [
+        "oak",
+        "a's",
+        "oakland",
+        "oakland athletics",
+        "sacramento athletics",
+        "sacramento",
+    ],
+    "Seattle Mariners": ["sea", "mariners", "seattle"],
+    "Texas Rangers": ["tex", "rangers", "texas"],
     # National League East
-    "Atlanta Braves":          ["atl", "braves", "atlanta"],
-    "Miami Marlins":           ["mia", "marlins", "miami"],
-    "New York Mets":           ["nym", "ny mets", "mets", "new york mets"],
-    "Philadelphia Phillies":   ["phi", "phillies", "philadelphia"],
-    "Washington Nationals":    ["was", "wsh", "nats", "nationals", "washington"],
+    "Atlanta Braves": ["atl", "braves", "atlanta"],
+    "Miami Marlins": ["mia", "marlins", "miami"],
+    "New York Mets": ["nym", "ny mets", "mets", "new york mets"],
+    "Philadelphia Phillies": ["phi", "phillies", "philadelphia"],
+    "Washington Nationals": ["was", "wsh", "nats", "nationals", "washington"],
     # National League Central
-    "Chicago Cubs":            ["chc", "cubs", "chicago cubs"],
-    "Cincinnati Reds":         ["cin", "reds", "cincinnati"],
-    "Milwaukee Brewers":       ["mil", "brewers", "milwaukee"],
-    "Pittsburgh Pirates":      ["pit", "pirates", "pittsburgh"],
-    "St. Louis Cardinals":     ["stl", "cardinals", "st. louis", "saint louis", "st louis"],
+    "Chicago Cubs": ["chc", "cubs", "chicago cubs"],
+    "Cincinnati Reds": ["cin", "reds", "cincinnati"],
+    "Milwaukee Brewers": ["mil", "brewers", "milwaukee"],
+    "Pittsburgh Pirates": ["pit", "pirates", "pittsburgh"],
+    "St. Louis Cardinals": ["stl", "cardinals", "st. louis", "saint louis", "st louis"],
     # National League West
-    "Arizona Diamondbacks":    ["ari", "ariz", "diamondbacks", "d-backs", "arizona"],
-    "Colorado Rockies":        ["col", "rockies", "colorado"],
-    "Los Angeles Dodgers":     ["lad", "dodgers", "los angeles dodgers"],
-    "San Diego Padres":        ["sd", "sdp", "padres", "san diego"],
-    "San Francisco Giants":    ["sf", "sfg", "giants", "san francisco"],
+    "Arizona Diamondbacks": ["ari", "ariz", "diamondbacks", "d-backs", "arizona"],
+    "Colorado Rockies": ["col", "rockies", "colorado"],
+    "Los Angeles Dodgers": ["lad", "dodgers", "los angeles dodgers"],
+    "San Diego Padres": ["sd", "sdp", "padres", "san diego"],
+    "San Francisco Giants": ["sf", "sfg", "giants", "san francisco"],
 }
 
 # Reverse map: alias (lowercased) → canonical name
@@ -80,18 +86,20 @@ for _canonical, _aliases in MLB_TEAMS.items():
 @dataclass(frozen=True)
 class FinalGame:
     """A completed MLB game with attributed final scores."""
-    event_id: str               # ESPN event id
-    date: str                   # YYYY-MM-DD (Eastern game date)
-    home_team: str              # canonical name
-    away_team: str              # canonical name
+
+    event_id: str  # ESPN event id
+    date: str  # YYYY-MM-DD (Eastern game date)
+    home_team: str  # canonical name
+    away_team: str  # canonical name
     home_score: int
     away_score: int
-    status: str                 # "final", "in_progress", "scheduled", "postponed", ...
+    status: str  # "final", "in_progress", "scheduled", "postponed", ...
 
 
 # ---------------------------------------------------------------------------
 # Alias resolution
 # ---------------------------------------------------------------------------
+
 
 def canonical_team(name_or_alias: str) -> str | None:
     """Resolve a team string to its canonical MLB team name.
@@ -114,6 +122,7 @@ def canonical_team(name_or_alias: str) -> str | None:
 # ---------------------------------------------------------------------------
 # HTTP
 # ---------------------------------------------------------------------------
+
 
 def fetch_scoreboard(
     date: str,
@@ -165,9 +174,13 @@ def parse_scoreboard(payload: dict) -> list[FinalGame]:
         for competitor in comp.get("competitors") or []:
             team_blob = competitor.get("team") or {}
             display_name = team_blob.get("displayName") or team_blob.get("name") or ""
-            canonical = canonical_team(display_name) or canonical_team(team_blob.get("abbreviation", ""))
+            canonical = canonical_team(display_name) or canonical_team(
+                team_blob.get("abbreviation", "")
+            )
             if not canonical:
-                logger.warning("Unmapped ESPN team: %r (abbr=%r)", display_name, team_blob.get("abbreviation"))
+                logger.warning(
+                    "Unmapped ESPN team: %r (abbr=%r)", display_name, team_blob.get("abbreviation")
+                )
                 canonical = display_name  # preserve raw so caller can flag
             score = int(competitor.get("score") or 0)
             if competitor.get("homeAway") == "home":
@@ -179,14 +192,16 @@ def parse_scoreboard(payload: dict) -> list[FinalGame]:
             logger.debug("skipping event %s — missing home/away", event_id)
             continue
 
-        results.append(FinalGame(
-            event_id=event_id,
-            date=iso_date,
-            home_team=home,
-            away_team=away,
-            home_score=home_score,
-            away_score=away_score,
-            status=status_short,
-        ))
+        results.append(
+            FinalGame(
+                event_id=event_id,
+                date=iso_date,
+                home_team=home,
+                away_team=away,
+                home_score=home_score,
+                away_score=away_score,
+                status=status_short,
+            )
+        )
 
     return results

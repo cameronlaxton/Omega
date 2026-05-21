@@ -3,6 +3,7 @@
 These rows capture provider market observations. They are not recommendations
 and do not replace the `closing_lines` table used for CLV joins.
 """
+
 from __future__ import annotations
 
 import hashlib

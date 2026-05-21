@@ -1,11 +1,11 @@
 """Tests for omega.core.simulation.validation — sim-input boundary hardening."""
 
-
 from omega.core.simulation.validation import SIM_INPUT_BOUNDS, validate_sim_context
 
 # ---------------------------------------------------------------------------
 # Happy path: valid data passes through
 # ---------------------------------------------------------------------------
+
 
 class TestValidDataPassthrough:
     def test_basketball_valid_context(self):
@@ -58,6 +58,7 @@ class TestValidDataPassthrough:
 # String coercion
 # ---------------------------------------------------------------------------
 
+
 class TestStringCoercion:
     def test_string_numeric_coerced(self):
         ctx = {"off_rating": "112.5", "def_rating": "108.0"}
@@ -73,6 +74,7 @@ class TestStringCoercion:
 # ---------------------------------------------------------------------------
 # Bounds rejection
 # ---------------------------------------------------------------------------
+
 
 class TestBoundsRejection:
     def test_off_rating_too_low(self):
@@ -107,6 +109,7 @@ class TestBoundsRejection:
 # ---------------------------------------------------------------------------
 # Garbage rejection
 # ---------------------------------------------------------------------------
+
 
 class TestGarbageRejection:
     def test_non_numeric_string_dropped(self):
@@ -157,6 +160,7 @@ class TestGarbageRejection:
 # Unknown key stripping
 # ---------------------------------------------------------------------------
 
+
 class TestUnknownKeyStripping:
     def test_unknown_keys_stripped(self):
         ctx = {
@@ -178,6 +182,7 @@ class TestUnknownKeyStripping:
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestEdgeCases:
     def test_none_context(self):
@@ -209,6 +214,7 @@ class TestEdgeCases:
 # Bounds table coverage
 # ---------------------------------------------------------------------------
 
+
 class TestBoundsTableCoverage:
     def test_all_bounds_have_valid_ranges(self):
         for key, (lo, hi) in SIM_INPUT_BOUNDS.items():
@@ -217,6 +223,7 @@ class TestBoundsTableCoverage:
     def test_all_archetype_critical_keys_have_bounds(self):
         """Every critical key in every archetype should have a bounds entry."""
         from omega.core.simulation.archetypes import ARCHETYPE_REGISTRY
+
         missing = []
         for name, arch in ARCHETYPE_REGISTRY.items():
             for key in arch.critical_team_keys:

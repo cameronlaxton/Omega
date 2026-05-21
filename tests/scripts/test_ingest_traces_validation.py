@@ -7,6 +7,7 @@ scripts/ingest_traces.py.
 - BUG-5: line/odds drift between trace.input_snapshot and bet_record is
   logged as a warning but does NOT fail ingest.
 """
+
 from __future__ import annotations
 
 import json
@@ -126,9 +127,17 @@ class TestBug4Validation:
         inbox, db = workspace
         _write(inbox, "bad.json", _make_prop_export(with_identity=False))
 
-        monkeypatch.setattr(sys, "argv", [
-            "ingest_traces.py", "--inbox", str(inbox), "--db", str(db),
-        ])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "ingest_traces.py",
+                "--inbox",
+                str(inbox),
+                "--db",
+                str(db),
+            ],
+        )
         rc = ingest_traces.main()
         assert rc == 0  # main returns 0 even when individual files fail
         assert (inbox / "failed" / "bad.json").exists()
@@ -138,9 +147,14 @@ class TestBug4Validation:
 class TestBug5DriftWarnings:
     def test_line_drift_logs_warning(self, workspace, caplog):
         inbox, db = workspace
-        path = _write(inbox, "drift.json", _make_prop_export(
-            line=25.5, line_taken=26.5,  # 1.0 — exactly at threshold (not >)
-        ))
+        path = _write(
+            inbox,
+            "drift.json",
+            _make_prop_export(
+                line=25.5,
+                line_taken=26.5,  # 1.0 — exactly at threshold (not >)
+            ),
+        )
         store = TraceStore(db_path=str(db))
         with caplog.at_level(logging.WARNING, logger="ingest_traces"):
             ingest_traces.ingest_file(path, store)
@@ -150,9 +164,14 @@ class TestBug5DriftWarnings:
 
     def test_line_drift_above_threshold_logs_warning(self, workspace, caplog):
         inbox, db = workspace
-        path = _write(inbox, "drift2.json", _make_prop_export(
-            line=25.5, line_taken=27.0,
-        ))
+        path = _write(
+            inbox,
+            "drift2.json",
+            _make_prop_export(
+                line=25.5,
+                line_taken=27.0,
+            ),
+        )
         store = TraceStore(db_path=str(db))
         with caplog.at_level(logging.WARNING, logger="ingest_traces"):
             ingest_traces.ingest_file(path, store)
@@ -163,9 +182,14 @@ class TestBug5DriftWarnings:
 
     def test_line_drift_does_not_fail_ingest(self, workspace):
         inbox, db = workspace
-        path = _write(inbox, "drift_ok.json", _make_prop_export(
-            line=25.5, line_taken=30.0,  # 4.5 drift
-        ))
+        path = _write(
+            inbox,
+            "drift_ok.json",
+            _make_prop_export(
+                line=25.5,
+                line_taken=30.0,  # 4.5 drift
+            ),
+        )
         store = TraceStore(db_path=str(db))
         trace_id, bet_id = ingest_traces.ingest_file(path, store)
         assert trace_id and bet_id  # both persisted despite drift
@@ -174,9 +198,15 @@ class TestBug5DriftWarnings:
     def test_odds_drift_warns_when_side_resolvable(self, workspace, caplog):
         inbox, db = workspace
         # over side; analysis odds_over=-115, bet odds_taken=-160 -> delta=45
-        path = _write(inbox, "odds.json", _make_prop_export(
-            odds_over=-115, odds_taken=-160, descriptor="Tatum_over_27.5_pts",
-        ))
+        path = _write(
+            inbox,
+            "odds.json",
+            _make_prop_export(
+                odds_over=-115,
+                odds_taken=-160,
+                descriptor="Tatum_over_27.5_pts",
+            ),
+        )
         store = TraceStore(db_path=str(db))
         with caplog.at_level(logging.WARNING, logger="ingest_traces"):
             ingest_traces.ingest_file(path, store)
@@ -186,13 +216,18 @@ class TestBug5DriftWarnings:
 
     def test_no_warning_when_within_threshold(self, workspace, caplog):
         inbox, db = workspace
-        path = _write(inbox, "clean.json", _make_prop_export(
-            line=27.5, line_taken=27.5, odds_over=-115, odds_taken=-110,
-        ))
+        path = _write(
+            inbox,
+            "clean.json",
+            _make_prop_export(
+                line=27.5,
+                line_taken=27.5,
+                odds_over=-115,
+                odds_taken=-110,
+            ),
+        )
         store = TraceStore(db_path=str(db))
         with caplog.at_level(logging.WARNING, logger="ingest_traces"):
             ingest_traces.ingest_file(path, store)
-        assert not any(
-            "drift" in r.message for r in caplog.records
-        )
+        assert not any("drift" in r.message for r in caplog.records)
         store.close()

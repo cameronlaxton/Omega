@@ -153,9 +153,7 @@ def validate_sim_context(
         return dict(context)
 
     known_keys: set[str] = set(
-        archetype.critical_team_keys
-        + archetype.required_team_keys
-        + archetype.optional_team_keys
+        archetype.critical_team_keys + archetype.required_team_keys + archetype.optional_team_keys
     )
 
     cleaned: dict[str, Any] = {}

@@ -67,9 +67,7 @@ class FrozenArtifact(BaseModel):
     )
 
 
-def compute_artifact_id(
-    home_team: str, away_team: str, league: str, date: str
-) -> str:
+def compute_artifact_id(home_team: str, away_team: str, league: str, date: str) -> str:
     """Derive a deterministic artifact ID from event identity.
 
     Same event always produces the same ID, preventing duplicate artifacts

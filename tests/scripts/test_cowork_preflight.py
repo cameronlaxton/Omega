@@ -21,8 +21,7 @@ def test_missing_distribution_points_to_editable_mcp_install(monkeypatch):
     failures = cowork_preflight.check_distribution()
 
     assert failures == [
-        "Omega is not installed in this interpreter. "
-        "Run: python -m pip install -e .[mcp]"
+        "Omega is not installed in this interpreter. Run: python -m pip install -e .[mcp]"
     ]
 
 

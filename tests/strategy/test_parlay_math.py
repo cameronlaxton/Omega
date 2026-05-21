@@ -14,6 +14,7 @@ from omega.core.betting.parlay import (
 # Fixtures — modeled after user's real bets
 # ---------------------------------------------------------------------------
 
+
 def _leg(selection, decimal_odds, win_prob, player="", stat_key="", team=""):
     return ParlayLeg(
         selection=selection,
@@ -132,7 +133,9 @@ class TestBuildParlay:
     def test_full_slip_construction(self):
         """Matches user's 4/7 bet: Davion Mitchell 5+ ast + Wiggins 2+ 3pt @ 2.00x."""
         legs = [
-            _leg("Mitchell 5+ ast", 1.40, 0.75, player="Davion Mitchell", stat_key="ast", team="TOR"),
+            _leg(
+                "Mitchell 5+ ast", 1.40, 0.75, player="Davion Mitchell", stat_key="ast", team="TOR"
+            ),
             _leg("Wiggins 2+ 3pt", 1.45, 0.72, player="Andrew Wiggins", stat_key="3pm", team="TOR"),
         ]
         slip = build_parlay(legs)

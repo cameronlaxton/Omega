@@ -7,6 +7,7 @@ It forces --league NBA and forwards everything else to the generalized script.
 
 Remove this shim once all callers reference fetch_closing_lines.py directly.
 """
+
 from __future__ import annotations
 
 import sys

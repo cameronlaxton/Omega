@@ -20,14 +20,16 @@ Exit codes:
     0 — completed (may have unmatched; see log)
     1 — fatal error (e.g., ESPN unreachable)
 """
+
 from __future__ import annotations
 
 import argparse
 import logging
 import sys
 from datetime import date, datetime, timedelta, timezone
-UTC = timezone.utc
 from pathlib import Path
+
+UTC = timezone.utc
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -42,6 +44,7 @@ logger = logging.getLogger("fetch_outcomes_nba")
 # ---------------------------------------------------------------------------
 # Date parsing
 # ---------------------------------------------------------------------------
+
 
 def _parse_date_arg(s: str) -> date:
     """Accept YYYY-MM-DD, 'today', 'yesterday'."""
@@ -63,6 +66,7 @@ def _iter_dates(start: date, end: date):
 # ---------------------------------------------------------------------------
 # Matching
 # ---------------------------------------------------------------------------
+
 
 def _trace_matchup(trace: dict) -> tuple[str, str] | None:
     """Pull (home_canonical, away_canonical) from a trace dict, or None if unresolvable.
@@ -103,11 +107,16 @@ def _match_trace_to_game(
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Attach ESPN final scores to NBA traces")
-    parser.add_argument("--since", default="yesterday", help="Start date (YYYY-MM-DD | today | yesterday)")
+    parser.add_argument(
+        "--since", default="yesterday", help="Start date (YYYY-MM-DD | today | yesterday)"
+    )
     parser.add_argument("--until", default=None, help="End date inclusive (default = since)")
-    parser.add_argument("--db", default=None, help="SQLite path (default: repo-root omega_traces.db)")
+    parser.add_argument(
+        "--db", default=None, help="SQLite path (default: repo-root omega_traces.db)"
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
@@ -165,13 +174,15 @@ def main() -> int:
         # Also pull ungraded traces from the prior day (decisions made the day
         # before the game)
         prior = d - timedelta(days=1)
-        traces.extend(store.query_traces(
-            league="NBA",
-            start=f"{prior.isoformat()}T00:00:00Z",
-            end=f"{prior.isoformat()}T23:59:59Z",
-            has_outcome=False,
-            limit=500,
-        ))
+        traces.extend(
+            store.query_traces(
+                league="NBA",
+                start=f"{prior.isoformat()}T00:00:00Z",
+                end=f"{prior.isoformat()}T23:59:59Z",
+                has_outcome=False,
+                limit=500,
+            )
+        )
 
         for trace in traces:
             # Prop traces grade against player stats, not game scores. Skip
@@ -187,9 +198,14 @@ def main() -> int:
                 continue
 
             if args.dry_run:
-                logger.info("DRY %s -> %s @ %s (%d-%d)", trace["trace_id"],
-                            game.away_team, game.home_team,
-                            game.away_score, game.home_score)
+                logger.info(
+                    "DRY %s -> %s @ %s (%d-%d)",
+                    trace["trace_id"],
+                    game.away_team,
+                    game.home_team,
+                    game.away_score,
+                    game.home_score,
+                )
                 attached += 1
                 continue
 
@@ -201,9 +217,14 @@ def main() -> int:
                     source="api:espn",
                 )
                 attached += 1
-                logger.info("ATTACHED %s -> %s %d, %s %d", trace["trace_id"],
-                            game.home_team, game.home_score,
-                            game.away_team, game.away_score)
+                logger.info(
+                    "ATTACHED %s -> %s %d, %s %d",
+                    trace["trace_id"],
+                    game.home_team,
+                    game.home_score,
+                    game.away_team,
+                    game.away_score,
+                )
             except ValueError as exc:
                 # Likely already attached (idempotency at the outcomes-table level
                 # is not currently enforced — multiple outcomes per trace would
@@ -213,7 +234,9 @@ def main() -> int:
 
     logger.info(
         "Done. attached=%d unmatched=%d skipped=%d",
-        attached, len(unmatched), skipped_already_graded,
+        attached,
+        len(unmatched),
+        skipped_already_graded,
     )
     if unmatched:
         logger.warning("Unmatched traces (consider extending NBA_TEAMS aliases):")

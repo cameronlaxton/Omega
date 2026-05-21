@@ -6,6 +6,7 @@ caller explicitly requests line shopping or all-book comparison.
 This script prepares market inputs and provenance. It does not compute model
 probabilities, edge, EV, Kelly, staking, confidence tiers, or trace IDs.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -177,9 +178,8 @@ def _resolve_event_id(
         commence_time_to=commence_time_to,
     )
     for event in events:
-        if (
-            _norm(event.home_team) == _norm(home_team)
-            and _norm(event.away_team) == _norm(away_team)
+        if _norm(event.home_team) == _norm(home_team) and _norm(event.away_team) == _norm(
+            away_team
         ):
             return event.event_id, []
     return None, [
@@ -248,7 +248,8 @@ def _filter_prop_quotes(
 ) -> list[dict[str, Any]]:
     """Return only the quotes matching the requested player and stat type."""
     return [
-        q for q in quotes
+        q
+        for q in quotes
         if q.get("market_type") == "player_prop"
         and q.get("stat_key") == prop_type
         and _norm(q.get("player")) == _norm(player_name)
@@ -398,7 +399,9 @@ def resolve_odds(
             if not (line_shopping or all_books)
             else "no exact market match"
         )
-        return _unavailable(kind, league, bookmaker, skipped, client, quotes=output_quotes, event=event)
+        return _unavailable(
+            kind, league, bookmaker, skipped, client, quotes=output_quotes, event=event
+        )
 
     return {
         "status": "success",

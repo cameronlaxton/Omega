@@ -5,7 +5,6 @@ Tests the deterministic core — no network, no LLM.
 """
 
 
-
 class TestModuleImports:
     """Verify core modules import without error."""
 
@@ -29,6 +28,7 @@ class TestModuleImports:
             ARCHETYPE_REGISTRY,
             LEAGUE_TO_ARCHETYPE,
         )
+
         assert len(ARCHETYPE_REGISTRY) == 9
         assert len(LEAGUE_TO_ARCHETYPE) > 50
 
@@ -117,7 +117,10 @@ class TestSimulation:
 
         engine = OmegaSimulationEngine()
         result = engine.run_fast_game_simulation(
-            home_team="A", away_team="B", league="QUIDDITCH", n_iterations=10,
+            home_team="A",
+            away_team="B",
+            league="QUIDDITCH",
+            n_iterations=10,
         )
         assert result["success"] is False
         assert "No simulation model" in result["skip_reason"]
@@ -127,7 +130,9 @@ class TestSimulation:
 
         engine = OmegaSimulationEngine()
         result = engine.run_fast_game_simulation(
-            home_team="Liverpool", away_team="Man City", league="EPL",
+            home_team="Liverpool",
+            away_team="Man City",
+            league="EPL",
             n_iterations=200,
             home_context={"off_rating": 1.8, "def_rating": 0.9},
             away_context={"off_rating": 2.1, "def_rating": 0.7},
@@ -140,7 +145,9 @@ class TestSimulation:
 
         engine = OmegaSimulationEngine()
         result = engine.run_fast_game_simulation(
-            home_team="Fighter A", away_team="Fighter B", league="UFC",
+            home_team="Fighter A",
+            away_team="Fighter B",
+            league="UFC",
             n_iterations=200,
             home_context={"win_pct": 0.7, "finish_rate": 0.6},
             away_context={"win_pct": 0.5, "finish_rate": 0.4},

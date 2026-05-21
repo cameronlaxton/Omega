@@ -39,6 +39,7 @@ from omega.core.simulation.archetypes import (
 # Distribution samplers
 # ---------------------------------------------------------------------------
 
+
 def select_distribution(
     metric_key: str,
     league: str,
@@ -69,17 +70,40 @@ def select_distribution(
     if league in {"NFL", "NCAAF"} and metric_key == "score":
         return "poisson"
 
-    discrete_stats = {"goals", "td", "touchdowns", "receptions", "rec", "sog",
-                      "aces", "double_faults", "kills", "deaths", "assists_esport",
-                      "hrs", "stolen_bases", "saves"}
+    discrete_stats = {
+        "goals",
+        "td",
+        "touchdowns",
+        "receptions",
+        "rec",
+        "sog",
+        "aces",
+        "double_faults",
+        "kills",
+        "deaths",
+        "assists_esport",
+        "hrs",
+        "stolen_bases",
+        "saves",
+    }
     if metric_key in discrete_stats:
         return "poisson"
 
     # Low-mean basketball count stats: Normal grossly understates right-tail mass
     # at low lambda. A blk prop with line=1.5 and mean=0.6 under Normal yields
     # under_prob ~ 0.95; under Poisson it correctly lands near 0.88.
-    low_count_basketball = {"blk", "stl", "3pm", "oreb", "dreb", "to", "blocks",
-                            "steals", "turnovers", "offensive_rebounds"}
+    low_count_basketball = {
+        "blk",
+        "stl",
+        "3pm",
+        "oreb",
+        "dreb",
+        "to",
+        "blocks",
+        "steals",
+        "turnovers",
+        "offensive_rebounds",
+    }
     if metric_key in low_count_basketball and (mean is None or mean < 3.0):
         return "poisson"
 
@@ -122,6 +146,7 @@ def _bernoulli_sample(p: float, size: int) -> list[int]:
 # Skip / missing-requirements helpers
 # ---------------------------------------------------------------------------
 
+
 def _skip_result(
     home_team: str,
     away_team: str,
@@ -159,6 +184,7 @@ def _validate_required_keys(
 # ---------------------------------------------------------------------------
 # Simulation result builder
 # ---------------------------------------------------------------------------
+
 
 def _build_team_score_result(
     home_team: str,
@@ -214,6 +240,7 @@ def _build_team_score_result(
 # ---------------------------------------------------------------------------
 # Legacy standalone functions (preserved for backward compatibility)
 # ---------------------------------------------------------------------------
+
 
 def run_game_simulation(
     projection: dict,
@@ -277,8 +304,10 @@ def simulate_totals(
     n_iter: int = 10000,
 ) -> dict:
     """Simulates totals (over/under) with explicit distribution selection."""
-    sigma = max(0.1, variance ** 0.5)
-    samples = _normal_sample(mean, sigma, n_iter) if dist == "normal" else _poisson_sample(mean, n_iter)
+    sigma = max(0.1, variance**0.5)
+    samples = (
+        _normal_sample(mean, sigma, n_iter) if dist == "normal" else _poisson_sample(mean, n_iter)
+    )
 
     over_hits = sum(1 for x in samples if x > market_total)
     under_hits = sum(1 for x in samples if x < market_total)
@@ -330,7 +359,7 @@ def run_player_simulation(
     distribution_override = player_proj.get("distribution")
 
     dist = select_distribution(stat_key, league, mean=mean, override=distribution_override)
-    sigma = max(0.1, variance ** 0.5)
+    sigma = max(0.1, variance**0.5)
 
     if dist == "poisson":
         samples = _poisson_sample(mean, n_iter)
@@ -343,7 +372,7 @@ def run_player_simulation(
 
     sample_mean = sum(samples) / n_iter
     sample_variance = sum((x - sample_mean) ** 2 for x in samples) / n_iter
-    sample_std = sample_variance ** 0.5
+    sample_std = sample_variance**0.5
 
     return {
         "over_prob": over_hits / n_iter,
@@ -358,6 +387,7 @@ def run_player_simulation(
 # ---------------------------------------------------------------------------
 # Archetype-specific simulation models
 # ---------------------------------------------------------------------------
+
 
 def _sim_basketball(
     home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
@@ -416,9 +446,7 @@ def _sim_american_football(
     return home_scores, away_scores
 
 
-def _sim_baseball(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
-) -> tuple:
+def _sim_baseball(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
     """Baseball: Poisson run environment model.
 
     off_rating = runs scored per game, def_rating = runs allowed per game.
@@ -462,9 +490,7 @@ def _sim_baseball(
     return home_scores, away_scores
 
 
-def _sim_hockey(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
-) -> tuple:
+def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
     """Hockey: Poisson goal model with goalie/shot-rate adjustments.
 
     off_rating = goals per game, def_rating = goals allowed per game.
@@ -515,9 +541,7 @@ def _sim_hockey(
     return home_scores, away_scores
 
 
-def _sim_soccer(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
-) -> tuple:
+def _sim_soccer(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
     """Soccer: Poisson goal model with xG integration.
 
     off_rating = goals per game (or xG), def_rating = goals conceded per game (or xGA).
@@ -550,9 +574,7 @@ def _sim_soccer(
     return home_scores, away_scores
 
 
-def _sim_tennis(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
-) -> tuple:
+def _sim_tennis(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
     """Tennis: Point-level serve/return probability → simulate sets.
 
     home = Player A (listed first / higher seed), away = Player B.
@@ -657,19 +679,17 @@ def _tennis_game_win_prob(p: float) -> float:
     # Prob of reaching deuce (3-3 in points) = C(6,3) * p^3 * q^3 = 20 * p^3 * q^3
     # Prob server wins from deuce = p^2 / (p^2 + q^2)
     p_deuce_win = (p * p) / (p * p + q * q)
-    p_reach_deuce = 20 * (p ** 3) * (q ** 3)
+    p_reach_deuce = 20 * (p**3) * (q**3)
 
     # Prob server wins before deuce (4-0, 4-1, 4-2)
-    p_win_0 = p ** 4
-    p_win_1 = 4 * (p ** 4) * q
-    p_win_2 = 10 * (p ** 4) * (q ** 2)
+    p_win_0 = p**4
+    p_win_1 = 4 * (p**4) * q
+    p_win_2 = 10 * (p**4) * (q**2)
 
     return p_win_0 + p_win_1 + p_win_2 + p_reach_deuce * p_deuce_win
 
 
-def _sim_golf(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
-) -> tuple:
+def _sim_golf(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
     """Golf: Strokes-gained field probability model.
 
     For head-to-head matchup betting, we simulate 4-round tournament scores
@@ -707,9 +727,7 @@ def _sim_golf(
     return ([-s for s in a_totals], [-s for s in b_totals])
 
 
-def _sim_fighting(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
-) -> tuple:
+def _sim_fighting(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
     """Fighting: Win probability with method-of-victory modeling.
 
     off_rating = win percentage (0-1), finish_rate = rate of finishes.
@@ -779,9 +797,7 @@ def _sim_fighting(
     return a_scores, b_scores
 
 
-def _sim_esports(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
-) -> tuple:
+def _sim_esports(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
     """Esports: Map win probability with best-of-N simulation.
 
     map_win_rate: team's overall map win rate (0-1).
@@ -843,6 +859,7 @@ _ARCHETYPE_SIMULATORS = {
 # Main engine class
 # ---------------------------------------------------------------------------
 
+
 class OmegaSimulationEngine:
     """
     High-level simulation engine dispatching to sport-archetype models.
@@ -891,7 +908,9 @@ class OmegaSimulationEngine:
         # Unknown sport → skip with helpful message
         if archetype is None or archetype_name is None:
             return _skip_result(
-                home_team, away_team, league,
+                home_team,
+                away_team,
+                league,
                 skip_reason=f"No simulation model for league '{league}'. Add it to LEAGUE_TO_ARCHETYPE in sport_archetypes.py.",
                 missing_requirements=["league_model"],
             )
@@ -904,7 +923,9 @@ class OmegaSimulationEngine:
 
         if all_missing:
             return _skip_result(
-                home_team, away_team, league,
+                home_team,
+                away_team,
+                league,
                 skip_reason=f"Missing required inputs for {archetype.display_name}: {', '.join(all_missing)}",
                 missing_requirements=all_missing,
             )
@@ -913,7 +934,9 @@ class OmegaSimulationEngine:
         simulator = _ARCHETYPE_SIMULATORS.get(archetype_name)
         if simulator is None:
             return _skip_result(
-                home_team, away_team, league,
+                home_team,
+                away_team,
+                league,
                 skip_reason=f"Simulator not implemented for archetype '{archetype_name}'",
                 missing_requirements=["archetype_simulator"],
             )
@@ -925,8 +948,12 @@ class OmegaSimulationEngine:
         )
 
         return _build_team_score_result(
-            home_team, away_team, league, n_iterations,
-            home_scores, away_scores,
+            home_team,
+            away_team,
+            league,
+            n_iterations,
+            home_scores,
+            away_scores,
             home_context=home_context,
             away_context=away_context,
             archetype_name=archetype_name,
@@ -951,7 +978,9 @@ class OmegaSimulationEngine:
         """
         if home_context is None or away_context is None:
             return _skip_result(
-                home_team, away_team, league,
+                home_team,
+                away_team,
+                league,
                 skip_reason="Missing home_context or away_context (caller must supply)",
                 missing_requirements=["home_context", "away_context"],
             )
@@ -964,7 +993,9 @@ class OmegaSimulationEngine:
             ).MarkovSimulator
         except ModuleNotFoundError:
             return _skip_result(
-                home_team, away_team, league,
+                home_team,
+                away_team,
+                league,
                 skip_reason=(
                     "Markov simulator module is not available in this checkout; "
                     "use run_fast_game_simulation() or the canonical analyze_game() path"
@@ -1026,7 +1057,9 @@ class OmegaSimulationEngine:
                 n = len(sorted_vals)
                 player_projections[player_name][stat_key] = {
                     "mean": sum(values) / n if n > 0 else 0,
-                    "std": (sum((v - sum(values) / n) ** 2 for v in values) / n) ** 0.5 if n > 1 else 0,
+                    "std": (sum((v - sum(values) / n) ** 2 for v in values) / n) ** 0.5
+                    if n > 1
+                    else 0,
                     "min": min(values) if values else 0,
                     "max": max(values) if values else 0,
                     "p10": sorted_vals[int(n * 0.1)] if n > 10 else min(values) if values else 0,

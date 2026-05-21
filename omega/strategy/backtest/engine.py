@@ -20,7 +20,6 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-UTC = timezone.utc
 from typing import Any
 
 from omega.core.betting.kelly import recommend_stake
@@ -33,6 +32,8 @@ from omega.core.calibration.probability import apply_calibration
 from omega.core.simulation.engine import OmegaSimulationEngine
 from omega.strategy.artifacts import FrozenArtifact, compat_dict_to_artifact
 from omega.strategy.models import BacktestResult, StrategyEntry
+
+UTC = timezone.utc
 
 logger = logging.getLogger("omega.strategy.backtest")
 
@@ -51,6 +52,7 @@ class HistoricalGame(dict):
         date: str (YYYY-MM-DD)
         closing_odds: dict (optional — for CLV calculation)
     """
+
     pass
 
 
@@ -148,9 +150,7 @@ class BacktestEngine:
         brier_values = [b["brier"] for b in bets if b.get("brier") is not None]
         brier_score = sum(brier_values) / len(brier_values) if brier_values else None
 
-        avg_edge = (
-            sum(b["edge_pct"] for b in bets) / len(bets) if bets else 0.0
-        )
+        avg_edge = sum(b["edge_pct"] for b in bets) / len(bets) if bets else 0.0
 
         roi = (net_units / total_wagered * 100) if total_wagered > 0 else 0.0
         win_rate = wins / len(bets) if bets else 0.0

@@ -4,6 +4,7 @@ This script intentionally checks the runtime before an agent attempts MCP or
 direct engine execution. A missing dependency is a setup failure, not a reason
 to downgrade away from the deterministic engine without first repairing setup.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,10 +36,7 @@ def check_distribution() -> list[str]:
     try:
         importlib.metadata.version("omega")
     except importlib.metadata.PackageNotFoundError:
-        return [
-            "Omega is not installed in this interpreter. "
-            "Run: python -m pip install -e .[mcp]"
-        ]
+        return ["Omega is not installed in this interpreter. Run: python -m pip install -e .[mcp]"]
     return []
 
 

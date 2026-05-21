@@ -30,6 +30,7 @@ logger = logging.getLogger("omega.strategy.promotion")
 @dataclass
 class PromotionCriteria:
     """Configurable criteria for auto-promotion."""
+
     min_roi_pct: float = 2.0
     min_win_rate: float = 0.48
     min_sample_size: int = 30
@@ -52,19 +53,13 @@ def evaluate_for_promotion(
         reasons.extend(result.rejection_reasons)
 
     if result.total_bets_placed < criteria.min_sample_size:
-        reasons.append(
-            f"Sample too small: {result.total_bets_placed} < {criteria.min_sample_size}"
-        )
+        reasons.append(f"Sample too small: {result.total_bets_placed} < {criteria.min_sample_size}")
 
     if result.roi_pct < criteria.min_roi_pct:
-        reasons.append(
-            f"ROI too low: {result.roi_pct:.1f}% < {criteria.min_roi_pct:.1f}%"
-        )
+        reasons.append(f"ROI too low: {result.roi_pct:.1f}% < {criteria.min_roi_pct:.1f}%")
 
     if result.win_rate < criteria.min_win_rate:
-        reasons.append(
-            f"Win rate too low: {result.win_rate:.1%} < {criteria.min_win_rate:.1%}"
-        )
+        reasons.append(f"Win rate too low: {result.win_rate:.1%} < {criteria.min_win_rate:.1%}")
 
     if result.max_drawdown_units > criteria.max_drawdown:
         reasons.append(
@@ -98,7 +93,9 @@ def auto_promote_or_reject(
     if entry.status == StrategyStatus.REJECTED:
         logger.info(
             "Strategy %s v%d rejected by backtest engine: %s",
-            strategy_id, version, result.rejection_reasons,
+            strategy_id,
+            version,
+            result.rejection_reasons,
         )
         return entry
 

@@ -93,7 +93,9 @@ def omega_analyze_prop(
         return _error("omega_analyze_prop", "analysis_failed", str(exc))
 
 
-def omega_analyze_slate(request: dict[str, Any], bankroll: float, session_id: str) -> dict[str, Any]:
+def omega_analyze_slate(
+    request: dict[str, Any], bankroll: float, session_id: str
+) -> dict[str, Any]:
     """Run deterministic slate analysis through canonical core service."""
     from omega.core.contracts.schemas import SlateAnalysisRequest
     from omega.core.contracts.service import analyze

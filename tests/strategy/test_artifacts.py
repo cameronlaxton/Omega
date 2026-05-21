@@ -5,10 +5,10 @@ All tests are deterministic — no network calls, no LLM.
 """
 
 
-
 # -----------------------------------------------------------------------
 # Fixtures
 # -----------------------------------------------------------------------
+
 
 def _make_trace_dict():
     """A minimal ExecutionTrace dict as stored in TraceStore."""
@@ -66,11 +66,13 @@ def _make_legacy_game_dict():
 # FrozenArtifact model tests
 # -----------------------------------------------------------------------
 
+
 class TestFrozenArtifact:
     """Test the FrozenArtifact Pydantic model."""
 
     def test_create_valid(self):
         from omega.strategy.artifacts import FrozenArtifact
+
         artifact = FrozenArtifact(
             artifact_id="test123",
             home_team="Celtics",
@@ -89,6 +91,7 @@ class TestFrozenArtifact:
 
     def test_serialization_round_trip(self):
         from omega.strategy.artifacts import FrozenArtifact
+
         artifact = FrozenArtifact(
             artifact_id="rt-test",
             home_team="Lakers",
@@ -107,6 +110,7 @@ class TestFrozenArtifact:
 
     def test_json_round_trip(self):
         from omega.strategy.artifacts import FrozenArtifact
+
         artifact = FrozenArtifact(
             artifact_id="json-test",
             home_team="Nuggets",
@@ -124,29 +128,34 @@ class TestFrozenArtifact:
 # Deterministic artifact ID
 # -----------------------------------------------------------------------
 
+
 class TestArtifactId:
     """artifact_id must be deterministic for the same event identity."""
 
     def test_same_inputs_same_id(self):
         from omega.strategy.artifacts import compute_artifact_id
+
         id1 = compute_artifact_id("Celtics", "Pacers", "NBA", "2025-03-01")
         id2 = compute_artifact_id("Celtics", "Pacers", "NBA", "2025-03-01")
         assert id1 == id2
 
     def test_different_date_different_id(self):
         from omega.strategy.artifacts import compute_artifact_id
+
         id1 = compute_artifact_id("Celtics", "Pacers", "NBA", "2025-03-01")
         id2 = compute_artifact_id("Celtics", "Pacers", "NBA", "2025-03-02")
         assert id1 != id2
 
     def test_different_teams_different_id(self):
         from omega.strategy.artifacts import compute_artifact_id
+
         id1 = compute_artifact_id("Celtics", "Pacers", "NBA", "2025-03-01")
         id2 = compute_artifact_id("Lakers", "Pacers", "NBA", "2025-03-01")
         assert id1 != id2
 
     def test_id_is_hex_string(self):
         from omega.strategy.artifacts import compute_artifact_id
+
         aid = compute_artifact_id("Celtics", "Pacers", "NBA", "2025-03-01")
         assert len(aid) == 16
         int(aid, 16)  # must be valid hex
@@ -156,11 +165,13 @@ class TestArtifactId:
 # trace_to_artifact converter
 # -----------------------------------------------------------------------
 
+
 class TestTraceToArtifact:
     """Test conversion from ExecutionTrace dict to FrozenArtifact."""
 
     def test_basic_conversion(self):
         from omega.strategy.artifacts import trace_to_artifact
+
         trace = _make_trace_dict()
         outcome = _make_outcome_dict()
         artifact = trace_to_artifact(trace, outcome)
@@ -176,6 +187,7 @@ class TestTraceToArtifact:
 
     def test_contexts_from_execution_result(self):
         from omega.strategy.artifacts import trace_to_artifact
+
         trace = _make_trace_dict()
         artifact = trace_to_artifact(trace)
 
@@ -185,12 +197,14 @@ class TestTraceToArtifact:
 
     def test_no_outcome_produces_none(self):
         from omega.strategy.artifacts import trace_to_artifact
+
         trace = _make_trace_dict()
         artifact = trace_to_artifact(trace)
         assert artifact.outcome is None
 
     def test_deterministic_id_from_trace(self):
         from omega.strategy.artifacts import compute_artifact_id, trace_to_artifact
+
         trace = _make_trace_dict()
         artifact = trace_to_artifact(trace)
         expected_id = compute_artifact_id("Celtics", "Pacers", "NBA", "2025-03-01")
@@ -201,11 +215,13 @@ class TestTraceToArtifact:
 # compat_dict_to_artifact converter
 # -----------------------------------------------------------------------
 
+
 class TestCompatDictToArtifact:
     """Test legacy HistoricalGame dict conversion."""
 
     def test_basic_conversion(self):
         from omega.strategy.artifacts import compat_dict_to_artifact
+
         game = _make_legacy_game_dict()
         artifact = compat_dict_to_artifact(game)
 
@@ -218,6 +234,7 @@ class TestCompatDictToArtifact:
 
     def test_missing_fields_use_defaults(self):
         from omega.strategy.artifacts import compat_dict_to_artifact
+
         artifact = compat_dict_to_artifact({"home_team": "X", "away_team": "Y"})
         assert artifact.league == "NBA"  # default
         assert artifact.outcome is None
@@ -249,6 +266,7 @@ class TestCompatDictToArtifact:
 # -----------------------------------------------------------------------
 # Backtest parity: FrozenArtifact vs legacy dict
 # -----------------------------------------------------------------------
+
 
 class TestBacktestParity:
     """Same game via FrozenArtifact and legacy dict must produce identical results."""
@@ -325,11 +343,13 @@ class TestBacktestParity:
 # BacktestResult new fields
 # -----------------------------------------------------------------------
 
+
 class TestBacktestResultFields:
     """Test that BacktestResult includes Phase 6b fields."""
 
     def test_default_fields(self):
         from omega.strategy.models import BacktestResult
+
         result = BacktestResult(
             strategy_id="test",
             strategy_version=1,

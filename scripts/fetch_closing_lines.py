@@ -40,6 +40,7 @@ Usage:
     python scripts/fetch_closing_lines.py --league NBA
     python scripts/fetch_closing_lines.py --league NFL --dry-run
 """
+
 from __future__ import annotations
 
 import argparse
@@ -48,8 +49,9 @@ import logging
 import sys
 from collections.abc import Callable
 from datetime import datetime, timezone
-UTC = timezone.utc
 from pathlib import Path
+
+UTC = timezone.utc
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -72,6 +74,7 @@ logger = logging.getLogger("fetch_closing_lines")
 # ---------------------------------------------------------------------------
 # Team canonicalization registry
 # ---------------------------------------------------------------------------
+
 
 def _identity(name: str) -> str | None:
     return name or None
@@ -205,13 +208,14 @@ def _match_prop_outcome(bet: dict, books: list[BookOdds]) -> BookOdds | None:
 # Bet selection
 # ---------------------------------------------------------------------------
 
+
 def _pending_bets_needing_close(
-    store: TraceStore, league_filter: str | None = None,
+    store: TraceStore,
+    league_filter: str | None = None,
 ) -> list[dict]:
     """Return rows joining bet_records, traces, closing_lines — only pending bets
     with no closing-line attached yet. Optionally filter to a single league."""
-    sql = (
-        """SELECT b.bet_id, b.trace_id, b.book, b.market, b.selection,
+    sql = """SELECT b.bet_id, b.trace_id, b.book, b.market, b.selection,
                   b.selection_descriptor, b.line_taken, b.odds_taken,
                   b.decision_timestamp, b.status,
                   t.league, t.full_trace
@@ -223,7 +227,6 @@ def _pending_bets_needing_close(
             AND c.selection_descriptor = b.selection_descriptor
            WHERE b.status = 'pending'
              AND c.closing_id IS NULL"""
-    )
     params: tuple = ()
     if league_filter:
         sql += " AND t.league = ?"
@@ -239,6 +242,7 @@ def _event_key(home: str, away: str, canonicalize: Callable[[str], str | None]) 
 # ---------------------------------------------------------------------------
 # Per-league processing
 # ---------------------------------------------------------------------------
+
 
 def _process_league(
     league: str,
@@ -267,7 +271,9 @@ def _process_league(
 
     logger.info(
         "[%s] fetched %d events; remaining budget=%d",
-        league, len(events), client.remaining_budget(),
+        league,
+        len(events),
+        client.remaining_budget(),
     )
 
     canonicalize = _load_canonicalizer(league)
@@ -286,7 +292,8 @@ def _process_league(
         full_trace = bet["full_trace"]
         try:
             import json as _json
-            input_snap = (_json.loads(full_trace).get("input_snapshot") or {})
+
+            input_snap = _json.loads(full_trace).get("input_snapshot") or {}
         except Exception:  # noqa: BLE001
             input_snap = {}
         home = canonicalize(input_snap.get("home_team", ""))
@@ -332,9 +339,15 @@ def _process_league(
             continue
 
         if dry_run:
-            logger.info("DRY [%s] %s -> %s %s @ %s pt=%s",
-                        league, bet["bet_id"], outcome.bookmaker, outcome.market,
-                        outcome.price, outcome.point)
+            logger.info(
+                "DRY [%s] %s -> %s %s @ %s pt=%s",
+                league,
+                bet["bet_id"],
+                outcome.bookmaker,
+                outcome.market,
+                outcome.price,
+                outcome.point,
+            )
             attached += 1
             continue
 
@@ -348,9 +361,15 @@ def _process_league(
             source=f"the-odds-api:{outcome.bookmaker}",
         )
         attached += 1
-        logger.info("ATTACHED [%s] %s -> %s %s pt=%s (book=%s)",
-                    league, bet["bet_id"], outcome.price, bet["market"],
-                    outcome.point, outcome.bookmaker)
+        logger.info(
+            "ATTACHED [%s] %s -> %s %s pt=%s (book=%s)",
+            league,
+            bet["bet_id"],
+            outcome.price,
+            bet["market"],
+            outcome.point,
+            outcome.bookmaker,
+        )
 
     return attached, skipped
 
@@ -359,11 +378,17 @@ def _process_league(
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Capture closing lines for pending bets across mapped leagues")
-    parser.add_argument("--db", default=None, help="SQLite path (default: repo-root omega_traces.db)")
+    parser = argparse.ArgumentParser(
+        description="Capture closing lines for pending bets across mapped leagues"
+    )
     parser.add_argument(
-        "--league", default=None,
+        "--db", default=None, help="SQLite path (default: repo-root omega_traces.db)"
+    )
+    parser.add_argument(
+        "--league",
+        default=None,
         help="Restrict to a single league code (e.g. NBA, NFL, MLB). Default: process all leagues found in pending bets.",
     )
     parser.add_argument("--dry-run", action="store_true")
@@ -389,7 +414,9 @@ def main() -> int:
 
     logger.info(
         "Found %d pending bet(s) across %d league(s): %s",
-        len(pending), len(by_league), sorted(by_league),
+        len(pending),
+        len(by_league),
+        sorted(by_league),
     )
 
     client = OddsApiClient()
@@ -401,8 +428,11 @@ def main() -> int:
             total_skipped.extend(f"{b['bet_id']} (no league on trace)" for b in by_league[league])
             continue
         attached, skipped = _process_league(
-            league=league, bets=by_league[league],
-            client=client, store=store, dry_run=args.dry_run,
+            league=league,
+            bets=by_league[league],
+            client=client,
+            store=store,
+            dry_run=args.dry_run,
         )
         total_attached += attached
         total_skipped.extend(skipped)

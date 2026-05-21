@@ -12,7 +12,6 @@ import itertools
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-UTC = timezone.utc
 from typing import Any
 
 from omega.core.betting.kelly import recommend_stake
@@ -20,12 +19,15 @@ from omega.core.betting.odds import american_to_decimal
 from omega.core.betting.parlay import ParlayLeg, build_parlay
 from omega.strategy.anchor.detector import AnchorLeg, scan_player
 
+UTC = timezone.utc
+
 logger = logging.getLogger("omega.strategy.anchor.scanner")
 
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class AnchorParlayConfig:
@@ -36,10 +38,10 @@ class AnchorParlayConfig:
     games_lookback: int = 10
     min_legs: int = 2
     max_legs: int = 4
-    target_min_odds: float = 1.80    # decimal
-    target_max_odds: float = 3.00    # decimal
-    min_leg_edge: float = -5.0       # allow slightly negative individual edge
-    min_parlay_ev: float = 0.0       # minimum combined EV% to include
+    target_min_odds: float = 1.80  # decimal
+    target_max_odds: float = 3.00  # decimal
+    min_leg_edge: float = -5.0  # allow slightly negative individual edge
+    min_parlay_ev: float = 0.0  # minimum combined EV% to include
     correlation_discount: float = 0.95  # multiply combined prob when correlated
     bankroll: float = 1000.0
     confidence_tier: str = "B"
@@ -50,15 +52,16 @@ class AnchorParlayConfig:
 # Output models
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AnchorParlay:
     """A single recommended parlay."""
 
-    game: str                            # e.g. "Thunder @ Clippers"
+    game: str  # e.g. "Thunder @ Clippers"
     legs: list[AnchorLeg]
     combined_decimal_odds: float
-    combined_hit_rate: float             # empirical
-    implied_probability: float           # from combined odds
+    combined_hit_rate: float  # empirical
+    implied_probability: float  # from combined odds
     combined_edge_pct: float
     ev_pct: float
     correlation_warnings: list[str]
@@ -84,6 +87,7 @@ class ScanResult:
 # ---------------------------------------------------------------------------
 # Scanner
 # ---------------------------------------------------------------------------
+
 
 def _anchor_to_parlay_leg(leg: AnchorLeg) -> ParlayLeg | None:
     """Convert an AnchorLeg (with odds) to a ParlayLeg for parlay math."""
@@ -164,19 +168,21 @@ def build_parlays_for_game(
                 confidence_tier=config.confidence_tier,
             )
 
-            results.append(AnchorParlay(
-                game=game_label,
-                legs=alegs,
-                combined_decimal_odds=slip.combined_decimal_odds,
-                combined_hit_rate=slip.combined_win_probability,
-                implied_probability=slip.implied_probability,
-                combined_edge_pct=slip.combined_edge_pct,
-                ev_pct=slip.ev_pct,
-                correlation_warnings=slip.correlation_warnings,
-                recommended_units=stake["units"],
-                kelly_fraction=stake["kelly_fraction"],
-                confidence_tier=config.confidence_tier,
-            ))
+            results.append(
+                AnchorParlay(
+                    game=game_label,
+                    legs=alegs,
+                    combined_decimal_odds=slip.combined_decimal_odds,
+                    combined_hit_rate=slip.combined_win_probability,
+                    implied_probability=slip.implied_probability,
+                    combined_edge_pct=slip.combined_edge_pct,
+                    ev_pct=slip.ev_pct,
+                    correlation_warnings=slip.correlation_warnings,
+                    recommended_units=stake["units"],
+                    kelly_fraction=stake["kelly_fraction"],
+                    confidence_tier=config.confidence_tier,
+                )
+            )
 
     # Sort by EV descending
     results.sort(key=lambda p: p.ev_pct, reverse=True)
@@ -227,8 +233,10 @@ def run_full_scan(
 
     logger.info(
         "Scan complete: %d games, %d players, %d anchors, %d parlays",
-        result.games_scanned, result.players_scanned,
-        result.anchors_found, result.parlays_built,
+        result.games_scanned,
+        result.players_scanned,
+        result.anchors_found,
+        result.parlays_built,
     )
     return result
 
@@ -283,14 +291,12 @@ def scan_slate(
             game_anchor_legs.extend(legs)
 
         # Build parlays for this game
-        game_parlays = build_parlays_for_game(
-            game_anchor_legs, game_label, config
-        )
+        game_parlays = build_parlays_for_game(game_anchor_legs, game_label, config)
         all_parlays.extend(game_parlays)
 
     # Sort all parlays by EV and limit
     all_parlays.sort(key=lambda p: p.ev_pct, reverse=True)
-    all_parlays = all_parlays[:config.max_results]
+    all_parlays = all_parlays[: config.max_results]
 
     return ScanResult(
         league=config.league,

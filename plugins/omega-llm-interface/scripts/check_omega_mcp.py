@@ -17,14 +17,19 @@ from omega.mcp.server import PROMPT_NAMES, RESOURCE_URIS, TOOL_NAMES  # noqa: E4
 
 
 def main() -> int:
-    print(json.dumps({
-        "tool_count": len(TOOL_NAMES),
-        "tools": list(TOOL_NAMES),
-        "resource_count": len(RESOURCE_URIS),
-        "resources": list(RESOURCE_URIS),
-        "prompt_count": len(PROMPT_NAMES),
-        "prompts": list(PROMPT_NAMES),
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "tool_count": len(TOOL_NAMES),
+                "tools": list(TOOL_NAMES),
+                "resource_count": len(RESOURCE_URIS),
+                "resources": list(RESOURCE_URIS),
+                "prompt_count": len(PROMPT_NAMES),
+                "prompts": list(PROMPT_NAMES),
+            },
+            indent=2,
+        )
+    )
     return 0
 
 

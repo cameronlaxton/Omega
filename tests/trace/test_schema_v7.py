@@ -6,6 +6,7 @@ Tests for V7 schema migration:
 - BUG-3 cleanup removes binary 1/0 game-outcome rows attached to prop-kind traces
 - migration is idempotent (safe to re-run)
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -22,7 +23,9 @@ def _tmp_db_path() -> str:
     return tmp.name
 
 
-def _persist_trace(store: TraceStore, trace_id: str, *, session_id: str | None, kind: str = "prop") -> None:
+def _persist_trace(
+    store: TraceStore, trace_id: str, *, session_id: str | None, kind: str = "prop"
+) -> None:
     blob = {
         "trace_id": trace_id,
         "run_id": "r-" + trace_id,
@@ -229,9 +232,7 @@ class TestV8OutcomeUniqueness:
         rows = store.conn.execute(
             "SELECT outcome_id, result FROM outcomes WHERE trace_id = 't-dup-outcome'"
         ).fetchall()
-        assert [dict(row) for row in rows] == [
-            {"outcome_id": "o-first", "result": "home_win"}
-        ]
+        assert [dict(row) for row in rows] == [{"outcome_id": "o-first", "result": "home_win"}]
         idx = store.conn.execute(
             "SELECT name FROM sqlite_master WHERE type='index' "
             "AND name='idx_outcomes_trace_id_unique'"

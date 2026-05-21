@@ -13,9 +13,11 @@ import pytest
 # Fixtures
 # -----------------------------------------------------------------------
 
+
 def _make_profile(**overrides):
     """Create a CalibrationProfile with sensible defaults."""
     from omega.core.calibration.profiles import CalibrationProfile
+
     defaults = {
         "profile_id": "test_nba_v1",
         "version": 1,
@@ -38,6 +40,7 @@ def _make_graded_traces(n=50, bias=0.0):
     with optional bias to create overconfidence.
     """
     import random
+
     random.seed(42)
     traces = []
     for i in range(n):
@@ -45,17 +48,19 @@ def _make_graded_traces(n=50, bias=0.0):
         raw_prob = max(0.1, min(0.95, raw_prob))
         # Outcome correlates with probability
         actual_home_win = random.random() < (raw_prob * 0.9)  # slightly less than predicted
-        traces.append({
-            "trace_id": f"trace-{i:04d}",
-            "league": "NBA",
-            "predictions": {"home_win_prob": raw_prob * 100},  # stored as percentage
-            "_outcome": {
-                "outcome_id": f"out-{i:04d}",
-                "home_score": 110 if actual_home_win else 95,
-                "away_score": 95 if actual_home_win else 110,
-                "result": "home_win" if actual_home_win else "away_win",
-            },
-        })
+        traces.append(
+            {
+                "trace_id": f"trace-{i:04d}",
+                "league": "NBA",
+                "predictions": {"home_win_prob": raw_prob * 100},  # stored as percentage
+                "_outcome": {
+                    "outcome_id": f"out-{i:04d}",
+                    "home_score": 110 if actual_home_win else 95,
+                    "away_score": 95 if actual_home_win else 110,
+                    "result": "home_win" if actual_home_win else "away_win",
+                },
+            }
+        )
     return traces
 
 
@@ -63,8 +68,8 @@ def _make_graded_traces(n=50, bias=0.0):
 # CalibrationProfile model tests
 # -----------------------------------------------------------------------
 
-class TestCalibrationProfile:
 
+class TestCalibrationProfile:
     def test_create_valid(self):
         profile = _make_profile()
         assert profile.profile_id == "test_nba_v1"
@@ -74,6 +79,7 @@ class TestCalibrationProfile:
 
     def test_round_trip(self):
         from omega.core.calibration.profiles import CalibrationProfile
+
         profile = _make_profile(method="isotonic", params={"calibration_map": {0.5: 0.48}})
         dumped = profile.model_dump()
         restored = CalibrationProfile(**dumped)
@@ -81,6 +87,7 @@ class TestCalibrationProfile:
 
     def test_json_round_trip(self):
         from omega.core.calibration.profiles import CalibrationProfile
+
         profile = _make_profile()
         json_str = profile.model_dump_json()
         restored = CalibrationProfile.model_validate_json(json_str)
@@ -88,6 +95,7 @@ class TestCalibrationProfile:
 
     def test_default_status_is_candidate(self):
         from omega.core.calibration.profiles import ProfileStatus
+
         profile = _make_profile()
         assert profile.status == ProfileStatus.CANDIDATE
 
@@ -96,10 +104,11 @@ class TestCalibrationProfile:
 # CalibrationRegistry tests
 # -----------------------------------------------------------------------
 
-class TestCalibrationRegistry:
 
+class TestCalibrationRegistry:
     def test_register_and_list(self):
         from omega.core.calibration.registry import CalibrationRegistry
+
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = f.name
         try:
@@ -116,6 +125,7 @@ class TestCalibrationRegistry:
 
     def test_get_production_none(self):
         from omega.core.calibration.registry import CalibrationRegistry
+
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = f.name
         try:
@@ -131,6 +141,7 @@ class TestCalibrationRegistry:
     def test_promote_workflow(self):
         from omega.core.calibration.profiles import ProfileStatus
         from omega.core.calibration.registry import CalibrationRegistry
+
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = f.name
         try:
@@ -162,6 +173,7 @@ class TestCalibrationRegistry:
     def test_reject(self):
         from omega.core.calibration.profiles import ProfileStatus
         from omega.core.calibration.registry import CalibrationRegistry
+
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = f.name
         try:
@@ -179,12 +191,14 @@ class TestCalibrationRegistry:
 
     def test_empty_file(self):
         from omega.core.calibration.registry import CalibrationRegistry
+
         reg = CalibrationRegistry(path="/tmp/nonexistent_profiles_12345.json")
         assert reg.get_production("NBA") is None
         assert reg.list_profiles() == []
 
     def test_duplicate_id_raises(self):
         from omega.core.calibration.registry import CalibrationRegistry
+
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = f.name
         try:
@@ -202,10 +216,11 @@ class TestCalibrationRegistry:
 # CalibrationFitter tests
 # -----------------------------------------------------------------------
 
-class TestCalibrationFitter:
 
+class TestCalibrationFitter:
     def test_extract_pairs(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = _make_graded_traces(n=50)
         fitter = CalibrationFitter()
         preds, outs = fitter.extract_pairs(traces)
@@ -216,6 +231,7 @@ class TestCalibrationFitter:
 
     def test_extract_pairs_skips_incomplete(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = [
             {"predictions": None, "_outcome": {"result": "home_win"}},
             {"predictions": {"home_win_prob": 60}, "_outcome": None},
@@ -230,6 +246,7 @@ class TestCalibrationFitter:
     def test_extract_pairs_ignores_prop_only_traces(self):
         """Prop traces have no _outcome — extract_pairs must skip them silently."""
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = [
             {
                 "predictions": {"over_prob": 0.6, "under_prob": 0.4},
@@ -244,6 +261,7 @@ class TestCalibrationFitter:
 
     def test_extract_prop_pairs_over_win(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = [
             {
                 "predictions": {"over_prob": 0.62, "under_prob": 0.38},
@@ -256,6 +274,7 @@ class TestCalibrationFitter:
 
     def test_extract_prop_pairs_under_loss(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = [
             {
                 "predictions": {"over_prob": 0.45, "under_prob": 0.55},
@@ -268,6 +287,7 @@ class TestCalibrationFitter:
 
     def test_extract_prop_pairs_skips_push(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = [
             {
                 "predictions": {"over_prob": 0.5, "under_prob": 0.5},
@@ -281,6 +301,7 @@ class TestCalibrationFitter:
     def test_extract_prop_pairs_multiple_props_per_trace(self):
         """One trace can have many prop outcomes (e.g. pts, reb, ast)."""
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = [
             {
                 "predictions": {"over_prob": 0.58, "under_prob": 0.42},
@@ -298,6 +319,7 @@ class TestCalibrationFitter:
     def test_extract_prop_pairs_normalizes_percentage_form(self):
         """If over_prob comes in as 62 (percent) it must be coerced to 0.62."""
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = [
             {
                 "predictions": {"over_prob": 62, "under_prob": 38},
@@ -309,6 +331,7 @@ class TestCalibrationFitter:
 
     def test_extract_prop_pairs_skips_game_only_traces(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = [
             {"predictions": {"home_win_prob": 0.6}, "_outcome": {"result": "home_win"}},
         ]
@@ -318,6 +341,7 @@ class TestCalibrationFitter:
 
     def test_fit_isotonic_reproducible(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = _make_graded_traces(n=100)
         fitter = CalibrationFitter()
         preds, outs = fitter.extract_pairs(traces)
@@ -330,6 +354,7 @@ class TestCalibrationFitter:
 
     def test_fit_isotonic_monotonic(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = _make_graded_traces(n=100)
         fitter = CalibrationFitter()
         preds, outs = fitter.extract_pairs(traces)
@@ -340,11 +365,12 @@ class TestCalibrationFitter:
         values = [cal_map[k] for k in sorted_keys]
         for i in range(len(values) - 1):
             assert values[i] <= values[i + 1] + 1e-9, (
-                f"Monotonicity violation at index {i}: {values[i]} > {values[i+1]}"
+                f"Monotonicity violation at index {i}: {values[i]} > {values[i + 1]}"
             )
 
     def test_fit_shrinkage(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         # Create overconfident traces (bias predictions upward)
         traces = _make_graded_traces(n=100, bias=0.1)
         fitter = CalibrationFitter()
@@ -356,12 +382,14 @@ class TestCalibrationFitter:
 
     def test_fit_too_few_samples(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         fitter = CalibrationFitter()
         with pytest.raises(ValueError, match="at least"):
             fitter.fit_isotonic([0.5] * 10, [1] * 10, "NBA")
 
     def test_evaluate_metrics(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = _make_graded_traces(n=100)
         fitter = CalibrationFitter()
         preds, outs = fitter.extract_pairs(traces)
@@ -378,6 +406,7 @@ class TestCalibrationFitter:
 
     def test_compare_recommend(self):
         from omega.core.calibration.fitter import CalibrationFitter
+
         traces = _make_graded_traces(n=100)
         fitter = CalibrationFitter()
         preds, outs = fitter.extract_pairs(traces)
@@ -402,8 +431,8 @@ class TestCalibrationFitter:
 # apply_calibration backward compatibility + profile selection
 # -----------------------------------------------------------------------
 
-class TestApplyCalibration:
 
+class TestApplyCalibration:
     def test_backward_compat_no_league(self):
         """apply_calibration(p) without league must match pre-Phase-6c behavior."""
         from omega.core.calibration.probability import apply_calibration
@@ -444,10 +473,17 @@ class TestApplyCalibration:
                 version=1,
                 method="isotonic",
                 league="NBA",
-                params={"calibration_map": {
-                    0.0: 0.10, 0.2: 0.18, 0.4: 0.38,
-                    0.5: 0.48, 0.6: 0.55, 0.8: 0.72, 1.0: 0.85,
-                }},
+                params={
+                    "calibration_map": {
+                        0.0: 0.10,
+                        0.2: 0.18,
+                        0.4: 0.38,
+                        0.5: 0.48,
+                        0.6: 0.55,
+                        0.8: 0.72,
+                        1.0: 0.85,
+                    }
+                },
                 training_window="2025-01-01/2025-06-30",
                 sample_size=200,
                 dataset_hash="testhash",
@@ -458,6 +494,7 @@ class TestApplyCalibration:
 
             # Monkeypatch _get_active_profile to use our temp registry
             import omega.core.calibration.probability as prob_mod
+
             original = prob_mod._get_active_profile
 
             def _patched_get(league, context_slice=None):
@@ -502,9 +539,11 @@ class TestApplyCalibration:
 # context_slice on CalibrationProfile
 # ---------------------------------------------------------------------------
 
+
 class TestContextSliceProfile:
     def test_base_profile_has_none_slice(self):
         from omega.core.calibration.profiles import CalibrationProfile
+
         p = CalibrationProfile(
             profile_id="iso_nba_v1",
             version=1,
@@ -519,6 +558,7 @@ class TestContextSliceProfile:
 
     def test_playoff_profile_stores_slice(self):
         from omega.core.calibration.profiles import CalibrationProfile
+
         p = CalibrationProfile(
             profile_id="iso_nba_playoff_v1",
             version=1,
@@ -538,6 +578,7 @@ class TestContextSliceProfile:
 
     def test_mlb_regular_profile(self):
         from omega.core.calibration.profiles import CalibrationProfile
+
         p = CalibrationProfile(
             profile_id="iso_mlb_regular_v1",
             version=1,
@@ -557,10 +598,13 @@ class TestContextSliceProfile:
 # Registry context_slice lookup and promotion
 # ---------------------------------------------------------------------------
 
+
 class TestRegistryContextSlice:
     def test_get_production_returns_base_when_no_slice_profile(self):
         """If no slice-specific profile exists, falls back to base."""
-        import tempfile, os
+        import os
+        import tempfile
+
         from omega.core.calibration.registry import CalibrationRegistry
 
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
@@ -583,7 +627,9 @@ class TestRegistryContextSlice:
 
     def test_get_production_returns_slice_when_available(self):
         """Slice-specific profile is preferred over base."""
-        import tempfile, os
+        import os
+        import tempfile
+
         from omega.core.calibration.registry import CalibrationRegistry
 
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
@@ -616,7 +662,9 @@ class TestRegistryContextSlice:
 
     def test_promote_slice_does_not_archive_base(self):
         """Promoting a playoff profile must not archive the base profile."""
-        import tempfile, os
+        import os
+        import tempfile
+
         from omega.core.calibration.profiles import ProfileStatus
         from omega.core.calibration.registry import CalibrationRegistry
 
@@ -651,7 +699,9 @@ class TestRegistryContextSlice:
 
     def test_list_profiles_filters_by_context_slice(self):
         """list_profiles(context_slice='playoff') returns only playoff profiles."""
-        import tempfile, os
+        import os
+        import tempfile
+
         from omega.core.calibration.registry import CalibrationRegistry
 
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
@@ -687,6 +737,7 @@ class TestRegistryContextSlice:
 # Fitter: extract_pairs_by_context
 # ---------------------------------------------------------------------------
 
+
 class TestExtractPairsByContext:
     def _make_game_trace(self, is_playoff: bool, home_win_prob: float, result: str):
         return {
@@ -704,7 +755,10 @@ class TestExtractPairsByContext:
             self._make_game_trace(False, 0.55, "away_win"),
             self._make_game_trace(False, 0.52, "home_win"),
         ]
-        fn = lambda t: "playoff" if t.get("context_labels", {}).get("is_playoff") else "regular"
+
+        def fn(trace):
+            return "playoff" if trace.get("context_labels", {}).get("is_playoff") else "regular"
+
         result = CalibrationFitter.extract_pairs_by_context(traces, fn)
 
         assert "playoff" in result
@@ -716,7 +770,10 @@ class TestExtractPairsByContext:
         from omega.core.calibration.fitter import CalibrationFitter
 
         traces = [self._make_game_trace(False, 0.6, "home_win")]
-        fn = lambda t: "playoff" if t.get("context_labels", {}).get("is_playoff") else "regular"
+
+        def fn(trace):
+            return "playoff" if trace.get("context_labels", {}).get("is_playoff") else "regular"
+
         result = CalibrationFitter.extract_pairs_by_context(traces, fn)
 
         assert "regular" in result
@@ -729,7 +786,10 @@ class TestExtractPairsByContext:
             self._make_game_trace(True, 0.65, "home_win"),
             self._make_game_trace(True, 0.55, "away_win"),
         ]
-        fn = lambda _: None  # all go to base slice
+
+        def fn(_trace):
+            return None
+
         result = CalibrationFitter.extract_pairs_by_context(traces, fn)
         assert None in result
         assert len(result[None][0]) == 2
@@ -739,28 +799,35 @@ class TestExtractPairsByContext:
 # _derive_context_slice
 # ---------------------------------------------------------------------------
 
+
 class TestDeriveContextSlice:
     def test_none_hints_returns_none(self):
         from omega.core.calibration.probability import _derive_context_slice
+
         assert _derive_context_slice(None) is None
 
     def test_empty_hints_returns_none(self):
         from omega.core.calibration.probability import _derive_context_slice
+
         assert _derive_context_slice({}) is None
 
     def test_playoff_true_returns_playoff(self):
         from omega.core.calibration.probability import _derive_context_slice
+
         assert _derive_context_slice({"is_playoff": True}) == "playoff"
 
     def test_playoff_false_returns_none(self):
         from omega.core.calibration.probability import _derive_context_slice
+
         assert _derive_context_slice({"is_playoff": False}) is None
 
     def test_b2b_returns_back_to_back(self):
         from omega.core.calibration.probability import _derive_context_slice
+
         assert _derive_context_slice({"rest_days": 0}) == "back_to_back"
 
     def test_playoff_takes_precedence_over_b2b(self):
         from omega.core.calibration.probability import _derive_context_slice
+
         result = _derive_context_slice({"is_playoff": True, "rest_days": 0})
         assert result == "playoff"  # playoff wins

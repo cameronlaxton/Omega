@@ -163,7 +163,10 @@ class StrategyRegistry:
         self._persist()
         logger.info(
             "Backtest recorded for %s v%d: passed=%s roi=%.1f%%",
-            strategy_id, version, result.passed, result.roi_pct,
+            strategy_id,
+            version,
+            result.passed,
+            result.roi_pct,
         )
         return entry
 
@@ -199,29 +202,33 @@ class StrategyRegistry:
         current_prod = self.get_production(strategy_id)
         if current_prod is not None:
             current_prod.status = StrategyStatus.ARCHIVED
-            current_prod.promotion_history.append(PromotionRecord(
-                strategy_id=strategy_id,
-                strategy_version=current_prod.version,
-                action="archive",
-                from_status=StrategyStatus.PRODUCTION.value,
-                to_status=StrategyStatus.ARCHIVED.value,
-                reason=f"Superseded by v{version}",
-                decided_by=decided_by,
-            ))
+            current_prod.promotion_history.append(
+                PromotionRecord(
+                    strategy_id=strategy_id,
+                    strategy_version=current_prod.version,
+                    action="archive",
+                    from_status=StrategyStatus.PRODUCTION.value,
+                    to_status=StrategyStatus.ARCHIVED.value,
+                    reason=f"Superseded by v{version}",
+                    decided_by=decided_by,
+                )
+            )
 
         # Promote
         from_status = entry.status.value
         entry.status = StrategyStatus.PRODUCTION
-        entry.promotion_history.append(PromotionRecord(
-            strategy_id=strategy_id,
-            strategy_version=version,
-            action="promote",
-            from_status=from_status,
-            to_status=StrategyStatus.PRODUCTION.value,
-            reason=reason,
-            decided_by=decided_by,
-            backtest_run_id=backtest_run_id,
-        ))
+        entry.promotion_history.append(
+            PromotionRecord(
+                strategy_id=strategy_id,
+                strategy_version=version,
+                action="promote",
+                from_status=from_status,
+                to_status=StrategyStatus.PRODUCTION.value,
+                reason=reason,
+                decided_by=decided_by,
+                backtest_run_id=backtest_run_id,
+            )
+        )
 
         self._persist()
         logger.info("Promoted %s v%d to production", strategy_id, version)
@@ -242,15 +249,17 @@ class StrategyRegistry:
 
         from_status = entry.status.value
         entry.status = StrategyStatus.REJECTED
-        entry.promotion_history.append(PromotionRecord(
-            strategy_id=strategy_id,
-            strategy_version=version,
-            action="reject",
-            from_status=from_status,
-            to_status=StrategyStatus.REJECTED.value,
-            reason=reason,
-            decided_by=decided_by,
-        ))
+        entry.promotion_history.append(
+            PromotionRecord(
+                strategy_id=strategy_id,
+                strategy_version=version,
+                action="reject",
+                from_status=from_status,
+                to_status=StrategyStatus.REJECTED.value,
+                reason=reason,
+                decided_by=decided_by,
+            )
+        )
 
         self._persist()
         logger.info("Rejected %s v%d: %s", strategy_id, version, reason)
@@ -265,10 +274,7 @@ class StrategyRegistry:
         return f"{strategy_id}:v{version}"
 
     def _versions_of(self, strategy_id: str) -> list[int]:
-        return [
-            e.version for e in self._strategies.values()
-            if e.strategy_id == strategy_id
-        ]
+        return [e.version for e in self._strategies.values() if e.strategy_id == strategy_id]
 
     def _persist(self) -> None:
         if not self._storage_path:
@@ -276,9 +282,7 @@ class StrategyRegistry:
         try:
             path = Path(self._storage_path)
             path.parent.mkdir(parents=True, exist_ok=True)
-            data = {
-                k: v.model_dump() for k, v in self._strategies.items()
-            }
+            data = {k: v.model_dump() for k, v in self._strategies.items()}
             path.write_text(json.dumps(data, indent=2, default=str))
         except Exception:
             logger.warning("Failed to persist strategy registry", exc_info=True)

@@ -86,8 +86,7 @@ def format_parlay(parlay: AnchorParlay, rank: int = 0) -> str:
 def format_parlay_brief(parlay: AnchorParlay) -> str:
     """One-line summary of a parlay for quick display."""
     legs_str = " + ".join(
-        f"{leg.player_name} {leg.threshold:.0f}+ {leg.stat_key}"
-        for leg in parlay.legs
+        f"{leg.player_name} {leg.threshold:.0f}+ {leg.stat_key}" for leg in parlay.legs
     )
     return (
         f"{parlay.game}: {legs_str} | "

@@ -8,6 +8,7 @@ Covers:
 - Idempotent re-run on processed/ files (no duplicate row)
 - new bet records require selection_descriptor; legacy exports can infer it
 """
+
 from __future__ import annotations
 
 import json
@@ -33,6 +34,7 @@ from omega.trace.store import TraceStore  # noqa: E402
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_analyze_out(trace_id: str = "sandbox-abc123", kind: str = "prop") -> dict[str, Any]:
     """A minimal but realistic core analyze() return value."""
@@ -151,14 +153,23 @@ def _write_file(inbox: Path, name: str, payload: dict[str, Any]) -> Path:
 # Shape A: export block
 # ---------------------------------------------------------------------------
 
+
 class TestExportBlock:
     def test_round_trip_with_bet(self, workspace, monkeypatch):
         inbox, db_path = workspace
         _write_file(inbox, "sandbox-abc123.json", _make_export_block("sandbox-abc123"))
 
-        monkeypatch.setattr(sys, "argv", [
-            "ingest_traces.py", "--inbox", str(inbox), "--db", str(db_path),
-        ])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "ingest_traces.py",
+                "--inbox",
+                str(inbox),
+                "--db",
+                str(db_path),
+            ],
+        )
         rc = ingest_traces.main()
         assert rc == 0
 
@@ -185,9 +196,17 @@ class TestExportBlock:
         inbox, db_path = workspace
         _write_file(inbox, "sandbox-xyz.json", _make_export_block("sandbox-xyz", with_bet=False))
 
-        monkeypatch.setattr(sys, "argv", [
-            "ingest_traces.py", "--inbox", str(inbox), "--db", str(db_path),
-        ])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "ingest_traces.py",
+                "--inbox",
+                str(inbox),
+                "--db",
+                str(db_path),
+            ],
+        )
         assert ingest_traces.main() == 0
 
         store = TraceStore(db_path=str(db_path))
@@ -199,9 +218,17 @@ class TestExportBlock:
         inbox, db_path = workspace
         _write_file(inbox, "legacy.json", _make_legacy_export_block("sandbox-legacy"))
 
-        monkeypatch.setattr(sys, "argv", [
-            "ingest_traces.py", "--inbox", str(inbox), "--db", str(db_path),
-        ])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "ingest_traces.py",
+                "--inbox",
+                str(inbox),
+                "--db",
+                str(db_path),
+            ],
+        )
         assert ingest_traces.main() == 0
 
         store = TraceStore(db_path=str(db_path))
@@ -226,14 +253,23 @@ class TestExportBlock:
 # Shape B: raw analyze() output
 # ---------------------------------------------------------------------------
 
+
 class TestRawAnalyzeOutput:
     def test_raw_output_is_accepted(self, workspace, monkeypatch):
         inbox, db_path = workspace
         _write_file(inbox, "raw.json", _make_analyze_out("sandbox-raw1", kind="game"))
 
-        monkeypatch.setattr(sys, "argv", [
-            "ingest_traces.py", "--inbox", str(inbox), "--db", str(db_path),
-        ])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "ingest_traces.py",
+                "--inbox",
+                str(inbox),
+                "--db",
+                str(db_path),
+            ],
+        )
         assert ingest_traces.main() == 0
 
         store = TraceStore(db_path=str(db_path))
@@ -248,15 +284,24 @@ class TestRawAnalyzeOutput:
 # Error path
 # ---------------------------------------------------------------------------
 
+
 class TestFailedFiles:
     def test_malformed_json_moves_to_failed(self, workspace, monkeypatch):
         inbox, db_path = workspace
         bad = inbox / "bad.json"
         bad.write_text("{not valid json", encoding="utf-8")
 
-        monkeypatch.setattr(sys, "argv", [
-            "ingest_traces.py", "--inbox", str(inbox), "--db", str(db_path),
-        ])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "ingest_traces.py",
+                "--inbox",
+                str(inbox),
+                "--db",
+                str(db_path),
+            ],
+        )
         assert ingest_traces.main() == 0  # main returns 0 even with file-level failures
 
         assert not bad.exists()
@@ -269,9 +314,17 @@ class TestFailedFiles:
         bad_payload["trace"].pop("trace_id")
         _write_file(inbox, "no_id.json", bad_payload)
 
-        monkeypatch.setattr(sys, "argv", [
-            "ingest_traces.py", "--inbox", str(inbox), "--db", str(db_path),
-        ])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "ingest_traces.py",
+                "--inbox",
+                str(inbox),
+                "--db",
+                str(db_path),
+            ],
+        )
         assert ingest_traces.main() == 0
 
         assert (inbox / "failed" / "no_id.json").exists()
@@ -281,14 +334,23 @@ class TestFailedFiles:
 # Idempotency
 # ---------------------------------------------------------------------------
 
+
 class TestIdempotent:
     def test_double_ingest_same_trace(self, workspace, monkeypatch):
         inbox, db_path = workspace
         _write_file(inbox, "first.json", _make_export_block("sandbox-dup"))
 
-        monkeypatch.setattr(sys, "argv", [
-            "ingest_traces.py", "--inbox", str(inbox), "--db", str(db_path),
-        ])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "ingest_traces.py",
+                "--inbox",
+                str(inbox),
+                "--db",
+                str(db_path),
+            ],
+        )
         assert ingest_traces.main() == 0
 
         # Drop the same trace_id again as a new inbox file
@@ -312,14 +374,24 @@ class TestIdempotent:
 # Dry-run
 # ---------------------------------------------------------------------------
 
+
 class TestDryRun:
     def test_dry_run_does_not_persist_or_move(self, workspace, monkeypatch):
         inbox, db_path = workspace
         path = _write_file(inbox, "dry.json", _make_export_block("sandbox-dry"))
 
-        monkeypatch.setattr(sys, "argv", [
-            "ingest_traces.py", "--inbox", str(inbox), "--db", str(db_path), "--dry-run",
-        ])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "ingest_traces.py",
+                "--inbox",
+                str(inbox),
+                "--db",
+                str(db_path),
+                "--dry-run",
+            ],
+        )
         assert ingest_traces.main() == 0
 
         assert path.exists()  # not moved
@@ -331,6 +403,7 @@ class TestDryRun:
 # ---------------------------------------------------------------------------
 # Prop matchup derivation: with vs. without game identity
 # ---------------------------------------------------------------------------
+
 
 class TestPropMatchupDerivation:
     """Phase 6h: prop traces should denormalize matchup to the game pair when

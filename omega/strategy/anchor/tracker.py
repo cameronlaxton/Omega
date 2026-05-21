@@ -7,6 +7,7 @@ outcome attachment after initial persistence.
 
 Schema version: 1
 """
+
 from __future__ import annotations
 
 import csv
@@ -17,9 +18,10 @@ import sqlite3
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-UTC = timezone.utc
 from pathlib import Path
 from typing import Any, Literal
+
+UTC = timezone.utc
 
 logger = logging.getLogger("omega.strategy.anchor.tracker")
 
@@ -58,17 +60,18 @@ CREATE INDEX IF NOT EXISTS idx_anchor_bets_league ON anchor_bets(league);
 # Models
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AnchorBetLeg:
     """A single leg in a tracked anchor bet."""
 
     player: str
     team: str
-    stat: str             # pts, reb, ast, 3pm, stl, blk
-    threshold: float      # e.g. 20 for "20+ points"
-    hit_rate: float       # empirical at scan time
-    odds_over: float | None = None   # American odds
-    result: str | None = None        # "HIT", "MISS", None
+    stat: str  # pts, reb, ast, 3pm, stl, blk
+    threshold: float  # e.g. 20 for "20+ points"
+    hit_rate: float  # empirical at scan time
+    odds_over: float | None = None  # American odds
+    result: str | None = None  # "HIT", "MISS", None
 
 
 @dataclass
@@ -76,10 +79,10 @@ class AnchorBetRecord:
     """A tracked anchor bet for CLV and calibration."""
 
     bet_id: str
-    scan_date: str                    # ISO date: "2026-04-13"
-    game: str                         # "Thunder @ Clippers"
+    scan_date: str  # ISO date: "2026-04-13"
+    game: str  # "Thunder @ Clippers"
     legs: list[AnchorBetLeg]
-    odds_taken: float                 # decimal odds at bet time
+    odds_taken: float  # decimal odds at bet time
     league: str = "NBA"
     sportsbook: str = "BetMGM"
     odds_close: float | None = None  # decimal odds at close
@@ -112,6 +115,7 @@ class AnchorBetRecord:
 # ---------------------------------------------------------------------------
 # Store
 # ---------------------------------------------------------------------------
+
 
 class AnchorBetTracker:
     """SQLite-backed anchor bet persistence and retrieval."""
@@ -212,9 +216,7 @@ class AnchorBetTracker:
 
     def get_bet(self, bet_id: str) -> AnchorBetRecord | None:
         """Retrieve a single bet by ID."""
-        row = self.conn.execute(
-            "SELECT * FROM anchor_bets WHERE bet_id = ?", (bet_id,)
-        ).fetchone()
+        row = self.conn.execute("SELECT * FROM anchor_bets WHERE bet_id = ?", (bet_id,)).fetchone()
         return self._row_to_record(row) if row else None
 
     def query_bets(
@@ -278,7 +280,9 @@ class AnchorBetTracker:
         # ROI: (total_returned - total_staked) / total_staked * 100
         total_staked = len(graded)  # 1 unit per bet
         total_returned = sum(b.odds_taken for b in graded if b.result == "WIN")
-        roi_pct = ((total_returned - total_staked) / total_staked * 100.0) if total_staked > 0 else 0.0
+        roi_pct = (
+            ((total_returned - total_staked) / total_staked * 100.0) if total_staked > 0 else 0.0
+        )
 
         return {
             "total": len(bets),
@@ -300,22 +304,43 @@ class AnchorBetTracker:
         output = io.StringIO()
         writer = csv.writer(output)
 
-        writer.writerow([
-            "bet_id", "scan_date", "game", "league", "sportsbook",
-            "num_legs", "legs", "odds_taken", "odds_close",
-            "modeled_true_p", "result", "clv_pct", "notes",
-        ])
+        writer.writerow(
+            [
+                "bet_id",
+                "scan_date",
+                "game",
+                "league",
+                "sportsbook",
+                "num_legs",
+                "legs",
+                "odds_taken",
+                "odds_close",
+                "modeled_true_p",
+                "result",
+                "clv_pct",
+                "notes",
+            ]
+        )
 
         for b in bets:
-            legs_str = " | ".join(
-                f"{leg.player} {leg.threshold:.0f}+ {leg.stat}"
-                for leg in b.legs
+            legs_str = " | ".join(f"{leg.player} {leg.threshold:.0f}+ {leg.stat}" for leg in b.legs)
+            writer.writerow(
+                [
+                    b.bet_id,
+                    b.scan_date,
+                    b.game,
+                    b.league,
+                    b.sportsbook,
+                    len(b.legs),
+                    legs_str,
+                    b.odds_taken,
+                    b.odds_close,
+                    b.modeled_true_p,
+                    b.result,
+                    b.clv_pct,
+                    b.notes,
+                ]
             )
-            writer.writerow([
-                b.bet_id, b.scan_date, b.game, b.league, b.sportsbook,
-                len(b.legs), legs_str, b.odds_taken, b.odds_close,
-                b.modeled_true_p, b.result, b.clv_pct, b.notes,
-            ])
 
         return output.getvalue()
 

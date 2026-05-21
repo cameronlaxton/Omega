@@ -8,7 +8,6 @@ and generates human-readable text summaries from simulation and edge data.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-UTC = timezone.utc
 from typing import Any
 
 from omega.core.models import (
@@ -18,6 +17,8 @@ from omega.core.models import (
     OutputPackage,
     QueryUnderstanding,
 )
+
+UTC = timezone.utc
 
 
 def compose_response(
@@ -56,14 +57,13 @@ def compose_response(
                         "source": f.result.source if f.result else None,
                         "quality": f.quality_score,
                     }
-                    for f in facts if f.filled
+                    for f in facts
+                    if f.filled
                 ],
             }
 
         elif pkg == OutputPackage.PLAIN_EXPLANATION:
-            narrative_parts.append(
-                f"Analysis of {understanding.raw_prompt}"
-            )
+            narrative_parts.append(f"Analysis of {understanding.raw_prompt}")
 
         elif pkg == OutputPackage.COMPACT_SUMMARY:
             filled = [f for f in facts if f.filled]
@@ -79,8 +79,7 @@ def compose_response(
                 )
             elif filled:
                 narrative_parts.append(
-                    f"Quick look at {understanding.raw_prompt}: "
-                    f"{len(filled)} data points gathered."
+                    f"Quick look at {understanding.raw_prompt}: {len(filled)} data points gathered."
                 )
 
         elif pkg == OutputPackage.LIMITED_CONTEXT_ANSWER:
@@ -105,9 +104,7 @@ def compose_response(
             }
             if execution.best_bet:
                 kelly = execution.best_bet.get("kelly_fraction", 0)
-                narrative_parts.append(
-                    f"Bankroll guidance: suggested Kelly fraction {kelly:.1%}"
-                )
+                narrative_parts.append(f"Bankroll guidance: suggested Kelly fraction {kelly:.1%}")
 
         elif pkg == OutputPackage.NEWS_DIGEST:
             news_facts = [
@@ -116,7 +113,8 @@ def compose_response(
                     "data": f.result.data if f.result else None,
                     "source": f.result.source if f.result else None,
                 }
-                for f in facts if f.filled
+                for f in facts
+                if f.filled
             ]
             sections["news_digest"] = {"items": news_facts}
 
@@ -216,11 +214,13 @@ def _extract_key_factors(facts: list[GatheredFact]) -> list[dict[str, Any]]:
     factors = []
     for fact in facts:
         if fact.filled and fact.result:
-            factors.append({
-                "key": fact.slot.key,
-                "importance": fact.slot.importance.value,
-                "data": fact.result.data,
-                "source": fact.result.source,
-                "quality": fact.quality_score,
-            })
+            factors.append(
+                {
+                    "key": fact.slot.key,
+                    "importance": fact.slot.importance.value,
+                    "data": fact.result.data,
+                    "source": fact.result.source,
+                    "quality": fact.quality_score,
+                }
+            )
     return factors

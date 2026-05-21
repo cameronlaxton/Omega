@@ -8,6 +8,7 @@ Covers:
 - attach_closing_line on a missing trace_id raises ValueError.
 - get_closing_lines returns all snapshots for a trace.
 """
+
 from __future__ import annotations
 
 import tempfile

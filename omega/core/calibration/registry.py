@@ -19,7 +19,6 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-UTC = timezone.utc
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +26,8 @@ from omega.core.calibration.profiles import (
     CalibrationProfile,
     ProfileStatus,
 )
+
+UTC = timezone.utc
 
 logger = logging.getLogger("omega.core.calibration.registry")
 
@@ -77,8 +78,12 @@ class CalibrationRegistry:
             raise ValueError(f"Profile ID already exists: {profile.profile_id}")
         data["profiles"].append(profile.model_dump())
         self._save(data)
-        logger.info("Registered profile %s (league=%s, method=%s)",
-                     profile.profile_id, profile.league, profile.method)
+        logger.info(
+            "Registered profile %s (league=%s, method=%s)",
+            profile.profile_id,
+            profile.league,
+            profile.method,
+        )
 
     def get_production(
         self,
@@ -99,8 +104,10 @@ class CalibrationRegistry:
         slice_profile: CalibrationProfile | None = None
 
         for p in data["profiles"]:
-            if (p.get("league", "").upper() != league_uc
-                    or p.get("status") != ProfileStatus.PRODUCTION.value):
+            if (
+                p.get("league", "").upper() != league_uc
+                or p.get("status") != ProfileStatus.PRODUCTION.value
+            ):
                 continue
             p_slice = p.get("context_slice")  # None for base profiles
             if context_slice is not None and p_slice == context_slice:
@@ -144,19 +151,24 @@ class CalibrationRegistry:
         # Archive existing production profile for the same (league, context_slice).
         # A playoff profile never archives the base profile, and vice versa.
         for p in data["profiles"]:
-            if (p.get("league", "").upper() == league.upper()
-                    and p.get("status") == ProfileStatus.PRODUCTION.value
-                    and p.get("context_slice") == target_slice):
+            if (
+                p.get("league", "").upper() == league.upper()
+                and p.get("status") == ProfileStatus.PRODUCTION.value
+                and p.get("context_slice") == target_slice
+            ):
                 p["status"] = ProfileStatus.ARCHIVED.value
-                logger.info("Archived incumbent profile %s for league=%s slice=%s",
-                            p["profile_id"], league, target_slice)
+                logger.info(
+                    "Archived incumbent profile %s for league=%s slice=%s",
+                    p["profile_id"],
+                    league,
+                    target_slice,
+                )
 
         # Promote the target
         target["status"] = ProfileStatus.PRODUCTION.value
         target["promoted_at"] = now
         self._save(data)
-        logger.info("Promoted profile %s to production for league %s",
-                     profile_id, league)
+        logger.info("Promoted profile %s to production for league %s", profile_id, league)
 
     def reject(self, profile_id: str, reason: str) -> None:
         """Reject a candidate profile with a documented reason."""

@@ -12,7 +12,6 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-UTC = timezone.utc
 from typing import Any
 
 from omega.core.betting.kelly import recommend_stake
@@ -43,6 +42,8 @@ from omega.core.simulation.engine import (
     run_player_simulation,
     select_distribution,
 )
+
+UTC = timezone.utc
 
 logger = logging.getLogger("omega.service")
 
@@ -350,9 +351,7 @@ def _resolve_game_market_odds(
     # Only use spread_home_price when spread_home was explicitly supplied;
     # otherwise fall through to moneyline_home. The spread_home_price field
     # defaults to -110 which would otherwise shadow a real moneyline_home value.
-    legacy_home = (
-        odds.spread_home_price if odds.spread_home is not None else odds.moneyline_home
-    )
+    legacy_home = odds.spread_home_price if odds.spread_home is not None else odds.moneyline_home
     home_odds = (
         home_spread.price
         if home_spread is not None
@@ -365,6 +364,7 @@ def _resolve_game_market_odds(
 # ---------------------------------------------------------------------------
 # analyze_game  — primary entry point
 # ---------------------------------------------------------------------------
+
 
 def analyze_game(
     request: GameAnalysisRequest,
@@ -466,33 +466,73 @@ def analyze_game(
         if home_odds is not None:
             if is_home_spread_market and "home_cover_prob" in sim_result:
                 cover_prob = sim_result["home_cover_prob"] / 100.0
-                cal_cover, cover_audit = _calibrate_audited(cover_prob, league=request.league, context_hints=gc, plane="game", market="cover")
+                cal_cover, cover_audit = _calibrate_audited(
+                    cover_prob,
+                    league=request.league,
+                    context_hints=gc,
+                    plane="game",
+                    market="cover",
+                )
                 home_edge = _build_edge(
-                    "home", request.home_team, cover_prob, cal_cover,
-                    home_odds, bankroll, request.n_iterations,
+                    "home",
+                    request.home_team,
+                    cover_prob,
+                    cal_cover,
+                    home_odds,
+                    bankroll,
+                    request.n_iterations,
                     calibration_audit=cover_audit,
                 )
                 home_edge = home_edge.model_copy(update={"spread_coverage_prob": cover_prob})
             else:
-                cal_home, home_audit = _calibrate_audited(home_prob, league=request.league, context_hints=gc, plane="game", market="home")
+                cal_home, home_audit = _calibrate_audited(
+                    home_prob, league=request.league, context_hints=gc, plane="game", market="home"
+                )
                 home_edge = _build_edge(
-                    "home", request.home_team, home_prob, cal_home,
-                    home_odds, bankroll, request.n_iterations,
+                    "home",
+                    request.home_team,
+                    home_prob,
+                    cal_home,
+                    home_odds,
+                    bankroll,
+                    request.n_iterations,
                     calibration_audit=home_audit,
                 )
             edges.append(home_edge)
 
         if away_odds is not None:
-            cal_away, away_audit = _calibrate_audited(away_prob, league=request.league, context_hints=gc, plane="game", market="away")
+            cal_away, away_audit = _calibrate_audited(
+                away_prob, league=request.league, context_hints=gc, plane="game", market="away"
+            )
             edges.append(
-                _build_edge("away", request.away_team, away_prob, cal_away, away_odds, bankroll, request.n_iterations, calibration_audit=away_audit)
+                _build_edge(
+                    "away",
+                    request.away_team,
+                    away_prob,
+                    cal_away,
+                    away_odds,
+                    bankroll,
+                    request.n_iterations,
+                    calibration_audit=away_audit,
+                )
             )
 
         # 3-way moneyline (hockey regulation, soccer)
         if request.odds.moneyline_draw is not None and draw_prob_raw > 0:
-            cal_draw, draw_audit = _calibrate_audited(draw_prob_raw, league=request.league, context_hints=gc, plane="game", market="draw")
+            cal_draw, draw_audit = _calibrate_audited(
+                draw_prob_raw, league=request.league, context_hints=gc, plane="game", market="draw"
+            )
             edges.append(
-                _build_edge("draw", "Draw", draw_prob_raw, cal_draw, request.odds.moneyline_draw, bankroll, request.n_iterations, calibration_audit=draw_audit)
+                _build_edge(
+                    "draw",
+                    "Draw",
+                    draw_prob_raw,
+                    cal_draw,
+                    request.odds.moneyline_draw,
+                    bankroll,
+                    request.n_iterations,
+                    calibration_audit=draw_audit,
+                )
             )
 
     best_bet = _pick_best_bet(edges, bankroll) if edges else None
@@ -522,12 +562,12 @@ def analyze_game(
 # Missing league falls back to _DEFAULT_PLAYOFF_FACTOR; missing stat within a
 # known league also falls back to the default.
 _PLAYOFF_STAT_FACTORS: dict[str, dict[str, float]] = {
-    "NBA":  {"pts": 0.96, "reb": 0.97, "ast": 0.96, "3pm": 0.94, "stl": 0.95, "blk": 0.95},
-    "NHL":  {"goals": 0.94, "assists": 0.95, "shots": 0.94, "saves": 0.97},
-    "MLB":  {"hits": 0.97, "hr": 0.93, "rbis": 0.96, "strikeouts": 1.02, "total_bases": 0.95},
-    "NFL":  {"pass_yds": 0.97, "rush_yds": 0.97, "rec_yds": 0.97, "receptions": 0.97},
-    "EPL":  {"goals": 0.96, "assists": 0.97, "shots": 0.95},
-    "MLS":  {"goals": 0.96, "assists": 0.97, "shots": 0.95},
+    "NBA": {"pts": 0.96, "reb": 0.97, "ast": 0.96, "3pm": 0.94, "stl": 0.95, "blk": 0.95},
+    "NHL": {"goals": 0.94, "assists": 0.95, "shots": 0.94, "saves": 0.97},
+    "MLB": {"hits": 0.97, "hr": 0.93, "rbis": 0.96, "strikeouts": 1.02, "total_bases": 0.95},
+    "NFL": {"pass_yds": 0.97, "rush_yds": 0.97, "rec_yds": 0.97, "receptions": 0.97},
+    "EPL": {"goals": 0.96, "assists": 0.97, "shots": 0.95},
+    "MLS": {"goals": 0.96, "assists": 0.97, "shots": 0.95},
 }
 _DEFAULT_PLAYOFF_FACTOR = 0.97
 # Back-to-back fatigue — only meaningful in sports with consecutive-night scheduling.
@@ -586,6 +626,7 @@ def _apply_game_context(
 # analyze_player_prop
 # ---------------------------------------------------------------------------
 
+
 def analyze_player_prop(
     request: PlayerPropRequest,
     bankroll: float = 1000.0,
@@ -603,9 +644,7 @@ def analyze_player_prop(
     std_key = f"{stat_key}_std"
 
     if request.game_context:
-        player_ctx = _apply_game_context(
-            player_ctx, request.game_context, stat_key, request.league
-        )
+        player_ctx = _apply_game_context(player_ctx, request.game_context, stat_key, request.league)
 
     mean = player_ctx.get(mean_key)
     if mean is None:
@@ -642,7 +681,7 @@ def analyze_player_prop(
         "league": request.league,
         "stat_key": stat_key,
         "mean": mean_f,
-        "variance": std_f ** 2,
+        "variance": std_f**2,
         "market_line": request.line,
         "distribution": distribution_override,
     }
@@ -670,7 +709,10 @@ def analyze_player_prop(
 
     notes: list[str] = []
     resolved_dist = select_distribution(
-        stat_key, request.league, mean=mean_f, override=distribution_override,
+        stat_key,
+        request.league,
+        mean=mean_f,
+        override=distribution_override,
     )
     if distribution_override in {"normal", "poisson"}:
         notes.append(f"distribution_override:{resolved_dist}")
@@ -710,14 +752,22 @@ def analyze_player_prop(
     _ctx_hints = request.game_context or None
     if request.odds_over is not None:
         market_over = implied_probability(request.odds_over)
-        cal_over, over_audit = _calibrate_audited(over_prob, league=request.league, context_hints=_ctx_hints, plane="prop", market="over")
+        cal_over, over_audit = _calibrate_audited(
+            over_prob, league=request.league, context_hints=_ctx_hints, plane="prop", market="over"
+        )
         edge_over = round(edge_percentage(cal_over, market_over), 2)
     else:
         notes.append("odds_unsourced_over")
 
     if request.odds_under is not None:
         market_under = implied_probability(request.odds_under)
-        cal_under, under_audit = _calibrate_audited(under_prob, league=request.league, context_hints=_ctx_hints, plane="prop", market="under")
+        cal_under, under_audit = _calibrate_audited(
+            under_prob,
+            league=request.league,
+            context_hints=_ctx_hints,
+            plane="prop",
+            market="under",
+        )
         edge_under = round(edge_percentage(cal_under, market_under), 2)
     else:
         notes.append("odds_unsourced_under")
@@ -795,6 +845,7 @@ def analyze_player_prop(
 # ---------------------------------------------------------------------------
 # analyze_slate
 # ---------------------------------------------------------------------------
+
 
 def analyze_slate(
     request: SlateAnalysisRequest,

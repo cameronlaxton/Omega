@@ -1,6 +1,7 @@
 """MVP evolution-tracker: reads events.jsonl and emits a simple summary.
 This is intentionally synchronous and file-based for initial integration.
 """
+
 import json
 from pathlib import Path
 
@@ -20,9 +21,7 @@ class EvolutionTracker:
         if not p.exists():
             return {"summary": "no events"}
         events = [
-            json.loads(line)
-            for line in p.read_text(encoding="utf-8").splitlines()
-            if line.strip()
+            json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()
         ]
         # basic summary: count by skill, count of actions
         by_skill: dict[str, int] = {}
