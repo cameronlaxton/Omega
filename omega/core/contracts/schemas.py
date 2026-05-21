@@ -59,9 +59,9 @@ class OddsInput(BaseModel):
 class GameAnalysisRequest(BaseModel):
     """Request to analyze a single game matchup.
 
-    Caller must supply home_context and away_context (not game_context) with
-    archetype-specific keys. Missing or None context produces status='skipped'
-    with missing_requirements listing the exact keys needed.
+    home_context / away_context carry team performance stats (archetype-specific).
+    game_context carries situational signals used for calibration slice selection
+    and any future game-level adjustments (is_playoff, rest_days, etc.).
 
     Required keys by archetype (see omega/core/simulation/archetypes.py for full lists):
       Basketball (NBA, NCAAB): off_rating, def_rating, pace
@@ -91,8 +91,21 @@ class GameAnalysisRequest(BaseModel):
     away_context: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "Pre-fetched away team stats. Same required keys as home_context. "
-            "Do not nest these under a 'game_context' key — use home_context and away_context directly."
+            "Pre-fetched away team stats. Same required keys as home_context."
+        ),
+    )
+    game_context: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Situational game context for calibration slice selection. Open-ended dict; "
+            "supply any applicable signals. "
+            "Universal: is_playoff (bool), rest_days (int; 0=B2B), "
+            "opponent_def_rank (int), blowout_risk (float 0-1), "
+            "pace_adjustment_factor (float). "
+            "MLB: park_factor (float), weather_wind_mph (float). "
+            "NFL: is_dome (bool), weather_temp_f (float), week_of_season (int). "
+            "Any additional matchup context (e.g. matchup_weakness, scheme_advantage) "
+            "is preserved in context_labels for calibration fitting."
         ),
     )
     seed: int | None = Field(default=None, description="RNG seed for reproducible simulations")
@@ -175,6 +188,10 @@ class EdgeDetail(BaseModel):
         default=None,
         description="P(covers spread) when market is run-line/puck-line (0-1); None for moneyline edges",
     )
+    calibration_audit: CalibrationAudit | None = Field(
+        default=None,
+        description="Calibration provenance for this edge: which path/profile was used",
+    )
 
 
 class BetSlip(BaseModel):
@@ -189,11 +206,32 @@ class BetSlip(BaseModel):
     kelly_fraction: float
 
 
+class CalibrationAudit(BaseModel):
+    """Per-edge calibration provenance. Records which path was taken, not inferred."""
+
+    raw_prob: float
+    calibrated_prob: float
+    league: str | None = None
+    plane: str = Field(description="'game' or 'prop'")
+    market: str = Field(description="'home', 'away', 'draw', 'over', 'under', 'cover'")
+    method_resolved: str | None = None
+    profile_id: str | None = None
+    context_slice: str | None = None
+    resolved_slice: str | None = None
+    path: str = Field(
+        description=(
+            "'profile': learned profile applied; "
+            "'base_profile_fallback': fell back from context_slice to base profile; "
+            "'static_calibrated': no profile, static policy changed the value; "
+            "'static_identity': no profile, within threshold, returned raw unchanged"
+        )
+    )
+
+
 class AnalysisMetadata(BaseModel):
     """Metadata about how the analysis was produced."""
 
     engine_version: str = "2.0-dse"
-    calibration_method: str = "combined"
     data_sources: list[str] = Field(default_factory=lambda: ["simulation"])
     archetype: str | None = Field(default=None, description="Sport archetype used for simulation")
 
@@ -260,6 +298,14 @@ class PlayerPropResponse(BaseModel):
     imputed_fraction: float | None = Field(
         default=None,
         description="Fraction of observations marked as imputed (0..1); None when not reported.",
+    )
+    over_calibration_audit: CalibrationAudit | None = Field(
+        default=None,
+        description="Calibration provenance for the over probability",
+    )
+    under_calibration_audit: CalibrationAudit | None = Field(
+        default=None,
+        description="Calibration provenance for the under probability",
     )
 
 

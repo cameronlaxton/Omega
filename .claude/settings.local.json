@@ -86,7 +86,14 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\camer\\\\OneDrive\\\\Documents\\\\GitHub\\\\Omega\" -Filter __pycache__ -Recurse -Directory)",
       "Bash(Measure-Object)",
       "Bash(Select-Object -ExpandProperty Count)",
-      "Bash(python scripts/cowork_preflight.py --direct-only)"
+      "Bash(python scripts/cowork_preflight.py --direct-only)",
+      "Bash(python -m pytest tests/core/test_contracts_service.py tests/core/test_calibration_profiles.py tests/core/test_engine.py -x -q)",
+      "Bash(python -m pytest tests/ -x -q --tb=short)",
+      "Bash(python -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(python -m pytest tests/scripts/test_cowork_preflight.py -q --tb=short)",
+      "Bash(git stash *)",
+      "Bash(python -m pytest tests/scripts/test_cowork_preflight.py -q --tb=line)",
+      "Bash(python -m pytest tests/ -q --tb=short --ignore=tests/scripts/test_cowork_preflight.py)"
     ]
   }
 }

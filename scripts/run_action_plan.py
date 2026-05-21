@@ -20,6 +20,10 @@ Allowlist:
     type=report_calibration
         args.league: str (required)
         args.window_days: int (default 30)
+    type=fetch_outcomes
+        args.leagues: list[str] (default ["nba", "mlb", "props"])
+        args.since: str YYYY-MM-DD (optional)
+        args.until: str YYYY-MM-DD (optional)
 
 Usage:
     python scripts/run_action_plan.py inbox/action_plans/<session_id>.json
@@ -100,11 +104,39 @@ def _validate_report_calibration(args: dict[str, Any]) -> list[str]:
     return cmd
 
 
+def _validate_fetch_outcomes(args: dict[str, Any]) -> list[str]:
+    _VALID_LEAGUES = {"nba", "mlb", "props"}
+    leagues = args.get("leagues", ["nba", "mlb", "props"])
+    if not isinstance(leagues, list) or not all(isinstance(l, str) for l in leagues):
+        raise ValueError("fetch_outcomes.args.leagues must be a list of strings")
+    unknown = set(leagues) - _VALID_LEAGUES
+    if unknown:
+        raise ValueError(f"fetch_outcomes.args.leagues contains unknown leagues: {unknown}")
+    since = args.get("since")
+    until = args.get("until")
+    if since is not None and not isinstance(since, str):
+        raise ValueError("fetch_outcomes.args.since must be a date string YYYY-MM-DD")
+    if until is not None and not isinstance(until, str):
+        raise ValueError("fetch_outcomes.args.until must be a date string YYYY-MM-DD")
+
+    cmd = [
+        sys.executable,
+        str(_REPO_ROOT / "scripts" / "fetch_outcomes_all.py"),
+        "--leagues", *leagues,
+    ]
+    if since:
+        cmd += ["--since", since]
+    if until:
+        cmd += ["--until", until]
+    return cmd
+
+
 # Strict allowlist. Adding a key here is a deliberate boundary change.
 _DISPATCH: dict[str, Any] = {
     "fit_calibration": _validate_fit_calibration,
     "promote_profile": _validate_promote_profile,
     "report_calibration": _validate_report_calibration,
+    "fetch_outcomes": _validate_fetch_outcomes,
 }
 
 

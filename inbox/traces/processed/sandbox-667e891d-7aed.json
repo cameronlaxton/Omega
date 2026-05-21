@@ -1,0 +1,41 @@
+{
+  "trace": {
+    "trace_id": "sandbox-667e891d-7aed",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-19T20:16:00.000000+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260519-nyk1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Karl-Anthony Towns",
+      "league": "NBA",
+      "prop_type": "first_basket",
+      "line": null,
+      "home_team": "New York Knicks",
+      "away_team": "Cleveland Cavaliers",
+      "game_date": "2026-05-19",
+      "n_iterations": 0,
+      "seed": 0
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:novelty_prop"
+    },
+    "downgrades": [
+      "manual:novelty_prop"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "954bcea0ca93",
+    "trace_id": "sandbox-667e891d-7aed",
+    "book": "other:thescore",
+    "market": "player_prop:first_basket",
+    "selection": "Karl-Anthony Towns First Basket (incl. FTs)",
+    "selection_descriptor": "kat_first_basket",
+    "line_taken": null,
+    "odds_taken": 600,
+    "stake_units": 5.0,
+    "decision_timestamp": "2026-05-19T20:00:00Z",
+    "status": "lost"
+  }
+}

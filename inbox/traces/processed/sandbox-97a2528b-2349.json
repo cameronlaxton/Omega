@@ -1,0 +1,75 @@
+{
+  "trace": {
+    "trace_id": "sandbox-97a2528b-2349",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-15T18:45:00.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260515-mlb1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "MLB",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "various",
+      "away_team": "various",
+      "game_date": "2026-05-15",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Zack Littell",
+          "prop": "strikeouts",
+          "side": "over",
+          "line": 2.5,
+          "result": "won",
+          "actual": 3
+        },
+        {
+          "player": "Andrew Abbott",
+          "prop": "strikeouts",
+          "side": "over",
+          "line": 3.5,
+          "result": "lost",
+          "actual": 2
+        },
+        {
+          "player": "Emerson Hancock",
+          "prop": "strikeouts",
+          "side": "over",
+          "line": 4.5,
+          "result": "won",
+          "actual": 6
+        },
+        {
+          "player": "Randy Vasquez",
+          "prop": "strikeouts",
+          "side": "over",
+          "line": 3.5,
+          "result": "lost",
+          "actual": 3
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:sgp_mlb_boost_20pct"
+    },
+    "downgrades": [
+      "manual:sgp_mlb_boost_20pct"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "66e1503c07c4",
+    "trace_id": "sandbox-97a2528b-2349",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "SGP 4-leg MLB: Littell O2.5K(WIN) / Abbott O3.5K(LOSS 2) / Hancock O4.5K(WIN) / Vasquez O3.5K(LOSS 3)",
+    "selection_descriptor": "sgp4_littell_k_o2.5_abbott_k_o3.5_hancock_k_o4.5_vasquez_k_o3.5",
+    "line_taken": null,
+    "odds_taken": 303,
+    "stake_units": 25.0,
+    "decision_timestamp": "2026-05-15T18:45:00Z",
+    "status": "lost"
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "trace": {
+    "trace_id": "sandbox-901f82b2-3615",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-15T18:45:00.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260515-mlb1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "MLB",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "various",
+      "away_team": "various",
+      "game_date": "2026-05-15",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Zack Littell",
+          "prop": "strikeouts",
+          "side": "under",
+          "line": 3.5,
+          "result": "won",
+          "actual": 3
+        },
+        {
+          "player": "Andrew Abbott",
+          "prop": "strikeouts",
+          "side": "under",
+          "line": 4.5,
+          "result": "won",
+          "actual": 2
+        },
+        {
+          "player": "Randy Vasquez",
+          "prop": "strikeouts",
+          "side": "under",
+          "line": 5.5,
+          "result": "won",
+          "actual": 3
+        },
+        {
+          "player": "Emerson Hancock",
+          "prop": "strikeouts",
+          "side": "over",
+          "line": 5.5,
+          "result": "won",
+          "actual": 6
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:sgp_mlb_boost_30pct"
+    },
+    "downgrades": [
+      "manual:sgp_mlb_boost_30pct"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "f7a97ceb5d4d",
+    "trace_id": "sandbox-901f82b2-3615",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "SGP 4-leg MLB: Littell U3.5K / Abbott U4.5K / Vasquez U5.5K / Hancock O5.5K \u2014 WON $86.56",
+    "selection_descriptor": "sgp4_littell_k_u3.5_abbott_k_u4.5_vasquez_k_u5.5_hancock_k_o5.5",
+    "line_taken": null,
+    "odds_taken": 589,
+    "stake_units": 10.0,
+    "decision_timestamp": "2026-05-15T18:45:00Z",
+    "status": "won"
+  }
+}

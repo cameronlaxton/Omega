@@ -223,6 +223,77 @@ def apply_calibration(
     return result["calibrated"]
 
 
+def apply_calibration_audited(
+    raw_prob: float,
+    league: str | None = None,
+    context_hints: dict[str, Any] | None = None,
+) -> tuple[float, dict[str, Any]]:
+    """Like apply_calibration() but also returns an audit dict.
+
+    The audit dict documents exactly which calibration path was taken:
+      path: "profile" | "base_profile_fallback" | "static_calibrated" | "static_identity"
+      profile_id: str | None
+      context_slice: str | None  (the slice that was requested)
+      resolved_slice: str | None (the profile's actual slice; None if base fallback)
+      method_resolved: str | None
+      raw_prob: float
+      calibrated_prob: float
+    """
+    raw = max(0.0, min(1.0, raw_prob))
+    context_slice = _derive_context_slice(context_hints) if context_hints else None
+
+    if league is not None:
+        profile = _get_active_profile(league, context_slice=context_slice)
+        if profile is not None:
+            result = calibrate_probability(raw, method=profile.method, **profile.params)
+            calibrated = result["calibrated"]
+            resolved_slice = getattr(profile, "context_slice", None)
+            path = (
+                "base_profile_fallback"
+                if context_slice is not None and resolved_slice is None
+                else "profile"
+            )
+            return calibrated, {
+                "path": path,
+                "profile_id": profile.profile_id,
+                "context_slice": context_slice,
+                "resolved_slice": resolved_slice,
+                "method_resolved": profile.method,
+                "raw_prob": raw,
+                "calibrated_prob": calibrated,
+            }
+
+    # Static fallback: if within threshold, return raw unchanged
+    if not should_apply_calibration(raw, strict_cap=False):
+        return raw, {
+            "path": "static_identity",
+            "profile_id": None,
+            "context_slice": context_slice,
+            "resolved_slice": None,
+            "method_resolved": None,
+            "raw_prob": raw,
+            "calibrated_prob": raw,
+        }
+
+    result = calibrate_probability(
+        raw,
+        method=_POLICY_METHOD,
+        shrink_factor=_POLICY_SHRINK_FACTOR,
+        cap_max=_POLICY_CAP_MAX,
+        cap_min=_POLICY_CAP_MIN,
+    )
+    calibrated = result["calibrated"]
+    return calibrated, {
+        "path": "static_calibrated",
+        "profile_id": None,
+        "context_slice": context_slice,
+        "resolved_slice": None,
+        "method_resolved": _POLICY_METHOD,
+        "raw_prob": raw,
+        "calibrated_prob": calibrated,
+    }
+
+
 def _derive_context_slice(context_hints: dict[str, Any] | None) -> str | None:
     """Derive a calibration context_slice string from context hints.
 

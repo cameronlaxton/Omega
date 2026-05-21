@@ -1,0 +1,59 @@
+{
+  "trace": {
+    "trace_id": "sandbox-02f7bb73-beda",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-17T17:55:00.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260517-k9m2",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "MLB",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "various",
+      "away_team": "various",
+      "game_date": "2026-05-17",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Peter Lambert",
+          "prop": "strikeouts",
+          "side": "over",
+          "line": 4.5,
+          "result": "won",
+          "actual": 6
+        },
+        {
+          "player": "Colin Rea",
+          "prop": "strikeouts",
+          "side": "under",
+          "line": 4.5,
+          "result": "won",
+          "actual": 4
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:parlay"
+    },
+    "downgrades": [
+      "manual:parlay"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "79e9bad88ec7",
+    "trace_id": "sandbox-02f7bb73-beda",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "Parlay 2-leg: Lambert O4.5K / Rea U4.5K \u2014 WON $75",
+    "selection_descriptor": "parlay2_lambert_k_o4.5_rea_k_u4.5",
+    "line_taken": null,
+    "odds_taken": 200,
+    "stake_units": 25.0,
+    "decision_timestamp": "2026-05-17T17:55:00Z",
+    "status": "won"
+  }
+}

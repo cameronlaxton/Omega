@@ -1,0 +1,78 @@
+{
+  "trace": {
+    "trace_id": "sandbox-99e3717e-371b",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-19T23:29:45.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260519-nyk1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "NBA",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "New York Knicks",
+      "away_team": "Cleveland Cavaliers",
+      "game_date": "2026-05-19",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Dennis Schroder",
+          "prop": "ast",
+          "side": "over",
+          "line": 1.5,
+          "result": "unknown"
+        },
+        {
+          "player": "Karl-Anthony Towns",
+          "prop": "reb",
+          "side": "over",
+          "line": 9.5,
+          "result": "unknown"
+        },
+        {
+          "player": "Karl-Anthony Towns",
+          "prop": "pts",
+          "side": "over",
+          "line": 14.5,
+          "result": "unknown"
+        },
+        {
+          "player": "Mikal Bridges",
+          "prop": "pts",
+          "side": "over",
+          "line": 9.5,
+          "result": "unknown"
+        },
+        {
+          "player": "James Harden",
+          "prop": "ast",
+          "side": "over",
+          "line": 5.5,
+          "result": "unknown"
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:sgp_5leg_boost_50pct"
+    },
+    "downgrades": [
+      "manual:sgp_5leg_boost_50pct"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "a935202feb32",
+    "trace_id": "sandbox-99e3717e-371b",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "SGP 5-leg: Schroder 2+ast / KAT 10+reb / KAT 15+pts / Bridges 10+pts / Harden 6+ast",
+    "selection_descriptor": "sgp5_schroder_ast2_kat_reb10_kat_pts15_bridges_pts10_harden_ast6",
+    "line_taken": null,
+    "odds_taken": 316,
+    "stake_units": 20.0,
+    "decision_timestamp": "2026-05-19T20:00:00Z",
+    "status": "lost"
+  }
+}

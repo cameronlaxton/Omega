@@ -1,0 +1,68 @@
+{
+  "trace": {
+    "trace_id": "sandbox-19aec082-7db7",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-18T18:40:00.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260518-mlb1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "MLB",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "various",
+      "away_team": "various",
+      "game_date": "2026-05-18",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Shane McClanahan",
+          "prop": "strikeouts",
+          "side": "over",
+          "line": 5.5,
+          "result": "won",
+          "actual": 6,
+          "game": "BAL@TB"
+        },
+        {
+          "player": "Trevor Rogers",
+          "prop": "strikeouts",
+          "side": "over",
+          "line": 3.5,
+          "result": "lost",
+          "actual": 3,
+          "game": "BAL@TB"
+        },
+        {
+          "team": "Houston Astros",
+          "market": "moneyline",
+          "result": "won",
+          "score": "HOU 2 MIN 1",
+          "odds": -105
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:mlb_parlay_boost_20pct"
+    },
+    "downgrades": [
+      "manual:mlb_parlay_boost_20pct"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "3107dae59a33",
+    "trace_id": "sandbox-19aec082-7db7",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "MLB 3-leg: McClanahan O5.5K(WIN) / Rogers O3.5K(LOSS 3) / HOU ML(WIN)",
+    "selection_descriptor": "parlay3_mcclana_k_o5.5_rogers_k_o3.5_hou_ml",
+    "line_taken": null,
+    "odds_taken": 339,
+    "stake_units": 20.0,
+    "decision_timestamp": "2026-05-18T18:40:00Z",
+    "status": "lost"
+  }
+}

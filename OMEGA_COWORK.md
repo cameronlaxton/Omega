@@ -146,6 +146,44 @@ After every analysis, write the trace file to `inbox/traces/<trace_id>.json`:
 }
 ```
 
+### 6b. game_context is mandatory (required for calibration)
+
+Every `analyze()` call **must** populate `game_context` in the request, for both game-level and prop-level analyses. This is the sole mechanism for calibration slice fitting. Omitting it pins the calibration fitter to the base profile regardless of game type.
+
+Minimum required keys for every analysis:
+
+| Key | Type | Notes |
+|-----|------|-------|
+| `is_playoff` | bool | Always required. Set `false` for regular season. |
+| `rest_days` | int | Days since last game. `0` = back-to-back. |
+
+Additional keys to supply when known:
+
+| Key | Type | Notes |
+|-----|------|-------|
+| `blowout_risk` | float 0–1 | Estimated chance of non-competitive game |
+| `opponent_def_rank` | int 1–30 | Opponent's defensive ranking |
+| `pace_adjustment_factor` | float | Team pace ratio vs league baseline |
+| `park_factor` | float | MLB only |
+| `weather_wind_mph` | float | MLB/NFL only |
+| `is_dome` | bool | NFL only |
+
+Any additional matchup context (scheme advantages, defensive matchup weaknesses, etc.) may be included under any key — the engine passes all keys through to `context_labels` in the trace, where the calibration fitter can use them.
+
+Example game request:
+
+```python
+analyze({
+    "home_team": "Boston Celtics",
+    "away_team": "New York Knicks",
+    "league": "NBA",
+    "home_context": {"off_rating": 119.2, "def_rating": 108.1, "pace": 96.5},
+    "away_context": {"off_rating": 115.8, "def_rating": 110.3, "pace": 94.1},
+    "odds": {"moneyline_home": -180, "moneyline_away": 150},
+    "game_context": {"is_playoff": True, "rest_days": 2},
+}, session_id=session_id, bankroll=bankroll)
+```
+
 If the user explicitly confirms they took a bet, include `bet_record` with actual book, market, selection, `selection_descriptor`, line, odds, stake units, and decision timestamp. Never fabricate bet metadata. The retired closing-line instruction block must not be emitted.
 
 ### 6a. Single-trace policy (required)
@@ -178,13 +216,22 @@ Closing lines are captured from the paid Odds API through:
 python scripts/fetch_closing_lines.py
 ```
 
-Use dry-runs when reviewing matches. Outcome backfill sub-agents may run:
+Use dry-runs when reviewing matches.
+
+**Outcome attachment is required for calibration learning.** The calibration fitter cannot fit profiles without graded traces. Run after game windows close (same day for afternoon games, next morning for late games):
+
+```bash
+python scripts/fetch_outcomes_all.py          # all leagues, idempotent
+python scripts/fetch_outcomes_all.py --dry-run  # preview only
+```
+
+Or per-league:
 
 - `scripts/fetch_outcomes_nba.py`
 - `scripts/fetch_outcomes_mlb.py`
 - `scripts/fetch_outcomes_props.py`
 
-Player props and game outcomes stay in separate tables.
+Player props and game outcomes stay in separate tables. Outcome attachment is idempotent — re-running is safe.
 
 ## 8. Session Automation
 
@@ -194,14 +241,37 @@ At session start, run calibration health when enough data exists:
 python scripts/report_calibration.py --league NBA --window-days 30
 ```
 
-Action plans live at `inbox/action_plans/<session_id>.json`. Allowed action types are only `fit_calibration`, `promote_profile`, and `report_calibration`. Dry-run before executing:
+Action plans live at `inbox/action_plans/<session_id>.json`. Allowed action types are only `fit_calibration`, `promote_profile`, `report_calibration`, and `fetch_outcomes`. Dry-run before executing:
 
 ```bash
 python scripts/run_action_plan.py inbox/action_plans/<session_id>.json --dry-run
 python scripts/run_action_plan.py inbox/action_plans/<session_id>.json
 ```
 
-Session sidecars live at `inbox/sessions/<session_id>.json` and are read directly by reports.
+### Session Sidecar Schema (required)
+
+Write `inbox/sessions/<session_id>.json` at session end. All keys below are required; use exactly these key names.
+
+```json
+{
+  "session_id": "sess-YYYYMMDD-XXXX",
+  "opened_at": "2026-05-21T18:00:00Z",
+  "closed_at": "2026-05-21T19:15:00Z",
+  "model_version": "claude-sonnet-4-6",
+  "purpose": "One-line description of session scope",
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {
+    "traces_emitted": 0,
+    "bets_recorded": 0,
+    "webfetch_failures": 0,
+    "jit_snapshots_emitted": 0
+  },
+  "agent_notes": "Free-text notes on session outcome, data quality issues, or anomalies."
+}
+```
+
+`report_calibration.py` joins sidecar data with trace summaries by `session_id`. Missing or inconsistent keys produce silent gaps in reports.
 
 ## 9. VM Directory Map
 
@@ -221,6 +291,7 @@ All paths are relative to the repo root.
 | `scripts/fit_calibration.py` | Fits calibration candidates |
 | `scripts/promote_profile.py` | Promotes a calibration candidate |
 | `scripts/fetch_closing_lines.py` | Captures closing lines through The Odds API |
+| `scripts/fetch_outcomes_all.py` | Attaches outcomes for all leagues (preferred; idempotent) |
 | `scripts/fetch_outcomes_nba.py` | Attaches NBA game outcomes |
 | `scripts/fetch_outcomes_mlb.py` | Attaches MLB game outcomes |
 | `scripts/fetch_outcomes_props.py` | Attaches player prop outcomes |

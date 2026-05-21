@@ -1,0 +1,59 @@
+{
+  "trace": {
+    "trace_id": "sandbox-080f9920-4361",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-18T21:17:00.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260518-wcf1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "NBA",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "San Antonio Spurs",
+      "game_date": "2026-05-18",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Chet Holmgren",
+          "prop": "pts",
+          "side": "over",
+          "line": 14.5,
+          "result": "lost",
+          "actual": 8
+        },
+        {
+          "player": "Victor Wembanyama",
+          "prop": "reb",
+          "side": "over",
+          "line": 11.5,
+          "result": "won",
+          "actual": 24
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:parlay"
+    },
+    "downgrades": [
+      "manual:parlay"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "0412cfd2fd4d",
+    "trace_id": "sandbox-080f9920-4361",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "SGP 2-leg: Holmgren 15+pts(LOSS 8) / Wemby 12+reb(WIN 24)",
+    "selection_descriptor": "sgp2_holmgren_pts_o14.5_wemby_reb_o11.5",
+    "line_taken": null,
+    "odds_taken": 143,
+    "stake_units": 50.0,
+    "decision_timestamp": "2026-05-18T20:30:00Z",
+    "status": "lost"
+  }
+}

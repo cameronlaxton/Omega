@@ -1,0 +1,59 @@
+{
+  "trace": {
+    "trace_id": "sandbox-27b89e49-bc02",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-15T03:57:36.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260515-g7d1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "NBA",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "Cleveland Cavaliers",
+      "away_team": "Detroit Pistons",
+      "game_date": "2026-05-15",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Cade Cunningham",
+          "prop": "pts",
+          "side": "over",
+          "line": 24.5,
+          "result": "lost",
+          "actual": 21
+        },
+        {
+          "player": "Tobias Harris",
+          "prop": "pts",
+          "side": "over",
+          "line": 14.5,
+          "result": "lost",
+          "actual": 6
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:parlay"
+    },
+    "downgrades": [
+      "manual:parlay"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "c7650276495c",
+    "trace_id": "sandbox-27b89e49-bc02",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "SGP 2-leg: Cade 25+pts(LOSS 21) / Harris 15+pts(LOSS 6)",
+    "selection_descriptor": "sgp2_cade_pts_o24.5_harris_pts_o14.5",
+    "line_taken": null,
+    "odds_taken": 112,
+    "stake_units": 40.0,
+    "decision_timestamp": "2026-05-15T19:00:00Z",
+    "status": "lost"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "session_id": "sess-20260520-g001",
+  "date": "2026-05-20",
+  "opened_at": "2026-05-20T21:16:29.000000+00:00",
+  "purpose": "SA Spurs @ OKC Thunder WCF Game 2 prop scan — theScore",
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "traces": [
+    "sandbox-83d46f99-a7a4",
+    "sandbox-5a11c7de-3c08",
+    "sandbox-bdc85fb9-326e",
+    "sandbox-78020f56-4297",
+    "sandbox-7ff33f2a-111c"
+  ],
+  "bets_taken": [
+    {"bet_id": "9c9f1da3ef8a", "description": "SGA O29.5 pts straight $75 WON"},
+    {"bet_id": "eb633093323b", "description": "SGP 3-leg +215 boost $25 WON (SGA O29.5 / Wemby U25.5 / JWill Q1 VOID)"},
+    {"bet_id": "db848b6919a7", "description": "SGP 5-leg +165 $50 LOST (Champagnie 2+ 3PM killed it)"}
+  ],
+  "game_result": "OKC Thunder 122, SA Spurs 113",
+  "notes": "Manual override: SGA O29.5 taken at user-selected line 29.5 vs engine line 28.5. Engine recommended over. User added parlay legs not individually analyzed."
+}

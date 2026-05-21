@@ -1,0 +1,67 @@
+{
+  "trace": {
+    "trace_id": "sandbox-269250e7-c2e9",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-18T21:17:00.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260518-wcf1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "NBA",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "San Antonio Spurs",
+      "game_date": "2026-05-18",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Victor Wembanyama",
+          "prop": "blk",
+          "side": "over",
+          "line": 2.5,
+          "result": "won",
+          "actual": 3
+        },
+        {
+          "player": "Shai Gilgeous-Alexander",
+          "prop": "ast",
+          "side": "over",
+          "line": 6.5,
+          "result": "won",
+          "actual": 12
+        },
+        {
+          "player": "Dylan Harper",
+          "prop": "pts",
+          "side": "over",
+          "line": 9.5,
+          "result": "won",
+          "actual": 24
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:sgp_3leg_boost_50pct"
+    },
+    "downgrades": [
+      "manual:sgp_3leg_boost_50pct"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "15e6bb3f94dd",
+    "trace_id": "sandbox-269250e7-c2e9",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "SGP 3-leg: Wemby 3+blk / SGA O6.5ast / Harper 10+pts \u2014 WON",
+    "selection_descriptor": "sgp3_wemby_blk3_sga_ast_o6.5_harper_pts_o9.5",
+    "line_taken": null,
+    "odds_taken": 338,
+    "stake_units": 29.06,
+    "decision_timestamp": "2026-05-18T20:30:00Z",
+    "status": "won"
+  }
+}

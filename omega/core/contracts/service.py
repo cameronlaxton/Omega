@@ -21,10 +21,11 @@ from omega.core.betting.odds import (
     expected_value_percent,
     implied_probability,
 )
-from omega.core.calibration.probability import apply_calibration
+from omega.core.calibration.probability import apply_calibration, apply_calibration_audited
 from omega.core.contracts.schemas import (
     AnalysisMetadata,
     BetSlip,
+    CalibrationAudit,
     EdgeDetail,
     GameAnalysisRequest,
     GameAnalysisResponse,
@@ -173,16 +174,11 @@ def analyze(
             "Expected GameAnalysisRequest, PlayerPropRequest, or SlateAnalysisRequest."
         )
 
-    # Populate context_labels from game_context for calibration slice fitting.
+    # Populate context_labels for calibration slice fitting.
+    # Covers both GameAnalysisRequest and PlayerPropRequest via _build_context_labels().
     context_labels: dict[str, Any] = {}
-    if isinstance(typed_req, PlayerPropRequest) and typed_req.game_context:
-        gc = typed_req.game_context
-        if gc.get("is_playoff") is not None:
-            context_labels["is_playoff"] = bool(gc["is_playoff"])
-        if gc.get("rest_days") is not None:
-            context_labels["rest_days"] = int(gc["rest_days"])
-        if gc.get("blowout_risk") is not None:
-            context_labels["blowout_risk"] = float(gc["blowout_risk"])
+    if isinstance(typed_req, (GameAnalysisRequest, PlayerPropRequest)):
+        context_labels = _build_context_labels(typed_req)
 
     return {
         "trace_id": trace_id,
@@ -203,12 +199,58 @@ def _calibrate(
     league: str | None = None,
     context_hints: dict[str, Any] | None = None,
 ) -> float:
-    """Apply probability calibration via shared policy.
-
-    Delegates to apply_calibration() — the single source of truth for
-    calibration parameters. Do not add local overrides here.
-    """
+    """Apply calibration. Delegates to apply_calibration() — the single source of truth."""
     return apply_calibration(raw_prob, league=league, context_hints=context_hints)
+
+
+def _calibrate_audited(
+    raw_prob: float,
+    league: str | None = None,
+    context_hints: dict[str, Any] | None = None,
+    plane: str = "game",
+    market: str = "home",
+) -> tuple[float, CalibrationAudit]:
+    """Like _calibrate() but also returns a CalibrationAudit recording the path taken."""
+    calibrated, d = apply_calibration_audited(raw_prob, league=league, context_hints=context_hints)
+    audit = CalibrationAudit(
+        raw_prob=d["raw_prob"],
+        calibrated_prob=d["calibrated_prob"],
+        league=league,
+        plane=plane,
+        market=market,
+        method_resolved=d.get("method_resolved"),
+        profile_id=d.get("profile_id"),
+        context_slice=d.get("context_slice"),
+        resolved_slice=d.get("resolved_slice"),
+        path=d["path"],
+    )
+    return calibrated, audit
+
+
+def _build_context_labels(
+    request: GameAnalysisRequest | PlayerPropRequest,
+) -> dict[str, Any]:
+    """Extract calibration context labels from any request type.
+
+    Passes through all game_context keys so the fitter can use any signal
+    the agent supplies, not just the known set at coding time.
+    """
+    gc: dict[str, Any] | None = getattr(request, "game_context", None)
+    if not gc:
+        return {}
+    labels: dict[str, Any] = {}
+    # Type-coerce the known calibration slice keys for safety
+    if gc.get("is_playoff") is not None:
+        labels["is_playoff"] = bool(gc["is_playoff"])
+    if gc.get("rest_days") is not None:
+        labels["rest_days"] = int(gc["rest_days"])
+    if gc.get("blowout_risk") is not None:
+        labels["blowout_risk"] = float(gc["blowout_risk"])
+    # Pass through any additional context keys (matchup weaknesses, scheme signals, etc.)
+    for k, v in gc.items():
+        if k not in labels:
+            labels[k] = v
+    return labels
 
 
 def _build_edge(
@@ -219,6 +261,7 @@ def _build_edge(
     market_odds: float,
     bankroll: float,
     n_iterations: int,
+    calibration_audit: CalibrationAudit | None = None,
 ) -> EdgeDetail:
     """Compute edge detail for one side of a matchup."""
     market_prob = implied_probability(market_odds)
@@ -246,6 +289,7 @@ def _build_edge(
         market_odds=market_odds,
         confidence_tier=tier,
         recommended_units=stake["units"],
+        calibration_audit=calibration_audit,
     )
 
 
@@ -418,34 +462,37 @@ def analyze_game(
             and request.odds.moneyline_home is None
         )
 
+        gc = request.game_context
         if home_odds is not None:
             if is_home_spread_market and "home_cover_prob" in sim_result:
                 cover_prob = sim_result["home_cover_prob"] / 100.0
-                cal_cover = _calibrate(cover_prob, league=request.league)
+                cal_cover, cover_audit = _calibrate_audited(cover_prob, league=request.league, context_hints=gc, plane="game", market="cover")
                 home_edge = _build_edge(
                     "home", request.home_team, cover_prob, cal_cover,
                     home_odds, bankroll, request.n_iterations,
+                    calibration_audit=cover_audit,
                 )
                 home_edge = home_edge.model_copy(update={"spread_coverage_prob": cover_prob})
             else:
-                cal_home = _calibrate(home_prob, league=request.league)
+                cal_home, home_audit = _calibrate_audited(home_prob, league=request.league, context_hints=gc, plane="game", market="home")
                 home_edge = _build_edge(
                     "home", request.home_team, home_prob, cal_home,
                     home_odds, bankroll, request.n_iterations,
+                    calibration_audit=home_audit,
                 )
             edges.append(home_edge)
 
         if away_odds is not None:
-            cal_away = _calibrate(away_prob, league=request.league)
+            cal_away, away_audit = _calibrate_audited(away_prob, league=request.league, context_hints=gc, plane="game", market="away")
             edges.append(
-                _build_edge("away", request.away_team, away_prob, cal_away, away_odds, bankroll, request.n_iterations)
+                _build_edge("away", request.away_team, away_prob, cal_away, away_odds, bankroll, request.n_iterations, calibration_audit=away_audit)
             )
 
         # 3-way moneyline (hockey regulation, soccer)
         if request.odds.moneyline_draw is not None and draw_prob_raw > 0:
-            cal_draw = _calibrate(draw_prob_raw, league=request.league)
+            cal_draw, draw_audit = _calibrate_audited(draw_prob_raw, league=request.league, context_hints=gc, plane="game", market="draw")
             edges.append(
-                _build_edge("draw", "Draw", draw_prob_raw, cal_draw, request.odds.moneyline_draw, bankroll, request.n_iterations)
+                _build_edge("draw", "Draw", draw_prob_raw, cal_draw, request.odds.moneyline_draw, bankroll, request.n_iterations, calibration_audit=draw_audit)
             )
 
     best_bet = _pick_best_bet(edges, bankroll) if edges else None
@@ -655,18 +702,20 @@ def analyze_player_prop(
     edge_under: float | None = None
     recommendation = "pass"
     tier: str | None = None
+    over_audit: CalibrationAudit | None = None
+    under_audit: CalibrationAudit | None = None
 
     _ctx_hints = request.game_context or None
     if request.odds_over is not None:
         market_over = implied_probability(request.odds_over)
-        cal_over = _calibrate(over_prob, league=request.league, context_hints=_ctx_hints)
+        cal_over, over_audit = _calibrate_audited(over_prob, league=request.league, context_hints=_ctx_hints, plane="prop", market="over")
         edge_over = round(edge_percentage(cal_over, market_over), 2)
     else:
         notes.append("odds_unsourced_over")
 
     if request.odds_under is not None:
         market_under = implied_probability(request.odds_under)
-        cal_under = _calibrate(under_prob, league=request.league, context_hints=_ctx_hints)
+        cal_under, under_audit = _calibrate_audited(under_prob, league=request.league, context_hints=_ctx_hints, plane="prop", market="under")
         edge_under = round(edge_percentage(cal_under, market_under), 2)
     else:
         notes.append("odds_unsourced_under")
@@ -709,6 +758,8 @@ def analyze_player_prop(
         missing_requirements=[],
         notes=notes,
         imputed_fraction=imputed_fraction,
+        over_calibration_audit=over_audit,
+        under_calibration_audit=under_audit,
     )
 
 
@@ -755,6 +806,7 @@ def analyze_slate(
             "odds": odds_input,
             "home_context": game.get("home_context"),
             "away_context": game.get("away_context"),
+            "game_context": game.get("game_context"),
         }
         if game.get("n_iterations") is not None:
             game_kwargs["n_iterations"] = game.get("n_iterations")

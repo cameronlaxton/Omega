@@ -1,0 +1,59 @@
+{
+  "trace": {
+    "trace_id": "sandbox-0ab7c05b-39c7",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-19T23:29:45.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260519-nyk1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "NBA",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "New York Knicks",
+      "away_team": "Cleveland Cavaliers",
+      "game_date": "2026-05-19",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Donovan Mitchell",
+          "prop": "pts",
+          "side": "under",
+          "line": 27.5,
+          "result": "lost",
+          "actual": 29
+        },
+        {
+          "player": "Jalen Brunson",
+          "prop": "ast",
+          "side": "under",
+          "line": 7.5,
+          "result": "won",
+          "actual": 6
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:parlay"
+    },
+    "downgrades": [
+      "manual:parlay"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "c6088c62082e",
+    "trace_id": "sandbox-0ab7c05b-39c7",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "SGP 2-leg: Mitchell U27.5 pts(LOSS) / Brunson U7.5 ast(WIN)",
+    "selection_descriptor": "sgp2_mitchell_pts_u27.5_brunson_ast_u7.5",
+    "line_taken": null,
+    "odds_taken": 133,
+    "stake_units": 25.47,
+    "decision_timestamp": "2026-05-19T20:00:00Z",
+    "status": "lost"
+  }
+}

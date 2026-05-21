@@ -1,0 +1,67 @@
+{
+  "trace": {
+    "trace_id": "sandbox-271ff5b0-b270",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-15T03:57:36.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260515-g7d1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "NBA",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "Cleveland Cavaliers",
+      "away_team": "Detroit Pistons",
+      "game_date": "2026-05-15",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Jalen Duren",
+          "prop": "pts",
+          "side": "under",
+          "line": 10.5,
+          "result": "lost",
+          "actual": 15
+        },
+        {
+          "player": "Tobias Harris",
+          "prop": "pts",
+          "side": "over",
+          "line": 16.5,
+          "result": "lost",
+          "actual": 6
+        },
+        {
+          "player": "De'Aaron Fox",
+          "prop": "ast",
+          "side": "under",
+          "line": 6.5,
+          "result": "lost",
+          "actual": 9
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:sgp_boost_50pct"
+    },
+    "downgrades": [
+      "manual:sgp_boost_50pct"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "68f78c6a6dc5",
+    "trace_id": "sandbox-271ff5b0-b270",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "SGP 3-leg: Duren U10.5pts(LOSS 15) / Harris O16.5pts(LOSS 6) / Fox U6.5ast(LOSS 9)",
+    "selection_descriptor": "sgp3_duren_pts_u10.5_harris_pts_o16.5_fox_ast_u6.5",
+    "line_taken": null,
+    "odds_taken": 301,
+    "stake_units": 25.0,
+    "decision_timestamp": "2026-05-15T19:00:00Z",
+    "status": "lost"
+  }
+}

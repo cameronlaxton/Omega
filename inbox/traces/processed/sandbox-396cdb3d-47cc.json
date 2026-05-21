@@ -1,0 +1,41 @@
+{
+  "trace": {
+    "trace_id": "sandbox-396cdb3d-47cc",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-15T18:45:00.000000+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260515-mlb1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Zack Littell",
+      "league": "MLB",
+      "prop_type": "strikeouts",
+      "line": 3.5,
+      "home_team": "Washington Nationals",
+      "away_team": "Baltimore Orioles",
+      "game_date": "2026-05-15",
+      "n_iterations": 0,
+      "seed": 0
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:no_engine_run"
+    },
+    "downgrades": [
+      "manual:no_engine_run"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "b56d79a94962",
+    "trace_id": "sandbox-396cdb3d-47cc",
+    "book": "other:thescore",
+    "market": "player_prop:strikeouts",
+    "selection": "Zack Littell Under 3.5 Strikeouts",
+    "selection_descriptor": "littell_strikeouts_under_3.5",
+    "line_taken": 3.5,
+    "odds_taken": -155,
+    "stake_units": 15.0,
+    "decision_timestamp": "2026-05-15T18:45:00Z",
+    "status": "won"
+  }
+}

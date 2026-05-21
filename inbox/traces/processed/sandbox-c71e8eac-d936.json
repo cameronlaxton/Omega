@@ -1,0 +1,47 @@
+{
+  "trace": {
+    "trace_id": "sandbox-c71e8eac-d936",
+    "session_id": "sess-20260521-nyk2",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-21T19:51:30.062776+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Donovan Mitchell",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 27.5,
+      "odds_over": -111.0,
+      "odds_under": -120.0,
+      "player_context": {
+        "pts_mean": 26.0,
+        "pts_std": 7.0
+      },
+      "game_context": null,
+      "n_iterations": 5000,
+      "seed": 3638058362,
+      "home_team": "New York Knicks",
+      "away_team": "Cleveland Cavaliers",
+      "game_date": "2026-05-21"
+    },
+    "result": {
+      "player_name": "Donovan Mitchell",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 27.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.414,
+      "under_prob": 0.586,
+      "edge_over": -11.21,
+      "edge_under": 4.05,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "notes": [],
+      "imputed_fraction": 0.0
+    },
+    "downgrades": []
+  },
+  "bet_record": null
+}

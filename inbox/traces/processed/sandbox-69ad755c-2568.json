@@ -1,0 +1,67 @@
+{
+  "trace": {
+    "trace_id": "sandbox-69ad755c-2568",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-14T22:10:00.000000+00:00",
+    "kind": "parlay",
+    "session_id": "sess-20260514-mlb1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "PARLAY",
+      "league": "MLB",
+      "prop_type": "parlay",
+      "line": null,
+      "home_team": "Los Angeles Dodgers",
+      "away_team": "San Francisco Giants",
+      "game_date": "2026-05-14",
+      "n_iterations": 0,
+      "seed": 0,
+      "parlay_legs": [
+        {
+          "player": "Landen Roupp",
+          "prop": "strikeouts",
+          "side": "over",
+          "line": 5.5,
+          "result": "won",
+          "actual": 7
+        },
+        {
+          "player": "Emmet Sheehan",
+          "prop": "strikeouts",
+          "side": "over",
+          "line": 5.5,
+          "result": "won",
+          "actual": 6
+        },
+        {
+          "player": "Heliot Ramos",
+          "prop": "total_bases",
+          "side": "over",
+          "line": 1.5,
+          "result": "lost",
+          "actual": 0
+        }
+      ]
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:sgp_mlb_boost_20pct"
+    },
+    "downgrades": [
+      "manual:sgp_mlb_boost_20pct"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "db16c0f59dc5",
+    "trace_id": "sandbox-69ad755c-2568",
+    "book": "other:thescore",
+    "market": "parlay",
+    "selection": "SGP 3-leg SFG@LAD: Roupp O5.5K(WIN7) / Sheehan O5.5K(WIN6) / Ramos O1.5TB(LOSS0)",
+    "selection_descriptor": "sgp3_roupp_k_o5.5_sheehan_k_o5.5_ramos_tb_o1.5",
+    "line_taken": null,
+    "odds_taken": 792,
+    "stake_units": 29.29,
+    "decision_timestamp": "2026-05-14T22:10:00Z",
+    "status": "lost"
+  }
+}

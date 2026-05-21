@@ -1,0 +1,41 @@
+{
+  "trace": {
+    "trace_id": "sandbox-160f0433-0a9b",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-15T21:40:00.000000+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260515-mlb1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Emerson Hancock",
+      "league": "MLB",
+      "prop_type": "strikeouts",
+      "line": 5.5,
+      "home_team": "Seattle Mariners",
+      "away_team": "San Diego Padres",
+      "game_date": "2026-05-15",
+      "n_iterations": 0,
+      "seed": 0
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:no_engine_run"
+    },
+    "downgrades": [
+      "manual:no_engine_run"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "91136ba8fabe",
+    "trace_id": "sandbox-160f0433-0a9b",
+    "book": "other:thescore",
+    "market": "player_prop:strikeouts",
+    "selection": "Emerson Hancock Over 5.5 Strikeouts",
+    "selection_descriptor": "hancock_strikeouts_over_5.5",
+    "line_taken": 5.5,
+    "odds_taken": 105,
+    "stake_units": 15.0,
+    "decision_timestamp": "2026-05-15T21:40:00Z",
+    "status": "won"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "trace": {
+    "trace_id": "sandbox-ae676de8-fef0",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-15T03:57:36.000000+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260515-g7d1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Jalen Duren",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 11.5,
+      "home_team": "Cleveland Cavaliers",
+      "away_team": "Detroit Pistons",
+      "game_date": "2026-05-15",
+      "n_iterations": 0,
+      "seed": 0
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:no_engine_run"
+    },
+    "downgrades": [
+      "manual:no_engine_run"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "9b71ca5a7fbb",
+    "trace_id": "sandbox-ae676de8-fef0",
+    "book": "other:thescore",
+    "market": "player_prop:pts",
+    "selection": "Jalen Duren Under 11.5 Points",
+    "selection_descriptor": "duren_pts_under_11.5",
+    "line_taken": 11.5,
+    "odds_taken": -160,
+    "stake_units": 15.0,
+    "decision_timestamp": "2026-05-15T19:00:00Z",
+    "status": "lost"
+  }
+}

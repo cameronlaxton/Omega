@@ -1,0 +1,41 @@
+{
+  "trace": {
+    "trace_id": "sandbox-c073fa13-6844",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-18T21:17:00.000000+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260518-wcf1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "ast",
+      "line": 6.5,
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "San Antonio Spurs",
+      "game_date": "2026-05-18",
+      "n_iterations": 0,
+      "seed": 0
+    },
+    "result": {
+      "status": "skipped",
+      "skip_reason": "manual:no_engine_run"
+    },
+    "downgrades": [
+      "manual:no_engine_run"
+    ]
+  },
+  "bet_record": {
+    "bet_id": "faf9cc4b5d12",
+    "trace_id": "sandbox-c073fa13-6844",
+    "book": "other:thescore",
+    "market": "player_prop:ast",
+    "selection": "Shai Gilgeous-Alexander Over 6.5 Assists",
+    "selection_descriptor": "sga_ast_over_6.5",
+    "line_taken": 6.5,
+    "odds_taken": -105,
+    "stake_units": 20.0,
+    "decision_timestamp": "2026-05-18T20:30:00Z",
+    "status": "won"
+  }
+}
