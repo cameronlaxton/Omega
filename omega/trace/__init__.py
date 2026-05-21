@@ -8,3 +8,7 @@ Design rules (from CLAUDE.md):
 - Traces must be persistable without depending on request/response wrappers
 - Every persistence format must be versioned
 """
+
+from omega.trace.persistable import PersistableTrace
+
+__all__ = ["PersistableTrace"]

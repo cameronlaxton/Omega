@@ -27,7 +27,6 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from datetime import datetime, timedelta, timezone
@@ -43,22 +42,22 @@ from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
 from omega.core.calibration.profiles import ProfileStatus  # noqa: E402
 from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
 from omega.trace.clv import compute_clv  # noqa: E402
+from omega.trace.session_sidecar import SessionSidecar  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 logger = logging.getLogger("report_calibration")
 
 
 def _load_session_sidecars(inbox: Path) -> list[dict[str, Any]]:
-    """Read every inbox/sessions/*.json sidecar. Bad files are skipped with a warning."""
+    """Read every inbox/sessions/*.json sidecar through the sidecar contract."""
     if not inbox.exists():
         return []
     out: list[dict[str, Any]] = []
     for path in sorted(inbox.glob("*.json")):
         try:
-            with path.open("r", encoding="utf-8") as fh:
-                out.append(json.load(fh))
+            out.append(SessionSidecar.from_path(path).to_report_dict())
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Skipping malformed session sidecar %s: %s", path.name, exc)
+            logger.warning("Skipping invalid session sidecar %s: %s", path.name, exc)
     return out
 
 

@@ -271,7 +271,11 @@ Write `inbox/sessions/<session_id>.json` at session end. All keys below are requ
 }
 ```
 
-`report_calibration.py` joins sidecar data with trace summaries by `session_id`. Missing or inconsistent keys produce silent gaps in reports.
+`report_calibration.py` joins sidecar data with trace summaries by `session_id`. Validate sidecars before relying on report session sections:
+
+```bash
+python scripts/validate_session_sidecars.py
+```
 
 ## 9. VM Directory Map
 

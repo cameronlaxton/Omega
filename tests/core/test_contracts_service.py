@@ -320,6 +320,53 @@ class TestAnalyzePlayerProp:
         assert 0 < resp.under_prob < 1
         assert resp.over_prob + resp.under_prob == pytest.approx(1.0, abs=0.01)
 
+    def test_recommended_prop_populates_deterministic_stake_fields(self):
+        req = PlayerPropRequest(
+            player_name="LeBron James",
+            league="NBA",
+            prop_type="pts",
+            line=22.5,
+            home_team="Los Angeles Lakers",
+            away_team="Boston Celtics",
+            game_date="2026-05-17",
+            odds_over=150,
+            odds_under=-110,
+            n_iterations=1000,
+            seed=42,
+            player_context={"pts_mean": 32.0, "pts_std": 5.0},
+        )
+        resp = analyze_player_prop(req, bankroll=1000.0)
+
+        assert resp.status == "success"
+        assert resp.recommendation == "over"
+        assert resp.bet_side_odds == pytest.approx(150.0)
+        assert isinstance(resp.kelly_fraction, float)
+        assert isinstance(resp.recommended_units, float)
+        assert resp.recommended_units > 0.0
+
+    def test_prop_pass_leaves_stake_fields_null(self):
+        req = PlayerPropRequest(
+            player_name="LeBron James",
+            league="NBA",
+            prop_type="pts",
+            line=25.5,
+            home_team="Los Angeles Lakers",
+            away_team="Boston Celtics",
+            game_date="2026-05-17",
+            odds_over=-1000,
+            odds_under=-1000,
+            n_iterations=1000,
+            seed=42,
+            player_context={"pts_mean": 25.5, "pts_std": 5.0},
+        )
+        resp = analyze_player_prop(req, bankroll=1000.0)
+
+        assert resp.status == "success"
+        assert resp.recommendation == "pass"
+        assert resp.kelly_fraction is None
+        assert resp.recommended_units is None
+        assert resp.bet_side_odds is None
+
     def test_never_raises_on_bad_context(self):
         req = PlayerPropRequest(
             player_name="Test Player",

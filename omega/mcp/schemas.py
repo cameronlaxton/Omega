@@ -36,6 +36,7 @@ class CalibrationFitPreviewRequest(BaseModel):
 
     db_path: str | None = None
     league: str | None = None
+    plane: str = Field(default="game", pattern="^(game|prop)$")
     method: str = Field(default="isotonic", pattern="^(isotonic|shrinkage)$")
     limit: int = Field(default=1000, ge=1, le=10000)
 

@@ -38,6 +38,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from omega.trace.bet_record import BetRecord  # noqa: E402
+from omega.trace.persistable import PersistableTrace  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 logger = logging.getLogger("ingest_traces")
@@ -48,93 +49,8 @@ logger = logging.getLogger("ingest_traces")
 # ---------------------------------------------------------------------------
 
 def _adapt_sandbox_trace(analyze_out: dict[str, Any]) -> dict[str, Any]:
-    """Map an `analyze()` return value to the TraceStore persist schema.
-
-    TraceStore.persist requires: trace_id, run_id, timestamp. It uses other
-    denormalized fields (league, matchup, execution_mode, ...) for querying but
-    falls back gracefully if absent. The `full_trace` blob preserves the raw
-    analyze output for downstream reconstruction.
-    """
-    trace_id = analyze_out.get("trace_id", "")
-    ran_at = analyze_out.get("ran_at") or analyze_out.get("analyzed_at") or ""
-    kind = analyze_out.get("kind", "unknown")
-    input_snap = analyze_out.get("input_snapshot") or {}
-    result = analyze_out.get("result") or {}
-    gate = analyze_out.get("quality_gate") or {}
-
-    league = input_snap.get("league") or result.get("league") or ""
-    matchup = _derive_matchup(kind, input_snap, result)
-    seed = input_snap.get("seed")
-    aggregate_quality = gate.get("aggregate_quality")
-    downgrades = gate.get("downgrades") or analyze_out.get("downgrades") or []
-
-    # Predictions/recommendations vary by kind; we pull what's available
-    predictions = result.get("simulation") if kind == "game" else {
-        k: result.get(k) for k in ("over_prob", "under_prob") if result.get(k) is not None
-    } or None
-    recommendations = result.get("edges") or result.get("best_bet") or None
-    odds_snapshot = input_snap.get("odds") or _prop_odds_snapshot(input_snap) or None
-
-    return {
-        "trace_id": trace_id,
-        # run_id: one analyze() call = one run in sandbox path
-        "run_id": analyze_out.get("run_id") or trace_id,
-        "timestamp": ran_at,
-        "prompt": _derive_prompt(kind, input_snap, league, matchup),
-        "league": league,
-        "matchup": matchup,
-        "execution_mode": f"sandbox_{kind}",
-        "simulation_seed": seed,
-        "aggregate_quality": aggregate_quality,
-        "predictions": predictions,
-        "recommendations": recommendations,
-        "odds_snapshot": odds_snapshot,
-        "downgrades": downgrades,
-        "session_id": analyze_out.get("session_id"),
-        # Preserve the raw analyze output for downstream consumers
-        "model_version": analyze_out.get("model_version"),
-        "kind": kind,
-        "input_snapshot": input_snap,
-        "result": result,
-        "quality_gate": gate,
-    }
-
-
-def _derive_matchup(kind: str, input_snap: dict[str, Any], result: dict[str, Any]) -> str:
-    if kind == "game":
-        home = input_snap.get("home_team") or ""
-        away = input_snap.get("away_team") or ""
-        if home and away:
-            return f"{away} @ {home}"
-    if kind == "prop":
-        # Prefer the game pair when the prop request carried game identity so
-        # the trace can be resolved by the existing time-window + league query
-        # path and graded via fetch_outcomes_props.py. The prop descriptor
-        # stays available in full_trace.input_snapshot for human inspection.
-        home = input_snap.get("home_team") or ""
-        away = input_snap.get("away_team") or ""
-        if home and away:
-            return f"{away} @ {home}"
-        player = input_snap.get("player_name") or ""
-        prop = input_snap.get("prop_type") or ""
-        line = input_snap.get("line")
-        if player and prop:
-            line_str = f" {line}" if line is not None else ""
-            return f"{player} {prop}{line_str}"
-    return result.get("matchup", "") or ""
-
-
-def _derive_prompt(kind: str, input_snap: dict[str, Any], league: str, matchup: str) -> str:
-    base = f"{league} {kind}: {matchup}".strip()
-    return base or json.dumps(input_snap, default=str)[:200]
-
-
-def _prop_odds_snapshot(input_snap: dict[str, Any]) -> dict[str, Any] | None:
-    over = input_snap.get("odds_over")
-    under = input_snap.get("odds_under")
-    if over is None and under is None:
-        return None
-    return {"odds_over": over, "odds_under": under}
+    """Backward-compatible wrapper around the explicit persistable trace contract."""
+    return PersistableTrace.from_analyze_output(analyze_out).to_store_record()
 
 
 # ---------------------------------------------------------------------------

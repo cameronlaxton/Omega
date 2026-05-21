@@ -286,6 +286,18 @@ class PlayerPropResponse(BaseModel):
     edge_under: float | None = Field(default=None, description="Edge on Under in pct points")
     recommendation: str | None = Field(default=None, description="'over', 'under', or 'pass'")
     confidence_tier: str | None = None
+    kelly_fraction: float | None = Field(
+        default=None,
+        description="Scaled Kelly fraction for the recommended prop side; null for pass or unsourced odds",
+    )
+    recommended_units: float | None = Field(
+        default=None,
+        description="Kelly-sized stake in units for the recommended prop side; null for pass or unsourced odds",
+    )
+    bet_side_odds: float | None = Field(
+        default=None,
+        description="American odds used for the recommended prop side; null for pass or unsourced odds",
+    )
     notes: list[str] = Field(
         default_factory=list,
         description=(

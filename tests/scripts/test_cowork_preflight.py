@@ -5,11 +5,11 @@ import importlib.metadata
 from scripts import cowork_preflight
 
 
-def test_python_below_312_fails():
-    failures = cowork_preflight.check_python((3, 11, 9))
+def test_python_below_310_fails():
+    failures = cowork_preflight.check_python((3, 9, 18))
 
     assert len(failures) == 1
-    assert "Python 3.12+ is required" in failures[0]
+    assert "Python 3.10+ is required" in failures[0]
 
 
 def test_missing_distribution_points_to_editable_mcp_install(monkeypatch):

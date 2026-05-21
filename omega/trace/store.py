@@ -121,11 +121,11 @@ class TraceStore:
     # Persist
     # ------------------------------------------------------------------
 
-    def persist(self, trace: dict[str, Any]) -> str:
+    def persist(self, trace: dict[str, Any] | Any) -> str:
         """Write a trace to SQLite. Idempotent on trace_id.
 
         Args:
-            trace: Serialized ExecutionTrace dict (must contain trace_id, run_id, timestamp).
+            trace: PersistableTrace or serialized trace dict containing trace_id, run_id, timestamp.
 
         Returns:
             trace_id of the persisted record.
@@ -133,6 +133,11 @@ class TraceStore:
         Raises:
             ValueError: if required fields are missing.
         """
+        if hasattr(trace, "to_store_record"):
+            trace = trace.to_store_record()
+        elif hasattr(trace, "model_dump"):
+            trace = trace.model_dump(mode="json")
+
         trace_id = str(trace.get("trace_id", ""))
         run_id = str(trace.get("run_id", ""))
         timestamp = str(trace.get("timestamp", ""))

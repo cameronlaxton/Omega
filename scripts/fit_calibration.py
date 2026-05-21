@@ -15,6 +15,7 @@ seed" — extended here to "same data → same calibration fit".
 
 Usage:
     python scripts/fit_calibration.py --league NBA
+    python scripts/fit_calibration.py --league NBA --plane prop
     python scripts/fit_calibration.py --league NBA --method isotonic
     python scripts/fit_calibration.py --league NBA --method both --min-samples 100
     python scripts/fit_calibration.py --league NBA --dry-run
@@ -132,11 +133,29 @@ def fit_and_register(
     return profile
 
 
+def _extract_plane_pairs(
+    fitter: CalibrationFitter,
+    graded: list[dict[str, object]],
+    plane: str,
+) -> tuple[list[float], list[int], str]:
+    if plane == "prop":
+        predictions, outcomes = fitter.extract_prop_pairs(graded)
+        return predictions, outcomes, "prop probability/outcome"
+    predictions, outcomes = fitter.extract_pairs(graded)
+    return predictions, outcomes, "home_win_prob/outcome"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Fit calibration profile candidates from graded traces."
     )
     parser.add_argument("--league", required=True, help="League code (e.g. NBA)")
+    parser.add_argument(
+        "--plane",
+        choices=["game", "prop"],
+        default="game",
+        help="Calibration plane to fit: game uses home_win_prob pairs; prop uses graded prop pairs",
+    )
     parser.add_argument(
         "--method",
         choices=["isotonic", "shrinkage", "both"],
@@ -168,21 +187,25 @@ def main() -> int:
         return 1
 
     fitter = CalibrationFitter()
-    predictions, outcomes = fitter.extract_pairs(graded)
+    predictions, outcomes, pair_label = _extract_plane_pairs(fitter, graded, args.plane)
 
     if len(predictions) < args.min_samples:
         logger.error(
-            "Refusing to fit: only %d graded (home_win_prob, outcome) pairs available, "
+            "Refusing to fit %s plane: only %d graded %s pairs available, "
             "minimum %d required. Run with --min-samples to override.",
+            args.plane,
             len(predictions),
+            pair_label,
             args.min_samples,
         )
         return 1
 
     train_p, train_o, hold_p, hold_o = _deterministic_split(predictions, outcomes, args.league)
     logger.info(
-        "Loaded %d graded pairs; split %d train / %d holdout (deterministic).",
+        "Loaded %d graded %s pairs for %s plane; split %d train / %d holdout (deterministic).",
         len(predictions),
+        pair_label,
+        args.plane,
         len(train_p),
         len(hold_p),
     )

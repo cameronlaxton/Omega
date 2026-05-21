@@ -286,6 +286,7 @@ def omega_trace_attach_outcome(
 def omega_calibration_fit_preview(
     db_path: str | None = None,
     league: str | None = None,
+    plane: str = "game",
     method: str = "isotonic",
     limit: int = 1000,
 ) -> dict[str, Any]:
@@ -298,6 +299,7 @@ def omega_calibration_fit_preview(
         req = CalibrationFitPreviewRequest(
             db_path=db_path,
             league=league,
+            plane=plane,
             method=method,
             limit=limit,
         )
@@ -308,7 +310,12 @@ def omega_calibration_fit_preview(
     try:
         graded = store.get_graded_traces(league=req.league, limit=req.limit)
         fitter = CalibrationFitter()
-        predictions, outcomes = fitter.extract_pairs(graded)
+        if req.plane == "prop":
+            predictions, outcomes = fitter.extract_prop_pairs(graded)
+            pair_label = "prop probability/outcome"
+        else:
+            predictions, outcomes = fitter.extract_pairs(graded)
+            pair_label = "home_win_prob/outcome"
         if len(predictions) < 30:
             return _ok(
                 "omega_calibration_fit_preview",
@@ -319,6 +326,8 @@ def omega_calibration_fit_preview(
                     "reason": "insufficient_graded_samples",
                     "minimum_samples": 30,
                     "league": req.league,
+                    "plane": req.plane,
+                    "pair_type": pair_label,
                     "method": req.method,
                 },
             )
@@ -344,6 +353,8 @@ def omega_calibration_fit_preview(
                 "status": "success",
                 "dry_run": True,
                 "sample_size": len(predictions),
+                "plane": req.plane,
+                "pair_type": pair_label,
                 "candidate": candidate.model_dump(mode="json"),
                 "metrics": metrics,
                 "comparison": comparison,

@@ -229,6 +229,7 @@ class BacktestEngine:
         league = artifact.league
         home_ctx = artifact.home_context
         away_ctx = artifact.away_context
+        game_ctx = artifact.game_context
         odds = artifact.odds
         outcome = artifact.outcome or {}
         closing = artifact.closing_odds or odds
@@ -247,6 +248,7 @@ class BacktestEngine:
             n_iterations=self._n_iterations,
             home_context=home_ctx or None,
             away_context=away_ctx or None,
+            seed=artifact.simulation_seed if artifact.simulation_seed is not None else self._seed,
         )
 
         if not sim_result.get("success"):
@@ -261,8 +263,8 @@ class BacktestEngine:
         away_prob = sim_result["away_win_prob"] / 100.0
 
         # Calibrate via shared policy (must match production path)
-        cal_home = apply_calibration(home_prob, league=league)
-        cal_away = apply_calibration(away_prob, league=league)
+        cal_home = apply_calibration(home_prob, league=league, context_hints=game_ctx or None)
+        cal_away = apply_calibration(away_prob, league=league, context_hints=game_ctx or None)
 
         # Home ML
         if ml_home is not None:

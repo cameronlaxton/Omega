@@ -41,6 +41,10 @@ class FrozenArtifact(BaseModel):
     # Contexts (as used by the sim at decision time)
     home_context: dict[str, Any] = Field(default_factory=dict)
     away_context: dict[str, Any] = Field(default_factory=dict)
+    game_context: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Decision-time situational context used for calibration slice selection",
+    )
 
     # Odds (decision-time snapshot)
     odds: dict[str, Any] = Field(
@@ -108,10 +112,13 @@ def trace_to_artifact(
     # Extract date from timestamp
     date = timestamp[:10] if timestamp else ""
 
-    # Extract contexts from execution_result
+    input_snapshot = trace.get("input_snapshot") or {}
+
+    # Extract contexts from execution_result or canonical analyze() input_snapshot
     exec_result = trace.get("execution_result") or {}
-    home_context = exec_result.get("home_context", {})
-    away_context = exec_result.get("away_context", {})
+    home_context = exec_result.get("home_context") or input_snapshot.get("home_context") or {}
+    away_context = exec_result.get("away_context") or input_snapshot.get("away_context") or {}
+    game_context = input_snapshot.get("game_context") or trace.get("context_labels") or {}
 
     # If contexts not in execution_result, try gathered_facts
     if not home_context and not away_context:
@@ -141,6 +148,7 @@ def trace_to_artifact(
         date=date,
         home_context=home_context,
         away_context=away_context,
+        game_context=game_context,
         odds=odds,
         simulation_seed=seed if seed is not None else 42,
         outcome=outcome,
@@ -168,6 +176,7 @@ def compat_dict_to_artifact(game: dict[str, Any]) -> FrozenArtifact:
         date=date,
         home_context=game.get("home_context", {}),
         away_context=game.get("away_context", {}),
+        game_context=game.get("game_context", {}),
         odds=game.get("odds", {}),
         simulation_seed=game.get("simulation_seed", 42),
         outcome=game.get("outcome"),

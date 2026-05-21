@@ -704,6 +704,8 @@ def analyze_player_prop(
     tier: str | None = None
     over_audit: CalibrationAudit | None = None
     under_audit: CalibrationAudit | None = None
+    cal_over = over_prob
+    cal_under = under_prob
 
     _ctx_hints = request.game_context or None
     if request.odds_over is not None:
@@ -743,6 +745,30 @@ def analyze_player_prop(
         tier = "B"
         notes.append("tier_capped_imputation")
 
+    kelly: float | None = None
+    units: float | None = None
+    bet_side_odds: float | None = None
+    if recommendation == "over" and request.odds_over is not None and tier is not None:
+        stake = recommend_stake(
+            true_prob=cal_over,
+            odds=request.odds_over,
+            bankroll=bankroll,
+            confidence_tier=tier,
+        )
+        kelly = stake["kelly_fraction"]
+        units = stake["units"]
+        bet_side_odds = request.odds_over
+    elif recommendation == "under" and request.odds_under is not None and tier is not None:
+        stake = recommend_stake(
+            true_prob=cal_under,
+            odds=request.odds_under,
+            bankroll=bankroll,
+            confidence_tier=tier,
+        )
+        kelly = stake["kelly_fraction"]
+        units = stake["units"]
+        bet_side_odds = request.odds_under
+
     return PlayerPropResponse(
         player_name=request.player_name,
         league=request.league,
@@ -755,6 +781,9 @@ def analyze_player_prop(
         edge_under=edge_under,
         recommendation=recommendation,
         confidence_tier=tier,
+        kelly_fraction=kelly,
+        recommended_units=units,
+        bet_side_odds=bet_side_odds,
         missing_requirements=[],
         notes=notes,
         imputed_fraction=imputed_fraction,

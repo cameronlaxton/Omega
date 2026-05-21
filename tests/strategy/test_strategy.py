@@ -229,6 +229,46 @@ class TestBacktestEngine:
         assert isinstance(result.results_by_league, dict)
         assert isinstance(result.rejection_reasons, list)
 
+    def test_backtest_passes_game_context_to_calibration(self, monkeypatch):
+        from omega.strategy.artifacts import FrozenArtifact
+        import omega.strategy.backtest.engine as engine_mod
+        from omega.strategy.backtest.engine import BacktestEngine
+        from omega.strategy.models import StrategyEntry
+
+        seen_contexts = []
+
+        def fake_apply_calibration(raw_prob, league=None, context_hints=None):
+            seen_contexts.append(context_hints)
+            return raw_prob
+
+        monkeypatch.setattr(engine_mod, "apply_calibration", fake_apply_calibration)
+
+        artifact = FrozenArtifact(
+            artifact_id="ctx-test",
+            home_team="Celtics",
+            away_team="Pacers",
+            league="NBA",
+            date="2026-05-21",
+            home_context={"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+            away_context={"off_rating": 112.0, "def_rating": 112.0, "pace": 98.0},
+            game_context={"is_playoff": True},
+            odds={"moneyline_home": 300, "moneyline_away": 300},
+            outcome={"home_score": 112, "away_score": 101},
+            simulation_seed=42,
+        )
+        strategy = StrategyEntry(
+            strategy_id="ctx-cal",
+            name="Context Calibration",
+            leagues=["NBA"],
+            edge_threshold=0.01,
+            confidence_tiers=["A", "B", "C"],
+        )
+
+        BacktestEngine(n_iterations=100, seed=7).run(strategy, [artifact])
+
+        assert seen_contexts
+        assert all(ctx == {"is_playoff": True} for ctx in seen_contexts)
+
 
 # -----------------------------------------------------------------------
 # Promotion tests

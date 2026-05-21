@@ -168,12 +168,14 @@ def test_trace_tools_round_trip(tmp_path):
 
 
 def test_calibration_preview_is_dry_run_when_insufficient_data(tmp_path):
-    result = omega_calibration_fit_preview(db_path=str(tmp_path / "traces.db"))
+    result = omega_calibration_fit_preview(db_path=str(tmp_path / "traces.db"), plane="prop")
 
     assert result["status"] == "success"
     assert result["result"]["status"] == "skipped"
     assert result["result"]["dry_run"] is True
     assert result["result"]["sample_size"] == 0
+    assert result["result"]["plane"] == "prop"
+    assert result["result"]["pair_type"] == "prop probability/outcome"
 
 
 def test_resolve_odds_tool_returns_input_prep_result(monkeypatch):

@@ -37,6 +37,7 @@ def _make_trace_dict():
             "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
             "away_context": {"off_rating": 112.0, "def_rating": 112.0, "pace": 98.0},
         },
+        "context_labels": {"is_playoff": True},
         "downgrades": [],
     }
 
@@ -180,6 +181,7 @@ class TestTraceToArtifact:
 
         assert artifact.home_context["off_rating"] == 118.0
         assert artifact.away_context["off_rating"] == 112.0
+        assert artifact.game_context["is_playoff"] is True
 
     def test_no_outcome_produces_none(self):
         from omega.strategy.artifacts import trace_to_artifact
@@ -220,6 +222,28 @@ class TestCompatDictToArtifact:
         assert artifact.league == "NBA"  # default
         assert artifact.outcome is None
         assert artifact.home_context == {}
+
+    def test_contexts_from_canonical_input_snapshot(self):
+        from omega.strategy.artifacts import trace_to_artifact
+
+        trace = {
+            "trace_id": "canonical-1",
+            "timestamp": "2026-05-21T12:00:00Z",
+            "league": "NBA",
+            "matchup": "Pacers @ Celtics",
+            "input_snapshot": {
+                "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+                "away_context": {"off_rating": 112.0, "def_rating": 112.0, "pace": 98.0},
+                "game_context": {"rest_days": 0},
+            },
+            "odds_snapshot": {"moneyline_home": -150},
+        }
+
+        artifact = trace_to_artifact(trace)
+
+        assert artifact.home_context["off_rating"] == 118.0
+        assert artifact.away_context["off_rating"] == 112.0
+        assert artifact.game_context == {"rest_days": 0}
 
 
 # -----------------------------------------------------------------------
