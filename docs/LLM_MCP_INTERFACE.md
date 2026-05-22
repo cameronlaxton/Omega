@@ -54,7 +54,7 @@ For an MCP client that supports command-based local servers:
     "omega": {
       "command": "python",
       "args": ["-m", "omega.mcp.server"],
-      "cwd": "C:\\Users\\camer\\OneDrive\\Documents\\GitHub\\Omega"
+      "cwd": "C:\\repos\\Omega"
     }
   }
 }

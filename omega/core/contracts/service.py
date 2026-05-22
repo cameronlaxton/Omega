@@ -200,7 +200,7 @@ def _calibrate(
     league: str | None = None,
     context_hints: dict[str, Any] | None = None,
 ) -> float:
-    """Apply calibration. Delegates to apply_calibration() — the single source of truth."""
+    """Apply calibration. Delegates to apply_calibration() -- the single source of truth."""
     return apply_calibration(raw_prob, league=league, context_hints=context_hints)
 
 
@@ -362,7 +362,7 @@ def _resolve_game_market_odds(
 
 
 # ---------------------------------------------------------------------------
-# analyze_game  — primary entry point
+# analyze_game  -- primary entry point
 # ---------------------------------------------------------------------------
 
 
@@ -370,7 +370,7 @@ def analyze_game(
     request: GameAnalysisRequest,
     bankroll: float = 1000.0,
 ) -> GameAnalysisResponse:
-    """Analyze a single game matchup. Never raises — returns structured response."""
+    """Analyze a single game matchup. Never raises -- returns structured response."""
     now = datetime.now().isoformat()
     matchup = f"{request.away_team} @ {request.home_team}"
     archetype_name = get_archetype_name(request.league)
@@ -406,7 +406,7 @@ def analyze_game(
             skip_reason=f"Simulation error: {exc}",
         )
 
-    # Skipped — propagate missing_requirements
+    # Skipped -- propagate missing_requirements
     if not sim_result.get("success"):
         return GameAnalysisResponse(
             matchup=matchup,
@@ -429,7 +429,7 @@ def analyze_game(
         predicted_away_score=sim_result.get("predicted_away_score", 0),
     )
 
-    # Edge analysis — requires odds
+    # Edge analysis -- requires odds
     edges: list[EdgeDetail] = []
     data_sources = ["simulation"]
 
@@ -570,7 +570,7 @@ _PLAYOFF_STAT_FACTORS: dict[str, dict[str, float]] = {
     "MLS": {"goals": 0.96, "assists": 0.97, "shots": 0.95},
 }
 _DEFAULT_PLAYOFF_FACTOR = 0.97
-# Back-to-back fatigue — only meaningful in sports with consecutive-night scheduling.
+# Back-to-back fatigue -- only meaningful in sports with consecutive-night scheduling.
 _B2B_FATIGUE: dict[str, float] = {"NBA": 0.94, "NHL": 0.95}
 # MLB park factor applies to power/extra-base counting stats only.
 _MLB_PARK_FACTOR_STATS = frozenset({"hr", "total_bases", "rbis"})
@@ -717,7 +717,7 @@ def analyze_player_prop(
     if distribution_override in {"normal", "poisson"}:
         notes.append(f"distribution_override:{resolved_dist}")
 
-    # B2: imputation provenance — LLM declares which observation slots are
+    # B2: imputation provenance -- LLM declares which observation slots are
     # imputed and (ideally) the underlying sample size. We cap tiers based on
     # the imputed fraction so a 4-of-5-imputed std cannot ride an A-tier edge.
     raw_imputed = player_ctx.get("imputed_keys") or []
@@ -738,7 +738,7 @@ def analyze_player_prop(
     else:
         imputed_fraction = 0.0
 
-    # B4: single-side odds — "implied opposite" is forbidden. If only one
+    # B4: single-side odds -- "implied opposite" is forbidden. If only one
     # side is sourced, compute that side's edge only and annotate the other.
     edge_over: float | None = None
     edge_under: float | None = None

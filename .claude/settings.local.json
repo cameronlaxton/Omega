@@ -4,14 +4,11 @@
       "Bash(xargs grep:*)",
       "Bash(xargs ls:*)",
       "Bash(python -m pytest tests/ -x -q)",
-      "Bash(ls -la /c/Users/camer/OneDrive/Desktop/Omega/omega/*/)",
       "Bash(python -m pytest tests/ --collect-only -q)",
-      "Bash(find /c/Users/camer/OneDrive/Desktop/Omega/omega/strategy -name *.py -type f)",
       "Bash(python -m pytest tests/skills/test_skills.py -v)",
       "Bash(python -m pytest tests/ -v)",
       "Bash(python -c \":*)",
       "Bash(python -m pytest tests/ -v --tb=short)",
-      "Bash(python3 -m pytest /c/Users/camer/OneDrive/Desktop/Omega/tests/ -v --co -q)",
       "Bash(python3:*)",
       "Bash(python -m pytest tests/core/test_engine.py::TestCalibration -v)",
       "Bash(python -m pytest tests/trace/test_trace_store.py -v)",
@@ -76,14 +73,11 @@
       "Bash(cp omega_traces.db /tmp/omega_traces_test.db)",
       "Bash(python -c \"from omega.trace.store import TraceStore; s = TraceStore\\(db_path='/tmp/omega_traces_test.db'\\); print\\('schema_version:', s.schema_version\\(\\)\\); cur = s.conn.execute\\('SELECT COUNT\\(*\\) AS c FROM bet_records WHERE session_id IS NOT NULL'\\); print\\('bet_records with session_id:', cur.fetchone\\(\\)['c']\\); cur = s.conn.execute\\('SELECT COUNT\\(*\\) AS c FROM bet_records WHERE session_id IS NULL'\\); print\\('bet_records still NULL:', cur.fetchone\\(\\)['c']\\); cur = s.conn.execute\\(\\\\\"SELECT COUNT\\(*\\) AS c FROM outcomes WHERE home_score IN \\(0,1\\) AND away_score IN \\(0,1\\) AND trace_id IN \\(SELECT trace_id FROM traces WHERE json_extract\\(full_trace, '\\\\$.kind'\\)='prop'\\)\\\\\"\\); print\\('remaining bad prop-game outcomes:', cur.fetchone\\(\\)['c']\\); s.close\\(\\)\")",
       "Bash(cp omega_traces.db omega_traces_v7test.db)",
-      "Bash(python -m py_compile C:\\\\Users\\\\camer\\\\OneDrive\\\\Documents\\\\GitHub\\\\Omega\\\\scripts\\\\ingest_traces.py)",
-      "Read(//mnt/c/Users/camer/OneDrive/Documents/GitHub/**)",
       "Bash(python -m py_compile scripts/ingest_traces.py)",
       "Bash(python -m pytest tests/core/test_calibration_profiles.py -x -q)",
       "Bash(python -c \"import tests.core.test_contracts_service as t; print\\(dir\\(t\\)\\)\")",
       "Bash(python -c \"import tests.core.test_contracts_service as t; import inspect; src = inspect.getsource\\(t\\); print\\(src[-200:]\\)\")",
       "Bash(python -c \"import tests.core.test_calibration_profiles as t; import inspect; src = inspect.getsource\\(t\\); print\\(src[-300:]\\)\")",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\camer\\\\OneDrive\\\\Documents\\\\GitHub\\\\Omega\" -Filter __pycache__ -Recurse -Directory)",
       "Bash(Measure-Object)",
       "Bash(Select-Object -ExpandProperty Count)",
       "Bash(python scripts/cowork_preflight.py --direct-only)",
@@ -93,7 +87,8 @@
       "Bash(python -m pytest tests/scripts/test_cowork_preflight.py -q --tb=short)",
       "Bash(git stash *)",
       "Bash(python -m pytest tests/scripts/test_cowork_preflight.py -q --tb=line)",
-      "Bash(python -m pytest tests/ -q --tb=short --ignore=tests/scripts/test_cowork_preflight.py)"
+      "Bash(python -m pytest tests/ -q --tb=short --ignore=tests/scripts/test_cowork_preflight.py)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('scripts/cowork_preflight.py'\\).read\\(\\)\\); print\\('preflight: AST OK'\\)\")"
     ]
   }
 }

@@ -1,7 +1,7 @@
 # OMEGA - Cowork / Local VM Instructions
 
 **Version:** Phase 6h
-**Repo:** `C:\Users\camer\OneDrive\Documents\GitHub\Omega`
+**Repo:** `C:\repos\Omega`
 **DB:** `omega_traces.db` (SQLite V6 - `traces`, `bet_records`, `closing_lines`, `outcomes`, `market_snapshots`, `prop_outcomes`)
 
 This is the runtime instruction set for an Omega agent running with local repo access. The local VM model is the standard model. Use the local MCP server first; use direct repo imports only when MCP is unavailable in the current client.
@@ -62,7 +62,7 @@ python scripts/cowork_preflight.py --direct-only
 import hashlib
 import sys
 
-sys.path.insert(0, r"C:\Users\camer\OneDrive\Documents\GitHub\Omega")
+sys.path.insert(0, r"C:\repos\Omega")
 from omega.core.contracts.service import analyze
 
 prompt = "Smoke Test NBA pts prop"

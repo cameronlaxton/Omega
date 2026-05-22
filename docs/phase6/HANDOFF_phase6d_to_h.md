@@ -168,7 +168,7 @@ building blocks, do not rebuild them.
 ## How to pick this up (next session)
 
 ```bash
-cd C:/Users/camer/OneDrive/Documents/GitHub/Omega
+cd C:/repos/Omega
 git status                                  # confirm clean
 python -m pytest tests/ -q                  # confirm 268 passing
 cat docs/phase6/HANDOFF_phase6d_to_h.md     # this file
