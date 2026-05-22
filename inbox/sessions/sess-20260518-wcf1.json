@@ -1,26 +1,16 @@
 {
   "session_id": "sess-20260518-wcf1",
-  "date": "2026-05-18",
   "opened_at": "2026-05-18T21:17:00.000000+00:00",
-  "purpose": "SA Spurs @ OKC Thunder WCF Game 1 prop scan — theScore",
+  "purpose": "SA Spurs @ OKC Thunder WCF Game 1 prop scan \u2014 theScore",
   "bankroll": 1000.0,
   "bankroll_confirmed": true,
-  "traces": [
-    "sandbox-120445d0-faba",
-    "sandbox-19c101c3-e7d4",
-    "sandbox-1ccb9517-4ad6",
-    "sandbox-23fb7bc0-9145",
-    "sandbox-460a3220-2796",
-    "sandbox-bd6720bf-010f",
-    "sandbox-c41a3ab9-1001",
-    "sandbox-e430c484-9a41"
-  ],
-  "bets_taken": [
-    {"bet_id": "e50d41f108d3", "description": "SGP 3-leg +338 boost $29.06 WON $176.42 (Wemby 3+blk / SGA O6.5ast / Harper 10+pts)"},
-    {"bet_id": "12ffea5c06db", "description": "SGA O6.5 ast straight -105 $20 WON $39.05"},
-    {"bet_id": "7d559d47b871", "description": "SGP 2-leg +258 $20 LOST (Wemby O15.5reb / Caruso U16.5pts)"},
-    {"bet_id": "47ebcd408a16", "description": "SGP 2-leg +143 $50 LOST (Holmgren 15+pts / Wemby 12+reb)"}
-  ],
-  "game_result": "OKC Thunder 122, SA Spurs 113",
-  "notes": "Key actuals: SGA 12 ast, Wemby 3 blk + 24 reb, Harper 24 pts, Caruso 31 pts, Holmgren 8 pts."
+  "model_version": "claude-sonnet-4-6",
+  "exec_stats": {
+    "traces_emitted": 0,
+    "bets_recorded": 0,
+    "webfetch_failures": 0,
+    "jit_snapshots_emitted": 0
+  },
+  "agent_notes": "[migrated from pre-schema sidecar] | archived_keys: date=\"2026-05-18\"; traces=[\"sandbox-120445d0-faba\", \"sandbox-19c101c3-e7d4\", \"sandbox-1ccb9517-4ad6\", \"sandbox-23fb7bc0-9145\", \"sandbox-460a3220-2; bets_taken=[{\"bet_id\": \"e50d41f108d3\", \"description\": \"SGP 3-leg +338 boost $29.06 WON $176.42 (Wemby 3+blk / SGA O6.5ast / Harper ; game_result=\"OKC Thunder 122, SA Spurs 113\"; notes=\"Key actuals: SGA 12 ast, Wemby 3 blk + 24 reb, Harper 24 pts, Caruso 31 pts, Holmgren 8 pts.\"",
+  "closed_at": null
 }

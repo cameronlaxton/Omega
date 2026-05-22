@@ -1,9 +1,9 @@
 {
   "session_id": "sess-20260515-g7d1",
-  "started_at": "2026-05-16T03:45:00Z",
-  "ended_at": "2026-05-16T04:15:00Z",
+  "opened_at": "2026-05-16T03:45:00Z",
+  "closed_at": "2026-05-16T04:15:00Z",
   "model_version": "claude-sonnet-4-6",
-  "agent_notes": "User requested 4-6 player prop bets for Game 7 Pistons vs Cavaliers (Sunday May 17, Detroit, 8PM ET). Session ran in Cowork local VM mode. Engine smoke test required dependency install (pydantic, numpy not pre-installed in sandbox). Three props initially skipped due to wrong player_context field names (pts_mean passed instead of reb_mean/ast_mean/threes_mean for non-pts prop types) — corrected on second pass. 9 total traces emitted: 4 with Tier A recommendations (Cunningham pts under, Cunningham threes over, Harden ast over, Mobley pts over), 2 engine passes (Mitchell pts, Duren reb), 3 initial skips (corrected). User confirmed all 4 recommended bets on theScore Bet at 1 unit / $25 each. Bet records logged and ingested. JIT CLV capture scheduled for 7:30 PM ET May 17 — create_scheduled_task blocked by unsupervised-mode restriction; capture prompts documented in QA log for manual scheduling. No WebFetch failures. No calibration actions taken (0 traces in DB at session start).",
+  "agent_notes": "User requested 4-6 player prop bets for Game 7 Pistons vs Cavaliers (Sunday May 17, Detroit, 8PM ET). Session ran in Cowork local VM mode. Engine smoke test required dependency install (pydantic, numpy not pre-installed in sandbox). Three props initially skipped due to wrong player_context field names (pts_mean passed instead of reb_mean/ast_mean/threes_mean for non-pts prop types) \u2014 corrected on second pass. 9 total traces emitted: 4 with Tier A recommendations (Cunningham pts under, Cunningham threes over, Harden ast over, Mobley pts over), 2 engine passes (Mitchell pts, Duren reb), 3 initial skips (corrected). User confirmed all 4 recommended bets on theScore Bet at 1 unit / $25 each. Bet records logged and ingested. JIT CLV capture scheduled for 7:30 PM ET May 17 \u2014 create_scheduled_task blocked by unsupervised-mode restriction; capture prompts documented in QA log for manual scheduling. No WebFetch failures. No calibration actions taken (0 traces in DB at session start).",
   "exec_stats": {
     "traces_emitted": 9,
     "bets_recorded": 4,
@@ -11,5 +11,8 @@
     "jit_snapshots_emitted": 0,
     "jit_snapshots_skipped": 4,
     "jit_skip_reason": "create_scheduled_task unavailable in unsupervised mode"
-  }
+  },
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "purpose": "[unknown \u2014 pre-schema session]"
 }

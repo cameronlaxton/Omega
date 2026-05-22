@@ -208,6 +208,10 @@ def main(
     unmatched: list[str] = []
     unsupported_prop: list[str] = []
     skipped_missing_fields: list[str] = []
+    # Dedup sets — the same trace_id can appear across multiple date windows
+    # (BUG-PROP-1: duplicate warning lines per trace).
+    _unsupported_seen: set[str] = set()
+    _missing_fields_seen: set[str] = set()
 
     for league in leagues:
         for d in _iter_dates(start, end):
@@ -248,16 +252,29 @@ def main(
                 fields = _prop_fields(trace)
                 if fields is None:
                     if trace.get("kind") == "prop":
-                        skipped_missing_fields.append(
-                            f"{trace.get('trace_id', '?')} (missing game_date/home/away)"
-                        )
+                        tid = trace.get("trace_id", "?")
+                        # BUG-PROP-2: check prop_type against supported list first.
+                        # An unsupported prop_type (e.g. first_basket) with all game
+                        # identity fields present was misclassified as missing fields.
+                        snap = trace.get("input_snapshot") or {}
+                        pt = str(snap.get("prop_type") or "").lower()
+                        if pt and not supported_prop_type(league, pt):
+                            if tid not in _unsupported_seen:
+                                _unsupported_seen.add(tid)
+                                unsupported_prop.append(f"{tid} ({league} {pt})")
+                        elif tid not in _missing_fields_seen:
+                            _missing_fields_seen.add(tid)
+                            skipped_missing_fields.append(
+                                f"{tid} (missing game_date/home/away)"
+                            )
                     continue
                 if fields["game_date"] != d.isoformat():
                     continue
                 if not supported_prop_type(league, fields["prop_type"]):
-                    unsupported_prop.append(
-                        f"{trace.get('trace_id', '?')} ({league} {fields['prop_type']})"
-                    )
+                    tid = trace.get("trace_id", "?")
+                    if tid not in _unsupported_seen:
+                        _unsupported_seen.add(tid)
+                        unsupported_prop.append(f"{tid} ({league} {fields['prop_type']})")
                     continue
                 pair = _canonical_pair(league, fields["home_team"], fields["away_team"])
                 if pair is None:

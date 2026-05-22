@@ -99,7 +99,7 @@ class TestSimulation:
         assert 0 <= result["away_win_prob"] <= 100
         assert result["iterations"] == 100
 
-    def test_fast_game_simulation_missing_context(self):
+    def test_fast_game_simulation_uses_archetype_defaults_when_context_absent(self):
         from omega.core.simulation.engine import OmegaSimulationEngine
 
         engine = OmegaSimulationEngine()
@@ -109,8 +109,10 @@ class TestSimulation:
             league="NBA",
             n_iterations=100,
         )
-        # Should skip gracefully when no context provided
-        assert result.get("success") is False or result.get("skipped") is True
+        # P3 fix: engine falls back to league-average archetype defaults instead of
+        # skipping, producing a calibration-eligible prediction at lower accuracy.
+        assert result.get("success") is True
+        assert 0 <= result["home_win_prob"] <= 100
 
     def test_unknown_league_skips(self):
         from omega.core.simulation.engine import OmegaSimulationEngine

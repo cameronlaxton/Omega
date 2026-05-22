@@ -385,6 +385,54 @@ def run_player_simulation(
 
 
 # ---------------------------------------------------------------------------
+# League-average archetype defaults (for calibration-eligible fallback)
+# ---------------------------------------------------------------------------
+
+
+def _archetype_league_defaults(league: str) -> dict:
+    """Return league-average context so game analyses produce calibration-eligible
+    predictions even when the caller omits home_context / away_context.
+
+    These are intentionally coarse — accuracy degrades to a coin-flip baseline,
+    but the resulting trace is persistable and contributes a calibration pair
+    once the outcome is known. The caller should supply real context whenever
+    possible to improve accuracy.
+    """
+    from omega.core.config.leagues import get_league_config
+    config = get_league_config(league)
+    archetype = get_archetype(league)
+    if archetype is None:
+        return {}
+    name = archetype.name
+    if name == "basketball":
+        pace = config.get("avg_pace", 100.0)
+        # off_rating = points scored per 100 possessions; league avg ~110
+        avg_off = config.get("avg_total", 224.0) / 2.0
+        return {"off_rating": avg_off, "def_rating": avg_off, "pace": pace}
+    if name == "american_football":
+        avg = config.get("avg_total", 45.0) / 2.0
+        return {"off_rating": avg, "def_rating": avg}
+    if name == "baseball":
+        avg = config.get("avg_total", 8.5) / 2.0
+        return {"off_rating": avg, "def_rating": avg}
+    if name == "hockey":
+        avg = config.get("avg_total", 5.5) / 2.0
+        return {"off_rating": avg, "def_rating": avg}
+    if name == "soccer":
+        avg = config.get("avg_total", 2.5) / 2.0
+        return {"off_rating": avg, "def_rating": avg}
+    if name == "tennis":
+        return {"serve_win_pct": 0.62, "return_win_pct": 0.38}
+    if name == "golf":
+        return {"strokes_gained_total": 0.0}
+    if name == "fighting":
+        return {"win_pct": 0.5, "finish_rate": 0.5}
+    if name == "esports":
+        return {"map_win_rate": 0.5, "recent_form": 0.5}
+    return {}
+
+
+# ---------------------------------------------------------------------------
 # Archetype-specific simulation models
 # ---------------------------------------------------------------------------
 
@@ -914,6 +962,18 @@ class OmegaSimulationEngine:
                 skip_reason=f"No simulation model for league '{league}'. Add it to LEAGUE_TO_ARCHETYPE in sport_archetypes.py.",
                 missing_requirements=["league_model"],
             )
+
+        # When context is absent, fall back to league-average archetype defaults so
+        # the engine can produce a calibration-eligible prediction. The result will
+        # be less accurate than a context-supplied run but allows the trace to
+        # contribute a calibration pair once the outcome is known.
+        if home_context is None or away_context is None:
+            defaults = _archetype_league_defaults(league)
+            if defaults:
+                if home_context is None:
+                    home_context = dict(defaults)
+                if away_context is None:
+                    away_context = dict(defaults)
 
         # Validate required context
         required = archetype.required_team_keys

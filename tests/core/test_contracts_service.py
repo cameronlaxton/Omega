@@ -180,7 +180,10 @@ class TestAnalyzeGame:
         assert len(resp.edges) == 2
         assert all(isinstance(e, EdgeDetail) for e in resp.edges)
 
-    def test_skipped_when_missing_required_context(self):
+    def test_succeeds_with_archetype_defaults_when_context_absent(self):
+        # P3 fix: engine now falls back to league-average archetype defaults when
+        # home_context/away_context are None, producing a calibration-eligible
+        # prediction instead of skipping. Accuracy is lower but the trace is usable.
         req = GameAnalysisRequest(
             home_team="Team A",
             away_team="Team B",
@@ -188,9 +191,9 @@ class TestAnalyzeGame:
             n_iterations=100,
         )
         resp = analyze_game(req)
-        assert resp.status == "skipped"
-        assert resp.best_bet is None
-        assert resp.simulation is None
+        assert resp.status == "success"
+        assert resp.simulation is not None
+        assert 0 < resp.simulation.home_win_prob < 100
 
     def test_never_raises(self):
         # Garbage input should return error/skipped, not raise

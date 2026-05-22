@@ -1,12 +1,16 @@
 {
   "session_id": "sess-20260518-mlb1",
-  "date": "2026-05-18",
   "bankroll": 1000.0,
-  "traces": [
-    "sandbox-dcb7aad8-3456",
-    "sandbox-3e17852f-939d",
-    "sandbox-4dbb52a4-3494",
-    "sandbox-3d5592d9-70b5"
-  ],
-  "created_at": "2026-05-18T21:21:49.032960+00:00"
+  "model_version": "claude-sonnet-4-6",
+  "bankroll_confirmed": true,
+  "exec_stats": {
+    "traces_emitted": 0,
+    "bets_recorded": 0,
+    "webfetch_failures": 0,
+    "jit_snapshots_emitted": 0
+  },
+  "agent_notes": "[migrated from pre-schema sidecar] | archived_keys: date=\"2026-05-18\"; traces=[\"sandbox-dcb7aad8-3456\", \"sandbox-3e17852f-939d\", \"sandbox-4dbb52a4-3494\", \"sandbox-3d5592d9-70b5\"]; created_at=\"2026-05-18T21:21:49.032960+00:00\"",
+  "purpose": "[unknown \u2014 pre-schema session]",
+  "opened_at": "2026-05-18T00:00:00Z",
+  "closed_at": "2026-05-18T00:00:00Z"
 }

@@ -1,12 +1,16 @@
 {
   "session_id": "sess-20260519-nba1",
-  "date": "2026-05-19",
   "opened_at": "2026-05-19T23:29:45.000000+00:00",
-  "purpose": "CLE vs NYK ECF G1 — Mitchell/Brunson lines pre-game",
+  "purpose": "CLE vs NYK ECF G1 \u2014 Mitchell/Brunson lines pre-game",
   "bankroll": 1000.0,
   "bankroll_confirmed": false,
-  "traces": ["sandbox-78d469cf-cfb5", "sandbox-82a9471f-22f4", "sandbox-bef88920-cc0e"],
-  "bets_taken": [
-    {"bet_id": "55182b2fa643", "description": "SGP 2-leg Mitchell U27.5 / Brunson U7.5 $25.47 LOST"}
-  ]
+  "model_version": "claude-sonnet-4-6",
+  "exec_stats": {
+    "traces_emitted": 0,
+    "bets_recorded": 0,
+    "webfetch_failures": 0,
+    "jit_snapshots_emitted": 0
+  },
+  "agent_notes": "[migrated from pre-schema sidecar] | archived_keys: date=\"2026-05-19\"; traces=[\"sandbox-78d469cf-cfb5\", \"sandbox-82a9471f-22f4\", \"sandbox-bef88920-cc0e\"]; bets_taken=[{\"bet_id\": \"55182b2fa643\", \"description\": \"SGP 2-leg Mitchell U27.5 / Brunson U7.5 $25.47 LOST\"}]",
+  "closed_at": null
 }

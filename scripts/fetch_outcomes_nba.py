@@ -141,6 +141,9 @@ def main() -> int:
     attached = 0
     unmatched: list[str] = []
     skipped_already_graded = 0
+    # Track trace_ids matched in any date iteration so prior-day window duplicates
+    # are not double-reported in the unmatched list (BUG-DRY-1).
+    matched_trace_ids: set[str] = set()
 
     for d in _iter_dates(start, end):
         logger.info("Fetching ESPN scoreboard for %s", d)
@@ -190,36 +193,43 @@ def main() -> int:
             if trace.get("kind") == "prop":
                 continue
 
+            tid = trace.get("trace_id", "?")
+
             game = _match_trace_to_game(trace, games_by_pair)
             if game is None:
-                pair = _trace_matchup(trace)
-                pair_str = f"{pair[1]} @ {pair[0]}" if pair else "<unresolved>"
-                unmatched.append(f"{trace.get('trace_id', '?')} ({pair_str})")
+                # Only report as unmatched if this trace wasn't matched in an
+                # earlier date iteration (prior-day window causes duplicates).
+                if tid not in matched_trace_ids:
+                    pair = _trace_matchup(trace)
+                    pair_str = f"{pair[1]} @ {pair[0]}" if pair else "<unresolved>"
+                    unmatched.append(f"{tid} ({pair_str})")
                 continue
 
             if args.dry_run:
                 logger.info(
                     "DRY %s -> %s @ %s (%d-%d)",
-                    trace["trace_id"],
+                    tid,
                     game.away_team,
                     game.home_team,
                     game.away_score,
                     game.home_score,
                 )
+                matched_trace_ids.add(tid)
                 attached += 1
                 continue
 
             try:
                 store.attach_outcome(
-                    trace_id=trace["trace_id"],
+                    trace_id=tid,
                     home_score=game.home_score,
                     away_score=game.away_score,
                     source="api:espn",
                 )
+                matched_trace_ids.add(tid)
                 attached += 1
                 logger.info(
                     "ATTACHED %s -> %s %d, %s %d",
-                    trace["trace_id"],
+                    tid,
                     game.home_team,
                     game.home_score,
                     game.away_team,
@@ -229,7 +239,7 @@ def main() -> int:
                 # Likely already attached (idempotency at the outcomes-table level
                 # is not currently enforced — multiple outcomes per trace would
                 # be allowed by schema but we treat that as an error here)
-                logger.warning("Skipped %s: %s", trace.get("trace_id"), exc)
+                logger.warning("Skipped %s: %s", tid, exc)
                 skipped_already_graded += 1
 
     logger.info(

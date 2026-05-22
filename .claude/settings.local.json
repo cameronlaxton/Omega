@@ -88,7 +88,21 @@
       "Bash(git stash *)",
       "Bash(python -m pytest tests/scripts/test_cowork_preflight.py -q --tb=line)",
       "Bash(python -m pytest tests/ -q --tb=short --ignore=tests/scripts/test_cowork_preflight.py)",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('scripts/cowork_preflight.py'\\).read\\(\\)\\); print\\('preflight: AST OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('scripts/cowork_preflight.py'\\).read\\(\\)\\); print\\('preflight: AST OK'\\)\")",
+      "Bash(python -m pytest tests/ -q --tb=short)",
+      "Bash(python -m pytest tests/core/test_evidence.py -q)",
+      "Bash(python -m pytest tests/core/test_contracts_service.py tests/core/test_engine.py -q)",
+      "Bash(python -m pytest tests/trace/test_schema_v9.py tests/trace/test_schema_v7.py tests/trace/test_trace_store.py -q)",
+      "Bash(python -m pytest tests/trace/ -q)",
+      "Bash(python -c \"from omega.core.calibration.adjustment_policy import AdjustmentPolicyRegistry; r=AdjustmentPolicyRegistry\\(\\); p=r.get_production_policy\\(\\); print\\('loaded:', p.policy_id, p.version, p.mode, p.status\\); print\\('b2b:', p.coeffs_for\\('b2b_fatigue'\\)\\); print\\('signal count:', len\\(p.coefficients\\)\\)\")",
+      "Bash(python -m pytest tests/core/test_adjustment_policy.py tests/core/test_calibration_profiles.py -q)",
+      "Bash(python -m pytest tests/core/test_contracts_service.py tests/core/test_engine.py tests/core/test_evidence.py tests/core/test_adjustment_policy.py tests/trace/ -q)",
+      "Bash(python -m pytest tests/core/test_evidence_handlers.py -q)",
+      "Bash(python -m pytest tests/strategy/test_signal_performance.py tests/trace/test_schema_v9.py -q)",
+      "Bash(python -m pytest tests/strategy/test_signal_performance.py tests/trace/ -q)",
+      "Bash(python -m pytest tests/scripts/test_adjustment_policy_lifecycle.py -q)",
+      "Bash(python -m pytest tests/core/test_evidence.py tests/core/test_adjustment_policy.py tests/core/test_evidence_handlers.py tests/trace/test_schema_v9.py tests/strategy/test_signal_performance.py tests/scripts/test_adjustment_policy_lifecycle.py -q)",
+      "Bash(git push *)"
     ]
   }
 }
