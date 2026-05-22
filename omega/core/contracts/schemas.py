@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+import warnings
+
+from pydantic import BaseModel, Field, model_validator
+
+from omega.core.contracts.evidence import EvidenceSignal
 
 # -- Request Models ----------------------------------------------------------
 
@@ -125,6 +129,27 @@ class GameAnalysisRequest(BaseModel):
         ),
     )
     seed: int | None = Field(default=None, description="RNG seed for reproducible simulations")
+    evidence: list[EvidenceSignal] = Field(
+        default_factory=list,
+        description=(
+            "Structured reasoning signals (game/matchup/situational/team_form). "
+            "The engine applies known signal types deterministically before simulation "
+            "and persists every signal for retrospective scoring; unknown types are "
+            "ignored. Defaults to empty — supplying none preserves prior behavior."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _warn_missing_game_context_keys(self) -> "GameAnalysisRequest":
+        gc = self.game_context or {}
+        missing = [k for k in ("is_playoff", "rest_days") if k not in gc]
+        if missing:
+            warnings.warn(
+                f"GameAnalysisRequest missing game_context keys: {missing}. "
+                "Context-slice calibration fitting will be unavailable for this trace.",
+                stacklevel=3,
+            )
+        return self
 
 
 class SlateAnalysisRequest(BaseModel):
@@ -169,6 +194,29 @@ class PlayerPropRequest(BaseModel):
     )
     n_iterations: int = Field(default=5000, ge=100, le=100000)
     seed: int | None = Field(default=None, description="RNG seed for reproducible simulations")
+    evidence: list[EvidenceSignal] = Field(
+        default_factory=list,
+        description=(
+            "Structured reasoning signals (player_form/matchup/situational). "
+            "The engine applies known signal types deterministically to player_context "
+            "means before simulation and persists every signal for retrospective "
+            "scoring; unknown types are ignored. Defaults to empty — supplying none "
+            "preserves prior behavior."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _warn_missing_game_context_keys(self) -> "PlayerPropRequest":
+        gc = self.game_context or {}
+        missing = [k for k in ("is_playoff", "rest_days") if k not in gc]
+        if missing:
+            warnings.warn(
+                f"PlayerPropRequest missing game_context keys: {missing}. "
+                "Context-slice calibration fitting will be unavailable for this trace.",
+                stacklevel=3,
+            )
+        return self
+
     # Required because persisted prop traces are graded by
     # (game_date, home_team, away_team). Without these fields the outcome
     # resolver cannot safely attach an ESPN box-score result.

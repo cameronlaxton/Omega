@@ -30,6 +30,12 @@ class PersistableTrace(BaseModel):
     calibration_audit: list[dict[str, Any]] = Field(default_factory=list)
     downgrades: list[Any] = Field(default_factory=list)
 
+    # Structured-evidence application (Phase 6i). evidence_application is aligned
+    # by index with input_snapshot.evidence; TraceStore.persist() explodes both
+    # into the evidence_signals table.
+    evidence_mode: str | None = None
+    evidence_application: list[dict[str, Any]] = Field(default_factory=list)
+
     prompt: str = ""
     league: str | None = None
     matchup: str = ""
@@ -70,6 +76,8 @@ class PersistableTrace(BaseModel):
             context_labels=analyze_out.get("context_labels") or {},
             calibration_audit=_extract_calibration_audit(result),
             downgrades=downgrades,
+            evidence_mode=analyze_out.get("evidence_mode"),
+            evidence_application=analyze_out.get("evidence_application") or [],
             prompt=_derive_prompt(kind, input_snap, str(league or ""), matchup),
             league=league,
             matchup=matchup,

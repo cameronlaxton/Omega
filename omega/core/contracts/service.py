@@ -20,6 +20,10 @@ from omega.core.betting.odds import (
     expected_value_percent,
     implied_probability,
 )
+from omega.core.calibration.adjustment_policy import (
+    AdjustmentPolicy,
+    AdjustmentPolicyRegistry,
+)
 from omega.core.calibration.probability import apply_calibration, apply_calibration_audited
 from omega.core.contracts.schemas import (
     AnalysisMetadata,
@@ -41,6 +45,12 @@ from omega.core.simulation.engine import (
     OmegaSimulationEngine,
     run_player_simulation,
     select_distribution,
+)
+from omega.core.simulation.evidence_handlers import (
+    PlaneAdjustment,
+    compute_game_adjustment,
+    compute_player_adjustment,
+    resolve_evidence_mode,
 )
 
 UTC = timezone.utc
@@ -158,12 +168,26 @@ def analyze(
     trace_id = _new_trace_id(typed_req)
     ran_at = datetime.now(UTC).isoformat()
 
+    # Structured-evidence adjustment — evaluated once here, then passed into the
+    # analyzer. The same PlaneAdjustment object supplies both the applied effect
+    # (inside the analyzer) and the per-signal applications recorded on the
+    # trace, so there is exactly one evaluation per analysis.
+    evidence_adjustment: PlaneAdjustment | None = None
+    if isinstance(typed_req, PlayerPropRequest):
+        evidence_adjustment = _player_adjustment_for(typed_req)
+    elif isinstance(typed_req, GameAnalysisRequest):
+        evidence_adjustment = _game_adjustment_for(typed_req)
+
     result: GameAnalysisResponse | PlayerPropResponse | SlateAnalysisResponse
     if isinstance(typed_req, GameAnalysisRequest):
-        result = analyze_game(typed_req, bankroll=bankroll)
+        result = analyze_game(
+            typed_req, bankroll=bankroll, evidence_adjustment=evidence_adjustment
+        )
         kind = "game"
     elif isinstance(typed_req, PlayerPropRequest):
-        result = analyze_player_prop(typed_req, bankroll=bankroll)
+        result = analyze_player_prop(
+            typed_req, bankroll=bankroll, evidence_adjustment=evidence_adjustment
+        )
         kind = "prop"
     elif isinstance(typed_req, SlateAnalysisRequest):
         typed_req = typed_req.model_copy(update={"bankroll": bankroll})
@@ -181,6 +205,14 @@ def analyze(
     if isinstance(typed_req, (GameAnalysisRequest, PlayerPropRequest)):
         context_labels = _build_context_labels(typed_req)
 
+    # Evidence application — aligned by index with input_snapshot.evidence so the
+    # trace store can explode it into the evidence_signals table (V9).
+    evidence_mode = "shadow"
+    evidence_application: list[dict[str, Any]] = []
+    if evidence_adjustment is not None:
+        evidence_mode = evidence_adjustment.evidence_mode
+        evidence_application = evidence_adjustment.applications()
+
     return {
         "trace_id": trace_id,
         "model_version": MODEL_VERSION,
@@ -192,6 +224,8 @@ def analyze(
         "result": _safe_dump(result),
         "downgrades": _result_downgrades(result),
         "context_labels": context_labels,
+        "evidence_mode": evidence_mode,
+        "evidence_application": evidence_application,
     }
 
 
@@ -252,6 +286,93 @@ def _build_context_labels(
         if k not in labels:
             labels[k] = v
     return labels
+
+
+# ---------------------------------------------------------------------------
+# Structured evidence adjustment (Phase 6i)
+# ---------------------------------------------------------------------------
+
+
+def _load_adjustment_policy() -> AdjustmentPolicy | None:
+    """Return the production engine adjustment policy, or None if unavailable.
+
+    Never raises: a missing/corrupt registry degrades to no evidence adjustment.
+    """
+    try:
+        return AdjustmentPolicyRegistry().get_production_policy()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Could not load adjustment policy: %s", exc)
+        return None
+
+
+def _player_adjustment_for(request: PlayerPropRequest) -> PlaneAdjustment | None:
+    """Compute the structured-evidence adjustment for a player-prop request.
+
+    Pure given (request, production policy). Returns None when the request
+    carries no evidence or no policy is available. The same function is used by
+    ``analyze()`` (to record per-signal applications in the trace) and by
+    ``analyze_player_prop()`` (to apply them) — one deterministic source.
+    """
+    if not getattr(request, "evidence", None):
+        return None
+    policy = _load_adjustment_policy()
+    if policy is None:
+        return None
+    return compute_player_adjustment(
+        player_context=request.player_context or {},
+        evidence=request.evidence,
+        league=request.league,
+        prop_type=request.prop_type,
+        policy=policy,
+        evidence_mode=resolve_evidence_mode(policy),
+    )
+
+
+def _game_adjustment_for(request: GameAnalysisRequest) -> PlaneAdjustment | None:
+    """Compute the structured-evidence adjustment for a game request."""
+    if not getattr(request, "evidence", None):
+        return None
+    policy = _load_adjustment_policy()
+    if policy is None:
+        return None
+    return compute_game_adjustment(
+        evidence=request.evidence,
+        league=request.league,
+        policy=policy,
+        evidence_mode=resolve_evidence_mode(policy),
+    )
+
+
+def _apply_game_evidence(
+    home_context: dict[str, Any] | None,
+    away_context: dict[str, Any] | None,
+    adjustment: PlaneAdjustment | None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Return team contexts with game-plane evidence factors applied.
+
+    Scales each team's ``off_rating`` by the per-team factor. In shadow mode the
+    factors are 1.0, so the contexts are returned unchanged. Never mutates the
+    input dicts.
+    """
+    if adjustment is None:
+        return home_context, away_context
+    home = dict(home_context) if isinstance(home_context, dict) else home_context
+    away = dict(away_context) if isinstance(away_context, dict) else away_context
+    if (
+        isinstance(home, dict)
+        and adjustment.home_factor != 1.0
+        and home.get("off_rating") is not None
+    ):
+        home["off_rating"] = float(home["off_rating"]) * adjustment.home_factor
+        home["_evidence_factor_applied"] = round(adjustment.home_factor, 4)
+    if (
+        isinstance(away, dict)
+        and adjustment.away_factor != 1.0
+        and away.get("off_rating") is not None
+    ):
+        away["off_rating"] = float(away["off_rating"]) * adjustment.away_factor
+        away["_evidence_factor_applied"] = round(adjustment.away_factor, 4)
+    return home, away
 
 
 def _build_edge(
@@ -369,11 +490,24 @@ def _resolve_game_market_odds(
 def analyze_game(
     request: GameAnalysisRequest,
     bankroll: float = 1000.0,
+    *,
+    evidence_adjustment: PlaneAdjustment | None = None,
 ) -> GameAnalysisResponse:
-    """Analyze a single game matchup. Never raises -- returns structured response."""
+    """Analyze a single game matchup. Never raises -- returns structured response.
+
+    ``evidence_adjustment`` is the precomputed game-plane structured-evidence
+    adjustment; when omitted it is derived from ``request.evidence``. In shadow
+    mode the team contexts are unchanged.
+    """
     now = datetime.now().isoformat()
     matchup = f"{request.away_team} @ {request.home_team}"
     archetype_name = get_archetype_name(request.league)
+
+    if evidence_adjustment is None:
+        evidence_adjustment = _game_adjustment_for(request)
+    home_ctx, away_ctx = _apply_game_evidence(
+        request.home_context, request.away_context, evidence_adjustment
+    )
 
     # Extract spread value so the engine can compute coverage probabilities.
     # Done before the engine call; odds may be absent.
@@ -391,8 +525,8 @@ def analyze_game(
             away_team=request.away_team,
             league=request.league,
             n_iterations=request.n_iterations,
-            home_context=request.home_context,
-            away_context=request.away_context,
+            home_context=home_ctx,
+            away_context=away_ctx,
             seed=request.seed,
             spread_home=spread_value,
         )
@@ -578,16 +712,24 @@ _MLB_PARK_FACTOR_STATS = frozenset({"hr", "total_bases", "rbis"})
 
 def _apply_game_context(
     player_context: dict[str, Any],
-    game_context: dict[str, Any],
+    game_context: dict[str, Any] | None,
     prop_type: str,
     league: str,
+    *,
+    evidence_adjustment: PlaneAdjustment | None = None,
 ) -> dict[str, Any]:
-    """Return an adjusted copy of player_context using game_context signals.
+    """Return an adjusted copy of player_context using game context + evidence.
 
-    Applies sport-appropriate factors to {prop_type}_mean and {prop_type}_std.
-    Never mutates the input dict. Stores _context_factor_applied for audit.
-    Returns the original dict unchanged if mean_key is absent.
+    Two adjustment layers, applied in order to {prop_type}_mean / {prop_type}_std:
+      1. Legacy ``game_context`` factor (playoff / B2B / pace / park) — unchanged.
+      2. Structured evidence factor from ``evidence_adjustment`` — new. In shadow
+         mode the evidence factors are 1.0 so this layer is a no-op.
+
+    Never mutates the input dict. Records ``_context_factor_applied`` and (when
+    evidence is present) ``_evidence_factor_applied`` + ``_adjustments_applied``
+    for audit. Returns the original dict unchanged if mean_key is absent.
     """
+    game_context = game_context or {}
     mean_key = f"{prop_type}_mean"
     std_key = f"{prop_type}_std"
     if mean_key not in player_context:
@@ -620,6 +762,20 @@ def _apply_game_context(
     if std_key in ctx:
         ctx[std_key] = ctx[std_key] * factor  # preserve coefficient of variation
     ctx["_context_factor_applied"] = round(factor, 4)
+
+    # Structured evidence factor — applied after the legacy game_context factor.
+    # The evidence handlers compute their factors against the raw {stat}_mean,
+    # so the two layers compose multiplicatively and order-independently.
+    if evidence_adjustment is not None:
+        ctx[mean_key] = ctx[mean_key] * evidence_adjustment.mean_factor
+        if std_key in ctx:
+            ctx[std_key] = ctx[std_key] * evidence_adjustment.std_factor
+        ctx["_evidence_factor_applied"] = {
+            "mean": round(evidence_adjustment.mean_factor, 4),
+            "std": round(evidence_adjustment.std_factor, 4),
+            "mode": evidence_adjustment.evidence_mode,
+        }
+        ctx["_adjustments_applied"] = evidence_adjustment.applications()
     return ctx
 
 
@@ -630,6 +786,8 @@ def _apply_game_context(
 def analyze_player_prop(
     request: PlayerPropRequest,
     bankroll: float = 1000.0,
+    *,
+    evidence_adjustment: PlaneAdjustment | None = None,
 ) -> PlayerPropResponse:
     """Analyze a single player prop. Never raises.
 
@@ -637,14 +795,27 @@ def analyze_player_prop(
     a player rolling-stat distribution (mean, std) against the prop line.
     Caller must supply player_context with `{stat}_mean` and optionally
     `{stat}_std` keys (e.g. for pts: pts_mean=24.3, pts_std=6.1).
+
+    ``evidence_adjustment`` is the precomputed structured-evidence adjustment;
+    when omitted it is derived from ``request.evidence`` so direct callers and
+    the ``analyze()`` wrapper get identical, deterministic behavior.
     """
     player_ctx = request.player_context or {}
     stat_key = request.prop_type
     mean_key = f"{stat_key}_mean"
     std_key = f"{stat_key}_std"
 
-    if request.game_context:
-        player_ctx = _apply_game_context(player_ctx, request.game_context, stat_key, request.league)
+    if evidence_adjustment is None:
+        evidence_adjustment = _player_adjustment_for(request)
+
+    if request.game_context or evidence_adjustment is not None:
+        player_ctx = _apply_game_context(
+            player_ctx,
+            request.game_context,
+            stat_key,
+            request.league,
+            evidence_adjustment=evidence_adjustment,
+        )
 
     mean = player_ctx.get(mean_key)
     if mean is None:

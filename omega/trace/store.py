@@ -17,8 +17,11 @@ import json
 import logging
 import sqlite3
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+UTC = timezone.utc
 
 from omega.trace.bet_record import BetRecord
 from omega.trace.market_snapshot import MarketMovement, MarketSnapshot
@@ -29,6 +32,7 @@ from omega.trace.schema import (
     SCHEMA_V3,
     SCHEMA_V5,
     SCHEMA_V6,
+    SCHEMA_V9,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
@@ -105,6 +109,13 @@ class TraceStore:
             "Phase 6j: enforce one game outcome row per trace",
         )
 
+        # V9: evidence_signals + signal_performance (structured reasoning loop)
+        self.conn.executescript(SCHEMA_V9)
+        self._record_version(
+            9,
+            "Phase 6i: evidence_signals + signal_performance tables",
+        )
+
     def _record_version(self, version: int, description: str) -> None:
         """Idempotently stamp a schema version into schema_versions."""
         existing = self.conn.execute(
@@ -155,7 +166,7 @@ class TraceStore:
         if session_id is not None:
             session_id = str(session_id) or None
 
-        self.conn.execute(
+        cur = self.conn.execute(
             """INSERT OR IGNORE INTO traces
                (trace_id, run_id, timestamp, prompt, league, matchup,
                 execution_mode, simulation_seed, aggregate_quality,
@@ -187,8 +198,172 @@ class TraceStore:
                 session_id,
             ),
         )
+        # Explode evidence into queryable rows only on a genuine first insert.
+        # persist() is idempotent on trace_id; guarding on rowcount keeps the
+        # evidence_signals table free of duplicates when a trace is re-persisted.
+        if cur.rowcount and cur.rowcount > 0:
+            self._write_evidence_signals(trace_id, trace)
         self.conn.commit()
         return trace_id
+
+    def _write_evidence_signals(self, trace_id: str, trace: dict[str, Any]) -> int:
+        """Explode input_snapshot.evidence into queryable evidence_signals rows.
+
+        Source of truth stays the full_trace JSON blob; this table only exists
+        so retrospective scoring can JOIN signals to outcomes. Phase B writes a
+        per-signal `evidence_application` list (aligned by index) describing
+        whether/how the engine applied each signal; when absent (Phase-A traces
+        or no engine apply) every signal is recorded as unapplied.
+
+        Returns the number of evidence rows written.
+        """
+        input_snap = trace.get("input_snapshot") or {}
+        evidence = input_snap.get("evidence") or []
+        if not isinstance(evidence, list) or not evidence:
+            return 0
+
+        league = trace.get("league")
+        application = trace.get("evidence_application")
+        if not isinstance(application, list):
+            application = []
+        trace_evidence_mode = trace.get("evidence_mode")
+
+        rows: list[tuple[Any, ...]] = []
+        for idx, sig in enumerate(evidence):
+            if not isinstance(sig, dict):
+                continue
+            app = (
+                application[idx]
+                if idx < len(application) and isinstance(application[idx], dict)
+                else {}
+            )
+            rows.append(
+                (
+                    trace_id,
+                    sig.get("signal_type"),
+                    sig.get("category"),
+                    sig.get("plane"),
+                    sig.get("source"),
+                    sig.get("confidence"),
+                    sig.get("window"),
+                    sig.get("direction"),
+                    sig.get("stat_key"),
+                    league,
+                    json.dumps(sig.get("value"), default=str),
+                    1 if app.get("applied") else 0,
+                    app.get("factor"),
+                    app.get("policy_version"),
+                    app.get("evidence_mode") or trace_evidence_mode,
+                )
+            )
+        if rows:
+            self.conn.executemany(
+                """INSERT INTO evidence_signals
+                   (trace_id, signal_type, category, plane, source, confidence,
+                    obs_window, direction, stat_key, league, value_json,
+                    applied, applied_factor, policy_version, evidence_mode)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                rows,
+            )
+        return len(rows)
+
+    def get_evidence_signals(self, trace_id: str) -> list[dict[str, Any]]:
+        """Return all evidence signal rows attached to a trace (may be empty)."""
+        rows = self.conn.execute(
+            """SELECT id, trace_id, signal_type, category, plane, source,
+                      confidence, obs_window, direction, stat_key, league,
+                      value_json, applied, applied_factor, policy_version,
+                      evidence_mode, created_at
+               FROM evidence_signals WHERE trace_id = ? ORDER BY id""",
+            (trace_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    # ------------------------------------------------------------------
+    # Signal performance (Phase 6i — retrospective evidence scoring)
+    # ------------------------------------------------------------------
+
+    def upsert_signal_performance(
+        self, rows: list[Any], dataset_hash: str
+    ) -> int:
+        """Write retrospective signal-performance aggregates for one scoring run.
+
+        ``rows`` are SignalPerformanceRow-shaped objects (see
+        omega/strategy/signal_performance.py). ``dataset_hash`` identifies the
+        scored dataset; all rows from one run share it and a single ``scored_at``
+        timestamp so the report can read the latest run cleanly. Idempotent on
+        (signal_type, source, obs_window, league, dataset_hash): re-running the
+        same dataset replaces its rows rather than duplicating them.
+
+        Returns the number of rows written.
+        """
+        scored_at = datetime.now(UTC).isoformat()
+        payload = [
+            (
+                r.signal_type,
+                r.source,
+                r.obs_window,
+                r.league,
+                int(r.sample_size),
+                int(r.direction_correct),
+                float(r.direction_accuracy),
+                float(r.mean_confidence),
+                float(r.realized_hit_rate),
+                float(r.calibration_gap),
+                float(r.brier),
+                dataset_hash,
+                scored_at,
+            )
+            for r in rows
+        ]
+        if payload:
+            self.conn.executemany(
+                """INSERT OR REPLACE INTO signal_performance
+                   (signal_type, source, obs_window, league, sample_size,
+                    direction_correct, direction_accuracy, mean_confidence,
+                    realized_hit_rate, calibration_gap, brier, dataset_hash,
+                    scored_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                payload,
+            )
+            self.conn.commit()
+        return len(payload)
+
+    def get_signal_performance(
+        self, league: str | None = None, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """Return the most recent scoring run's signal-performance rows.
+
+        "Most recent" is the latest ``scored_at`` (optionally scoped to a
+        league). Older runs stay in the table for history but are not returned.
+        """
+        latest = self.conn.execute(
+            "SELECT scored_at FROM signal_performance "
+            + ("WHERE league = ? " if league else "")
+            + "ORDER BY scored_at DESC LIMIT 1",
+            (league,) if league else (),
+        ).fetchone()
+        if latest is None:
+            return []
+
+        clauses = ["scored_at = ?"]
+        params: list[Any] = [latest["scored_at"]]
+        if league:
+            clauses.append("league = ?")
+            params.append(league)
+        params.append(limit)
+        rows = self.conn.execute(
+            f"""SELECT signal_type, source, obs_window, league, sample_size,
+                       direction_correct, direction_accuracy, mean_confidence,
+                       realized_hit_rate, calibration_gap, brier, dataset_hash,
+                       scored_at
+                FROM signal_performance
+                WHERE {" AND ".join(clauses)}
+                ORDER BY sample_size DESC, signal_type
+                LIMIT ?""",
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     # ------------------------------------------------------------------
     # Outcome attachment
@@ -660,6 +835,7 @@ class TraceStore:
         has_outcome: bool | None = None,
         execution_mode: str | None = None,
         limit: int = 100,
+        calibration_eligible_only: bool = False,
     ) -> list[dict[str, Any]]:
         """Query traces with optional filters.
 
@@ -703,6 +879,11 @@ class TraceStore:
         elif has_outcome is False:
             clauses.append(f"NOT {any_outcome_sql}")
 
+        if calibration_eligible_only:
+            # Exclude traces where the engine did not run (no model predictions).
+            # Covers manual:no_engine_run, sandbox_parlay, and pre-6h legacy schemas.
+            clauses.append("t.predictions IS NOT NULL")
+
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         params.append(limit)
 
@@ -738,11 +919,19 @@ class TraceStore:
     def get_graded_traces(
         self, league: str | None = None, limit: int = 1000
     ) -> list[dict[str, Any]]:
-        """Return traces that have attached outcomes. Used by calibration fitter.
+        """Return calibration-eligible traces with attached outcomes.
 
+        Only returns traces where the engine ran and produced model predictions
+        (predictions IS NOT NULL). Excludes manual:no_engine_run, parlay, and
+        pre-6h legacy traces that have outcomes attached but no probability to fit.
         Each returned dict has a '_outcome' key with the attached outcome.
         """
-        return self.query_traces(league=league, has_outcome=True, limit=limit)
+        return self.query_traces(
+            league=league,
+            has_outcome=True,
+            calibration_eligible_only=True,
+            limit=limit,
+        )
 
     def get_session_summary(
         self, league: str | None = None, limit: int = 50

@@ -49,6 +49,15 @@ Schema version 8 (additive + cleanup):
   duplicate rows are collapsed to the earliest row before the unique index is
   added. Re-grading requires explicit row deletion first.
 
+Schema version 9 (additive):
+- evidence_signals: one row per structured EvidenceSignal carried on a trace.
+  Exploded out of input_snapshot.evidence at persist time so retrospective
+  scoring can JOIN reasoning signals to outcomes without parsing the full_trace
+  JSON blob. The blob remains source of truth; this table is a query aid.
+- signal_performance: retrospective scoring aggregates keyed by
+  (signal_type, source, obs_window, league, dataset_hash). dataset_hash +
+  scored_at make every scoring run an attributable, non-clobbering record.
+
 Design rules:
 - Full trace stored as JSON blob to decouple trace evolution from SQLite schema
 - Denormalized columns exist for querying only — the blob is source of truth
@@ -60,7 +69,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 8
+CURRENT_VERSION = 9
 
 _logger = logging.getLogger("omega.trace.schema")
 
@@ -283,3 +292,54 @@ def apply_v8_migration(conn) -> int:
             deleted,
         )
     return deleted
+
+
+# V9 is purely additive (two new tables) so it can be applied via executescript.
+# obs_window is named to avoid SQLite's WINDOW keyword. The full_trace JSON blob
+# remains the source of truth — these tables are query aids for retrospective
+# evidence scoring.
+SCHEMA_V9 = """
+CREATE TABLE IF NOT EXISTS evidence_signals (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    trace_id        TEXT NOT NULL REFERENCES traces(trace_id),
+    signal_type     TEXT NOT NULL,
+    category        TEXT,
+    plane           TEXT,
+    source          TEXT,
+    confidence      REAL,
+    obs_window      TEXT,
+    direction       TEXT,
+    stat_key        TEXT,
+    league          TEXT,
+    value_json      TEXT,
+    applied         INTEGER NOT NULL DEFAULT 0,
+    applied_factor  REAL,
+    policy_version  TEXT,
+    evidence_mode   TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_signals_trace_id ON evidence_signals(trace_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_signals_type ON evidence_signals(signal_type, league);
+
+CREATE TABLE IF NOT EXISTS signal_performance (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_type         TEXT NOT NULL,
+    source              TEXT NOT NULL,
+    obs_window          TEXT NOT NULL,
+    league              TEXT NOT NULL,
+    sample_size         INTEGER NOT NULL,
+    direction_correct   INTEGER NOT NULL,
+    direction_accuracy  REAL,
+    mean_confidence     REAL,
+    realized_hit_rate   REAL,
+    calibration_gap     REAL,
+    brier               REAL,
+    dataset_hash        TEXT NOT NULL,
+    scored_at           TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (signal_type, source, obs_window, league, dataset_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_signal_performance_key
+    ON signal_performance(signal_type, league);
+"""

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "policies": [
+    {
+      "policy_id": "adj_v1_seed",
+      "schema_version": 1,
+      "version": 1,
+      "status": "production",
+      "mode": "shadow",
+      "coefficients": {
+        "recent_form": { "weight": 0.35, "cap": 0.18 },
+        "series_avg": { "weight": 0.30, "cap": 0.18 },
+        "last_game_outlier": { "std_widen": 0.10, "target": "std", "cap": 0.15 },
+        "home_away_split": { "weight": 0.50, "cap": 0.12 },
+        "opponent_stat_rank": { "pivot_rank": 15.5, "per_rank": 0.006, "cap": 0.15 },
+        "rest_advantage": { "per_day": 0.012, "cap": 0.07 },
+        "elimination_game": { "mean_mult": 1.02, "cap": 0.06 },
+        "motivation_edge": { "per_unit": 0.03, "cap": 0.07 },
+        "blowout_risk": { "std_compression": 0.25, "target": "std", "cap": 0.30 },
+        "usage_spike": { "scale": 1.0, "cap": 0.22 },
+        "usage_role_change": {
+          "map": {
+            "starter": 1.05,
+            "increased_role": 1.10,
+            "bench": 0.90,
+            "minutes_restriction": 0.80
+          },
+          "cap": 0.25
+        },
+        "b2b_fatigue": {
+          "by_league": { "NBA": 0.94, "NHL": 0.95 },
+          "default_mult": 0.97,
+          "cap": 0.10
+        },
+        "pace_up": { "scale": 1.0, "cap": 0.15 },
+        "pace_down": { "scale": 1.0, "cap": 0.15 },
+        "def_matchup_weak": { "mean_mult": 1.06, "cap": 0.15 },
+        "def_matchup_strong": { "mean_mult": 0.94, "cap": 0.15 },
+        "park_factor_evidence": { "scale": 1.0, "cap": 0.15 },
+        "weather_wind": { "per_unit": 0.004, "cap": 0.12 },
+        "pitcher_matchup": { "per_unit": 0.04, "cap": 0.12 },
+        "weather_cold": { "mean_mult": 0.95, "cap": 0.12 },
+        "dome_effect": { "mean_mult": 1.02, "cap": 0.06 },
+        "formation_mismatch": { "per_unit": 0.03, "cap": 0.10 },
+        "surface_edge": { "per_unit": 0.03, "cap": 0.10 },
+        "course_fit": { "per_unit": 0.03, "cap": 0.10 },
+        "stylistic_matchup": { "per_unit": 0.03, "cap": 0.10 },
+        "map_pool_edge": { "per_unit": 0.03, "cap": 0.10 }
+      },
+      "training_window": "",
+      "sample_size": 0,
+      "dataset_hash": "",
+      "metrics": {},
+      "notes": "Hand-seeded v1 priors. b2b_fatigue transcribes the legacy _B2B_FATIGUE constants verbatim; all other coefficients are conservative unfitted defaults. Mode is 'shadow' so nothing reaches live predictions until scripts/fit_adjustment_policy.py produces a backtested candidate and an operator promotes it.",
+      "created_at": "2026-05-22T00:00:00+00:00",
+      "promoted_at": "2026-05-22T00:00:00+00:00",
+      "rejected_at": null,
+      "reject_reason": null,
+      "incumbent_id": null
+    }
+  ]
+}

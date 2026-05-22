@@ -109,6 +109,18 @@ def _section_counts(store: TraceStore, league: str, cutoff: str) -> dict[str, in
            WHERE t.league = ? AND t.timestamp >= ?""",
         (league, cutoff),
     ).fetchone()[0]
+    n_with_predictions = conn.execute(
+        "SELECT COUNT(*) FROM traces WHERE league = ? AND timestamp >= ? AND predictions IS NOT NULL",
+        (league, cutoff),
+    ).fetchone()[0]
+    n_graded_calibration = conn.execute(
+        """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
+           WHERE t.league = ? AND t.timestamp >= ?
+             AND t.predictions IS NOT NULL
+             AND (EXISTS (SELECT 1 FROM outcomes o WHERE o.trace_id = t.trace_id)
+               OR EXISTS (SELECT 1 FROM prop_outcomes p WHERE p.trace_id = t.trace_id))""",
+        (league, cutoff),
+    ).fetchone()[0]
     return {
         "traces": n_traces,
         "graded": n_graded,
@@ -116,6 +128,8 @@ def _section_counts(store: TraceStore, league: str, cutoff: str) -> dict[str, in
         "graded_prop": n_graded_prop,
         "with_bet": n_with_bet,
         "with_close": n_with_close,
+        "with_predictions": n_with_predictions,
+        "graded_calibration": n_graded_calibration,
     }
 
 
@@ -300,6 +314,26 @@ def _section_sessions(
     return out
 
 
+def _section_signal_performance(store: TraceStore, league: str) -> list[dict[str, Any]]:
+    """Most recent retrospective evidence-signal scoring run for the league."""
+    return store.get_signal_performance(league=league, limit=200)
+
+
+def _signal_verdict(sample_size: int, accuracy: float, calibration_gap: float) -> str:
+    """Classify one signal-performance row for the agent.
+
+    A directional signal is a coin flip at 0.50; >=0.55 accuracy on >=30 samples
+    is treated as genuinely predictive. Below that it is noise. Thin samples are
+    unproven. A large positive calibration gap flags overconfidence.
+    """
+    if sample_size < 30:
+        return "insufficient_n"
+    verdict = "predictive" if accuracy >= 0.55 else "noise"
+    if calibration_gap > 0.10:
+        verdict += " / overconfident"
+    return verdict
+
+
 def _section_pending_candidates(registry: CalibrationRegistry, league: str) -> list[dict[str, Any]]:
     candidates = registry.list_profiles(league=league, status=ProfileStatus.CANDIDATE.value)
     out = []
@@ -326,6 +360,7 @@ def _render(
     sessions: list[dict[str, Any]],
     production_profile_id: str | None,
     candidates: list[dict[str, Any]],
+    signal_perf: list[dict[str, Any]],
 ) -> str:
     now = datetime.now(UTC).isoformat(timespec="seconds")
     lines: list[str] = []
@@ -338,10 +373,12 @@ def _render(
     lines.append("")
     lines.append("| Metric | Count |")
     lines.append("|---|---|")
-    lines.append(f"| Traces | {counts['traces']} |")
+    lines.append(f"| Traces (all) | {counts['traces']} |")
+    lines.append(f"| Traces with model predictions (calibration-eligible) | {counts['with_predictions']} |")
     lines.append(f"| Graded (any outcome) | {counts['graded']} |")
     lines.append(f"| &nbsp;&nbsp;of which game-graded | {counts['graded_game']} |")
     lines.append(f"| &nbsp;&nbsp;of which prop-graded | {counts['graded_prop']} |")
+    lines.append(f"| **Graded + calibration-eligible (usable pairs)** | **{counts['graded_calibration']}** |")
     lines.append(f"| With bet_record | {counts['with_bet']} |")
     lines.append(f"| With closing_line | {counts['with_close']} |")
     lines.append("")
@@ -440,6 +477,36 @@ def _render(
             )
     lines.append("")
 
+    lines.append("## 6B. Evidence signal performance (retrospective)")
+    lines.append("")
+    if not signal_perf:
+        lines.append(
+            "_No scored evidence signals yet — run `scripts/score_evidence_signals.py` "
+            "after outcomes attach._"
+        )
+    else:
+        lines.append(
+            "| signal_type | source | window | n | dir_acc | mean_conf | cal_gap | brier | verdict |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|")
+        for r in signal_perf:
+            verdict = _signal_verdict(
+                r["sample_size"], r["direction_accuracy"], r["calibration_gap"]
+            )
+            lines.append(
+                f"| {r['signal_type']} | {r['source']} | {r['obs_window']} | "
+                f"{r['sample_size']} | {r['direction_accuracy']:.2f} | "
+                f"{r['mean_confidence']:.2f} | {r['calibration_gap']:+.2f} | "
+                f"{r['brier']:.3f} | {verdict} |"
+            )
+        lines.append("")
+        lines.append(
+            "> Weight evidence by empirical accuracy: trust `predictive` signal "
+            "types/sources, discount `noise`, treat `insufficient_n` as unproven. "
+            "A positive `cal_gap` means the agent was overconfident in that signal."
+        )
+    lines.append("")
+
     lines.append("## 7. Suggested actions")
     lines.append("")
     lines.append(
@@ -492,6 +559,7 @@ def main() -> int:
 
     prod = registry.get_production(args.league)
     candidates = _section_pending_candidates(registry, args.league)
+    signal_perf = _section_signal_performance(store, args.league)
     store.close()
 
     rendered = _render(
@@ -504,6 +572,7 @@ def main() -> int:
         sessions=sessions,
         production_profile_id=prod.profile_id if prod else None,
         candidates=candidates,
+        signal_perf=signal_perf,
     )
 
     out_path.write_text(rendered, encoding="utf-8")

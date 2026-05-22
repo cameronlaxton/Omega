@@ -186,6 +186,35 @@ analyze({
 
 If the user explicitly confirms they took a bet, include `bet_record` with actual book, market, selection, `selection_descriptor`, line, odds, stake units, and decision timestamp. Never fabricate bet metadata. The retired closing-line instruction block must not be emitted.
 
+### 6c. Structured evidence (recommended)
+
+Express qualitative reasoning as typed `evidence` signals on the `analyze()` request — not as free text inside `player_context` / `game_context`, which the engine ignores. The `evidence` field is a list of `EvidenceSignal` objects (see `omega/core/contracts/evidence.py`); each carries `signal_type`, `category`, `plane` (`player`/`game`), `value`, `source`, `confidence` (0–1), `window`, and optional `direction`/`stat_key`. The signal taxonomy is multi-sport — `SIGNAL_REGISTRY` declares which sport archetypes each signal type applies to.
+
+The deterministic engine applies known signal types itself via a versioned `AdjustmentPolicy` (currently `mode=shadow` — recorded but not applied to predictions). Every signal is persisted to the `evidence_signals` table and scored retrospectively by `scripts/score_evidence_signals.py`. Set `confidence` honestly; it is measured against realized outcomes.
+
+At session start, read the "Evidence signal performance" section (§6B) of the calibration report and weight your evidence accordingly: trust signal types/sources marked `predictive`, discount `noise`, treat `insufficient_n` as unproven.
+
+Example with evidence:
+
+```python
+analyze({
+    "player_name": "Donovan Mitchell", "league": "NBA", "prop_type": "pts",
+    "line": 26.5, "odds_over": -110, "odds_under": -110,
+    "player_context": {"pts_mean": 28.4, "pts_std": 6.9},
+    "home_team": "Cleveland Cavaliers", "away_team": "Detroit Pistons",
+    "game_date": "2026-05-22",
+    "game_context": {"is_playoff": True, "rest_days": 2},
+    "evidence": [
+        {"signal_type": "series_avg", "category": "player_form", "plane": "player",
+         "value": 30.6, "source": "nba.com", "confidence": 0.9,
+         "window": "series", "direction": "over", "stat_key": "pts"},
+        {"signal_type": "last_game_outlier", "category": "player_form", "plane": "player",
+         "value": True, "source": "agent_reasoning", "confidence": 0.6,
+         "window": "last_3", "stat_key": "pts"},
+    ],
+}, session_id=session_id, bankroll=bankroll)
+```
+
 ### 6a. Single-trace policy (required)
 
 When the user confirms a bet, the export block **must reuse the original analysis trace's `trace_id` and `input_snapshot`**. Do **not** call `analyze()` a second time to "mint a confirmation trace"; that creates a second `trace_id` with stripped game identity and breaks automated grading (see [docs/session_bugs_20260519.md](docs/session_bugs_20260519.md), BUG-2/BUG-4).
