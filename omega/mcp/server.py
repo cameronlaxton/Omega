@@ -55,6 +55,7 @@ def omega_analyze_game(
     request: dict[str, Any],
     bankroll: float,
     session_id: str,
+    trace_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run deterministic single-game analysis through canonical core service."""
     from omega.core.contracts.schemas import GameAnalysisRequest
@@ -62,7 +63,7 @@ def omega_analyze_game(
 
     try:
         typed = GameAnalysisRequest(**request)
-        trace = analyze(typed, bankroll=bankroll, session_id=session_id)
+        trace = analyze(typed, bankroll=bankroll, session_id=session_id, trace_quality=trace_quality)
         return _ok("omega_analyze_game", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
         return _error("omega_analyze_game", "invalid_request", exc.errors())
@@ -76,6 +77,7 @@ def omega_analyze_prop(
     request: dict[str, Any],
     bankroll: float,
     session_id: str,
+    trace_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run deterministic player-prop analysis through canonical core service."""
     from omega.core.contracts.schemas import PlayerPropRequest
@@ -83,7 +85,7 @@ def omega_analyze_prop(
 
     try:
         typed = PlayerPropRequest(**request)
-        trace = analyze(typed, bankroll=bankroll, session_id=session_id)
+        trace = analyze(typed, bankroll=bankroll, session_id=session_id, trace_quality=trace_quality)
         return _ok("omega_analyze_prop", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
         return _error("omega_analyze_prop", "invalid_request", exc.errors())
@@ -94,7 +96,10 @@ def omega_analyze_prop(
 
 
 def omega_analyze_slate(
-    request: dict[str, Any], bankroll: float, session_id: str
+    request: dict[str, Any],
+    bankroll: float,
+    session_id: str,
+    trace_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run deterministic slate analysis through canonical core service."""
     from omega.core.contracts.schemas import SlateAnalysisRequest
@@ -102,7 +107,7 @@ def omega_analyze_slate(
 
     try:
         typed = SlateAnalysisRequest(**request)
-        trace = analyze(typed, bankroll=bankroll, session_id=session_id)
+        trace = analyze(typed, bankroll=bankroll, session_id=session_id, trace_quality=trace_quality)
         return _ok("omega_analyze_slate", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
         return _error("omega_analyze_slate", "invalid_request", exc.errors())

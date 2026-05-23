@@ -152,6 +152,7 @@ def analyze(
     *,
     session_id: str,
     bankroll: float,
+    trace_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a canonical Omega analysis and return an auditable trace envelope.
 
@@ -213,6 +214,29 @@ def analyze(
         evidence_mode = evidence_adjustment.evidence_mode
         evidence_application = evidence_adjustment.applications()
 
+    # Assemble trace_quality last — pure audit metadata, never influences math above.
+    result_downgrades = _result_downgrades(result)
+    evidence_signals = getattr(typed_req, "evidence", None) or []
+    evidence_status = "present" if evidence_signals else "empty"
+
+    engine_trace_quality: dict[str, Any] = {
+        "aggregate_quality": None,
+        "downgrades": result_downgrades,
+        "passed": len(result_downgrades) == 0,
+        "evidence_status": evidence_status,
+        "identity_status": "complete",
+    }
+    if trace_quality:
+        merged_downgrades = sorted(
+            {*trace_quality.get("downgrades", []), *result_downgrades}
+        )
+        engine_trace_quality = {
+            **engine_trace_quality,
+            **trace_quality,
+            "downgrades": merged_downgrades,
+            "evidence_status": evidence_status,  # engine-computed; caller cannot override
+        }
+
     return {
         "trace_id": trace_id,
         "model_version": MODEL_VERSION,
@@ -222,10 +246,11 @@ def analyze(
         "bankroll": bankroll,
         "input_snapshot": _safe_dump(typed_req),
         "result": _safe_dump(result),
-        "downgrades": _result_downgrades(result),
+        "downgrades": result_downgrades,
         "context_labels": context_labels,
         "evidence_mode": evidence_mode,
         "evidence_application": evidence_application,
+        "trace_quality": engine_trace_quality,
     }
 
 

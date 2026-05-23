@@ -215,6 +215,49 @@ analyze({
 }, session_id=session_id, bankroll=bankroll)
 ```
 
+### 6d. Trace completeness (required before filing any export block)
+
+Every export block filed to `inbox/traces/` must include structured reasoning fields alongside the `trace` output. These enable machine-auditable replay, retrospective evidence scoring, and calibration quality tracking.
+
+**Required fields on the export block:**
+
+```json
+{
+  "trace": { "...analyze() output..." },
+  "reasoning_inputs": {
+    "sources": ["espn.com", "nba.com"],
+    "fields_gathered": ["pts_mean", "pts_std", "is_playoff", "rest_days"],
+    "missing_fields": ["sample_size"],
+    "market_context": {"book": "draftkings", "odds_over": -110, "odds_under": -110}
+  },
+  "reasoning_downgrade_rationale": "Skipped bet_card: sample_size unavailable, imputed_fraction > 0.4",
+  "reasoning_narrative": "Considered recent form (5.1 pts above season avg last 5 games) and favorable matchup vs weak perimeter defense. Downgraded due to small confirmed sample — 3 of 5 recent games used imputed std.",
+  "trace_quality": {
+    "aggregate_quality": 0.74
+  }
+}
+```
+
+**Field rules:**
+
+- `reasoning_inputs` — dict of what data was available when you called `analyze()`. At minimum include `sources`, `fields_gathered`, `missing_fields`. Include `market_context` when odds were sourced. Extra keys are allowed.
+- `reasoning_downgrade_rationale` — plain-text string explaining any downgrade decision (data gap, imputation, low quality). Set to `null` if no downgrade was applied.
+- `reasoning_narrative` — 2–4 sentence summary of what you considered and why. Supplemental to the structured fields.
+- `trace_quality.aggregate_quality` — the float computed by `apply_quality_gate()` if it ran. Omit if the orchestrator did not call the quality gate.
+
+**Evidence signals on the request (required):**
+
+Include at least one `EvidenceSignal` in the `evidence` field of every `omega_analyze_prop` or `omega_analyze_game` call where you evaluated a material factor (player form, matchup strength, situational risk). If no structured evidence is available, use `evidence: []` and set `reasoning_downgrade_rationale` to explain why.
+
+Empty `evidence: []` is tagged `evidence_status: "empty"` in the persisted trace and excluded from retrospective signal scoring — this is visible in calibration reports and creates pressure to supply structured evidence.
+
+**Why this matters:**
+- `reasoning_inputs` → enables replay audit (what did the agent know at decision time?)
+- `evidence` signals → flow to `evidence_signals` table → `score_evidence_signals.py` scores them retrospectively
+- `trace_quality.aggregate_quality` → populates the `aggregate_quality` column in `traces` → required for calibration quality metrics
+
+**What gets warned at ingest:** `scripts/ingest_traces.py` logs a warning for every prop trace missing any identity field (`player_name`, `home_team`, `away_team`, `game_date`, `line`), every trace with empty evidence, and every `reasoning_inputs` block missing its required keys. These are warnings only — the trace is still ingested — but they are surfaced so compliance can be tracked.
+
 ### 6a. Single-trace policy (required)
 
 When the user confirms a bet, the export block **must reuse the original analysis trace's `trace_id` and `input_snapshot`**. Do **not** call `analyze()` a second time to "mint a confirmation trace"; that creates a second `trace_id` with stripped game identity and breaks automated grading (see [docs/session_bugs_20260519.md](docs/session_bugs_20260519.md), BUG-2/BUG-4).

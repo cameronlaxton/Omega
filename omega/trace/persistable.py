@@ -47,7 +47,13 @@ class PersistableTrace(BaseModel):
     odds_snapshot: dict[str, Any] | None = None
     model_version: str | None = None
     bankroll: float | None = None
-    quality_gate: dict[str, Any] = Field(default_factory=dict)
+    trace_quality: dict[str, Any] = Field(default_factory=dict)
+    quality_gate: dict[str, Any] | None = None  # backward-compat read alias; never written by new code
+
+    # LLM reasoning fields — populated by the agent orchestrator before filing the trace.
+    reasoning_narrative: str | None = None
+    reasoning_inputs: dict[str, Any] | None = None
+    reasoning_downgrade_rationale: str | None = None
 
     @classmethod
     def from_analyze_output(cls, analyze_out: dict[str, Any]) -> PersistableTrace:
@@ -60,7 +66,8 @@ class PersistableTrace(BaseModel):
 
         input_snap = analyze_out.get("input_snapshot") or {}
         result = analyze_out.get("result") or {}
-        gate = analyze_out.get("quality_gate") or {}
+        # Prefer new trace_quality key; fall back to legacy quality_gate for old traces.
+        gate = analyze_out.get("trace_quality") or analyze_out.get("quality_gate") or {}
         league = input_snap.get("league") or result.get("league") or None
         matchup = _derive_matchup(kind, input_snap, result)
         downgrades = gate.get("downgrades") or analyze_out.get("downgrades") or []
@@ -91,8 +98,25 @@ class PersistableTrace(BaseModel):
             odds_snapshot=input_snap.get("odds") or _prop_odds_snapshot(input_snap),
             model_version=analyze_out.get("model_version"),
             bankroll=analyze_out.get("bankroll"),
-            quality_gate=gate,
+            trace_quality=gate,
+            reasoning_narrative=analyze_out.get("reasoning_narrative"),
+            reasoning_inputs=analyze_out.get("reasoning_inputs"),
+            reasoning_downgrade_rationale=analyze_out.get("reasoning_downgrade_rationale"),
         )
+
+    def calibration_eligibility(self) -> dict[str, bool]:
+        """Diagnostic report on which calibration paths this trace is eligible for.
+
+        Not an enforcement gate — callers decide whether to act on the result.
+        Falls back to quality_gate when trace_quality is empty (pre-rename traces).
+        """
+        tq = self.trace_quality or self.quality_gate or {}
+        identity_status = tq.get("identity_status")
+        return {
+            "probability_calibration": self.predictions is not None,
+            "evidence_scoring": tq.get("evidence_status") == "present",
+            "context_slice_fitting": identity_status not in ("missing", "backfilled"),
+        }
 
     def to_store_record(self) -> dict[str, Any]:
         """Return the dict shape consumed by `TraceStore.persist()`."""

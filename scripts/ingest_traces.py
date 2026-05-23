@@ -159,6 +159,58 @@ def _warn_drift(trace_id: str, input_snap: dict[str, Any], bet_block: dict[str, 
                 )
 
 
+_PROP_IDENTITY_FIELDS = ("player_name", "home_team", "away_team", "game_date", "line")
+_REASONING_INPUTS_REQUIRED_KEYS = ("sources", "fields_gathered", "missing_fields")
+
+
+def _warn_prop_identity(adapted: dict) -> None:
+    """Warn when a prop trace is missing identity fields in input_snapshot.
+
+    Fires for all prop traces — not just those with bet_records. Traces without
+    full identity cannot support outcome attachment or calibration slice fitting.
+    """
+    if adapted.get("kind") != "prop":
+        return
+    snap = adapted.get("input_snapshot") or {}
+    missing = [f for f in _PROP_IDENTITY_FIELDS if not snap.get(f)]
+    if missing:
+        logger.warning(
+            "prop trace %s missing identity fields %s in input_snapshot — "
+            "outcome attachment and calibration slice fitting unavailable",
+            adapted.get("trace_id", "?"),
+            missing,
+        )
+
+
+def _warn_empty_evidence(adapted: dict) -> None:
+    """Warn when a trace carries no structured evidence signals.
+
+    Empty evidence means evidence_signals rows will not be written and
+    retrospective signal scoring will be unavailable for this trace.
+    """
+    snap = adapted.get("input_snapshot") or {}
+    if not snap.get("evidence"):
+        logger.warning(
+            "trace %s has no structured evidence signals — "
+            "retrospective evidence scoring unavailable for this trace",
+            adapted.get("trace_id", "?"),
+        )
+
+
+def _warn_reasoning_inputs(analyze_out: dict) -> None:
+    """Warn when reasoning_inputs is present but missing its expected minimal keys."""
+    ri = analyze_out.get("reasoning_inputs")
+    if ri is None or not isinstance(ri, dict):
+        return
+    for key in _REASONING_INPUTS_REQUIRED_KEYS:
+        if key not in ri:
+            logger.warning(
+                "trace %s reasoning_inputs missing expected key '%s'",
+                analyze_out.get("trace_id", "?"),
+                key,
+            )
+
+
 def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> tuple[str, str | None]:
     """Ingest one file. Returns (trace_id, bet_id or None). Raises on error."""
     payload = _load_payload(path)
@@ -174,6 +226,11 @@ def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> tuple[s
         raise ValueError("trace.trace_id is missing or empty")
     if not adapted["timestamp"]:
         raise ValueError("trace.ran_at is missing or empty")
+
+    # Trace quality warnings — emitted for all traces regardless of bet_record.
+    _warn_prop_identity(adapted)
+    _warn_empty_evidence(adapted)
+    _warn_reasoning_inputs(analyze_out)
 
     # Pre-persist validation: a bet_record on a prop trace must come with
     # full game identity (BUG-4 defense). Warnings about line/odds drift

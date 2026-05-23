@@ -173,6 +173,15 @@ def main() -> int:
     parser.add_argument(
         "--dry-run", action="store_true", help="Fit and evaluate but do not register"
     )
+    parser.add_argument(
+        "--include-backfilled",
+        action="store_true",
+        help=(
+            "Include traces with backfilled or missing identity in calibration slice fitting. "
+            "By default these are excluded because recovered identity fields are derived "
+            "metadata, not original request provenance."
+        ),
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -184,6 +193,21 @@ def main() -> int:
     store = TraceStore(db_path=args.db)
     graded = store.get_graded_traces(league=args.league, limit=100_000)
     store.close()
+
+    if not args.include_backfilled:
+        pre_filter = len(graded)
+        graded = [
+            t for t in graded
+            if (t.get("trace_quality") or t.get("quality_gate") or {}).get("identity_status")
+               not in ("missing", "backfilled")
+        ]
+        excluded = pre_filter - len(graded)
+        if excluded:
+            logger.warning(
+                "Excluded %d trace(s) with missing/backfilled identity from calibration fitting. "
+                "Pass --include-backfilled to include them.",
+                excluded,
+            )
 
     if not graded:
         logger.error("No graded traces found for league=%s", args.league)
