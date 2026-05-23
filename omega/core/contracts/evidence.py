@@ -35,7 +35,9 @@ from omega.core.simulation.archetypes import ARCHETYPE_REGISTRY, get_archetype_n
 
 SignalCategory = Literal["player_form", "matchup", "situational", "team_form"]
 SignalPlane = Literal["player", "game"]
-SignalWindow = Literal["last_3", "last_5", "last_10", "season", "series", "h2h", "matchup"]
+SignalWindow = Literal[
+    "last_1", "last_3", "last_5", "last_10", "season", "series", "h2h", "matchup"
+]
 SignalDirection = Literal["over", "under", "home", "away", "neutral"]
 ValueKind = Literal["scalar", "bool", "series", "categorical"]
 
@@ -236,6 +238,47 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             default_window="matchup",
             description="Probability the game is non-competitive; compresses prop floors.",
         ),
+        _spec(
+            "win_streak",
+            "team_form",
+            "game",
+            default_window="last_10",
+            description="Length of the current win streak for the directional team.",
+        ),
+        _spec(
+            "series_lead",
+            "matchup",
+            "game",
+            default_window="series",
+            description="Games-ahead lead in the current playoff series for the directional team.",
+        ),
+        _spec(
+            "season_record",
+            "team_form",
+            "game",
+            default_window="season",
+            description="Season win percentage for the directional team. Audit-only: "
+            "team ratings already encode this; no handler registered to avoid double-counting.",
+        ),
+        _spec(
+            "season_baseline",
+            "player_form",
+            "player",
+            requires_stat_key=True,
+            default_window="season",
+            description="Player's season baseline for the stat. Audit-only: recent_form/series_avg "
+            "already drive the live blend; no handler registered.",
+        ),
+        _spec(
+            "defensive_scheme",
+            "matchup",
+            "game",
+            applies_to_sports=frozenset({"basketball", "american_football"}),
+            default_window="matchup",
+            value_kind="categorical",
+            description="Defensive scheme/coverage label (e.g. 'blitz_primary_handler'). "
+            "Audit-only: no scheme-to-effect mapping yet.",
+        ),
         # --- Basketball / hockey ---
         _spec(
             "usage_spike",
@@ -322,6 +365,14 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             applies_to_sports=frozenset({"baseball"}),
             requires_stat_key=True,
             description="Batter-vs-pitcher handedness / history edge.",
+        ),
+        _spec(
+            "starter_era",
+            "matchup",
+            "game",
+            applies_to_sports=frozenset({"baseball"}),
+            default_window="season",
+            description="Starting pitcher's ERA for the directional team.",
         ),
         # --- American football ---
         _spec(

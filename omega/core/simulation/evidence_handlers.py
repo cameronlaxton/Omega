@@ -242,6 +242,7 @@ HANDLER_REGISTRY: dict[str, Handler] = {
     "def_matchup_weak": _h_flat_mult,
     "def_matchup_strong": _h_flat_mult,
     "pitcher_matchup": _h_per_unit,
+    "starter_era": _h_per_unit,
     "formation_mismatch": _h_per_unit,
     "surface_edge": _h_per_unit,
     "course_fit": _h_per_unit,
@@ -262,6 +263,12 @@ HANDLER_REGISTRY: dict[str, Handler] = {
     "usage_role_change": _h_categorical,
     "pace_up": _h_ratio,
     "pace_down": _h_ratio,
+    # team-form / matchup (game-plane momentum)
+    "win_streak": _h_per_unit,
+    "series_lead": _h_per_unit,
+    # Audit-only (no handler): season_record, season_baseline, defensive_scheme.
+    # Registered in SIGNAL_REGISTRY so the validator does not warn; the engine
+    # skips them cleanly because no coefficients are provided in the policy.
 }
 
 

@@ -43,6 +43,23 @@ python scripts/cowork_preflight.py
 Only after the preflight prints `cowork_preflight_ready` may the agent render
 formal Omega numeric output from MCP or `analyze()`.
 
+If preflight reports `Source diverges from git HEAD: <file>`, the mount has
+delivered a corrupt copy of a tracked file (Pattern C: a silent truncation
+that drops trailing function/class definitions while leaving the file
+AST-valid). Restore via:
+
+```bash
+python scripts/cowork_preflight.py --repair-from-git
+```
+
+`--repair-from-git` runs `git checkout HEAD -- <file>` through bash so the
+write propagates to the sandbox mount cache. **Never use the Write tool to
+repair source files in the cowork sandbox** — Windows-side writes do not
+invalidate the Linux mount cache, so the next read still sees the corrupt
+copy (see `docs/session_bugs_20260521_mount_corruption.md`). `--repair-from-git`
+will clobber any uncommitted in-session edits, so commit or stash deliberate
+work before invoking it.
+
 Preferred path:
 
 ```bash

@@ -20,6 +20,7 @@ Analyze calls:
 
 Structured evidence:
 - Express qualitative reasoning (defensive matchup, recent form, situational, game/matchup context) as typed `evidence` signals on the analyze request, not as free text. Each signal carries `signal_type`, `category`, `plane`, `value`, `source`, `confidence`, `window`, and optional `direction`/`stat_key`. See `omega/core/contracts/evidence.py` for the signal taxonomy.
+- `window` must be one of `last_1`, `last_3`, `last_5`, `last_10`, `season`, `series`, `h2h`, `matchup`. `direction` must be one of `over`, `under`, `home`, `away`, `neutral`. Do not invent values like `away_favored` — encode market lean in the agent's narrative or in `value`, not in `direction`. Pydantic will hard-reject anything else and abort the analyze call.
 - The deterministic engine applies known signal types itself; never bake a reasoning adjustment into a hand-tuned mean. Evidence values may come from you; how the engine applies them may not.
 - Set `confidence` honestly: it is scored retrospectively. The engine ignores any signal type it does not recognize.
 - Weight your evidence by the "Evidence signal performance" section (§6B) of the latest calibration report: trust signal types/sources marked `predictive`, discount `noise`, treat `insufficient_n` as unproven. A positive `cal_gap` means past confidence on that signal was too high.

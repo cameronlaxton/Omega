@@ -12,6 +12,7 @@ import ast
 import importlib
 import importlib.metadata
 import shutil
+import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -113,7 +114,94 @@ def repair_source_integrity(repo_root: Path) -> list[str]:
     return failures
 
 
-def run_checks(*, require_mcp: bool = True, repo_root: Path | None = None) -> list[str]:
+def _git(repo_root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def verify_against_git(repo_root: Path, *, repair: bool = False) -> list[str]:
+    """Detect silent semantic truncation (Pattern C) by comparing tracked .py files to git HEAD.
+
+    The sandbox mount has been observed to deliver source files that are
+    syntactically valid but missing trailing function/class definitions. AST
+    parsing cannot catch these; only content equality with the git blob does.
+
+    A divergence does not by itself prove corruption: the operator may have
+    legitimate uncommitted changes. We report all divergences and let the
+    operator decide. In --repair-from-git mode, every divergent file is
+    restored via `git checkout HEAD --`, which writes through the mount cache
+    (Write-tool writes do not - see docs/session_bugs_20260521_mount_corruption.md).
+
+    Caution: --repair-from-git will clobber uncommitted local changes. Commit
+    or stash deliberate work before invoking it.
+    """
+    failures: list[str] = []
+
+    head_check = _git(repo_root, ["rev-parse", "--verify", "HEAD"])
+    if head_check.returncode != 0:
+        return [
+            "verify_against_git: no HEAD commit available "
+            "(detached/empty repo); skipping git-parity check."
+        ]
+
+    ls_files = _git(repo_root, ["ls-files", "-z", "--", "*.py"])
+    if ls_files.returncode != 0:
+        return [f"verify_against_git: `git ls-files` failed: {ls_files.stderr.strip()}"]
+
+    diverged: list[str] = []
+    for rel_path in ls_files.stdout.split("\x00"):
+        if not rel_path:
+            continue
+        abs_path = repo_root / rel_path
+        if not abs_path.exists():
+            continue
+        index_hash = _git(repo_root, ["rev-parse", f"HEAD:{rel_path}"]).stdout.strip()
+        if not index_hash:
+            continue
+        wt_hash = _git(repo_root, ["hash-object", "--", str(abs_path)]).stdout.strip()
+        if wt_hash and wt_hash != index_hash:
+            diverged.append(rel_path)
+
+    if not diverged:
+        return []
+
+    if repair:
+        restored: list[str] = []
+        for rel_path in diverged:
+            result = _git(repo_root, ["checkout", "HEAD", "--", rel_path])
+            if result.returncode == 0:
+                restored.append(rel_path)
+            else:
+                failures.append(
+                    f"verify_against_git: failed to restore {rel_path}: "
+                    f"{result.stderr.strip()}"
+                )
+        if restored:
+            print(f"[repair] Restored {len(restored)} file(s) from git HEAD:")
+            for path in restored:
+                print(f"  {path}")
+        return failures
+
+    for rel_path in diverged:
+        failures.append(
+            f"Source diverges from git HEAD: {rel_path}. "
+            "If this is mount corruption (truncation/null bytes), re-run preflight "
+            "with --repair-from-git. If this is your intentional edit, ignore."
+        )
+    return failures
+
+
+def run_checks(
+    *,
+    require_mcp: bool = True,
+    repo_root: Path | None = None,
+    repair_from_git: bool = False,
+) -> list[str]:
     failures: list[str] = []
     failures.extend(check_python())
     if failures:
@@ -131,6 +219,13 @@ def run_checks(*, require_mcp: bool = True, repo_root: Path | None = None) -> li
             "Source integrity check failed. Fix the files above before running "
             "the engine. Do not emit formal Omega numeric outputs."
         )
+        return failures
+
+    # Pattern C: silent trailing truncation that leaves the file AST-valid.
+    # Only git content equality catches it.
+    git_failures = verify_against_git(repo_root, repair=repair_from_git)
+    if git_failures:
+        failures.extend(git_failures)
         return failures
 
     # Clean stale bytecode after source is verified clean (BUG-2026-05-20-003).
@@ -167,10 +262,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Skip the optional MCP SDK check for direct analyze() smoke tests.",
     )
+    parser.add_argument(
+        "--repair-from-git",
+        action="store_true",
+        help=(
+            "When a tracked file diverges from git HEAD, restore it via "
+            "`git checkout`. Used to recover from silent mount truncation. "
+            "Caution: clobbers uncommitted local changes."
+        ),
+    )
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).parent.parent
-    failures = run_checks(require_mcp=not args.direct_only, repo_root=repo_root)
+    failures = run_checks(
+        require_mcp=not args.direct_only,
+        repo_root=repo_root,
+        repair_from_git=args.repair_from_git,
+    )
     if failures:
         print("cowork_preflight_failed:")
         for failure in failures:

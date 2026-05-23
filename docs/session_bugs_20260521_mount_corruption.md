@@ -33,6 +33,19 @@ SyntaxError: expected ':'
 
 These were NOT detectable by null-byte scan — the files appeared syntactically valid up to the cut point.
 
+### Pattern C — Silent semantic truncation (observed 2026-05-23)
+Files arrive cut off at a function/class boundary, so the remaining bytes still parse as valid Python. Neither the null-byte scan nor `ast.parse()` catches this. The corruption surfaces only when the missing function is called at runtime:
+
+```
+NameError: name '_extract_calibration_audit' is not defined
+  File "/sessions/<id>/mnt/Omega/omega/trace/persistable.py", line 84, in from_analyze_output
+    calibration_audit=_extract_calibration_audit(result),
+```
+
+Observed instance: `omega/trace/persistable.py` arrived at 153 lines instead of 191; the trailing `_extract_calibration_audit` definition was missing, and `scripts/ingest_traces.py` crashed mid-pipeline with `NameError`.
+
+Detection requires **content equality with the git blob** — same SHA-1 hash as the index. `scripts/cowork_preflight.py:verify_against_git()` (added 2026-05-23) does this for every tracked `.py` file using `git hash-object` versus `git rev-parse HEAD:<path>`. When divergence is reported, run `python scripts/cowork_preflight.py --repair-from-git` to restore via `git checkout`, which writes through the mount cache.
+
 ---
 
 ## Affected Files
