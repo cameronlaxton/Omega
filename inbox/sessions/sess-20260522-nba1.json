@@ -1,0 +1,16 @@
+{
+  "session_id": "sess-20260522-nba1",
+  "opened_at": "2026-05-22T16:20:00Z",
+  "closed_at": null,
+  "model_version": "claude-sonnet-4-6",
+  "purpose": "NBA WCF Game 3 - OKC Thunder @ SA Spurs - best bets analysis",
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {
+    "traces_emitted": 6,
+    "bets_recorded": 0,
+    "webfetch_failures": 0,
+    "jit_snapshots_emitted": 0
+  },
+  "agent_notes": "Preflight required restoring 11 truncated files from HEAD (service.py 903->1092, report_calibration.py, test files, schemas.py, engine.py, trace/*.py, scripts/*.py). Bug: files are being written truncated in working tree vs HEAD. All calibrations path=static_identity (no fitted profile for NBA playoffs). Evidence mode=shadow: series signals recorded but not applied to sim. Game total engine projection ~208 vs line 218.5 (UNDER signal, but no direct edge market computed). Holmgren matchup suppression confirmed by series data (10.5 ppg vs 17.1 season avg)."
+}

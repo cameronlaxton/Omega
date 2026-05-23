@@ -1,0 +1,208 @@
+{
+  "trace": {
+    "trace_id": "sandbox-bc0d95a5-b895",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-23T15:39:36.408857+00:00",
+    "kind": "game",
+    "session_id": "sess-20260523-nba1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "Milwaukee Brewers",
+      "away_team": "Los Angeles Dodgers",
+      "league": "MLB",
+      "odds": {
+        "spread_home": 1.5,
+        "spread_home_price": -165.0,
+        "moneyline_home": 100.0,
+        "moneyline_away": -120.0,
+        "over_under": 9.0,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 20000,
+      "home_context": {
+        "off_rating": 105.2,
+        "def_rating": 103.8,
+        "pace": 90.1
+      },
+      "away_context": {
+        "off_rating": 113.4,
+        "def_rating": 101.2,
+        "pace": 92.0
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 1.02
+      },
+      "seed": 4025340036,
+      "evidence": [
+        {
+          "signal_type": "starter_era",
+          "category": "matchup",
+          "plane": "game",
+          "value": 5.09,
+          "source": "espn.com",
+          "confidence": 0.85,
+          "window": "season",
+          "direction": null,
+          "stat_key": "era",
+          "note": null
+        },
+        {
+          "signal_type": "season_record",
+          "category": "team_form",
+          "plane": "game",
+          "value": 0.617,
+          "source": "espn.com",
+          "confidence": 0.8,
+          "window": "season",
+          "direction": "away",
+          "stat_key": null,
+          "note": null
+        }
+      ]
+    },
+    "result": {
+      "matchup": "Los Angeles Dodgers @ Milwaukee Brewers",
+      "league": "MLB",
+      "analyzed_at": "2026-05-23T15:39:36.410337",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 20000,
+        "home_win_prob": 44.3,
+        "away_win_prob": 42.2,
+        "draw_prob": 13.5,
+        "predicted_spread": 0.1,
+        "predicted_total": 9.1,
+        "predicted_home_score": 4.6,
+        "predicted_away_score": 4.5
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Milwaukee Brewers",
+          "true_prob": 0.443,
+          "calibrated_prob": 0.443,
+          "market_implied": 0.6226,
+          "edge_pct": -17.96,
+          "ev_pct": -28.85,
+          "market_odds": -165.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.44299999999999995,
+            "calibrated_prob": 0.44299999999999995,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Los Angeles Dodgers",
+          "true_prob": 0.422,
+          "calibrated_prob": 0.422,
+          "market_implied": 0.5455,
+          "edge_pct": -12.35,
+          "ev_pct": -22.63,
+          "market_odds": -120.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.42200000000000004,
+            "calibrated_prob": 0.42200000000000004,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": null,
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      }
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 1.02
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "starter_era",
+        "target": "skip",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "no handler or coefficients for signal_type",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "season_record",
+        "target": "skip",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "no handler or coefficients for signal_type",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete"
+    }
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "espn.com",
+      "cbssports.com",
+      "the-odds-api:betmgm"
+    ],
+    "fields_gathered": [
+      "moneyline_home",
+      "moneyline_away",
+      "over_under",
+      "starter_era_away",
+      "team_record_away"
+    ],
+    "missing_fields": [
+      "bullpen_era_home",
+      "bullpen_era_away"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "moneyline_home": 100.0,
+      "moneyline_away": -120.0
+    }
+  },
+  "reasoning_downgrade_rationale": "Pass: MIL ML +100 \u2192 44.3% true vs 50% implied (-5.7% edge). LAD -120 \u2192 42.2% true vs 54.5% implied (-12.4% edge). Engine total 9.1 matches market 9.0 \u2014 no total edge either.",
+  "reasoning_narrative": "Sasaki ERA 5.09 is weak but Dodgers offense (5.1 R/G, 3rd MLB) offsets. Gasser also mediocre. Engine finds no edge on ML or total. Both sides negative EV. Pass.",
+  "trace_quality": {
+    "aggregate_quality": null
+  }
+}

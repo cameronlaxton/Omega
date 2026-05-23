@@ -1,0 +1,52 @@
+{
+  "trace": {
+    "trace_id": "sandbox-30d917c7-f743",
+    "session_id": "sess-20260522-nba1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-22T16:23:55Z",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_context": {
+        "reb_mean": 17.5,
+        "reb_std": 5.0
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2
+      },
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-22",
+      "player_name": "Victor Wembanyama",
+      "prop_type": "reb",
+      "line": 13.5
+    },
+    "result": {
+      "trace_id": "sandbox-30d917c7-f743",
+      "kind": "prop",
+      "player": "Victor Wembanyama",
+      "prop": "reb OVER 13.5",
+      "odds": -120,
+      "sim_prob": 0.7644,
+      "edge": 21.89,
+      "tier": "A",
+      "units": 5.0,
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-22"
+    },
+    "downgrades": []
+  },
+  "bet_record": {
+    "book": "betmgm",
+    "market": "player_rebounds",
+    "selection": "over",
+    "selection_descriptor": "Victor Wembanyama reb OVER 13.5",
+    "line_taken": 13.5,
+    "odds_taken": -120.0,
+    "stake_units": 2.0,
+    "decision_timestamp": "2026-05-22T20:30:00Z",
+    "sgp_note": "SGP leg (2-leg +136 LOSS, $20 stake)"
+  }
+}

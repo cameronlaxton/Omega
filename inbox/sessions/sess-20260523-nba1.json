@@ -1,0 +1,16 @@
+{
+  "session_id": "sess-20260523-nba1",
+  "opened_at": "2026-05-23T15:30:00Z",
+  "closed_at": "2026-05-23T15:41:00Z",
+  "model_version": "claude-sonnet-4-6",
+  "purpose": "NBA ECF Game 3 Knicks@Cavs + MLB Saturday prop and game scan",
+  "bankroll": 1000.0,
+  "bankroll_confirmed": false,
+  "exec_stats": {
+    "traces_emitted": 4,
+    "bets_recorded": 0,
+    "webfetch_failures": 0,
+    "jit_snapshots_emitted": 0
+  },
+  "agent_notes": "BUG-SESSION-20260523-A: 5 source files hard-truncated at session open (service.py, server.py, fit_calibration.py, ingest_traces.py, persistable.py). Restored from git HEAD via cp. git checkout blocked by Operation not permitted on sandbox FS. BUG-SESSION-20260523-B: win_streak, series_lead, season_baseline, starter_era, season_record signal types not in evidence registry — all fired as skip/no-handler. Affects confidence on Cavs -2.5 play (Knicks momentum unscorable). Two A-rated plays issued: (1) KAT REB OVER 11.5 at -115, 5.14pct edge; (2) Cavs -2.5 at -110, 6.42pct edge with qualitative downgrade noted. Brunson AST and Brewers/Dodgers ML both PASS. Ingest succeeded 4/4 after persistable.py restore."
+}
