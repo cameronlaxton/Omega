@@ -149,9 +149,9 @@ def verify_against_git(repo_root: Path, *, repair: bool = False) -> list[str]:
             "(detached/empty repo); skipping git-parity check."
         ]
 
-    ls_files = _git(repo_root, ["ls-files", "-z", "--", "*.py"])
+    ls_files = _git(repo_root, ["ls-tree", "-r", "-z", "--name-only", "HEAD", "--", "*.py"])
     if ls_files.returncode != 0:
-        return [f"verify_against_git: `git ls-files` failed: {ls_files.stderr.strip()}"]
+        return [f"verify_against_git: `git ls-tree` failed: {ls_files.stderr.strip()}"]
 
     diverged: list[str] = []
     for rel_path in ls_files.stdout.split("\x00"):
