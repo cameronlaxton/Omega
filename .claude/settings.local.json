@@ -102,7 +102,10 @@
       "Bash(python -m pytest tests/strategy/test_signal_performance.py tests/trace/ -q)",
       "Bash(python -m pytest tests/scripts/test_adjustment_policy_lifecycle.py -q)",
       "Bash(python -m pytest tests/core/test_evidence.py tests/core/test_adjustment_policy.py tests/core/test_evidence_handlers.py tests/trace/test_schema_v9.py tests/strategy/test_signal_performance.py tests/scripts/test_adjustment_policy_lifecycle.py -q)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(python -m py_compile scripts/report_calibration.py)",
+      "Bash(python -m py_compile tests/core/test_contracts_service.py)",
+      "Bash(python -m py_compile tests/core/test_engine.py)"
     ]
   }
 }
