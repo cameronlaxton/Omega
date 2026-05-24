@@ -105,7 +105,9 @@
       "Bash(git push *)",
       "Bash(python -m py_compile scripts/report_calibration.py)",
       "Bash(python -m py_compile tests/core/test_contracts_service.py)",
-      "Bash(python -m py_compile tests/core/test_engine.py)"
+      "Bash(python -m py_compile tests/core/test_engine.py)",
+      "Bash(python -m pytest tests/ -x --tb=short -q)",
+      "Bash(python -m pytest tests/core/test_adjustment_policy.py::TestSeedPolicy::test_seed_covers_all_registry_signals tests/core/test_evidence_handlers.py::TestCapAndDeterminism::test_every_registry_signal_has_a_handler tests/mcp/test_prompt_contract.py::test_cowork_prompt_uses_mcp_before_direct_repo_import_when_available -v)"
     ]
   }
 }

@@ -19,11 +19,24 @@ Analyze calls:
 - Preserve input provenance and cite sources outside the trace as needed.
 
 Structured evidence:
-- Express qualitative reasoning (defensive matchup, recent form, situational, game/matchup context) as typed `evidence` signals on the analyze request, not as free text. Each signal carries `signal_type`, `category`, `plane`, `value`, `source`, `confidence`, `window`, and optional `direction`/`stat_key`. See `omega/core/contracts/evidence.py` for the signal taxonomy.
+- Express qualitative reasoning (defensive matchup, recent form, situational, game/matchup context) as typed `evidence` signals on the analyze request, not as free text. Each signal carries `signal_type`, `category`, `plane`, `value`, `source`, `confidence`, `window`, and optional `direction`/`stat_key`. See `omega/core/contracts/evidence.py` for the full signal taxonomy.
 - `window` must be one of `last_1`, `last_3`, `last_5`, `last_10`, `season`, `series`, `h2h`, `matchup`. `direction` must be one of `over`, `under`, `home`, `away`, `neutral`. Do not invent values like `away_favored` — encode market lean in the agent's narrative or in `value`, not in `direction`. Pydantic will hard-reject anything else and abort the analyze call.
 - The deterministic engine applies known signal types itself; never bake a reasoning adjustment into a hand-tuned mean. Evidence values may come from you; how the engine applies them may not.
 - Set `confidence` honestly: it is scored retrospectively. The engine ignores any signal type it does not recognize.
 - Weight your evidence by the "Evidence signal performance" section (§6B) of the latest calibration report: trust signal types/sources marked `predictive`, discount `noise`, treat `insufficient_n` as unproven. A positive `cal_gap` means past confidence on that signal was too high.
+
+Markov backend evidence vocabulary:
+- When using simulation_backend="markov_state", only the following 8 signal_type values adjust the possession-level transition matrix. All other types are audited but have no Markov effect. Use exactly these strings:
+    pace_up             — matchup faster than league baseline (+6% pace)
+    pace_down           — matchup slower than league baseline (-8% pace)
+    rest_advantage      — rest-days advantage for one side (+4% scoring rate; set direction)
+    b2b_fatigue         — back-to-back fatigue for one side (-6% scoring rate; set direction)
+    def_matchup_weak    — opponent is a weak defender of this stat (+5% offense; set direction)
+    def_matchup_strong  — opponent is a strong defender of this stat (-5% offense; set direction)
+    usage_role_change   — key player role is restricted or expanded (-7% team rate; set direction)
+    blowout_risk        — high probability of non-competitive game (-2% momentum variance)
+- Call omega_markov_evidence_guide for the full table with modifier keys and cumulative cap rules.
+- Shadow-mode note: evidence modifiers are recorded but not yet applied to live predictions until the champion/challenger promotion gate clears.
 
 Downgrade discipline:
 - No Bet Card if any critical input is missing.

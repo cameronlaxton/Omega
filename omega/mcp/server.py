@@ -48,6 +48,7 @@ PROMPT_NAMES = (
     "omega_missing_input_repair",
     "omega_trace_audit",
     "omega_replay_review",
+    "omega_markov_evidence_guide",
 )
 
 
@@ -57,7 +58,39 @@ def omega_analyze_game(
     session_id: str,
     trace_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run deterministic single-game analysis through canonical core service."""
+    """Run deterministic single-game analysis through canonical core service.
+
+    Key request fields
+    ------------------
+    simulation_backend : str, default "fast_score"
+        "fast_score"   — Normal/Poisson model, fast, default.
+        "markov_state" — Possession-level Markov simulator. Produces empirical
+                         score distributions with provenance. Preferred when
+                         structured evidence signals are available.
+
+    evidence : list[EvidenceSignal]
+        Structured reasoning signals. All signal types are valid for audit and
+        fast_score paths. Only the 8 Markov-eligible types below affect the
+        transition matrix when simulation_backend="markov_state".
+
+        Markov-eligible signal_type values (use exactly these strings):
+          pace_up            +6% pace; matchup faster than league baseline
+          pace_down          -8% pace; matchup slower than league baseline
+          rest_advantage     +4% scoring rate advantage (use direction="home"/"away")
+          b2b_fatigue        -6% scoring rate for the fatigued side (directional)
+          def_matchup_weak   +5% offense vs. weak defender (directional)
+          def_matchup_strong -5% offense vs. strong defender (directional)
+          usage_role_change  -7% team rate when key player is restricted (directional)
+          blowout_risk       -2% momentum acceleration; suppresses variance runaway
+
+        All other signal types from the full SIGNAL_REGISTRY taxonomy are
+        captured, audited, and scored retrospectively — they do NOT adjust the
+        Markov transition matrix. Do not fabricate signal types outside the
+        registry.
+
+        Cumulative cap: no single transition attribute shifts by more than ±15%
+        regardless of stacked signals.
+    """
     from omega.core.contracts.schemas import GameAnalysisRequest
     from omega.core.contracts.service import analyze
 
@@ -481,6 +514,7 @@ def build_server():
     mcp.prompt()(omega_missing_input_repair)
     mcp.prompt()(omega_trace_audit)
     mcp.prompt()(omega_replay_review)
+    mcp.prompt()(omega_markov_evidence_guide)
     return mcp
 
 
@@ -493,6 +527,34 @@ def omega_runtime_prompt() -> str:
         "Kelly, staking, backtesting, and grading. If no engine tool can run, "
         "respond with Standard Text only."
     )
+
+
+def omega_markov_evidence_guide() -> str:
+    """Reference guide for structuring evidence signals on Markov-backend game requests.
+
+    Returns the authoritative vocabulary table derived directly from the
+    evidence_to_modifier module — never hand-edited here.
+    """
+    from omega.core.simulation.evidence_to_modifier import build_markov_vocabulary_table  # noqa: PLC0415
+
+    header = (
+        "=== Omega Markov Evidence Guide ===\n\n"
+        "Use simulation_backend='markov_state' when you have game-level structural\n"
+        "evidence (pace, rest, matchup) that should shift the possession-level model.\n\n"
+    )
+    footer = (
+        "\n\nWorkflow:\n"
+        "  1. Assess which of the 8 types above apply to this matchup.\n"
+        "  2. Set direction='home' or direction='away' for all directional signals.\n"
+        "  3. Set confidence honestly (scored retrospectively against outcomes).\n"
+        "  4. Call omega_analyze_game with simulation_backend='markov_state'.\n"
+        "  5. The engine applies modifiers automatically -- do NOT pre-adjust\n"
+        "     home_context or away_context ratings by hand.\n\n"
+        "Shadow-mode note: evidence modifiers are currently in shadow mode.\n"
+        "They are applied and recorded but do not yet affect live predictions\n"
+        "until the champion/challenger promotion gate is cleared."
+    )
+    return header + build_markov_vocabulary_table() + footer
 
 
 def omega_missing_input_repair(missing_requirements: str = "") -> str:

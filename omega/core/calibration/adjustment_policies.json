@@ -45,7 +45,13 @@
         "surface_edge": { "per_unit": 0.03, "cap": 0.10 },
         "course_fit": { "per_unit": 0.03, "cap": 0.10 },
         "stylistic_matchup": { "per_unit": 0.03, "cap": 0.10 },
-        "map_pool_edge": { "per_unit": 0.03, "cap": 0.10 }
+        "map_pool_edge": { "per_unit": 0.03, "cap": 0.10 },
+        "win_streak": { "per_unit": 0.015, "cap": 0.10 },
+        "series_lead": { "per_unit": 0.025, "cap": 0.10 },
+        "starter_era": { "per_unit": 0.04, "cap": 0.12 },
+        "season_record": { "cap": 0.01 },
+        "season_baseline": { "cap": 0.01 },
+        "defensive_scheme": { "map": {}, "cap": 0.01 }
       },
       "training_window": "",
       "sample_size": 0,

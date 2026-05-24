@@ -3,10 +3,15 @@
 This module owns possession-level stochastic state transitions. It is deliberately
 input-driven: callers provide contexts, players, and optional scalar modifiers;
 the simulator performs no network or evidence gathering.
+
+Momentum note: momentum is a single-possession hot-hand signal, not a cumulative
+streak counter. After each possession it is reset to ±1 (scored) or 0 (no score).
+Callers should not expect multi-possession momentum accumulation.
 """
 
 from __future__ import annotations
 
+import logging
 import random
 from dataclasses import dataclass, field
 from typing import Any
@@ -15,6 +20,13 @@ from omega.core.config.leagues import get_league_config
 from omega.core.simulation.archetypes import get_archetype, get_archetype_name
 
 COMPONENT_VERSION = "markov_state_v1"
+
+# Transition modifiers outside these bounds are clamped and logged.
+# This prevents extreme scalars from corrupting terminal score distributions
+# while maintaining a clear audit trail.
+_MODIFIER_BOUNDS: tuple[float, float] = (0.05, 10.0)
+
+_log = logging.getLogger(__name__)
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:
@@ -82,7 +94,7 @@ class MarkovSimulator:
         self.players = players or []
         self.home_context = home_context or {}
         self.away_context = away_context or {}
-        self.transition_modifiers = transition_modifiers or {}
+        self.transition_modifiers = self._clamp_modifiers(transition_modifiers or {})
         self.config = get_league_config(self.league)
         self.archetype = get_archetype(self.league)
         self.archetype_name = get_archetype_name(self.league)
@@ -94,12 +106,49 @@ class MarkovSimulator:
             "player": f"{COMPONENT_VERSION}:{self.league}:player_stat_allocation",
         }
 
+    @staticmethod
+    def _clamp_modifiers(raw: dict[str, float]) -> dict[str, float]:
+        lo, hi = _MODIFIER_BOUNDS
+        clamped: dict[str, float] = {}
+        for key, val in raw.items():
+            try:
+                fval = float(val)
+            except (TypeError, ValueError):
+                _log.warning("transition_modifier %r has non-numeric value %r; skipping", key, val)
+                continue
+            if not (lo <= fval <= hi):
+                clamped_val = max(lo, min(hi, fval))
+                _log.warning(
+                    "transition_modifier %r=%r clamped to %r (bounds [%s, %s])",
+                    key, fval, clamped_val, lo, hi,
+                )
+                clamped[key] = clamped_val
+            else:
+                clamped[key] = fval
+        return clamped
+
     def _resolve_base_possessions(self) -> int:
+        """Compute total simulation loop iterations.
+
+        ``pace`` in team context (and ``avg_pace`` in league config) represents
+        **per-team possessions per game** (e.g. NBA ≈ 100 per team).  The
+        simulation loop alternates home / away, so the total iteration count
+        must equal ``home_pace + away_pace`` to give each team its full
+        possession allocation.
+
+        American football: NFL play counts are roughly half of basketball pace
+        values in absolute terms; the ``/ 2.0`` preserves the existing
+        calibration until dedicated NFL sweep data is available.
+        """
         cfg_pace = _as_float(self.config.get("avg_pace"), 100.0)
         home_pace = _as_float(self.home_context.get("pace"), cfg_pace)
         away_pace = _as_float(self.away_context.get("pace"), cfg_pace)
-        possessions = (home_pace + away_pace) / 2.0
+        # Sum both teams' per-team possession counts so the alternating loop
+        # gives each team its full allocation (fixes the previous /2 halving bug).
+        possessions = home_pace + away_pace
         if self.archetype_name == "american_football":
+            # NFL context paces are expressed in a different unit; halve to
+            # avoid doubling the existing calibration until NFL sweep validates.
             possessions = possessions / 2.0
         return max(1, int(round(possessions)))
 
@@ -158,6 +207,46 @@ class MarkovSimulator:
                     stats[stat_key] = self._player_stat(player, stat_key)
             player_stats[name] = stats
         return player_stats
+
+    def run_diagnostics(self, n_games: int = 500, *, seed: int | None = 0) -> dict[str, float]:
+        """Return calibration statistics from a sample run of n_games.
+
+        Intended for sweep scripts and calibration notebooks, not production.
+        Sets the RNG to a fixed seed so diagnostics are reproducible.
+
+        Returns:
+            Dict with keys:
+              base_possessions, mean_home_score, mean_away_score, mean_total,
+              std_total, mean_spread, expected_ppp_home, expected_ppp_away
+        """
+        if seed is not None:
+            import random as _r
+
+            _r.seed(seed)
+        home_scores: list[float] = []
+        away_scores: list[float] = []
+        for _ in range(n_games):
+            state = self.simulate_game()
+            home_scores.append(state.home_score)
+            away_scores.append(state.away_score)
+        totals = [h + a for h, a in zip(home_scores, away_scores)]
+        spreads = [h - a for h, a in zip(home_scores, away_scores)]
+        n = len(home_scores)
+        mean_h = sum(home_scores) / n
+        mean_a = sum(away_scores) / n
+        mean_t = sum(totals) / n
+        mean_s = sum(spreads) / n
+        var_t = sum((t - mean_t) ** 2 for t in totals) / n
+        return {
+            "base_possessions": self._base_n_possessions,
+            "mean_home_score": round(mean_h, 2),
+            "mean_away_score": round(mean_a, 2),
+            "mean_total": round(mean_t, 2),
+            "std_total": round(var_t ** 0.5, 2),
+            "mean_spread": round(mean_s, 2),
+            "expected_ppp_home": round(self._expected_ppp("home", 0), 4),
+            "expected_ppp_away": round(self._expected_ppp("away", 0), 4),
+        }
 
     def simulate_game(self, n_possessions: int | None = None) -> MarkovGameState:
         possessions = max(1, int(n_possessions or self._base_n_possessions))

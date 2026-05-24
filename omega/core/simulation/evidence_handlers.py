@@ -231,6 +231,11 @@ def _h_std_widen(signal: EvidenceSignal, coeffs: dict[str, Any], baseline: float
     return "std", 1.0 + float(coeffs.get("std_widen", 0.0))
 
 
+def _h_audit_only(signal: EvidenceSignal, coeffs: dict[str, Any], baseline: float):
+    """Audit-only signals: registered so the validator is silent; never applied."""
+    return "skip", 1.0
+
+
 HANDLER_REGISTRY: dict[str, Handler] = {
     # player-form
     "recent_form": _h_series_blend,
@@ -266,9 +271,11 @@ HANDLER_REGISTRY: dict[str, Handler] = {
     # team-form / matchup (game-plane momentum)
     "win_streak": _h_per_unit,
     "series_lead": _h_per_unit,
-    # Audit-only (no handler): season_record, season_baseline, defensive_scheme.
-    # Registered in SIGNAL_REGISTRY so the validator does not warn; the engine
-    # skips them cleanly because no coefficients are provided in the policy.
+    # Audit-only: registered in SIGNAL_REGISTRY and policy but always return "skip"
+    # so the engine records them for retrospective scoring without applying them.
+    "season_record": _h_audit_only,
+    "season_baseline": _h_audit_only,
+    "defensive_scheme": _h_audit_only,
 }
 
 

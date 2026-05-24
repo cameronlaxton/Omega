@@ -235,7 +235,7 @@ def _validate_required_keys(
     missing = []
     for key in required_keys:
         val = context.get(key)
-        if val is None or (isinstance(val, (int, float)) and val == 0):
+        if val is None:
             missing.append(f"{side}_context.{key}")
     return missing
 
@@ -1289,6 +1289,7 @@ class OmegaSimulationEngine:
         seed: int | None = None,
         spread_home: float | None = None,
         allow_baseline: bool = False,
+        transition_modifiers: dict | None = None,
     ) -> dict:
         """
         Run a fast game simulation using team stats dispatched by sport archetype.
@@ -1301,6 +1302,8 @@ class OmegaSimulationEngine:
             home_context: Pre-fetched home team / player A context dict
             away_context: Pre-fetched away team / player B context dict
             seed: Optional RNG seed for reproducible results
+            transition_modifiers: Scalar modifiers for the Markov backend (ignored
+                by fast_score). Produced by evidence_to_modifier.signals_to_transition_modifiers().
 
         Returns:
             Dict with score distributions, win probabilities, and missing_requirements
@@ -1315,6 +1318,7 @@ class OmegaSimulationEngine:
             seed=seed,
             spread_home=spread_home,
             allow_baseline=allow_baseline,
+            transition_modifiers=transition_modifiers,
         )
         return enforce_game_backend_contract(self._game_backend.run(request))
 

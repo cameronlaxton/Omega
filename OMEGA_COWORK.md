@@ -1,6 +1,6 @@
 # OMEGA - Cowork / Local VM Instructions
 
-**Version:** Phase 6k
+**Version:** Phase 6h
 **Repo:** `C:\repos\Omega`
 **DB:** `omega_traces.db` (SQLite V10 - `traces`, `simulation_distributions`, `bet_records`, `closing_lines`, `outcomes`, `market_snapshots`, `prop_outcomes`)
 
@@ -210,6 +210,27 @@ Express qualitative reasoning as typed `evidence` signals on the `analyze()` req
 The deterministic engine applies known signal types itself via a versioned `AdjustmentPolicy` (currently `mode=shadow` — recorded but not applied to predictions). Every signal is persisted to the `evidence_signals` table and scored retrospectively by `scripts/score_evidence_signals.py`. Set `confidence` honestly; it is measured against realized outcomes.
 
 At session start, read the "Evidence signal performance" section (§6B) of the calibration report and weight your evidence accordingly: trust signal types/sources marked `predictive`, discount `noise`, treat `insufficient_n` as unproven.
+
+#### Markov backend — approved signal vocabulary
+
+When calling `omega_analyze_game` with `simulation_backend="markov_state"`, **only these 8 signal_type values affect the possession-level transition matrix.** All other signal types are audited and scored but have no Markov effect (silently ignored by the modifier engine). Use the exact string keys below:
+
+| signal_type | effect | direction required? |
+|---|---|---|
+| `pace_up` | +6% game pace | no |
+| `pace_down` | -8% game pace | no |
+| `rest_advantage` | +4% scoring rate for rested team | yes (`home`/`away`) |
+| `b2b_fatigue` | -6% scoring rate for fatigued team | yes (`home`/`away`) |
+| `def_matchup_weak` | +5% offense vs. weak defender | yes (`home`/`away`) |
+| `def_matchup_strong` | -5% offense vs. strong defender | yes (`home`/`away`) |
+| `usage_role_change` | -7% team rate when key player restricted/elevated | yes (`home`/`away`) |
+| `blowout_risk` | -2% momentum acceleration; suppresses variance | no |
+
+Rules:
+- Cumulative cap: no single modifier attribute shifts by more than ±15%, regardless of stacked signals.
+- Do NOT pre-adjust `home_context`/`away_context` ratings by hand to bake in these effects — the engine applies them from the signal.
+- Call `omega_markov_evidence_guide` (MCP prompt) for the full modifier table with scalar values.
+- **Shadow-mode note:** evidence modifiers are currently recorded but not yet applied to live predictions. This will change after the champion/challenger promotion gate clears.
 
 Example with evidence:
 

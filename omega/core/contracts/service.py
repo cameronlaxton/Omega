@@ -53,6 +53,7 @@ from omega.core.simulation.evidence_handlers import (
     compute_player_adjustment,
     resolve_evidence_mode,
 )
+from omega.core.simulation.evidence_to_modifier import signals_to_transition_modifiers
 
 UTC = timezone.utc
 
@@ -606,10 +607,23 @@ def analyze_game(
             context_source="missing",
         )
 
+    use_markov = request.simulation_backend == "markov_state"
+    transition_modifiers: dict | None = None
+    if use_markov and request.evidence:
+        transition_modifiers = signals_to_transition_modifiers(
+            request.evidence, home_team=request.home_team
+        )
+        if transition_modifiers:
+            logger.debug(
+                "Markov modifiers from %d evidence signals: %s",
+                len(request.evidence_signals),
+                transition_modifiers,
+            )
+
     try:
         engine = (
             OmegaSimulationEngine(game_backend=MarkovGameSimulationBackend())
-            if request.simulation_backend == "markov_state"
+            if use_markov
             else _engine
         )
         sim_result = engine.run_fast_game_simulation(
@@ -622,6 +636,7 @@ def analyze_game(
             seed=request.seed,
             spread_home=spread_value,
             allow_baseline=request.allow_baseline,
+            transition_modifiers=transition_modifiers,
         )
     except Exception as exc:
         logger.warning("Simulation error for %s: %s", matchup, exc)

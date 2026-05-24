@@ -52,6 +52,14 @@ def crps_from_distribution_row(row: dict[str, Any], observed: float) -> dict[str
         value = crps_normal(params["mu"], params["sigma"], observed)
     elif dist == "poisson":
         value = crps_poisson(params["lambda"], observed)
+    elif dist in ("empirical", "empirical_markov"):
+        # Normal-moment approximation using stored sample_mean/sample_std.
+        # Valid when N is large enough for CLT (both fast_score and markov backends
+        # default to ≥100 iterations). "empirical" is fast_score monte-carlo;
+        # "empirical_markov" is the Markov possession simulator.
+        mean = float(row.get("sample_mean") or 0.0)
+        std = float(row.get("sample_std") or 1.0)
+        value = crps_normal(mean, std, observed)
     else:
         raise ValueError(f"CRPS is not implemented for distribution_type={dist!r}")
     return {

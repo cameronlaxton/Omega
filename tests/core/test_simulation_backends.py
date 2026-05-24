@@ -168,3 +168,82 @@ def test_markov_simulator_exposes_transition_matrix_ids_and_terminal_state():
     assert state.home_score >= 0
     assert state.away_score >= 0
     assert state.get_player_stat("Test Player", "pts") >= 0
+
+
+def test_markov_clamps_extreme_modifier_and_logs_warning(caplog):
+    """Extreme modifier values must be clamped to [0.05, 10.0], not propagated."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="omega.core.simulation.markov_engine"):
+        simulator = MarkovSimulator(
+            league="NBA",
+            home_context={"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+            away_context={"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+            transition_modifiers={"home_score_rate_scalar": 50.0},
+        )
+
+    # After clamping, stored value must be the ceiling (10.0), not the original.
+    assert simulator.transition_modifiers["home_score_rate_scalar"] == 10.0
+    # A log warning must have been emitted.
+    assert any("clamped" in record.message for record in caplog.records)
+
+
+def test_markov_clamps_below_floor_modifier():
+    """Values below 0.05 must be clamped to the floor."""
+    simulator = MarkovSimulator(
+        league="NBA",
+        home_context={"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+        away_context={"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+        transition_modifiers={"away_score_rate_scalar": -2.0},
+    )
+    assert simulator.transition_modifiers["away_score_rate_scalar"] == 0.05
+
+
+def test_markov_accepts_modifier_within_bounds():
+    """Valid modifiers must pass through unchanged."""
+    simulator = MarkovSimulator(
+        league="NBA",
+        home_context={"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+        away_context={"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+        transition_modifiers={"home_score_rate_scalar": 1.04},
+    )
+    assert simulator.transition_modifiers["home_score_rate_scalar"] == pytest.approx(1.04)
+
+
+def test_markov_possession_count_equals_sum_of_team_paces():
+    """base_n_possessions must equal home_pace + away_pace (not their average).
+
+    Regression guard for the Phase 3c calibration fix: pace represents per-team
+    possessions, so the alternating loop needs home_pace + away_pace iterations
+    to give each team its full possession allocation.
+    """
+    simulator = MarkovSimulator(
+        league="NBA",
+        home_context={"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+        away_context={"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+    )
+    # home_pace=100, away_pace=98 → total = 198 iterations (not 99)
+    assert simulator._base_n_possessions == 198
+
+
+def test_markov_expected_nba_total_is_near_league_average():
+    """500-game sample mean total must land within ±10 of the NBA league avg_total=224.
+
+    Regression guard: if the possession count reverts to the /2 bug, this test
+    would observe a mean total near 112 and fail immediately.
+    """
+    import random as _random
+
+    _random.seed(0)
+    simulator = MarkovSimulator(
+        league="NBA",
+        home_context={"off_rating": 116.0, "def_rating": 110.0, "pace": 100.0},
+        away_context={"off_rating": 114.0, "def_rating": 112.0, "pace": 100.0},
+    )
+    totals = [simulator.simulate_game().home_score + simulator.simulate_game().away_score for _ in range(250)]
+    mean_total = sum(totals) / len(totals)
+    # NBA avg_total = 224; allow ±15 for sampling variance at n=250
+    assert 209 <= mean_total <= 239, (
+        f"Simulated mean total {mean_total:.1f} is outside expected NBA range [209, 239]. "
+        "Possible possession count regression."
+    )
