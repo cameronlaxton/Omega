@@ -21,8 +21,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-UTC = timezone.utc
-
 from omega.trace.bet_record import BetRecord
 from omega.trace.market_snapshot import MarketMovement, MarketSnapshot
 from omega.trace.schema import (
@@ -33,10 +31,13 @@ from omega.trace.schema import (
     SCHEMA_V5,
     SCHEMA_V6,
     SCHEMA_V9,
+    SCHEMA_V10,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
 )
+
+UTC = timezone.utc
 
 logger = logging.getLogger("omega.trace.store")
 
@@ -114,6 +115,13 @@ class TraceStore:
         self._record_version(
             9,
             "Phase 6i: evidence_signals + signal_performance tables",
+        )
+
+        # V10: queryable simulation distribution summaries for continuous grading
+        self.conn.executescript(SCHEMA_V10)
+        self._record_version(
+            10,
+            "Phase 6k: simulation_distributions + dynamic outcome view",
         )
 
     def _record_version(self, version: int, description: str) -> None:
@@ -203,8 +211,84 @@ class TraceStore:
         # evidence_signals table free of duplicates when a trace is re-persisted.
         if cur.rowcount and cur.rowcount > 0:
             self._write_evidence_signals(trace_id, trace)
+            self._write_simulation_distributions(trace_id, trace)
         self.conn.commit()
         return trace_id
+
+    def _write_simulation_distributions(self, trace_id: str, trace: dict[str, Any]) -> int:
+        """Explode deterministic distribution summaries into V10 query rows."""
+        rows_in = trace.get("simulation_distributions")
+        if not isinstance(rows_in, list) or not rows_in:
+            result = trace.get("result") or {}
+            rows_in = result.get("simulation_distributions") or []
+        if not isinstance(rows_in, list) or not rows_in:
+            return 0
+
+        rows: list[tuple[Any, ...]] = []
+        for item in rows_in:
+            if not isinstance(item, dict):
+                continue
+            dist_type = item.get("distribution_type")
+            target = item.get("target")
+            if not dist_type or not target:
+                continue
+            params = item.get("distribution_params") or {}
+            rows.append(
+                (
+                    trace_id,
+                    trace.get("kind"),
+                    trace.get("league"),
+                    target,
+                    item.get("market"),
+                    item.get("stat_key"),
+                    dist_type,
+                    json.dumps(params, default=str, sort_keys=True),
+                    int(item.get("params_schema_version") or 1),
+                    item.get("sample_mean"),
+                    item.get("sample_std"),
+                    item.get("p10"),
+                    item.get("p50"),
+                    item.get("p90"),
+                    item.get("n_iterations"),
+                    item.get("seed", trace.get("simulation_seed")),
+                    item.get("context_hash"),
+                    item.get("component_version") or trace.get("model_version"),
+                )
+            )
+        if rows:
+            self.conn.executemany(
+                """INSERT INTO simulation_distributions
+                   (trace_id, kind, league, target, market, stat_key,
+                    distribution_type, distribution_params, params_schema_version,
+                    sample_mean, sample_std, p10, p50, p90, n_iterations, seed,
+                    context_hash, component_version)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                rows,
+            )
+        return len(rows)
+
+    def get_simulation_distributions(self, trace_id: str) -> list[dict[str, Any]]:
+        """Return V10 simulation distribution rows attached to one trace."""
+        rows = self.conn.execute(
+            """SELECT distribution_id, trace_id, kind, league, target, market,
+                      stat_key, distribution_type, distribution_params,
+                      params_schema_version, sample_mean, sample_std, p10, p50,
+                      p90, n_iterations, seed, context_hash, component_version,
+                      created_at
+               FROM simulation_distributions
+               WHERE trace_id = ?
+               ORDER BY distribution_id""",
+            (trace_id,),
+        ).fetchall()
+        result = []
+        for row in rows:
+            data = dict(row)
+            try:
+                data["distribution_params"] = json.loads(data["distribution_params"])
+            except (TypeError, json.JSONDecodeError):
+                data["distribution_params"] = {}
+            result.append(data)
+        return result
 
     def _write_evidence_signals(self, trace_id: str, trace: dict[str, Any]) -> int:
         """Explode input_snapshot.evidence into queryable evidence_signals rows.
@@ -880,9 +964,18 @@ class TraceStore:
             clauses.append(f"NOT {any_outcome_sql}")
 
         if calibration_eligible_only:
-            # Exclude traces where the engine did not run (no model predictions).
-            # Covers manual:no_engine_run, sandbox_parlay, and pre-6h legacy schemas.
+            # Default-deny: legacy rows without explicit provenance are excluded.
             clauses.append("t.predictions IS NOT NULL")
+            clauses.append("json_extract(t.full_trace, '$.result.status') = 'success'")
+            clauses.append(
+                "json_extract(t.full_trace, '$.trace_quality.calibration_eligible') = 1"
+            )
+            clauses.append(
+                "json_extract(t.full_trace, '$.trace_quality.context_source') = 'provided'"
+            )
+            clauses.append(
+                "json_extract(t.full_trace, '$.trace_quality.identity_status') = 'complete'"
+            )
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         params.append(limit)
@@ -913,6 +1006,9 @@ class TraceStore:
             prop_rows = self.get_prop_outcomes(row["trace_id"])
             if prop_rows:
                 trace["_prop_outcomes"] = prop_rows
+            distribution_rows = self.get_simulation_distributions(row["trace_id"])
+            if distribution_rows:
+                trace["_simulation_distributions"] = distribution_rows
             results.append(trace)
         return results
 

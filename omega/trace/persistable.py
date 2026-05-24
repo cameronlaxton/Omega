@@ -35,6 +35,7 @@ class PersistableTrace(BaseModel):
     # into the evidence_signals table.
     evidence_mode: str | None = None
     evidence_application: list[dict[str, Any]] = Field(default_factory=list)
+    simulation_distributions: list[dict[str, Any]] = Field(default_factory=list)
 
     prompt: str = ""
     league: str | None = None
@@ -85,6 +86,7 @@ class PersistableTrace(BaseModel):
             downgrades=downgrades,
             evidence_mode=analyze_out.get("evidence_mode"),
             evidence_application=analyze_out.get("evidence_application") or [],
+            simulation_distributions=(result.get("simulation_distributions") or []),
             prompt=_derive_prompt(kind, input_snap, str(league or ""), matchup),
             league=league,
             matchup=matchup,
@@ -112,8 +114,15 @@ class PersistableTrace(BaseModel):
         """
         tq = self.trace_quality or self.quality_gate or {}
         identity_status = tq.get("identity_status")
+        context_source = tq.get("context_source")
+        calibration_eligible = bool(tq.get("calibration_eligible"))
         return {
-            "probability_calibration": self.predictions is not None,
+            "probability_calibration": (
+                self.predictions is not None
+                and calibration_eligible
+                and context_source == "provided"
+                and identity_status == "complete"
+            ),
             "evidence_scoring": tq.get("evidence_status") == "present",
             "context_slice_fitting": identity_status not in ("missing", "backfilled"),
         }

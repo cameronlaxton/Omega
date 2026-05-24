@@ -95,11 +95,13 @@ class TestSimulation:
             away_context={"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
         )
         assert result["success"] is True
+        assert result["context_source"] == "provided"
+        assert result["baseline_used"] is False
         assert 0 <= result["home_win_prob"] <= 100
         assert 0 <= result["away_win_prob"] <= 100
         assert result["iterations"] == 100
 
-    def test_fast_game_simulation_uses_archetype_defaults_when_context_absent(self):
+    def test_fast_game_simulation_skips_when_context_absent_by_default(self):
         from omega.core.simulation.engine import OmegaSimulationEngine
 
         engine = OmegaSimulationEngine()
@@ -109,10 +111,26 @@ class TestSimulation:
             league="NBA",
             n_iterations=100,
         )
-        # P3 fix: engine falls back to league-average archetype defaults instead of
-        # skipping, producing a calibration-eligible prediction at lower accuracy.
+        assert result.get("success") is False
+        assert result["context_source"] == "missing"
+        assert "allow_baseline=True" in result["skip_reason"]
+
+    def test_fast_game_simulation_allows_explicit_baseline(self):
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        engine = OmegaSimulationEngine()
+        result = engine.run_fast_game_simulation(
+            home_team="Team A",
+            away_team="Team B",
+            league="NBA",
+            n_iterations=100,
+            allow_baseline=True,
+        )
         assert result.get("success") is True
+        assert result["context_source"] == "league_default"
+        assert result["baseline_used"] is True
         assert 0 <= result["home_win_prob"] <= 100
+        assert result["simulation_distributions"]
 
     def test_unknown_league_skips(self):
         from omega.core.simulation.engine import OmegaSimulationEngine
@@ -356,7 +374,7 @@ class TestCalibration:
 
 
 class TestLegacyMarkovMethods:
-    def test_run_game_simulation_missing_markov_module_returns_skip(self):
+    def test_run_game_simulation_uses_markov_module(self):
         from omega.core.simulation.engine import OmegaSimulationEngine
 
         result = OmegaSimulationEngine().run_game_simulation(
@@ -367,10 +385,12 @@ class TestLegacyMarkovMethods:
             away_context={"off_rating": 108, "def_rating": 107, "pace": 98},
         )
 
-        assert result["success"] is False
-        assert "omega.core.simulation.markov_engine" in result["missing_requirements"]
+        assert result["success"] is True
+        assert result["simulation_backend"] == "markov_state"
+        assert result["context_source"] == "provided"
+        assert result["simulation_distributions"]
 
-    def test_run_player_prop_simulation_missing_markov_module_returns_skip(self):
+    def test_run_player_prop_simulation_uses_markov_module(self):
         from omega.core.simulation.engine import OmegaSimulationEngine
 
         result = OmegaSimulationEngine().run_player_prop_simulation(
@@ -383,5 +403,6 @@ class TestLegacyMarkovMethods:
             player_context={"pts_mean": 20.0},
         )
 
-        assert result["success"] is False
-        assert "omega.core.simulation.markov_engine" in result["missing_requirements"]
+        assert result["success"] is True
+        assert result["projected_value"] > 0
+        assert 0 <= result["over_prob"] <= 100

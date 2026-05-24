@@ -180,10 +180,7 @@ class TestAnalyzeGame:
         assert len(resp.edges) == 2
         assert all(isinstance(e, EdgeDetail) for e in resp.edges)
 
-    def test_succeeds_with_archetype_defaults_when_context_absent(self):
-        # P3 fix: engine now falls back to league-average archetype defaults when
-        # home_context/away_context are None, producing a calibration-eligible
-        # prediction instead of skipping. Accuracy is lower but the trace is usable.
+    def test_skips_when_context_absent_by_default(self):
         req = GameAnalysisRequest(
             home_team="Team A",
             away_team="Team B",
@@ -191,9 +188,61 @@ class TestAnalyzeGame:
             n_iterations=100,
         )
         resp = analyze_game(req)
+        assert resp.status == "skipped"
+        assert resp.simulation is None
+        assert resp.context_source is None
+
+    def test_succeeds_with_explicit_baseline_but_marks_provenance(self):
+        req = GameAnalysisRequest(
+            home_team="Team A",
+            away_team="Team B",
+            league="NBA",
+            n_iterations=100,
+            allow_baseline=True,
+        )
+        resp = analyze_game(req)
         assert resp.status == "success"
         assert resp.simulation is not None
+        assert resp.context_source == "league_default"
+        assert resp.baseline_used is True
         assert 0 < resp.simulation.home_win_prob < 100
+
+    def test_markov_backend_can_be_selected_explicitly(self):
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=100,
+            seed=123,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+            game_context={"is_playoff": False, "rest_days": 2},
+            simulation_backend="markov_state",
+        )
+
+        resp = analyze_game(req)
+
+        assert resp.status == "success"
+        assert resp.simulation_backend == "markov_state"
+        assert resp.component_version == "markov_state_v1"
+        assert resp.simulation_distributions
+        assert resp.simulation_distributions[0]["distribution_type"] == "empirical_markov"
+
+    def test_unsupported_simulation_backend_skips(self):
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+            game_context={"is_playoff": False, "rest_days": 2},
+            simulation_backend="unknown_backend",
+        )
+
+        resp = analyze_game(req)
+
+        assert resp.status == "skipped"
+        assert "simulation_backend" in resp.missing_requirements
 
     def test_never_raises(self):
         # Garbage input should return error/skipped, not raise
@@ -245,6 +294,8 @@ class TestAnalyzeTraceEnvelope:
         assert trace["bankroll"] == 2500.0
         assert trace["input_snapshot"]["seed"] == 42
         assert trace["result"]["status"] == "success"
+        assert trace["trace_quality"]["calibration_eligible"] is True
+        assert trace["trace_quality"]["context_source"] == "provided"
 
     def test_analyze_requires_explicit_session_id_and_bankroll(self):
         req = GameAnalysisRequest(
@@ -261,6 +312,23 @@ class TestAnalyzeTraceEnvelope:
             analyze(req, session_id="", bankroll=1000.0)
         with pytest.raises(ValueError):
             analyze(req, session_id="sess-20260518-core", bankroll=0.0)
+
+    def test_analyze_marks_baseline_trace_ineligible(self):
+        trace = analyze(
+            {
+                "home_team": "Team A",
+                "away_team": "Team B",
+                "league": "NBA",
+                "n_iterations": 100,
+                "allow_baseline": True,
+            },
+            session_id="sess-baseline",
+            bankroll=1000.0,
+        )
+        assert trace["result"]["status"] == "success"
+        assert trace["result"]["context_source"] == "league_default"
+        assert trace["trace_quality"]["calibration_eligible"] is False
+        assert "baseline_default_context" in trace["trace_quality"]["calibration_exclusion_reasons"]
 
     def test_stable_hash_excludes_volatile_odds_structures(self):
         base = {
@@ -329,6 +397,10 @@ class TestAnalyzePlayerProp:
         assert 0 < resp.over_prob < 1
         assert 0 < resp.under_prob < 1
         assert resp.over_prob + resp.under_prob == pytest.approx(1.0, abs=0.01)
+        assert resp.projection_mean is not None
+        assert resp.projection_std is not None
+        assert resp.distribution_type in {"normal", "poisson"}
+        assert resp.simulation_distributions
 
     def test_recommended_prop_populates_deterministic_stake_fields(self):
         req = PlayerPropRequest(

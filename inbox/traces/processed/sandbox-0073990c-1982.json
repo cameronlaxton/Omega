@@ -1,0 +1,169 @@
+{
+  "trace": {
+    "trace_id": "sandbox-0073990c-1982",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-23T21:27:21.876323+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260523-nba1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Donovan Mitchell",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 26.5,
+      "odds_over": -120.0,
+      "odds_under": -110.0,
+      "player_context": {
+        "pts_mean": 26.0,
+        "pts_std": 5.5,
+        "sample_size": 15
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2,
+        "blowout_risk": 0.12,
+        "opponent_def_rank": 5
+      },
+      "n_iterations": 10000,
+      "seed": 3550098507,
+      "evidence": [
+        {
+          "signal_type": "series_avg",
+          "category": "player_form",
+          "plane": "player",
+          "value": 27.5,
+          "source": "nba.com",
+          "confidence": 0.8,
+          "window": "series",
+          "direction": null,
+          "stat_key": "pts",
+          "note": null
+        },
+        {
+          "signal_type": "overtime_adjustment",
+          "category": "situational",
+          "plane": "game",
+          "value": true,
+          "source": "agent_reasoning",
+          "confidence": 0.7,
+          "window": "last_1",
+          "direction": "under",
+          "stat_key": "pts",
+          "note": null
+        }
+      ],
+      "home_team": "Cleveland Cavaliers",
+      "away_team": "New York Knicks",
+      "game_date": "2026-05-23"
+    },
+    "result": {
+      "player_name": "Donovan Mitchell",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 26.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.3754,
+      "under_prob": 0.6246,
+      "edge_over": -17.01,
+      "edge_under": 10.08,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.1058,
+      "recommended_units": 5.0,
+      "bet_side_odds": -110.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.3754,
+        "calibrated_prob": 0.3754,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.6246,
+        "calibrated_prob": 0.6246,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      }
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 2,
+      "blowout_risk": 0.12,
+      "opponent_def_rank": 5
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "series_avg",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.0173076923076922,
+        "reason": "series_avg: mean x1.0173 (raw 1.0173, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "overtime_adjustment",
+        "target": "skip",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "game-plane signal not applied on a player-prop analysis",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete"
+    }
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "nba.com",
+      "cbssports.com"
+    ],
+    "fields_gathered": [
+      "pts_mean",
+      "pts_std",
+      "is_playoff",
+      "rest_days",
+      "overtime_context"
+    ],
+    "missing_fields": [
+      "sample_size_full_season"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": -120,
+      "odds_under": -110
+    }
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "Mitchell scored 29 in G1 (OT game) and 26 in G2 (regulation). The 26.5 line doesn't discount OT inflation. In regulation, his mean tracks closer to 25-26 pts with a playoff avg of ~26.0. The under at -110 is the milder juice side.",
+  "trace_quality": {
+    "aggregate_quality": null,
+    "downgrades": [],
+    "passed": true,
+    "evidence_status": "present",
+    "identity_status": "complete"
+  }
+}

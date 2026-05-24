@@ -9,9 +9,8 @@ These models define the JSON interface between:
 
 from __future__ import annotations
 
-from typing import Any
-
 import warnings
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -102,6 +101,18 @@ class GameAnalysisRequest(BaseModel):
     )
     odds: OddsInput | None = Field(default=None, description="Market odds (if available)")
     n_iterations: int = Field(default=1000, ge=100, le=100000, description="Simulation iterations")
+    allow_baseline: bool = Field(
+        default=False,
+        description=(
+            "Explicitly allow league-average baseline contexts when home_context or "
+            "away_context is absent. Baseline runs are audit-only and are not "
+            "calibration eligible."
+        ),
+    )
+    simulation_backend: str = Field(
+        default="fast_score",
+        description="Deterministic game simulator backend: 'fast_score' or 'markov_state'.",
+    )
     home_context: dict[str, Any] | None = Field(
         default=None,
         description=(
@@ -140,7 +151,7 @@ class GameAnalysisRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _warn_missing_game_context_keys(self) -> "GameAnalysisRequest":
+    def _warn_missing_game_context_keys(self) -> GameAnalysisRequest:
         gc = self.game_context or {}
         missing = [k for k in ("is_playoff", "rest_days") if k not in gc]
         if missing:
@@ -206,7 +217,7 @@ class PlayerPropRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _warn_missing_game_context_keys(self) -> "PlayerPropRequest":
+    def _warn_missing_game_context_keys(self) -> PlayerPropRequest:
         gc = self.game_context or {}
         missing = [k for k in ("is_playoff", "rest_days") if k not in gc]
         if missing:
@@ -241,6 +252,12 @@ class SimulationResult(BaseModel):
     predicted_total: float = Field(description="Predicted combined score")
     predicted_home_score: float
     predicted_away_score: float
+    context_source: str = Field(
+        default="provided", description="'provided' or 'league_default'"
+    )
+    baseline_used: bool = Field(default=False)
+    simulation_backend: str | None = None
+    component_version: str | None = None
 
 
 class EdgeDetail(BaseModel):
@@ -330,6 +347,11 @@ class GameAnalysisResponse(BaseModel):
     edges: list[EdgeDetail] = Field(default_factory=list)
     best_bet: BetSlip | None = None
     metadata: AnalysisMetadata = Field(default_factory=AnalysisMetadata)
+    context_source: str | None = None
+    baseline_used: bool = False
+    simulation_backend: str | None = None
+    component_version: str | None = None
+    simulation_distributions: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class SlateAnalysisResponse(BaseModel):
@@ -356,6 +378,12 @@ class PlayerPropResponse(BaseModel):
 
     over_prob: float | None = Field(default=None, description="Probability of Over (0-1)")
     under_prob: float | None = Field(default=None, description="Probability of Under (0-1)")
+    projection_mean: float | None = Field(default=None, description="Simulated distribution mean")
+    projection_std: float | None = Field(default=None, description="Simulated distribution std dev")
+    projection_p10: float | None = None
+    projection_p50: float | None = None
+    projection_p90: float | None = None
+    distribution_type: str | None = Field(default=None, description="Resolved generator family")
     edge_over: float | None = Field(default=None, description="Edge on Over in pct points")
     edge_under: float | None = Field(default=None, description="Edge on Under in pct points")
     recommendation: str | None = Field(default=None, description="'over', 'under', or 'pass'")
@@ -393,6 +421,9 @@ class PlayerPropResponse(BaseModel):
         default=None,
         description="Calibration provenance for the under probability",
     )
+    context_source: str | None = None
+    baseline_used: bool = False
+    simulation_distributions: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ErrorResponse(BaseModel):

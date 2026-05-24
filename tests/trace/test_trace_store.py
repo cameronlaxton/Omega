@@ -56,6 +56,15 @@ def _make_trace(
         "recommendations": [{"side": "home", "edge_pct": 4.2, "units": 1.5}],
         "odds_snapshot": {"moneyline_home": -150, "moneyline_away": 130},
         "downgrades": [],
+        "kind": "game",
+        "result": {"status": "success", "context_source": "provided", "baseline_used": False},
+        "trace_quality": {
+            "calibration_eligible": True,
+            "context_source": "provided",
+            "baseline_used": False,
+            "identity_status": "complete",
+            "calibration_exclusion_reasons": [],
+        },
         "understanding": {"subjects": ["game"]},
         "stage_timings": {"understanding": 12.5, "execution": 450.2},
     }
@@ -130,6 +139,42 @@ class TestPersist:
         retrieved = store.get_trace("t-001")
         assert retrieved["predictions"] is None
         assert retrieved["odds_snapshot"] is None
+        store.close()
+
+    def test_persist_writes_simulation_distributions(self):
+        store = _tmp_store()
+        trace = _make_trace(
+            simulation_distributions=[
+                {
+                    "kind": "game",
+                    "league": "NBA",
+                    "target": "home_score",
+                    "market": "score",
+                    "stat_key": "points",
+                    "distribution_type": "normal",
+                    "distribution_params": {"mu": 112.5, "sigma": 11.2},
+                    "params_schema_version": 1,
+                    "sample_mean": 112.5,
+                    "sample_std": 11.2,
+                    "p10": 98.0,
+                    "p50": 113.0,
+                    "p90": 126.0,
+                    "n_iterations": 1000,
+                    "seed": 12345,
+                    "context_hash": "ctx-abc",
+                    "component_version": "test-v1",
+                }
+            ]
+        )
+
+        store.persist(trace)
+
+        rows = store.get_simulation_distributions("t-001")
+        assert len(rows) == 1
+        assert rows[0]["target"] == "home_score"
+        assert rows[0]["distribution_type"] == "normal"
+        assert rows[0]["distribution_params"] == {"mu": 112.5, "sigma": 11.2}
+        assert rows[0]["sample_mean"] == 112.5
         store.close()
 
     def test_count(self):
@@ -323,6 +368,38 @@ class TestGradedTraces:
     def test_empty_graded(self):
         store = _tmp_store()
         store.persist(_make_trace())
+        assert store.get_graded_traces() == []
+        store.close()
+
+    def test_legacy_missing_context_source_is_not_graded(self):
+        store = _tmp_store()
+        trace = _make_trace(
+            "legacy-context",
+            result={"status": "success"},
+            trace_quality={},
+        )
+        store.persist(trace)
+        store.attach_outcome("legacy-context", home_score=108, away_score=101)
+
+        assert store.get_graded_traces() == []
+        store.close()
+
+    def test_baseline_trace_is_not_graded(self):
+        store = _tmp_store()
+        trace = _make_trace(
+            "baseline-context",
+            result={"status": "success", "context_source": "league_default", "baseline_used": True},
+            trace_quality={
+                "calibration_eligible": False,
+                "context_source": "league_default",
+                "baseline_used": True,
+                "identity_status": "complete",
+                "calibration_exclusion_reasons": ["baseline_default_context"],
+            },
+        )
+        store.persist(trace)
+        store.attach_outcome("baseline-context", home_score=108, away_score=101)
+
         assert store.get_graded_traces() == []
         store.close()
 

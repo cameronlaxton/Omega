@@ -1,0 +1,187 @@
+{
+  "trace": {
+    "trace_id": "sandbox-8ecfcf61-8835",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-23T21:28:23.808069+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260523-nba1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "James Harden",
+      "league": "NBA",
+      "prop_type": "ast",
+      "line": 6.5,
+      "odds_over": 130.0,
+      "odds_under": -165.0,
+      "player_context": {
+        "ast_mean": 5.5,
+        "ast_std": 2.2,
+        "sample_size": 15
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2,
+        "blowout_risk": 0.15,
+        "opponent_def_rank": 6
+      },
+      "n_iterations": 10000,
+      "seed": 4129802163,
+      "evidence": [
+        {
+          "signal_type": "season_baseline",
+          "category": "player_form",
+          "plane": "player",
+          "value": 6.0,
+          "source": "statmuse.com",
+          "confidence": 0.85,
+          "window": "season",
+          "direction": null,
+          "stat_key": "ast",
+          "note": null
+        },
+        {
+          "signal_type": "last_game_outlier",
+          "category": "player_form",
+          "plane": "player",
+          "value": 3,
+          "source": "nba.com",
+          "confidence": 0.8,
+          "window": "last_1",
+          "direction": "under",
+          "stat_key": "ast",
+          "note": null
+        },
+        {
+          "signal_type": "b2b_fatigue",
+          "category": "situational",
+          "plane": "game",
+          "value": false,
+          "source": "agent_reasoning",
+          "confidence": 0.55,
+          "window": "series",
+          "direction": null,
+          "stat_key": "ast",
+          "note": null
+        }
+      ],
+      "home_team": "Cleveland Cavaliers",
+      "away_team": "New York Knicks",
+      "game_date": "2026-05-23"
+    },
+    "result": {
+      "player_name": "James Harden",
+      "league": "NBA",
+      "prop_type": "ast",
+      "line": 6.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.2798,
+      "under_prob": 0.7202,
+      "edge_over": -15.5,
+      "edge_under": 9.76,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.1293,
+      "recommended_units": 5.0,
+      "bet_side_odds": -165.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.2798,
+        "calibrated_prob": 0.2798,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.7202,
+        "calibrated_prob": 0.7202,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      }
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 2,
+      "blowout_risk": 0.15,
+      "opponent_def_rank": 6
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "season_baseline",
+        "target": "skip",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "no handler or coefficients for signal_type",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "last_game_outlier",
+        "target": "std",
+        "applied": false,
+        "factor": 1.1,
+        "reason": "last_game_outlier: std x1.1000 (raw 1.1000, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "b2b_fatigue",
+        "target": "skip",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "game-plane signal not applied on a player-prop analysis",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete"
+    }
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "statmuse.com",
+      "nba.com"
+    ],
+    "fields_gathered": [
+      "ast_mean",
+      "ast_std",
+      "is_playoff",
+      "rest_days"
+    ],
+    "missing_fields": [],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": 130,
+      "odds_under": -165
+    }
+  },
+  "reasoning_downgrade_rationale": "Engine recommends UNDER; however, the UNDER is at -165 (heavy juice). Presenting both sides for user judgment. UNDER has 9.76% edge but very juiced.",
+  "reasoning_narrative": "Harden's playoff avg is 6.0 ast but G1 ECF he had only 3. The engine models UNDER 6.5 as +EV but at -165. As a contrarian angle, noting for completeness; lower confidence due to heavy juice.",
+  "trace_quality": {
+    "aggregate_quality": null,
+    "downgrades": [],
+    "passed": true,
+    "evidence_status": "present",
+    "identity_status": "complete"
+  }
+}

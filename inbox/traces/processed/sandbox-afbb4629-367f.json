@@ -1,0 +1,166 @@
+{
+  "trace": {
+    "trace_id": "sandbox-afbb4629-367f",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-23T21:28:23.796263+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260523-nba1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Karl-Anthony Towns",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 11.5,
+      "odds_over": -140.0,
+      "odds_under": 105.0,
+      "player_context": {
+        "reb_mean": 13.0,
+        "reb_std": 1.5,
+        "sample_size": 2
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2,
+        "blowout_risk": 0.12,
+        "opponent_def_rank": 12
+      },
+      "n_iterations": 10000,
+      "seed": 1007912173,
+      "evidence": [
+        {
+          "signal_type": "series_avg",
+          "category": "player_form",
+          "plane": "player",
+          "value": 13.0,
+          "source": "nba.com",
+          "confidence": 0.9,
+          "window": "series",
+          "direction": "over",
+          "stat_key": "reb",
+          "note": null
+        },
+        {
+          "signal_type": "recent_form",
+          "category": "player_form",
+          "plane": "player",
+          "value": 1.0,
+          "source": "nba.com",
+          "confidence": 0.8,
+          "window": "last_3",
+          "direction": "over",
+          "stat_key": "reb",
+          "note": null
+        }
+      ],
+      "home_team": "Cleveland Cavaliers",
+      "away_team": "New York Knicks",
+      "game_date": "2026-05-23"
+    },
+    "result": {
+      "player_name": "Karl-Anthony Towns",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 11.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.777,
+      "under_prob": 0.223,
+      "edge_over": 19.37,
+      "edge_under": -26.48,
+      "recommendation": "over",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.2324,
+      "recommended_units": 5.0,
+      "bet_side_odds": -140.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.777,
+        "calibrated_prob": 0.777,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.223,
+        "calibrated_prob": 0.223,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      }
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 2,
+      "blowout_risk": 0.12,
+      "opponent_def_rank": 12
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "series_avg",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "series_avg: mean x1.0000 (raw 1.0000, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "recent_form",
+        "target": "mean",
+        "applied": false,
+        "factor": 0.8200000000000001,
+        "reason": "recent_form: mean x0.8200 (raw 0.6769, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete"
+    }
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "nba.com",
+      "statmuse.com"
+    ],
+    "fields_gathered": [
+      "reb_mean",
+      "reb_std",
+      "is_playoff",
+      "rest_days"
+    ],
+    "missing_fields": [],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": -140,
+      "odds_under": 105
+    }
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "KAT grabbed exactly 13 rebounds in both G1 and G2 \u2014 remarkable consistency. The 11.5 line is 1.5 below his series mean. Even at -140, the 19.37% edge clears the juice threshold comfortably.",
+  "trace_quality": {
+    "aggregate_quality": null,
+    "downgrades": [],
+    "passed": true,
+    "evidence_status": "present",
+    "identity_status": "complete"
+  }
+}

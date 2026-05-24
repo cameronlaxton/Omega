@@ -73,8 +73,8 @@ class TestV7SchemaColumn:
 
     def test_current_version_is_seven(self):
         store = TraceStore(db_path=_tmp_db_path())
-        assert CURRENT_VERSION == 9
-        assert store.schema_version() == 9
+        assert CURRENT_VERSION == 10
+        assert store.schema_version() == 10
         store.close()
 
 

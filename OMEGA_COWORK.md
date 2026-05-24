@@ -1,8 +1,8 @@
 # OMEGA - Cowork / Local VM Instructions
 
-**Version:** Phase 6h
+**Version:** Phase 6k
 **Repo:** `C:\repos\Omega`
-**DB:** `omega_traces.db` (SQLite V6 - `traces`, `bet_records`, `closing_lines`, `outcomes`, `market_snapshots`, `prop_outcomes`)
+**DB:** `omega_traces.db` (SQLite V10 - `traces`, `simulation_distributions`, `bet_records`, `closing_lines`, `outcomes`, `market_snapshots`, `prop_outcomes`)
 
 This is the runtime instruction set for an Omega agent running with local repo access. The local VM model is the standard model. Use the local MCP server first; use direct repo imports only when MCP is unavailable in the current client.
 
@@ -260,7 +260,7 @@ Every export block filed to `inbox/traces/` must include structured reasoning fi
 - `reasoning_inputs` — dict of what data was available when you called `analyze()`. At minimum include `sources`, `fields_gathered`, `missing_fields`. Include `market_context` when odds were sourced. Extra keys are allowed.
 - `reasoning_downgrade_rationale` — plain-text string explaining any downgrade decision (data gap, imputation, low quality). Set to `null` if no downgrade was applied.
 - `reasoning_narrative` — 2–4 sentence summary of what you considered and why. Supplemental to the structured fields.
-- `trace_quality.aggregate_quality` — the float computed by `apply_quality_gate()` if it ran. Omit if the orchestrator did not call the quality gate.
+- `trace_quality.aggregate_quality` — optional orchestrator quality score. Omit if no quality pass ran.
 
 **Evidence signals on the request (required):**
 
@@ -353,8 +353,7 @@ Write `inbox/sessions/<session_id>.json` at session end. All keys below are requ
   "exec_stats": {
     "traces_emitted": 0,
     "bets_recorded": 0,
-    "webfetch_failures": 0,
-    "jit_snapshots_emitted": 0
+    "webfetch_failures": 0
   },
   "agent_notes": "Free-text notes on session outcome, data quality issues, or anomalies."
 }

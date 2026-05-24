@@ -1,15 +1,17 @@
 # Omega Calibration Report — NBA
 
-Generated: `2026-05-22T03:29:36+00:00` | Window: last 30 days
+Generated: `2026-05-24T20:13:02+00:00` | Window: last 30 days
 
 ## 1. Coverage
 
 | Metric | Count |
 |---|---|
-| Traces | 63 |
-| Graded (any outcome) | 57 |
+| Traces (all) | 71 |
+| Traces with model predictions (calibration-eligible) | 0 |
+| Graded (any outcome) | 65 |
 | &nbsp;&nbsp;of which game-graded | 9 |
-| &nbsp;&nbsp;of which prop-graded | 48 |
+| &nbsp;&nbsp;of which prop-graded | 56 |
+| **Graded + calibration-eligible (usable pairs)** | **0** |
 | With bet_record | 28 |
 | With closing_line | 0 |
 
@@ -19,21 +21,15 @@ Generated: `2026-05-22T03:29:36+00:00` | Window: last 30 days
 
 ## 3. Realized metrics — game plane (graded game traces in window)
 
-- n: 2
-- Brier: 0.1175
-- ECE (10-bin): 0.3095
-- Log loss: 0.3937
-
-> **FLAG — ECE > 0.05 on game plane.** Investigate which probability quintile is miscalibrated.
+_Fewer than 10 game-graded traces in window — metrics suppressed (noise dominates)._
 
 ## 3B. Realized metrics — prop plane (graded prop traces in window)
 
-- n: 38
-- Brier: 0.3116
-- ECE (10-bin): 0.2607
-- Log loss: 0.8556
+_Fewer than 10 prop (prediction, outcome) pairs in window — metrics suppressed._
 
-> **FLAG — ECE > 0.05 on prop plane.** Prop calibration is separately tunable; consider a prop-specific shrinkage profile.
+## 3C. Distribution CRPS â€” prop projection curves
+
+_No V10 distribution rows with realized prop outcomes in window â€” CRPS suppressed._
 
 ## 4. CLV (bets with attached closing lines)
 
@@ -43,6 +39,7 @@ _No CLV-resolvable bets in window._
 
 | session_id | traces | graded | model | closes | webfetch_fail | notes |
 |---|---|---|---|---|---|---|
+| `sess-20260523-nba1` | 8 | 8 | claude-sonnet-4-6 | ? | 0 | Preflight: cowork_preflight.py truncated 1 line (recurring Pattern C); restored  |
 | `sess-20260521-nyk2` | 6 | 6 | ? | ? | ? |  |
 | `sess-20260520-g001` | 7 | 7 | claude-sonnet-4-6 | ? | 0 | [migrated from pre-schema sidecar] \| archived_keys: date="2026-05-20"; traces=[ |
 | `sess-20260519-nyk1` | 15 | 14 | claude-sonnet-4-6 | ? | 0 | [migrated from pre-schema sidecar] |
@@ -54,6 +51,10 @@ _No CLV-resolvable bets in window._
 ## 6. Pending CANDIDATE profiles
 
 _No pending candidates._
+
+## 6B. Evidence signal performance (retrospective)
+
+_No scored evidence signals yet — run `scripts/score_evidence_signals.py` after outcomes attach._
 
 ## 7. Suggested actions
 

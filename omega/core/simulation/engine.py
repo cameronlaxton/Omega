@@ -21,6 +21,8 @@ Sport archetypes:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import random
 from typing import Any
 
@@ -33,6 +35,11 @@ from omega.core.config.leagues import get_league_config
 from omega.core.simulation.archetypes import (
     get_archetype,
     get_archetype_name,
+)
+from omega.core.simulation.backends import (
+    GameSimulationBackend,
+    GameSimulationInput,
+    enforce_game_backend_contract,
 )
 
 # ---------------------------------------------------------------------------
@@ -142,6 +149,56 @@ def _bernoulli_sample(p: float, size: int) -> list[int]:
     return [1 if random.random() < p else 0 for _ in range(size)]
 
 
+def _percentile(sorted_values: list[float], q: float) -> float:
+    """Return a deterministic nearest-rank percentile from sorted samples."""
+    if not sorted_values:
+        return 0.0
+    idx = min(len(sorted_values) - 1, max(0, int(round((len(sorted_values) - 1) * q))))
+    return float(sorted_values[idx])
+
+
+def _context_hash(*contexts: dict | None) -> str:
+    payload = [ctx or {} for ctx in contexts]
+    encoded = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _distribution_row(
+    *,
+    target: str,
+    market: str,
+    stat_key: str | None,
+    distribution_type: str,
+    distribution_params: dict[str, Any],
+    samples: list[float],
+    n_iterations: int,
+    seed: int | None,
+    context_hash: str | None,
+    component_version: str = "fast_sim_v1",
+) -> dict[str, Any]:
+    sorted_vals = sorted(float(v) for v in samples)
+    n = len(sorted_vals)
+    mean = sum(sorted_vals) / n if n else 0.0
+    variance = sum((v - mean) ** 2 for v in sorted_vals) / n if n else 0.0
+    return {
+        "target": target,
+        "market": market,
+        "stat_key": stat_key,
+        "distribution_type": distribution_type,
+        "distribution_params": distribution_params,
+        "params_schema_version": 1,
+        "sample_mean": mean,
+        "sample_std": variance**0.5,
+        "p10": _percentile(sorted_vals, 0.10),
+        "p50": _percentile(sorted_vals, 0.50),
+        "p90": _percentile(sorted_vals, 0.90),
+        "n_iterations": n_iterations,
+        "seed": seed,
+        "context_hash": context_hash,
+        "component_version": component_version,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Skip / missing-requirements helpers
 # ---------------------------------------------------------------------------
@@ -163,6 +220,8 @@ def _skip_result(
         "home_team": home_team,
         "away_team": away_team,
         "league": league,
+        "context_source": "missing",
+        "baseline_used": False,
     }
 
 
@@ -197,6 +256,11 @@ def _build_team_score_result(
     away_context: dict | None = None,
     archetype_name: str | None = None,
     spread_home: float | None = None,
+    context_source: str = "provided",
+    baseline_used: bool = False,
+    seed: int | None = None,
+    backend_name: str = "fast_score",
+    component_version: str = "fast_score_v1",
 ) -> dict:
     """Build a standardized result dict from team score simulations."""
     home_wins = sum(1 for h, a in zip(home_scores, away_scores) if h > a)
@@ -223,6 +287,10 @@ def _build_team_score_result(
         "missing_requirements": [],
         "home_context": home_context or {},
         "away_context": away_context or {},
+        "context_source": context_source,
+        "baseline_used": baseline_used,
+        "simulation_backend": backend_name,
+        "component_version": component_version,
     }
 
     if spread_home is not None:
@@ -233,6 +301,60 @@ def _build_team_score_result(
         away_covers = sum(1 for h, a in zip(home_scores, away_scores) if h - a < threshold)
         result["home_cover_prob"] = round(home_covers / n_iterations * 100, 1)
         result["away_cover_prob"] = round(away_covers / n_iterations * 100, 1)
+
+    ctx_hash = _context_hash(home_context, away_context)
+    totals = [h + a for h, a in zip(home_scores, away_scores)]
+    spreads = [h - a for h, a in zip(home_scores, away_scores)]
+    result["simulation_distributions"] = [
+        _distribution_row(
+            target="home_score",
+            market="game_score",
+            stat_key=None,
+            distribution_type="empirical",
+            distribution_params={"source": "monte_carlo_scores"},
+            samples=home_scores,
+            n_iterations=n_iterations,
+            seed=seed,
+            context_hash=ctx_hash,
+            component_version=component_version,
+        ),
+        _distribution_row(
+            target="away_score",
+            market="game_score",
+            stat_key=None,
+            distribution_type="empirical",
+            distribution_params={"source": "monte_carlo_scores"},
+            samples=away_scores,
+            n_iterations=n_iterations,
+            seed=seed,
+            context_hash=ctx_hash,
+            component_version=component_version,
+        ),
+        _distribution_row(
+            target="total",
+            market="game_total",
+            stat_key=None,
+            distribution_type="empirical",
+            distribution_params={"source": "monte_carlo_scores"},
+            samples=totals,
+            n_iterations=n_iterations,
+            seed=seed,
+            context_hash=ctx_hash,
+            component_version=component_version,
+        ),
+        _distribution_row(
+            target="spread",
+            market="game_spread",
+            stat_key=None,
+            distribution_type="empirical",
+            distribution_params={"source": "monte_carlo_scores"},
+            samples=spreads,
+            n_iterations=n_iterations,
+            seed=seed,
+            context_hash=ctx_hash,
+            component_version=component_version,
+        ),
+    ]
 
     return result
 
@@ -373,6 +495,7 @@ def run_player_simulation(
     sample_mean = sum(samples) / n_iter
     sample_variance = sum((x - sample_mean) ** 2 for x in samples) / n_iter
     sample_std = sample_variance**0.5
+    sorted_samples = sorted(float(x) for x in samples)
 
     return {
         "over_prob": over_hits / n_iter,
@@ -380,6 +503,15 @@ def run_player_simulation(
         "push_prob": push_hits / n_iter,
         "mean": sample_mean,
         "std": sample_std,
+        "p10": _percentile(sorted_samples, 0.10),
+        "p50": _percentile(sorted_samples, 0.50),
+        "p90": _percentile(sorted_samples, 0.90),
+        "distribution_type": dist,
+        "distribution_params": (
+            {"lambda": float(mean)}
+            if dist == "poisson"
+            else {"mu": float(mean), "sigma": float(sigma)}
+        ),
         "samples": samples[:100] if len(samples) > 100 else samples,
     }
 
@@ -908,14 +1040,243 @@ _ARCHETYPE_SIMULATORS = {
 # ---------------------------------------------------------------------------
 
 
+class FastScoreSimulationBackend:
+    """Current normal/Poisson archetype simulator behind the backend contract."""
+
+    backend_name = "fast_score"
+    component_version = "fast_score_v1"
+
+    def run(self, request: GameSimulationInput) -> dict[str, Any]:
+        if request.seed is not None:
+            random.seed(request.seed)
+            if np is not None:
+                np.random.seed(request.seed)
+
+        league = request.league.upper()
+        archetype = get_archetype(league)
+        archetype_name = get_archetype_name(league)
+        config = get_league_config(league)
+
+        if archetype is None or archetype_name is None:
+            return _skip_result(
+                request.home_team,
+                request.away_team,
+                league,
+                skip_reason=(
+                    f"No simulation model for league '{league}'. Add it to "
+                    "LEAGUE_TO_ARCHETYPE in sport_archetypes.py."
+                ),
+                missing_requirements=["league_model"],
+            )
+
+        home_context = request.home_context
+        away_context = request.away_context
+        baseline_used = False
+        context_source = "provided"
+        if home_context is None or away_context is None:
+            if not request.allow_baseline:
+                missing = []
+                if home_context is None:
+                    missing.extend(f"home_context.{k}" for k in archetype.required_team_keys)
+                if away_context is None:
+                    missing.extend(f"away_context.{k}" for k in archetype.required_team_keys)
+                return _skip_result(
+                    request.home_team,
+                    request.away_team,
+                    league,
+                    skip_reason=(
+                        "Missing home_context or away_context; league-average "
+                        "baseline requires allow_baseline=True"
+                    ),
+                    missing_requirements=missing,
+                )
+            defaults = _archetype_league_defaults(league)
+            if defaults:
+                baseline_used = True
+                context_source = "league_default"
+                if home_context is None:
+                    home_context = dict(defaults)
+                if away_context is None:
+                    away_context = dict(defaults)
+
+        required = archetype.required_team_keys
+        home_missing = _validate_required_keys(home_context, "home", required, league)
+        away_missing = _validate_required_keys(away_context, "away", required, league)
+        all_missing = home_missing + away_missing
+        if all_missing:
+            return _skip_result(
+                request.home_team,
+                request.away_team,
+                league,
+                skip_reason=(
+                    f"Missing required inputs for {archetype.display_name}: "
+                    f"{', '.join(all_missing)}"
+                ),
+                missing_requirements=all_missing,
+            )
+
+        simulator = _ARCHETYPE_SIMULATORS.get(archetype_name)
+        if simulator is None:
+            return _skip_result(
+                request.home_team,
+                request.away_team,
+                league,
+                skip_reason=f"Simulator not implemented for archetype '{archetype_name}'",
+                missing_requirements=["archetype_simulator"],
+            )
+
+        assert home_context is not None
+        assert away_context is not None
+        home_scores, away_scores = simulator(
+            home_context,
+            away_context,
+            league,
+            request.n_iterations,
+            config,
+        )
+
+        return _build_team_score_result(
+            request.home_team,
+            request.away_team,
+            league,
+            request.n_iterations,
+            home_scores,
+            away_scores,
+            home_context=home_context,
+            away_context=away_context,
+            archetype_name=archetype_name,
+            spread_home=request.spread_home,
+            context_source=context_source,
+            baseline_used=baseline_used,
+            seed=request.seed,
+            backend_name=self.backend_name,
+            component_version=self.component_version,
+        )
+
+
+class MarkovGameSimulationBackend:
+    """Markov state-transition backend implementing the game simulation contract."""
+
+    backend_name = "markov_state"
+    component_version = "markov_state_v1"
+
+    def run(self, request: GameSimulationInput) -> dict[str, Any]:
+        if request.seed is not None:
+            random.seed(request.seed)
+            if np is not None:
+                np.random.seed(request.seed)
+
+        league = request.league.upper()
+        archetype = get_archetype(league)
+        archetype_name = get_archetype_name(league)
+        if archetype is None or archetype_name is None:
+            return _skip_result(
+                request.home_team,
+                request.away_team,
+                league,
+                skip_reason=f"No Markov simulation model for league '{league}'.",
+                missing_requirements=["league_model"],
+            )
+        if archetype.result_type != "team_score":
+            return _skip_result(
+                request.home_team,
+                request.away_team,
+                league,
+                skip_reason=f"Markov backend only supports team_score archetypes, got {archetype.result_type}.",
+                missing_requirements=["team_score_archetype"],
+            )
+
+        if request.home_context is None or request.away_context is None:
+            return _skip_result(
+                request.home_team,
+                request.away_team,
+                league,
+                skip_reason="Missing home_context or away_context for Markov backend",
+                missing_requirements=["home_context", "away_context"],
+            )
+
+        home_missing = _validate_required_keys(
+            request.home_context,
+            "home",
+            archetype.required_team_keys,
+            league,
+        )
+        away_missing = _validate_required_keys(
+            request.away_context,
+            "away",
+            archetype.required_team_keys,
+            league,
+        )
+        all_missing = home_missing + away_missing
+        if all_missing:
+            return _skip_result(
+                request.home_team,
+                request.away_team,
+                league,
+                skip_reason=(
+                    f"Missing required inputs for Markov {archetype.display_name}: "
+                    f"{', '.join(all_missing)}"
+                ),
+                missing_requirements=all_missing,
+            )
+
+        from omega.core.simulation.markov_engine import MarkovSimulator
+
+        simulator = MarkovSimulator(
+            league=league,
+            players=[],
+            home_context=request.home_context,
+            away_context=request.away_context,
+            transition_modifiers=request.transition_modifiers,
+        )
+        n_possessions = simulator._base_n_possessions
+        home_scores: list[float] = []
+        away_scores: list[float] = []
+        for _ in range(request.n_iterations):
+            state = simulator.simulate_game(n_possessions)
+            home_scores.append(state.home_score)
+            away_scores.append(state.away_score)
+
+        result = _build_team_score_result(
+            request.home_team,
+            request.away_team,
+            league,
+            request.n_iterations,
+            home_scores,
+            away_scores,
+            home_context=request.home_context,
+            away_context=request.away_context,
+            archetype_name=archetype_name,
+            spread_home=request.spread_home,
+            context_source="provided",
+            baseline_used=False,
+            seed=request.seed,
+            backend_name=self.backend_name,
+            component_version=self.component_version,
+        )
+        for row in result["simulation_distributions"]:
+            params = dict(row.get("distribution_params") or {})
+            params.update(
+                {
+                    "source": "markov_terminal_scores",
+                    "base_possessions": n_possessions,
+                    "transition_matrix_ids": simulator.transition_matrix_ids,
+                    "transition_modifiers": request.transition_modifiers or {},
+                }
+            )
+            row["distribution_type"] = "empirical_markov"
+            row["distribution_params"] = params
+        return result
+
+
 class OmegaSimulationEngine:
     """
     High-level simulation engine dispatching to sport-archetype models.
     Input-driven only — no network calls.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, game_backend: GameSimulationBackend | None = None):
+        self._game_backend = game_backend or FastScoreSimulationBackend()
 
     def run_fast_game_simulation(
         self,
@@ -927,6 +1288,7 @@ class OmegaSimulationEngine:
         away_context: dict | None = None,
         seed: int | None = None,
         spread_home: float | None = None,
+        allow_baseline: bool = False,
     ) -> dict:
         """
         Run a fast game simulation using team stats dispatched by sport archetype.
@@ -943,82 +1305,18 @@ class OmegaSimulationEngine:
         Returns:
             Dict with score distributions, win probabilities, and missing_requirements
         """
-        if seed is not None:
-            random.seed(seed)
-            if np is not None:
-                np.random.seed(seed)
-
-        league = league.upper()
-        archetype = get_archetype(league)
-        archetype_name = get_archetype_name(league)
-        config = get_league_config(league)
-
-        # Unknown sport → skip with helpful message
-        if archetype is None or archetype_name is None:
-            return _skip_result(
-                home_team,
-                away_team,
-                league,
-                skip_reason=f"No simulation model for league '{league}'. Add it to LEAGUE_TO_ARCHETYPE in sport_archetypes.py.",
-                missing_requirements=["league_model"],
-            )
-
-        # When context is absent, fall back to league-average archetype defaults so
-        # the engine can produce a calibration-eligible prediction. The result will
-        # be less accurate than a context-supplied run but allows the trace to
-        # contribute a calibration pair once the outcome is known.
-        if home_context is None or away_context is None:
-            defaults = _archetype_league_defaults(league)
-            if defaults:
-                if home_context is None:
-                    home_context = dict(defaults)
-                if away_context is None:
-                    away_context = dict(defaults)
-
-        # Validate required context
-        required = archetype.required_team_keys
-        home_missing = _validate_required_keys(home_context, "home", required, league)
-        away_missing = _validate_required_keys(away_context, "away", required, league)
-        all_missing = home_missing + away_missing
-
-        if all_missing:
-            return _skip_result(
-                home_team,
-                away_team,
-                league,
-                skip_reason=f"Missing required inputs for {archetype.display_name}: {', '.join(all_missing)}",
-                missing_requirements=all_missing,
-            )
-
-        # Dispatch to archetype simulator
-        simulator = _ARCHETYPE_SIMULATORS.get(archetype_name)
-        if simulator is None:
-            return _skip_result(
-                home_team,
-                away_team,
-                league,
-                skip_reason=f"Simulator not implemented for archetype '{archetype_name}'",
-                missing_requirements=["archetype_simulator"],
-            )
-
-        assert home_context is not None
-        assert away_context is not None
-        home_scores, away_scores = simulator(
-            home_context, away_context, league, n_iterations, config
-        )
-
-        return _build_team_score_result(
-            home_team,
-            away_team,
-            league,
-            n_iterations,
-            home_scores,
-            away_scores,
+        request = GameSimulationInput(
+            home_team=home_team,
+            away_team=away_team,
+            league=league,
+            n_iterations=n_iterations,
             home_context=home_context,
             away_context=away_context,
-            archetype_name=archetype_name,
+            seed=seed,
             spread_home=spread_home,
+            allow_baseline=allow_baseline,
         )
+        return enforce_game_backend_contract(self._game_backend.run(request))
 
     def run_game_simulation(
         self,
@@ -1129,6 +1427,34 @@ class OmegaSimulationEngine:
                     "p90": sorted_vals[int(n * 0.9)] if n > 10 else max(values) if values else 0,
                 }
 
+        distribution_result = _build_team_score_result(
+            home_team,
+            away_team,
+            league,
+            n_iterations,
+            home_scores,
+            away_scores,
+            home_context=home_context,
+            away_context=away_context,
+            archetype_name=get_archetype_name(league),
+            context_source="provided",
+            baseline_used=False,
+            backend_name="markov_state",
+            component_version="markov_state_v1",
+        )
+        for row in distribution_result["simulation_distributions"]:
+            params = dict(row.get("distribution_params") or {})
+            params.update(
+                {
+                    "source": "markov_terminal_scores",
+                    "base_possessions": n_possessions,
+                    "transition_matrix_ids": simulator.transition_matrix_ids,
+                    "transition_modifiers": {},
+                }
+            )
+            row["distribution_type"] = "empirical_markov"
+            row["distribution_params"] = params
+
         return {
             "success": True,
             "home_team": home_team,
@@ -1149,6 +1475,11 @@ class OmegaSimulationEngine:
             "player_projections": player_projections,
             "home_scores_sample": [round(s, 1) for s in home_scores[:20]],
             "away_scores_sample": [round(s, 1) for s in away_scores[:20]],
+            "context_source": "provided",
+            "baseline_used": False,
+            "simulation_backend": "markov_state",
+            "component_version": "markov_state_v1",
+            "simulation_distributions": distribution_result["simulation_distributions"],
         }
 
     def run_player_prop_simulation(

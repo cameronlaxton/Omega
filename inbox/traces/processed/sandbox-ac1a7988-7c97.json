@@ -1,0 +1,167 @@
+{
+  "trace": {
+    "trace_id": "sandbox-ac1a7988-7c97",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-23T21:27:21.853151+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260523-nba1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Jalen Brunson",
+      "league": "NBA",
+      "prop_type": "ast",
+      "line": 7.5,
+      "odds_over": 110.0,
+      "odds_under": -150.0,
+      "player_context": {
+        "ast_mean": 10.0,
+        "ast_std": 4.0,
+        "sample_size": 2
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2,
+        "blowout_risk": 0.1,
+        "opponent_def_rank": 8
+      },
+      "n_iterations": 10000,
+      "seed": 1573172107,
+      "evidence": [
+        {
+          "signal_type": "series_avg",
+          "category": "player_form",
+          "plane": "player",
+          "value": 10.0,
+          "source": "nba.com",
+          "confidence": 0.85,
+          "window": "series",
+          "direction": "over",
+          "stat_key": "ast",
+          "note": null
+        },
+        {
+          "signal_type": "last_game_outlier",
+          "category": "player_form",
+          "plane": "player",
+          "value": 14,
+          "source": "nba.com",
+          "confidence": 0.75,
+          "window": "last_1",
+          "direction": "over",
+          "stat_key": "ast",
+          "note": null
+        }
+      ],
+      "home_team": "Cleveland Cavaliers",
+      "away_team": "New York Knicks",
+      "game_date": "2026-05-23"
+    },
+    "result": {
+      "player_name": "Jalen Brunson",
+      "league": "NBA",
+      "prop_type": "ast",
+      "line": 7.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.7063,
+      "under_prob": 0.2937,
+      "edge_over": 23.01,
+      "edge_under": -30.63,
+      "recommendation": "over",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.2197,
+      "recommended_units": 5.0,
+      "bet_side_odds": 110.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.7063,
+        "calibrated_prob": 0.7063,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.2937,
+        "calibrated_prob": 0.2937,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      }
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 2,
+      "blowout_risk": 0.1,
+      "opponent_def_rank": 8
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "series_avg",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "series_avg: mean x1.0000 (raw 1.0000, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "last_game_outlier",
+        "target": "std",
+        "applied": false,
+        "factor": 1.1,
+        "reason": "last_game_outlier: std x1.1000 (raw 1.1000, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete"
+    }
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "nba.com",
+      "sportsbettingdime.com"
+    ],
+    "fields_gathered": [
+      "ast_mean",
+      "ast_std",
+      "is_playoff",
+      "rest_days",
+      "opponent_def_rank"
+    ],
+    "missing_fields": [],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": 110,
+      "odds_under": -150
+    }
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "Brunson averaging 10.0 ast/game in the ECF (6 G1, 14 G2). At +110 with a series mean well above the 7.5 line, this is the highest-value positive-odds bet on the board. G2 demonstrated his elite facilitating capacity against Cleveland's scheme.",
+  "trace_quality": {
+    "aggregate_quality": null,
+    "downgrades": [],
+    "passed": true,
+    "evidence_status": "present",
+    "identity_status": "complete"
+  }
+}

@@ -42,6 +42,7 @@ from omega.core.contracts.schemas import (
 )
 from omega.core.simulation.archetypes import get_archetype_name
 from omega.core.simulation.engine import (
+    MarkovGameSimulationBackend,
     OmegaSimulationEngine,
     run_player_simulation,
     select_distribution,
@@ -147,6 +148,32 @@ def _result_downgrades(result: Any) -> list[str]:
     return []
 
 
+def _result_status(result: Any) -> str | None:
+    return getattr(result, "status", None)
+
+
+def _result_context_source(result: Any) -> str | None:
+    return getattr(result, "context_source", None)
+
+
+def _result_baseline_used(result: Any) -> bool:
+    return bool(getattr(result, "baseline_used", False))
+
+
+def _identity_status(kind: str, request: Any) -> str:
+    if kind == "prop":
+        missing = [
+            field
+            for field in ("player_name", "home_team", "away_team", "game_date", "line")
+            if not getattr(request, field, None)
+        ]
+        return "missing" if missing else "complete"
+    if kind == "game":
+        has_teams = getattr(request, "home_team", None) and getattr(request, "away_team", None)
+        return "complete" if has_teams else "missing"
+    return "complete"
+
+
 def analyze(
     request: dict[str, Any] | GameAnalysisRequest | PlayerPropRequest | SlateAnalysisRequest,
     *,
@@ -218,13 +245,32 @@ def analyze(
     result_downgrades = _result_downgrades(result)
     evidence_signals = getattr(typed_req, "evidence", None) or []
     evidence_status = "present" if evidence_signals else "empty"
+    context_source = _result_context_source(result)
+    baseline_used = _result_baseline_used(result)
+    identity_status = _identity_status(kind, typed_req)
+    calibration_exclusion_reasons: list[str] = []
+    if _result_status(result) != "success":
+        calibration_exclusion_reasons.append("engine_skipped")
+    if context_source != "provided":
+        calibration_exclusion_reasons.append(
+            "baseline_default_context" if baseline_used else "legacy_missing_context_source"
+        )
+    if identity_status != "complete":
+        calibration_exclusion_reasons.append("legacy_missing_identity")
+    calibration_exclusion_reasons.extend(str(d) for d in result_downgrades)
+    calibration_exclusion_reasons = sorted(set(calibration_exclusion_reasons))
+    calibration_eligible = not calibration_exclusion_reasons
 
     engine_trace_quality: dict[str, Any] = {
         "aggregate_quality": None,
         "downgrades": result_downgrades,
         "passed": len(result_downgrades) == 0,
         "evidence_status": evidence_status,
-        "identity_status": "complete",
+        "identity_status": identity_status,
+        "context_source": context_source,
+        "baseline_used": baseline_used,
+        "calibration_eligible": calibration_eligible,
+        "calibration_exclusion_reasons": calibration_exclusion_reasons,
     }
     if trace_quality:
         merged_downgrades = sorted(
@@ -235,6 +281,11 @@ def analyze(
             **trace_quality,
             "downgrades": merged_downgrades,
             "evidence_status": evidence_status,  # engine-computed; caller cannot override
+            "identity_status": identity_status,
+            "context_source": context_source,
+            "baseline_used": baseline_used,
+            "calibration_eligible": calibration_eligible,
+            "calibration_exclusion_reasons": calibration_exclusion_reasons,
         }
 
     return {
@@ -544,8 +595,24 @@ def analyze_game(
         elif request.odds.spread_home is not None:
             spread_value = request.odds.spread_home
 
+    if request.simulation_backend not in {"fast_score", "markov_state"}:
+        return GameAnalysisResponse(
+            matchup=matchup,
+            league=request.league,
+            analyzed_at=now,
+            status="skipped",
+            skip_reason=f"Unsupported simulation_backend={request.simulation_backend!r}",
+            missing_requirements=["simulation_backend"],
+            context_source="missing",
+        )
+
     try:
-        sim_result = _engine.run_fast_game_simulation(
+        engine = (
+            OmegaSimulationEngine(game_backend=MarkovGameSimulationBackend())
+            if request.simulation_backend == "markov_state"
+            else _engine
+        )
+        sim_result = engine.run_fast_game_simulation(
             home_team=request.home_team,
             away_team=request.away_team,
             league=request.league,
@@ -554,6 +621,7 @@ def analyze_game(
             away_context=away_ctx,
             seed=request.seed,
             spread_home=spread_value,
+            allow_baseline=request.allow_baseline,
         )
     except Exception as exc:
         logger.warning("Simulation error for %s: %s", matchup, exc)
@@ -586,6 +654,10 @@ def analyze_game(
         predicted_total=sim_result["predicted_total"],
         predicted_home_score=sim_result.get("predicted_home_score", 0),
         predicted_away_score=sim_result.get("predicted_away_score", 0),
+        context_source=sim_result.get("context_source", "provided"),
+        baseline_used=bool(sim_result.get("baseline_used", False)),
+        simulation_backend=sim_result.get("simulation_backend"),
+        component_version=sim_result.get("component_version"),
     )
 
     # Edge analysis -- requires odds
@@ -705,6 +777,11 @@ def analyze_game(
         edges=edges,
         best_bet=best_bet,
         missing_requirements=[],
+        context_source=sim_result.get("context_source", "provided"),
+        baseline_used=bool(sim_result.get("baseline_used", False)),
+        simulation_backend=sim_result.get("simulation_backend"),
+        component_version=sim_result.get("component_version"),
+        simulation_distributions=sim_result.get("simulation_distributions") or [],
         metadata=AnalysisMetadata(
             data_sources=data_sources,
             archetype=archetype_name,
@@ -913,6 +990,31 @@ def analyze_player_prop(
     if distribution_override in {"normal", "poisson"}:
         notes.append(f"distribution_override:{resolved_dist}")
 
+    sim_distribution = {
+        "target": "player_stat",
+        "market": "player_prop",
+        "stat_key": stat_key,
+        "distribution_type": sim_result.get("distribution_type", resolved_dist),
+        "distribution_params": sim_result.get("distribution_params") or {},
+        "params_schema_version": 1,
+        "sample_mean": sim_result.get("mean"),
+        "sample_std": sim_result.get("std"),
+        "p10": sim_result.get("p10"),
+        "p50": sim_result.get("p50"),
+        "p90": sim_result.get("p90"),
+        "n_iterations": request.n_iterations,
+        "seed": request.seed,
+        "context_hash": _stable_input_hash(
+            {
+                "league": request.league,
+                "prop_type": stat_key,
+                "player_context": player_ctx,
+                "game_context": request.game_context,
+            }
+        ),
+        "component_version": "player_prop_fast_v1",
+    }
+
     # B2: imputation provenance -- LLM declares which observation slots are
     # imputed and (ideally) the underlying sample size. We cap tiers based on
     # the imputed fraction so a 4-of-5-imputed std cannot ride an A-tier edge.
@@ -1023,6 +1125,12 @@ def analyze_player_prop(
         status="success",
         over_prob=round(over_prob, 4),
         under_prob=round(under_prob, 4),
+        projection_mean=round(float(sim_result.get("mean", 0.0)), 4),
+        projection_std=round(float(sim_result.get("std", 0.0)), 4),
+        projection_p10=round(float(sim_result.get("p10", 0.0)), 4),
+        projection_p50=round(float(sim_result.get("p50", 0.0)), 4),
+        projection_p90=round(float(sim_result.get("p90", 0.0)), 4),
+        distribution_type=sim_result.get("distribution_type", resolved_dist),
         edge_over=edge_over,
         edge_under=edge_under,
         recommendation=recommendation,
@@ -1035,6 +1143,9 @@ def analyze_player_prop(
         imputed_fraction=imputed_fraction,
         over_calibration_audit=over_audit,
         under_calibration_audit=under_audit,
+        context_source="provided",
+        baseline_used=False,
+        simulation_distributions=[sim_distribution],
     )
 
 
@@ -1083,6 +1194,8 @@ def analyze_slate(
             "home_context": game.get("home_context"),
             "away_context": game.get("away_context"),
             "game_context": game.get("game_context"),
+            "allow_baseline": bool(game.get("allow_baseline", False)),
+            "simulation_backend": game.get("simulation_backend", "fast_score"),
         }
         if game.get("n_iterations") is not None:
             game_kwargs["n_iterations"] = game.get("n_iterations")

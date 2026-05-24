@@ -1,0 +1,154 @@
+{
+  "trace": {
+    "trace_id": "sandbox-378d576c-4820",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-23T21:28:23.817739+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260523-nba1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Evan Mobley",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 8.5,
+      "odds_over": 105.0,
+      "odds_under": -140.0,
+      "player_context": {
+        "reb_mean": 8.4,
+        "reb_std": 3.0,
+        "sample_size": 15
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2,
+        "blowout_risk": 0.12,
+        "opponent_def_rank": 12
+      },
+      "n_iterations": 10000,
+      "seed": 559030030,
+      "evidence": [
+        {
+          "signal_type": "season_baseline",
+          "category": "player_form",
+          "plane": "player",
+          "value": 8.4,
+          "source": "statmuse.com",
+          "confidence": 0.85,
+          "window": "season",
+          "direction": null,
+          "stat_key": "reb",
+          "note": null
+        },
+        {
+          "signal_type": "home_away_split",
+          "category": "situational",
+          "plane": "game",
+          "value": true,
+          "source": "agent_reasoning",
+          "confidence": 0.55,
+          "window": "series",
+          "direction": "over",
+          "stat_key": "reb",
+          "note": null
+        }
+      ],
+      "home_team": "Cleveland Cavaliers",
+      "away_team": "New York Knicks",
+      "game_date": "2026-05-23"
+    },
+    "result": {
+      "player_name": "Evan Mobley",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 8.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.4642,
+      "under_prob": 0.5358,
+      "edge_over": -2.36,
+      "edge_under": -4.75,
+      "recommendation": "pass",
+      "confidence_tier": null,
+      "kelly_fraction": null,
+      "recommended_units": null,
+      "bet_side_odds": null,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.4642,
+        "calibrated_prob": 0.4642,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.5358,
+        "calibrated_prob": 0.5358,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      }
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 2,
+      "blowout_risk": 0.12,
+      "opponent_def_rank": 12
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "season_baseline",
+        "target": "skip",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "no handler or coefficients for signal_type",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "home_away_split",
+        "target": "skip",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "game-plane signal not applied on a player-prop analysis",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete"
+    }
+  },
+  "reasoning_inputs": {
+    "sources": [],
+    "fields_gathered": [],
+    "missing_fields": [],
+    "market_context": {}
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "",
+  "trace_quality": {
+    "aggregate_quality": null,
+    "downgrades": [],
+    "passed": true,
+    "evidence_status": "present",
+    "identity_status": "complete"
+  }
+}

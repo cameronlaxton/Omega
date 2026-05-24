@@ -43,11 +43,24 @@ if str(_REPO_ROOT) not in sys.path:
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
 from omega.core.calibration.profiles import ProfileStatus  # noqa: E402
 from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
+from omega.strategy.distribution_metrics import (  # noqa: E402
+    METRIC_VERSION as DISTRIBUTION_METRIC_VERSION,
+)
+from omega.strategy.distribution_metrics import crps_from_distribution_row  # noqa: E402
 from omega.trace.clv import compute_clv  # noqa: E402
 from omega.trace.session_sidecar import SessionSidecar  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 logger = logging.getLogger("report_calibration")
+
+
+_CALIBRATION_ELIGIBLE_SQL = """
+    t.predictions IS NOT NULL
+    AND json_extract(t.full_trace, '$.result.status') = 'success'
+    AND json_extract(t.full_trace, '$.trace_quality.calibration_eligible') = 1
+    AND json_extract(t.full_trace, '$.trace_quality.context_source') = 'provided'
+    AND json_extract(t.full_trace, '$.trace_quality.identity_status') = 'complete'
+"""
 
 
 def _load_session_sidecars(inbox: Path) -> list[dict[str, Any]]:
@@ -110,13 +123,15 @@ def _section_counts(store: TraceStore, league: str, cutoff: str) -> dict[str, in
         (league, cutoff),
     ).fetchone()[0]
     n_with_predictions = conn.execute(
-        "SELECT COUNT(*) FROM traces WHERE league = ? AND timestamp >= ? AND predictions IS NOT NULL",
+        f"""SELECT COUNT(*) FROM traces t
+            WHERE league = ? AND timestamp >= ?
+              AND {_CALIBRATION_ELIGIBLE_SQL}""",
         (league, cutoff),
     ).fetchone()[0]
     n_graded_calibration = conn.execute(
-        """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
+        f"""SELECT COUNT(DISTINCT t.trace_id) FROM traces t
            WHERE t.league = ? AND t.timestamp >= ?
-             AND t.predictions IS NOT NULL
+             AND {_CALIBRATION_ELIGIBLE_SQL}
              AND (EXISTS (SELECT 1 FROM outcomes o WHERE o.trace_id = t.trace_id)
                OR EXISTS (SELECT 1 FROM prop_outcomes p WHERE p.trace_id = t.trace_id))""",
         (league, cutoff),
@@ -137,7 +152,13 @@ def _section_realized_metrics(
     store: TraceStore, league: str, cutoff: str
 ) -> dict[str, float] | None:
     """Brier / ECE / log_loss on graded traces in the window. Returns None if too few."""
-    rows = store.query_traces(league=league, start=cutoff, has_outcome=True, limit=100_000)
+    rows = store.query_traces(
+        league=league,
+        start=cutoff,
+        has_outcome=True,
+        calibration_eligible_only=True,
+        limit=100_000,
+    )
     if len(rows) < 10:
         return None
     fitter = CalibrationFitter()
@@ -195,7 +216,13 @@ def _section_prop_realized_metrics(
     problem (over/under stat lines, not home/away win). Suppressed when fewer
     than 10 prop (prediction, outcome) pairs are available.
     """
-    rows = store.query_traces(league=league, start=cutoff, has_outcome=True, limit=100_000)
+    rows = store.query_traces(
+        league=league,
+        start=cutoff,
+        has_outcome=True,
+        calibration_eligible_only=True,
+        limit=100_000,
+    )
     if not rows:
         return None
     predictions, outcomes = CalibrationFitter.extract_prop_pairs(rows)
@@ -238,6 +265,54 @@ def _section_prop_realized_metrics(
         "brier": brier,
         "ece": ece,
         "log_loss": log_loss,
+    }
+
+
+def _section_distribution_crps(
+    store: TraceStore, league: str, cutoff: str
+) -> dict[str, Any] | None:
+    """Dynamic CRPS over V10 distribution rows joined to realized outcomes.
+
+    Metrics are recomputed from ``v_distribution_outcomes`` at report time so a
+    future CRPS refinement changes the report code, not historical ledger rows.
+    """
+    rows = store.conn.execute(
+        f"""SELECT d.*
+           FROM v_distribution_outcomes d
+           JOIN traces t ON t.trace_id = d.trace_id
+           WHERE d.league = ?
+             AND t.timestamp >= ?
+             AND {_CALIBRATION_ELIGIBLE_SQL}
+             AND d.stat_value IS NOT NULL""",
+        (league, cutoff),
+    ).fetchall()
+    values: list[float] = []
+    by_stat: dict[str, list[float]] = {}
+    skipped = 0
+    for row in rows:
+        data = dict(row)
+        try:
+            metric = crps_from_distribution_row(data, observed=float(data["stat_value"]))
+        except (KeyError, TypeError, ValueError):
+            skipped += 1
+            continue
+        value = float(metric["value"])
+        values.append(value)
+        stat_key = str(data.get("stat_key") or data.get("target") or "unknown")
+        by_stat.setdefault(stat_key, []).append(value)
+
+    if not values:
+        return None
+
+    return {
+        "metric_version": DISTRIBUTION_METRIC_VERSION,
+        "n": len(values),
+        "mean_crps": sum(values) / len(values),
+        "by_stat": {
+            stat: {"n": len(stat_values), "mean_crps": sum(stat_values) / len(stat_values)}
+            for stat, stat_values in sorted(by_stat.items())
+        },
+        "skipped": skipped,
     }
 
 
@@ -356,6 +431,7 @@ def _render(
     counts: dict[str, int],
     realized: dict[str, float] | None,
     realized_prop: dict[str, float] | None,
+    distribution_crps: dict[str, Any] | None,
     clv: dict[str, Any],
     sessions: list[dict[str, Any]],
     production_profile_id: str | None,
@@ -425,6 +501,25 @@ def _render(
             lines.append(
                 "> **FLAG — ECE > 0.05 on prop plane.** Prop calibration is separately tunable; consider a prop-specific shrinkage profile."
             )
+    lines.append("")
+
+    lines.append("## 3C. Distribution CRPS â€” prop projection curves")
+    lines.append("")
+    if distribution_crps is None:
+        lines.append(
+            "_No V10 distribution rows with realized prop outcomes in window â€” CRPS suppressed._"
+        )
+    else:
+        lines.append(f"- metric_version: `{distribution_crps['metric_version']}`")
+        lines.append(f"- n: {distribution_crps['n']}")
+        lines.append(f"- Mean CRPS: {distribution_crps['mean_crps']:.4f}")
+        if distribution_crps["skipped"]:
+            lines.append(f"- Unsupported/skipped rows: {distribution_crps['skipped']}")
+        lines.append("")
+        lines.append("| stat_key | n | mean_crps |")
+        lines.append("|---|---:|---:|")
+        for stat, stats in distribution_crps["by_stat"].items():
+            lines.append(f"| {stat} | {stats['n']} | {stats['mean_crps']:.4f} |")
     lines.append("")
 
     lines.append("## 4. CLV (bets with attached closing lines)")
@@ -554,6 +649,7 @@ def main() -> int:
     counts = _section_counts(store, args.league, cutoff)
     realized = _section_realized_metrics(store, args.league, cutoff)
     realized_prop = _section_prop_realized_metrics(store, args.league, cutoff)
+    distribution_crps = _section_distribution_crps(store, args.league, cutoff)
     clv = _section_clv(store, args.league, cutoff)
     sessions = _section_sessions(store, sidecars, args.league)
 
@@ -568,6 +664,7 @@ def main() -> int:
         counts=counts,
         realized=realized,
         realized_prop=realized_prop,
+        distribution_crps=distribution_crps,
         clv=clv,
         sessions=sessions,
         production_profile_id=prod.profile_id if prod else None,

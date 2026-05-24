@@ -58,6 +58,14 @@ Schema version 9 (additive):
   (signal_type, source, obs_window, league, dataset_hash). dataset_hash +
   scored_at make every scoring run an attributable, non-clobbering record.
 
+Schema version 10 (additive):
+- simulation_distributions: queryable summaries and generator provenance for
+  deterministic simulation outputs. Universal summary columns stay typed;
+  family-specific generator parameters live in versioned JSON so future
+  distributions do not require schema churn.
+- v_distribution_outcomes: raw join substrate for dynamic metric computation
+  (CRPS/Brier/etc. are recomputed by versioned report code, not stored here).
+
 Design rules:
 - Full trace stored as JSON blob to decouple trace evolution from SQLite schema
 - Denormalized columns exist for querying only — the blob is source of truth
@@ -69,7 +77,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 9
+CURRENT_VERSION = 10
 
 _logger = logging.getLogger("omega.trace.schema")
 
@@ -342,4 +350,70 @@ CREATE TABLE IF NOT EXISTS signal_performance (
 
 CREATE INDEX IF NOT EXISTS idx_signal_performance_key
     ON signal_performance(signal_type, league);
+"""
+
+
+SCHEMA_V10 = """
+CREATE TABLE IF NOT EXISTS simulation_distributions (
+    distribution_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    trace_id              TEXT NOT NULL REFERENCES traces(trace_id),
+    kind                  TEXT,
+    league                TEXT,
+    target                TEXT NOT NULL,
+    market                TEXT,
+    stat_key              TEXT,
+    distribution_type     TEXT NOT NULL,
+    distribution_params   TEXT NOT NULL,
+    params_schema_version INTEGER NOT NULL DEFAULT 1,
+    sample_mean           REAL,
+    sample_std            REAL,
+    p10                   REAL,
+    p50                   REAL,
+    p90                   REAL,
+    n_iterations          INTEGER,
+    seed                  INTEGER,
+    context_hash          TEXT,
+    component_version     TEXT,
+    created_at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sim_distributions_trace_id
+    ON simulation_distributions(trace_id);
+CREATE INDEX IF NOT EXISTS idx_sim_distributions_lookup
+    ON simulation_distributions(league, kind, market, stat_key);
+
+CREATE VIEW IF NOT EXISTS v_distribution_outcomes AS
+SELECT
+    d.distribution_id,
+    d.trace_id,
+    d.kind,
+    d.league,
+    d.target,
+    d.market,
+    d.stat_key,
+    d.distribution_type,
+    d.distribution_params,
+    d.params_schema_version,
+    d.sample_mean,
+    d.sample_std,
+    d.p10,
+    d.p50,
+    d.p90,
+    d.n_iterations,
+    d.seed,
+    d.context_hash,
+    d.component_version,
+    o.home_score,
+    o.away_score,
+    o.result AS game_result,
+    p.player_name,
+    p.stat_type,
+    p.stat_value,
+    p.line,
+    p.side,
+    p.result AS prop_result
+FROM simulation_distributions d
+LEFT JOIN outcomes o ON o.trace_id = d.trace_id
+LEFT JOIN prop_outcomes p ON p.trace_id = d.trace_id
+    AND (d.stat_key IS NULL OR p.stat_type = d.stat_key);
 """
