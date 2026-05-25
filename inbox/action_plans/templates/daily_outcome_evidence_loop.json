@@ -1,0 +1,27 @@
+{
+  "template_id": "daily_outcome_evidence_loop",
+  "session_id": "template-daily-outcome-evidence-loop",
+  "generated_at": "2026-05-25T00:00:00Z",
+  "description": "Attach outcomes, score structured evidence signals, and refresh NBA calibration health from canonical trace data.",
+  "actions": [
+    {
+      "type": "fetch_outcomes",
+      "args": {
+        "leagues": ["nba", "mlb", "props"]
+      }
+    },
+    {
+      "type": "score_evidence_signals",
+      "args": {
+        "verbose": true
+      }
+    },
+    {
+      "type": "report_calibration",
+      "args": {
+        "league": "NBA",
+        "window_days": 30
+      }
+    }
+  ]
+}

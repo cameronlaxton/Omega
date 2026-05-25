@@ -376,7 +376,11 @@ At session start, run calibration health when enough data exists:
 python scripts/report_calibration.py --league NBA --window-days 30
 ```
 
-Action plans live at `inbox/action_plans/<session_id>.json`. Allowed action types are only `fit_calibration`, `promote_profile`, `report_calibration`, and `fetch_outcomes`. Dry-run before executing:
+Action plans live at `inbox/action_plans/<session_id>.json`. Repo-local templates live under `inbox/action_plans/templates/`; see `docs/phase6/automation_playbook.md` for the trace intake, confirmed-bet closing-line, outcome/evidence, weekly shadow-review, and no-op loops.
+
+Allowed action types are command-gated by `scripts/run_action_plan.py`: `ingest_traces`, `fetch_closing_lines`, `fetch_outcomes`, `score_evidence_signals`, `report_calibration`, `fit_calibration`, `fit_adjustment_policy`, and `promote_profile`. `fit_adjustment_policy` is shadow-only in action plans; do not schedule `promote_adjustment_policy --go-live`.
+
+Dry-run before executing:
 
 ```bash
 python scripts/run_action_plan.py inbox/action_plans/<session_id>.json --dry-run
@@ -423,6 +427,7 @@ All paths are relative to the repo root.
 | `inbox/traces/` | Trace export files -> `ingest_traces.py` |
 | `inbox/sessions/` | Session sidecars |
 | `inbox/action_plans/` | Action plan JSON -> `run_action_plan.py` |
+| `inbox/action_plans/templates/` | Repo-local action-plan templates for scheduler/manual loops |
 | `scripts/ingest_traces.py` | Drains trace exports into trace and bet-record tables |
 | `scripts/run_action_plan.py` | Validates and dispatches action plans |
 | `scripts/report_calibration.py` | Calibration health and session summary report |

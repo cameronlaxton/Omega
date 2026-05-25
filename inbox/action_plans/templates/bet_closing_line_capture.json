@@ -1,0 +1,14 @@
+{
+  "template_id": "bet_closing_line_capture",
+  "session_id": "template-bet-closing-line-capture",
+  "generated_at": "2026-05-25T00:00:00Z",
+  "description": "Capture market close for pending user-confirmed bet_records. This follows up recorded bets only; it never creates picks or recommendations.",
+  "actions": [
+    {
+      "type": "fetch_closing_lines",
+      "args": {
+        "verbose": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "template_id": "daily_trace_intake",
+  "session_id": "template-daily-trace-intake",
+  "generated_at": "2026-05-25T00:00:00Z",
+  "description": "Drain exported analysis traces into the canonical ledger; review ingest warnings for failed traces, missing identity fields, empty evidence, and confirmed bet records.",
+  "actions": [
+    {
+      "type": "ingest_traces",
+      "args": {
+        "verbose": true
+      }
+    }
+  ]
+}
