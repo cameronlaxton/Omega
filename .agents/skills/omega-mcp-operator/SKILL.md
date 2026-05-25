@@ -20,6 +20,20 @@ grading.
    `OMEGA_COWORK.md`.
 3. If no deterministic path can run, produce qualitative Standard Text only.
 
+## Cowork Startup Hygiene
+
+1. Run `python scripts/cowork_preflight.py` before formal Omega output.
+2. If preflight reports source corruption, inspect `git status --short` before
+   repair.
+3. Use `python scripts/cowork_preflight.py --repair-from-git` only for
+   syntax-corrupt files or known critical mount-corruption targets.
+4. Use `--force-repair` only when intentionally clobbering all divergent
+   tracked Python files back to `HEAD`.
+5. Treat SQLite WAL fallback as sequential-write mode; do not run parallel
+   trace ingestion, outcome ingestion, or calibration writes.
+6. Use `omega_resolve_odds` or `scripts/resolve_odds.py` for market inputs.
+   Do not call `OddsApiClient._get_json()` from ad hoc scripts.
+
 ## MCP Tools
 
 - `omega_analyze_game`: deterministic single-game analysis.
