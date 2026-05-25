@@ -1,0 +1,262 @@
+{
+  "trace": {
+    "trace_id": "sandbox-528d7179-0d40",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-25T18:20:15.561049+00:00",
+    "kind": "game",
+    "session_id": "sess-20260525-18b5",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "San Diego Padres",
+      "away_team": "Philadelphia Phillies",
+      "league": "MLB",
+      "odds": {
+        "spread_home": 1.5,
+        "spread_home_price": -170.0,
+        "moneyline_home": 100.0,
+        "moneyline_away": -120.0,
+        "over_under": 7.5,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 5000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 4.0576923076923075,
+        "def_rating": 3.9423076923076925
+      },
+      "away_context": {
+        "off_rating": 4.018867924528302,
+        "def_rating": 4.471698113207547
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 1.0
+      },
+      "seed": 3998746134,
+      "evidence": []
+    },
+    "result": {
+      "matchup": "Philadelphia Phillies @ San Diego Padres",
+      "league": "MLB",
+      "analyzed_at": "2026-05-25T18:20:15.561071",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 5000,
+        "home_win_prob": 41.0,
+        "away_win_prob": 44.0,
+        "draw_prob": 15.0,
+        "predicted_spread": -0.1,
+        "predicted_total": 8.2,
+        "predicted_home_score": 4.0,
+        "predicted_away_score": 4.2,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "San Diego Padres",
+          "true_prob": 0.41,
+          "calibrated_prob": 0.41,
+          "market_implied": 0.6296,
+          "edge_pct": -21.96,
+          "ev_pct": -34.88,
+          "market_odds": -170.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.41,
+            "calibrated_prob": 0.41,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Philadelphia Phillies",
+          "true_prob": 0.44,
+          "calibrated_prob": 0.44,
+          "market_implied": 0.5455,
+          "edge_pct": -10.55,
+          "ev_pct": -19.33,
+          "market_odds": -120.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.44,
+            "calibrated_prob": 0.44,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": null,
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.0342,
+          "sample_std": 1.989630709453317,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 5000,
+          "seed": 3998746134,
+          "context_hash": "28d9bd70e62b40b9",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.1646,
+          "sample_std": 2.052585403826217,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 5000,
+          "seed": 3998746134,
+          "context_hash": "28d9bd70e62b40b9",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 8.1988,
+          "sample_std": 2.880013638856722,
+          "p10": 5.0,
+          "p50": 8.0,
+          "p90": 12.0,
+          "n_iterations": 5000,
+          "seed": 3998746134,
+          "context_hash": "28d9bd70e62b40b9",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": -0.1304,
+          "sample_std": 2.8370752263554104,
+          "p10": -4.0,
+          "p50": 0.0,
+          "p90": 4.0,
+          "n_iterations": 5000,
+          "seed": 3998746134,
+          "context_hash": "28d9bd70e62b40b9",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 1.0
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "empty",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "the-odds-api:betmgm",
+      "statsapi.mlb.com"
+    ],
+    "fields_gathered": [
+      "off_rating",
+      "def_rating",
+      "moneyline",
+      "spread",
+      "total"
+    ],
+    "missing_fields": [
+      "starting_pitcher_stats",
+      "bullpen_state",
+      "park_factor",
+      "weather"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "moneyline_home": 100,
+      "moneyline_away": -120,
+      "spread_home": 1.5,
+      "spread_home_price": -170,
+      "spread_away_price": 140,
+      "over_under": 7.5,
+      "total_over_price": -102,
+      "total_under_price": -118
+    }
+  },
+  "reasoning_downgrade_rationale": "Missing pitcher/park/weather \u2192 aq<0.7.",
+  "reasoning_narrative": "YTD R/G Philadelphia Phillies 4.02/4.47 vs San Diego Padres 4.06/3.94; Poisson default.",
+  "trace_quality": {
+    "aggregate_quality": 0.62
+  }
+}

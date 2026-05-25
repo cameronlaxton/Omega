@@ -111,7 +111,10 @@
       "Bash(python scripts/run_champion_challenger.py --league NBA --n-iterations 1000 --json data/cc_phase3d_out.json)",
       "Bash(New-Item -ItemType Directory -Force data)",
       "Bash(Out-Null)",
-      "Bash(Select-String -NotMatch \"processed\")"
+      "Bash(Select-String -NotMatch \"processed\")",
+      "Bash(git commit -m 'Add session traces and bug report from 2026-05-25 *)",
+      "Bash(Remove-Item -Force \"C:\\\\repos\\\\Omega\\\\.git\\\\index.lock\" -ErrorAction SilentlyContinue)",
+      "Bash(rm -f \".git/index.lock\")"
     ]
   }
 }

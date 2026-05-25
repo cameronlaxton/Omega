@@ -1,0 +1,270 @@
+{
+  "trace": {
+    "trace_id": "sandbox-57bc7f55-5754",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-25T18:20:54.666909+00:00",
+    "kind": "game",
+    "session_id": "sess-20260525-18b5",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "Toronto Blue Jays",
+      "away_team": "Miami Marlins",
+      "league": "MLB",
+      "odds": {
+        "spread_home": -1.5,
+        "spread_home_price": 135.0,
+        "moneyline_home": -160.0,
+        "moneyline_away": 135.0,
+        "over_under": 7.5,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 5000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 4.037735849056604,
+        "def_rating": 4.150943396226415
+      },
+      "away_context": {
+        "off_rating": 4.277777777777778,
+        "def_rating": 4.481481481481482
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 1.0
+      },
+      "seed": 3232654776,
+      "evidence": []
+    },
+    "result": {
+      "matchup": "Miami Marlins @ Toronto Blue Jays",
+      "league": "MLB",
+      "analyzed_at": "2026-05-25T18:20:54.666920",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 5000,
+        "home_win_prob": 39.5,
+        "away_win_prob": 46.9,
+        "draw_prob": 13.6,
+        "predicted_spread": -0.2,
+        "predicted_total": 8.2,
+        "predicted_home_score": 4.0,
+        "predicted_away_score": 4.2,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Toronto Blue Jays",
+          "true_prob": 0.395,
+          "calibrated_prob": 0.395,
+          "market_implied": 0.4255,
+          "edge_pct": -3.05,
+          "ev_pct": -7.17,
+          "market_odds": 135.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.395,
+            "calibrated_prob": 0.395,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Miami Marlins",
+          "true_prob": 0.469,
+          "calibrated_prob": 0.469,
+          "market_implied": 0.4255,
+          "edge_pct": 4.35,
+          "ev_pct": 10.21,
+          "market_odds": 135.0,
+          "confidence_tier": "A",
+          "recommended_units": 3.78,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.469,
+            "calibrated_prob": 0.469,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": {
+        "selection": "Miami Marlins away",
+        "odds": 135.0,
+        "edge_pct": 4.35,
+        "ev_pct": 10.21,
+        "confidence_tier": "A",
+        "recommended_units": 3.78,
+        "kelly_fraction": 0.0378
+      },
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 3.9704,
+          "sample_std": 1.9996809345492996,
+          "p10": 1.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 5000,
+          "seed": 3232654776,
+          "context_hash": "6fac631ae318872a",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.22,
+          "sample_std": 2.012759300065417,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 5000,
+          "seed": 3232654776,
+          "context_hash": "6fac631ae318872a",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 8.1904,
+          "sample_std": 2.8247739449378724,
+          "p10": 5.0,
+          "p50": 8.0,
+          "p90": 12.0,
+          "n_iterations": 5000,
+          "seed": 3232654776,
+          "context_hash": "6fac631ae318872a",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": -0.2496,
+          "sample_std": 2.8496490731316935,
+          "p10": -4.0,
+          "p50": 0.0,
+          "p90": 3.0,
+          "n_iterations": 5000,
+          "seed": 3232654776,
+          "context_hash": "6fac631ae318872a",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 1.0
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "empty",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "the-odds-api:betmgm",
+      "statsapi.mlb.com"
+    ],
+    "fields_gathered": [
+      "off_rating",
+      "def_rating",
+      "moneyline",
+      "spread",
+      "total"
+    ],
+    "missing_fields": [
+      "starting_pitcher_stats",
+      "bullpen_state",
+      "park_factor",
+      "weather"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "moneyline_home": -160,
+      "moneyline_away": 135,
+      "spread_home": -1.5,
+      "spread_home_price": 135,
+      "spread_away_price": -165,
+      "over_under": 7.5,
+      "total_over_price": -110,
+      "total_under_price": -110
+    }
+  },
+  "reasoning_downgrade_rationale": "Missing pitcher/park/weather \u2192 aq<0.7.",
+  "reasoning_narrative": "YTD R/G Miami Marlins 4.28/4.48 vs Toronto Blue Jays 4.04/4.15; Poisson default.",
+  "trace_quality": {
+    "aggregate_quality": 0.62
+  }
+}

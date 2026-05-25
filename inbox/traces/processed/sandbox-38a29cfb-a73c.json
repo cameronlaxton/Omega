@@ -1,0 +1,321 @@
+{
+  "trace": {
+    "trace_id": "sandbox-38a29cfb-a73c",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-25T18:20:54.713902+00:00",
+    "kind": "game",
+    "session_id": "sess-20260525-18b5",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "Cleveland Cavaliers",
+      "away_team": "New York Knicks",
+      "league": "NBA",
+      "odds": {
+        "spread_home": 2.5,
+        "spread_home_price": -110.0,
+        "moneyline_home": 118.0,
+        "moneyline_away": -140.0,
+        "over_under": 218.5,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 5000,
+      "allow_baseline": false,
+      "simulation_backend": "markov_state",
+      "home_context": {
+        "off_rating": 117.0,
+        "def_rating": 113.5,
+        "pace": 97.5
+      },
+      "away_context": {
+        "off_rating": 119.5,
+        "def_rating": 112.0,
+        "pace": 96.0
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 1,
+        "blowout_risk": 0.15,
+        "series_state": "NYK leads 3-0"
+      },
+      "seed": 2750366889,
+      "evidence": [
+        {
+          "signal_type": "blowout_risk",
+          "category": "situational",
+          "plane": "game",
+          "value": 0.15,
+          "source": "agent_reasoning",
+          "confidence": 0.5,
+          "window": "season",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        }
+      ]
+    },
+    "result": {
+      "matchup": "New York Knicks @ Cleveland Cavaliers",
+      "league": "NBA",
+      "analyzed_at": "2026-05-25T18:20:54.713949",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 5000,
+        "home_win_prob": 50.8,
+        "away_win_prob": 46.3,
+        "draw_prob": 2.8,
+        "predicted_spread": 0.8,
+        "predicted_total": 226.8,
+        "predicted_home_score": 113.8,
+        "predicted_away_score": 113.0,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "markov_state",
+        "component_version": "markov_state_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Cleveland Cavaliers",
+          "true_prob": 0.5085,
+          "calibrated_prob": 0.5085,
+          "market_implied": 0.5238,
+          "edge_pct": -1.53,
+          "ev_pct": -2.92,
+          "market_odds": -110.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.5085085085085085,
+            "calibrated_prob": 0.5085085085085085,
+            "league": "NBA",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "New York Knicks",
+          "true_prob": 0.4635,
+          "calibrated_prob": 0.4635,
+          "market_implied": 0.5833,
+          "edge_pct": -11.99,
+          "ev_pct": -20.55,
+          "market_odds": -140.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.46346346346346345,
+            "calibrated_prob": 0.46346346346346345,
+            "league": "NBA",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": null,
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "basketball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "markov_state",
+      "component_version": "markov_state_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical_markov",
+          "distribution_params": {
+            "source": "markov_terminal_scores",
+            "base_possessions": 194,
+            "transition_matrix_ids": {
+              "home": "markov_state_v1:NBA:home_score_outcome",
+              "away": "markov_state_v1:NBA:away_score_outcome",
+              "momentum": "markov_state_v1:NBA:momentum_state",
+              "player": "markov_state_v1:NBA:player_stat_allocation"
+            },
+            "transition_modifiers": {
+              "home_momentum_scalar": 0.98
+            }
+          },
+          "params_schema_version": 1,
+          "sample_mean": 113.8342,
+          "sample_std": 10.982254338704793,
+          "p10": 100.0,
+          "p50": 114.0,
+          "p90": 128.0,
+          "n_iterations": 5000,
+          "seed": 2750366889,
+          "context_hash": "99bfe57f9eb0d832",
+          "component_version": "markov_state_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical_markov",
+          "distribution_params": {
+            "source": "markov_terminal_scores",
+            "base_possessions": 194,
+            "transition_matrix_ids": {
+              "home": "markov_state_v1:NBA:home_score_outcome",
+              "away": "markov_state_v1:NBA:away_score_outcome",
+              "momentum": "markov_state_v1:NBA:momentum_state",
+              "player": "markov_state_v1:NBA:player_stat_allocation"
+            },
+            "transition_modifiers": {
+              "home_momentum_scalar": 0.98
+            }
+          },
+          "params_schema_version": 1,
+          "sample_mean": 113.0048,
+          "sample_std": 10.967605798897162,
+          "p10": 99.0,
+          "p50": 113.0,
+          "p90": 127.0,
+          "n_iterations": 5000,
+          "seed": 2750366889,
+          "context_hash": "99bfe57f9eb0d832",
+          "component_version": "markov_state_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical_markov",
+          "distribution_params": {
+            "source": "markov_terminal_scores",
+            "base_possessions": 194,
+            "transition_matrix_ids": {
+              "home": "markov_state_v1:NBA:home_score_outcome",
+              "away": "markov_state_v1:NBA:away_score_outcome",
+              "momentum": "markov_state_v1:NBA:momentum_state",
+              "player": "markov_state_v1:NBA:player_stat_allocation"
+            },
+            "transition_modifiers": {
+              "home_momentum_scalar": 0.98
+            }
+          },
+          "params_schema_version": 1,
+          "sample_mean": 226.839,
+          "sample_std": 15.612465500362202,
+          "p10": 207.0,
+          "p50": 227.0,
+          "p90": 247.0,
+          "n_iterations": 5000,
+          "seed": 2750366889,
+          "context_hash": "99bfe57f9eb0d832",
+          "component_version": "markov_state_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical_markov",
+          "distribution_params": {
+            "source": "markov_terminal_scores",
+            "base_possessions": 194,
+            "transition_matrix_ids": {
+              "home": "markov_state_v1:NBA:home_score_outcome",
+              "away": "markov_state_v1:NBA:away_score_outcome",
+              "momentum": "markov_state_v1:NBA:momentum_state",
+              "player": "markov_state_v1:NBA:player_stat_allocation"
+            },
+            "transition_modifiers": {
+              "home_momentum_scalar": 0.98
+            }
+          },
+          "params_schema_version": 1,
+          "sample_mean": 0.8294,
+          "sample_std": 15.428787886285814,
+          "p10": -19.0,
+          "p50": 1.0,
+          "p90": 21.0,
+          "n_iterations": 5000,
+          "seed": 2750366889,
+          "context_hash": "99bfe57f9eb0d832",
+          "component_version": "markov_state_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 1,
+      "blowout_risk": 0.15,
+      "series_state": "NYK leads 3-0"
+    },
+    "evidence_mode": "markov_transition",
+    "evidence_application": [
+      {
+        "signal_type": "blowout_risk",
+        "target": "markov_transition",
+        "applied": true,
+        "factor": null,
+        "reason": "mapped_to_markov_transition_modifiers",
+        "policy_version": "markov_state_v1",
+        "evidence_mode": "markov_transition"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "the-odds-api:betmgm",
+      "nba.com"
+    ],
+    "fields_gathered": [
+      "off_rating",
+      "def_rating",
+      "pace",
+      "moneyline",
+      "spread",
+      "total"
+    ],
+    "missing_fields": [
+      "injury_report"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "moneyline_home": 118,
+      "moneyline_away": -140
+    }
+  },
+  "reasoning_downgrade_rationale": "Static season ratings; close-out scenario adds variance.",
+  "reasoning_narrative": "ECF G4 in Cleveland. Knicks lead 3-0.",
+  "trace_quality": {
+    "aggregate_quality": 0.68
+  }
+}

@@ -1,0 +1,262 @@
+{
+  "trace": {
+    "trace_id": "sandbox-bd93ee64-d836",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-25T18:20:54.595573+00:00",
+    "kind": "game",
+    "session_id": "sess-20260525-18b5",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "Kansas City Royals",
+      "away_team": "New York Yankees",
+      "league": "MLB",
+      "odds": {
+        "spread_home": 1.5,
+        "spread_home_price": -155.0,
+        "moneyline_home": 105.0,
+        "moneyline_away": -125.0,
+        "over_under": 8.5,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 5000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 3.9056603773584904,
+        "def_rating": 4.377358490566038
+      },
+      "away_context": {
+        "off_rating": 4.7924528301886795,
+        "def_rating": 3.5283018867924527
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 1.0
+      },
+      "seed": 2552561501,
+      "evidence": []
+    },
+    "result": {
+      "matchup": "New York Yankees @ Kansas City Royals",
+      "league": "MLB",
+      "analyzed_at": "2026-05-25T18:20:54.595597",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 5000,
+        "home_win_prob": 47.8,
+        "away_win_prob": 39.0,
+        "draw_prob": 13.2,
+        "predicted_spread": 0.4,
+        "predicted_total": 9.3,
+        "predicted_home_score": 4.9,
+        "predicted_away_score": 4.5,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Kansas City Royals",
+          "true_prob": 0.478,
+          "calibrated_prob": 0.478,
+          "market_implied": 0.6078,
+          "edge_pct": -12.98,
+          "ev_pct": -21.36,
+          "market_odds": -155.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.478,
+            "calibrated_prob": 0.478,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "New York Yankees",
+          "true_prob": 0.39,
+          "calibrated_prob": 0.39,
+          "market_implied": 0.5556,
+          "edge_pct": -16.56,
+          "ev_pct": -29.8,
+          "market_odds": -125.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.39,
+            "calibrated_prob": 0.39,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": null,
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.8604,
+          "sample_std": 2.1988432959172086,
+          "p10": 2.0,
+          "p50": 5.0,
+          "p90": 8.0,
+          "n_iterations": 5000,
+          "seed": 2552561501,
+          "context_hash": "3bc1eb3156282b59",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.484,
+          "sample_std": 2.126251161081431,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 5000,
+          "seed": 2552561501,
+          "context_hash": "3bc1eb3156282b59",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 9.3444,
+          "sample_std": 3.1048009018293916,
+          "p10": 5.0,
+          "p50": 9.0,
+          "p90": 13.0,
+          "n_iterations": 5000,
+          "seed": 2552561501,
+          "context_hash": "3bc1eb3156282b59",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 0.3764,
+          "sample_std": 3.0119633198297864,
+          "p10": -3.0,
+          "p50": 0.0,
+          "p90": 4.0,
+          "n_iterations": 5000,
+          "seed": 2552561501,
+          "context_hash": "3bc1eb3156282b59",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 1.0
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "empty",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "the-odds-api:betmgm",
+      "statsapi.mlb.com"
+    ],
+    "fields_gathered": [
+      "off_rating",
+      "def_rating",
+      "moneyline",
+      "spread",
+      "total"
+    ],
+    "missing_fields": [
+      "starting_pitcher_stats",
+      "bullpen_state",
+      "park_factor",
+      "weather"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "moneyline_home": 105,
+      "moneyline_away": -125,
+      "spread_home": 1.5,
+      "spread_home_price": -155,
+      "spread_away_price": 125,
+      "over_under": 8.5,
+      "total_over_price": -120,
+      "total_under_price": 100
+    }
+  },
+  "reasoning_downgrade_rationale": "Missing pitcher/park/weather \u2192 aq<0.7.",
+  "reasoning_narrative": "YTD R/G New York Yankees 4.79/3.53 vs Kansas City Royals 3.91/4.38; Poisson default.",
+  "trace_quality": {
+    "aggregate_quality": 0.62
+  }
+}

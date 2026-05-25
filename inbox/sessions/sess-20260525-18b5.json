@@ -1,0 +1,15 @@
+{
+  "session_id": "sess-20260525-18b5",
+  "opened_at": "2026-05-25T15:08:00Z",
+  "closed_at": "2026-05-25T18:30:00Z",
+  "model_version": "claude-opus-4-7",
+  "purpose": "NBA + MLB best-bets scan for 2026-05-25; engine-deterministic analysis on 13 MLB games + 1 NBA ECF G4 + 7 NBA props.",
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {
+    "traces_emitted": 21,
+    "bets_recorded": 0,
+    "webfetch_failures": 0
+  },
+  "agent_notes": "Preflight: recurring Pattern C mount corruption hit 6 files (cowork_preflight.py, evidence.py, service.py, run_champion_challenger.py, test_engine.py, test_mcp_tools.py); --repair-from-git did NOT actually repair (silent no-op); restored via manual `git show HEAD | cp`. CRITICAL BUG: _sim_baseball in omega/core/simulation/engine.py:648-649 has inverted def_rating math — formula `home_off * (league_avg_rpg / away_def)` yields larger multiplier when def_rating (runs allowed) is LOWER, i.e., elite pitching staffs increase opposing runs. Effect: all 13 MLB game-line edges this session are inverted, producing absurd underdog edges (Rockies +260 graded as +26% edge at Dodgers). MLB bet cards SUPPRESSED. NBA props all show Tier A 5-unit recs despite aq=0.60 (3-game playoff samples) — downgrade discipline enforced manually. Bug: MLB simulator emits draw_prob ~12-13% even though baseball archetype declares supports_draw=False; home_win+away_win+draw=100 means win probs are deflated. Bug: SessionSidecar pydantic rejects 'outcomes' key in sess-20260524-nba1.json. Bug: SQLite WAL fails on FUSE mount (can't manage -wal/-shm); workaround = copy DB to /tmp."
+}

@@ -1,0 +1,270 @@
+{
+  "trace": {
+    "trace_id": "sandbox-495dbc04-5877",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-25T18:20:54.615044+00:00",
+    "kind": "game",
+    "session_id": "sess-20260525-18b5",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "New York Mets",
+      "away_team": "Cincinnati Reds",
+      "league": "MLB",
+      "odds": {
+        "spread_home": -1.5,
+        "spread_home_price": 135.0,
+        "moneyline_home": -160.0,
+        "moneyline_away": 135.0,
+        "over_under": 7.5,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 5000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 3.8867924528301887,
+        "def_rating": 4.283018867924528
+      },
+      "away_context": {
+        "off_rating": 4.403846153846154,
+        "def_rating": 5.0576923076923075
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 1.0
+      },
+      "seed": 3170487620,
+      "evidence": []
+    },
+    "result": {
+      "matchup": "Cincinnati Reds @ New York Mets",
+      "league": "MLB",
+      "analyzed_at": "2026-05-25T18:20:54.615063",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 5000,
+        "home_win_prob": 31.8,
+        "away_win_prob": 54.5,
+        "draw_prob": 13.7,
+        "predicted_spread": -0.8,
+        "predicted_total": 7.7,
+        "predicted_home_score": 3.4,
+        "predicted_away_score": 4.2,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "New York Mets",
+          "true_prob": 0.318,
+          "calibrated_prob": 0.318,
+          "market_implied": 0.4255,
+          "edge_pct": -10.75,
+          "ev_pct": -25.27,
+          "market_odds": 135.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.318,
+            "calibrated_prob": 0.318,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Cincinnati Reds",
+          "true_prob": 0.545,
+          "calibrated_prob": 0.545,
+          "market_implied": 0.4255,
+          "edge_pct": 11.95,
+          "ev_pct": 28.08,
+          "market_odds": 135.0,
+          "confidence_tier": "A",
+          "recommended_units": 5.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.545,
+            "calibrated_prob": 0.545,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": {
+        "selection": "Cincinnati Reds away",
+        "odds": 135.0,
+        "edge_pct": 11.95,
+        "ev_pct": 28.08,
+        "confidence_tier": "A",
+        "recommended_units": 5.0,
+        "kelly_fraction": 0.104
+      },
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 3.4348,
+          "sample_std": 1.8607925623239374,
+          "p10": 1.0,
+          "p50": 3.0,
+          "p90": 6.0,
+          "n_iterations": 5000,
+          "seed": 3170487620,
+          "context_hash": "f9af93d82929e72b",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.2182,
+          "sample_std": 2.0622775661874186,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 5000,
+          "seed": 3170487620,
+          "context_hash": "f9af93d82929e72b",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 7.653,
+          "sample_std": 2.802247490854391,
+          "p10": 4.0,
+          "p50": 8.0,
+          "p90": 11.0,
+          "n_iterations": 5000,
+          "seed": 3170487620,
+          "context_hash": "f9af93d82929e72b",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": -0.7834,
+          "sample_std": 2.7529047277376026,
+          "p10": -4.0,
+          "p50": -1.0,
+          "p90": 3.0,
+          "n_iterations": 5000,
+          "seed": 3170487620,
+          "context_hash": "f9af93d82929e72b",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 1.0
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "empty",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "the-odds-api:betmgm",
+      "statsapi.mlb.com"
+    ],
+    "fields_gathered": [
+      "off_rating",
+      "def_rating",
+      "moneyline",
+      "spread",
+      "total"
+    ],
+    "missing_fields": [
+      "starting_pitcher_stats",
+      "bullpen_state",
+      "park_factor",
+      "weather"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "moneyline_home": -160,
+      "moneyline_away": 135,
+      "spread_home": -1.5,
+      "spread_home_price": 135,
+      "spread_away_price": -165,
+      "over_under": 7.5,
+      "total_over_price": -110,
+      "total_under_price": -110
+    }
+  },
+  "reasoning_downgrade_rationale": "Missing pitcher/park/weather \u2192 aq<0.7.",
+  "reasoning_narrative": "YTD R/G Cincinnati Reds 4.40/5.06 vs New York Mets 3.89/4.28; Poisson default.",
+  "trace_quality": {
+    "aggregate_quality": 0.62
+  }
+}
