@@ -62,6 +62,7 @@ def test_analyze_game_tool_delegates_to_core_service():
             "seed": 42,
             "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
             "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+            "game_context": {"is_playoff": False, "rest_days": 2},
             "odds": {"moneyline_home": -160, "moneyline_away": 140},
         },
         bankroll=2500.0,

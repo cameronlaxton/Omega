@@ -127,7 +127,7 @@ class EvidenceSignal(BaseModel):
                 f"disagrees with registry ({spec.plane!r}).",
                 stacklevel=3,
             )
-        if spec.requires_stat_key and not self.stat_key:
+        if spec.requires_stat_key and self.plane == "player" and not self.stat_key:
             warnings.warn(
                 f"EvidenceSignal {self.signal_type!r} requires a stat_key but none was supplied.",
                 stacklevel=3,
@@ -290,7 +290,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
         _spec(
             "usage_role_change",
             "situational",
-            "player",
+            "both",
             applies_to_sports=frozenset({"basketball", "hockey", "american_football", "soccer"}),
             value_kind="categorical",
             description="Starting status / minutes restriction / new lineup role.",
@@ -324,22 +324,28 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
         _spec(
             "def_matchup_weak",
             "matchup",
-            "player",
+            "both",
             applies_to_sports=frozenset(
                 {"basketball", "american_football", "hockey", "soccer"}
             ),
             requires_stat_key=True,
-            description="Opponent is a weak defender of this stat.",
+            description=(
+                "Opponent is a weak defender of this stat for props, or weak against "
+                "the directional team offense for Markov game analysis."
+            ),
         ),
         _spec(
             "def_matchup_strong",
             "matchup",
-            "player",
+            "both",
             applies_to_sports=frozenset(
                 {"basketball", "american_football", "hockey", "soccer"}
             ),
             requires_stat_key=True,
-            description="Opponent is a strong defender of this stat.",
+            description=(
+                "Opponent is a strong defender of this stat for props, or strong against "
+                "the directional team offense for Markov game analysis."
+            ),
         ),
         # --- Baseball ---
         _spec(

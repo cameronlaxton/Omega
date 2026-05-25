@@ -36,7 +36,10 @@ Markov backend evidence vocabulary:
     usage_role_change   — key player role is restricted or expanded (-7% team rate; set direction)
     blowout_risk        — high probability of non-competitive game (-2% momentum variance)
 - Call omega_markov_evidence_guide for the full table with modifier keys and cumulative cap rules.
-- Shadow-mode note: evidence modifiers are recorded but not yet applied to live predictions until the champion/challenger promotion gate clears.
+- Evidence routing note: handler-based evidence follows `AdjustmentPolicy.mode`
+  (`shadow` records only; `live` applies). Markov evidence uses backend-specific
+  transition modifiers instead of handler `off_rating` scaling; do not emit the
+  same logical signal on both game and player planes.
 
 Downgrade discipline:
 - No Bet Card if any critical input is missing.

@@ -29,10 +29,13 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from omega.core.contracts.evidence import EvidenceSignal
-from omega.core.simulation.engine import MarkovGameSimulationBackend, OmegaSimulationEngine
-from omega.core.simulation.evidence_to_modifier import signals_to_transition_modifiers
-from omega.strategy.distribution_metrics import crps_from_distribution_row
+from omega.core.contracts.evidence import EvidenceSignal  # noqa: E402
+from omega.core.simulation.engine import (  # noqa: E402
+    MarkovGameSimulationBackend,
+    OmegaSimulationEngine,
+)
+from omega.core.simulation.evidence_to_modifier import signals_to_transition_modifiers  # noqa: E402
+from omega.strategy.distribution_metrics import crps_from_distribution_row  # noqa: E402
 
 _FIXTURES_PATH = Path(__file__).parent / "fixtures" / "baseline_games.json"
 _MARKOV_ENGINE = OmegaSimulationEngine(game_backend=MarkovGameSimulationBackend())
@@ -46,6 +49,10 @@ def _load_fixtures(league_filter: str | None) -> list[dict]:
     return games
 
 
+def _trace_league(trace: dict) -> str:
+    return str(trace.get("league") or "").upper()
+
+
 def _load_graded_traces(league_filter: str | None) -> list[dict]:
     try:
         from omega.trace.store import TraceStore
@@ -53,7 +60,8 @@ def _load_graded_traces(league_filter: str | None) -> list[dict]:
         store = TraceStore()
         traces = store.query_traces(has_outcome=True, limit=200)
         if league_filter:
-            traces = [t for t in traces if t.get("league", "").upper() == league_filter.upper()]
+            league_upper = league_filter.upper()
+            traces = [t for t in traces if _trace_league(t) == league_upper]
         return traces
     except Exception as exc:
         print(f"[warn] TraceStore unavailable ({exc}); using bundled fixtures")
@@ -148,14 +156,25 @@ def main() -> None:
     # Source games: prefer graded TraceStore records; fall back to bundled fixtures
     games: list[dict] = []
     trace_games = _load_graded_traces(args.league)
+    trace_skipped = 0
     for t in trace_games:
         g = _trace_to_game(t)
         if g:
             games.append(g)
+        else:
+            trace_skipped += 1
 
     if games:
-        print(f"[info] Using {len(games)} games from TraceStore")
+        print(
+            f"[info] Using {len(games)} games from TraceStore "
+            f"({len(trace_games)} loaded, {trace_skipped} skipped during conversion)"
+        )
     else:
+        if trace_games:
+            print(
+                "[warn] HARD_FALLBACK: TraceStore rows were found but none converted "
+                "to champion/challenger games; using bundled fixtures."
+            )
         games = _load_fixtures(args.league)
         print(f"[info] Using {len(games)} games from bundled fixtures")
 
@@ -247,7 +266,7 @@ def main() -> None:
         )
 
     print("\nDelta < 0 --> Challenger is better --> eligible for evidence policy promotion")
-    print(f"Phase 3b limitation: fast_score excluded (fast backend ignores transition_modifiers)")
+    print("Phase 3b limitation: fast_score excluded (fast backend ignores transition_modifiers)")
 
     if args.json:
         out = {

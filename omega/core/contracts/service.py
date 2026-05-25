@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -48,12 +49,16 @@ from omega.core.simulation.engine import (
     select_distribution,
 )
 from omega.core.simulation.evidence_handlers import (
+    AdjustmentRecord,
     PlaneAdjustment,
     compute_game_adjustment,
     compute_player_adjustment,
     resolve_evidence_mode,
 )
-from omega.core.simulation.evidence_to_modifier import signals_to_transition_modifiers
+from omega.core.simulation.evidence_to_modifier import (
+    MAPPED_SIGNAL_TYPES,
+    signals_to_transition_modifiers,
+)
 
 UTC = timezone.utc
 
@@ -71,6 +76,21 @@ _TRACE_HASH_EXCLUDE = {
     "closing_line",
     "closing_lines",
 }
+
+
+@dataclass(frozen=True)
+class EvidenceExecutionPlan:
+    """Effective evidence path for one analysis.
+
+    The plan keeps simulation behavior and trace provenance together. Handler
+    adjustments, Markov modifiers, and per-signal application records are derived
+    once so canonical traces cannot claim a different path than the engine used.
+    """
+
+    adjustment: PlaneAdjustment | None = None
+    transition_modifiers: dict[str, float] | None = None
+    evidence_mode: str = "shadow"
+    evidence_application: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _sanitize_for_trace_hash(value: Any) -> Any:
@@ -197,25 +217,25 @@ def analyze(
     trace_id = _new_trace_id(typed_req)
     ran_at = datetime.now(UTC).isoformat()
 
-    # Structured-evidence adjustment — evaluated once here, then passed into the
-    # analyzer. The same PlaneAdjustment object supplies both the applied effect
-    # (inside the analyzer) and the per-signal applications recorded on the
-    # trace, so there is exactly one evaluation per analysis.
-    evidence_adjustment: PlaneAdjustment | None = None
+    # Structured evidence is planned once here, then passed into the analyzer.
+    # The same plan supplies both the applied effect and the per-signal
+    # applications recorded on the trace, so there is exactly one evaluation per
+    # analysis.
+    evidence_plan: EvidenceExecutionPlan | None = None
     if isinstance(typed_req, PlayerPropRequest):
-        evidence_adjustment = _player_adjustment_for(typed_req)
+        evidence_plan = _player_evidence_plan_for(typed_req)
     elif isinstance(typed_req, GameAnalysisRequest):
-        evidence_adjustment = _game_adjustment_for(typed_req)
+        evidence_plan = _game_evidence_plan_for(typed_req)
 
     result: GameAnalysisResponse | PlayerPropResponse | SlateAnalysisResponse
     if isinstance(typed_req, GameAnalysisRequest):
-        result = analyze_game(
-            typed_req, bankroll=bankroll, evidence_adjustment=evidence_adjustment
-        )
+        result = analyze_game(typed_req, bankroll=bankroll, evidence_plan=evidence_plan)
         kind = "game"
     elif isinstance(typed_req, PlayerPropRequest):
         result = analyze_player_prop(
-            typed_req, bankroll=bankroll, evidence_adjustment=evidence_adjustment
+            typed_req,
+            bankroll=bankroll,
+            evidence_adjustment=evidence_plan.adjustment if evidence_plan else None,
         )
         kind = "prop"
     elif isinstance(typed_req, SlateAnalysisRequest):
@@ -238,9 +258,9 @@ def analyze(
     # trace store can explode it into the evidence_signals table (V9).
     evidence_mode = "shadow"
     evidence_application: list[dict[str, Any]] = []
-    if evidence_adjustment is not None:
-        evidence_mode = evidence_adjustment.evidence_mode
-        evidence_application = evidence_adjustment.applications()
+    if evidence_plan is not None:
+        evidence_mode = evidence_plan.evidence_mode
+        evidence_application = evidence_plan.evidence_application
 
     # Assemble trace_quality last — pure audit metadata, never influences math above.
     result_downgrades = _result_downgrades(result)
@@ -382,42 +402,204 @@ def _load_adjustment_policy() -> AdjustmentPolicy | None:
         return None
 
 
+def _evidence_identity(signal: Any) -> tuple[tuple[Any, ...] | None, tuple[Any, ...]]:
+    """Return full and fallback identities for cross-plane deduplication."""
+    signal_type = getattr(signal, "signal_type", None)
+    direction = getattr(signal, "direction", None) or "neutral"
+    source = getattr(signal, "source", None)
+    window = getattr(signal, "window", None)
+    stat_key = getattr(signal, "stat_key", None)
+    fallback = (signal_type, direction)
+    full = None
+    if signal_type and source and window and stat_key:
+        full = (signal_type, source, window, direction, stat_key)
+    return full, fallback
+
+
+def _suppressed_player_signal_indices(evidence: list[Any]) -> set[int]:
+    """Identify player-plane duplicates suppressed by game-plane evidence.
+
+    Game-plane execution has precedence. Suppressed player signals remain in the
+    request snapshot for audit, but they cannot affect prediction math.
+    """
+    game_full: set[tuple[Any, ...]] = set()
+    game_fallback: set[tuple[Any, ...]] = set()
+    for sig in evidence:
+        if getattr(sig, "plane", None) != "game":
+            continue
+        full, fallback = _evidence_identity(sig)
+        if full is not None:
+            game_full.add(full)
+        game_fallback.add(fallback)
+
+    suppressed: set[int] = set()
+    for idx, sig in enumerate(evidence):
+        if getattr(sig, "plane", None) != "player":
+            continue
+        full, fallback = _evidence_identity(sig)
+        if (full is not None and full in game_full) or fallback in game_fallback:
+            suppressed.add(idx)
+    return suppressed
+
+
+def _signal_with_suppressed_player_plane(signal: Any) -> Any:
+    """Make a suppressed player signal skip player handlers without losing order."""
+    if hasattr(signal, "model_copy"):
+        return signal.model_copy(update={"plane": "game"})
+    return signal
+
+
+def _suppression_record(signal: Any, evidence_mode: str) -> AdjustmentRecord:
+    return AdjustmentRecord(
+        signal_type=str(getattr(signal, "signal_type", "")),
+        target="skip",
+        factor=1.0,
+        applied=False,
+        reason="suppressed_by_game_plane_dedup",
+        policy_version="evidence_dedup_v1",
+        evidence_mode=evidence_mode,
+    )
+
+
+def _with_suppression_records(
+    adjustment: PlaneAdjustment,
+    evidence: list[Any],
+    suppressed_indices: set[int],
+) -> PlaneAdjustment:
+    if not suppressed_indices:
+        return adjustment
+    records = list(adjustment.records)
+    for idx in suppressed_indices:
+        if idx < len(records):
+            records[idx] = _suppression_record(evidence[idx], adjustment.evidence_mode)
+    return PlaneAdjustment(
+        mean_factor=adjustment.mean_factor,
+        std_factor=adjustment.std_factor,
+        home_factor=adjustment.home_factor,
+        away_factor=adjustment.away_factor,
+        records=records,
+        evidence_mode=adjustment.evidence_mode,
+    )
+
+
+def _player_evidence_plan_for(request: PlayerPropRequest) -> EvidenceExecutionPlan:
+    evidence = list(getattr(request, "evidence", None) or [])
+    if not evidence:
+        return EvidenceExecutionPlan()
+    policy = _load_adjustment_policy()
+    if policy is None:
+        return EvidenceExecutionPlan()
+
+    evidence_mode = resolve_evidence_mode(policy)
+    suppressed = _suppressed_player_signal_indices(evidence)
+    handler_evidence = [
+        _signal_with_suppressed_player_plane(sig) if idx in suppressed else sig
+        for idx, sig in enumerate(evidence)
+    ]
+    adjustment = compute_player_adjustment(
+        player_context=request.player_context or {},
+        evidence=handler_evidence,
+        league=request.league,
+        prop_type=request.prop_type,
+        policy=policy,
+        evidence_mode=evidence_mode,
+    )
+    adjustment = _with_suppression_records(adjustment, evidence, suppressed)
+    return EvidenceExecutionPlan(
+        adjustment=adjustment,
+        evidence_mode=adjustment.evidence_mode,
+        evidence_application=adjustment.applications(),
+    )
+
+
+def _markov_evidence_applications(
+    evidence: list[Any],
+    active_indices: set[int],
+    suppressed_indices: set[int],
+) -> list[dict[str, Any]]:
+    applications: list[dict[str, Any]] = []
+    for idx, sig in enumerate(evidence):
+        signal_type = str(getattr(sig, "signal_type", ""))
+        if idx in suppressed_indices:
+            applications.append(_suppression_record(sig, "markov_transition").as_application())
+        elif idx in active_indices and signal_type in MAPPED_SIGNAL_TYPES:
+            applications.append(
+                {
+                    "signal_type": signal_type,
+                    "target": "markov_transition",
+                    "applied": True,
+                    "factor": None,
+                    "reason": "mapped_to_markov_transition_modifiers",
+                    "policy_version": "markov_state_v1",
+                    "evidence_mode": "markov_transition",
+                }
+            )
+        else:
+            applications.append(
+                {
+                    "signal_type": signal_type,
+                    "target": "skip",
+                    "applied": False,
+                    "factor": 1.0,
+                    "reason": "no Markov transition mapping for signal_type",
+                    "policy_version": "markov_state_v1",
+                    "evidence_mode": "markov_transition",
+                }
+            )
+    return applications
+
+
+def _game_evidence_plan_for(request: GameAnalysisRequest) -> EvidenceExecutionPlan:
+    evidence = list(getattr(request, "evidence", None) or [])
+    if not evidence:
+        return EvidenceExecutionPlan()
+
+    suppressed = _suppressed_player_signal_indices(evidence)
+    if request.simulation_backend == "markov_state":
+        active_indices = {idx for idx in range(len(evidence)) if idx not in suppressed}
+        active_evidence = [sig for idx, sig in enumerate(evidence) if idx in active_indices]
+        transition_modifiers = signals_to_transition_modifiers(
+            active_evidence, home_team=request.home_team
+        )
+        applications = _markov_evidence_applications(evidence, active_indices, suppressed)
+        return EvidenceExecutionPlan(
+            adjustment=None,
+            transition_modifiers=transition_modifiers or None,
+            evidence_mode="markov_transition",
+            evidence_application=applications,
+        )
+
+    policy = _load_adjustment_policy()
+    if policy is None:
+        return EvidenceExecutionPlan()
+    evidence_mode = resolve_evidence_mode(policy)
+    adjustment = compute_game_adjustment(
+        evidence=evidence,
+        league=request.league,
+        policy=policy,
+        evidence_mode=evidence_mode,
+    )
+    adjustment = _with_suppression_records(adjustment, evidence, suppressed)
+    return EvidenceExecutionPlan(
+        adjustment=adjustment,
+        evidence_mode=adjustment.evidence_mode,
+        evidence_application=adjustment.applications(),
+    )
+
+
 def _player_adjustment_for(request: PlayerPropRequest) -> PlaneAdjustment | None:
     """Compute the structured-evidence adjustment for a player-prop request.
 
     Pure given (request, production policy). Returns None when the request
-    carries no evidence or no policy is available. The same function is used by
-    ``analyze()`` (to record per-signal applications in the trace) and by
-    ``analyze_player_prop()`` (to apply them) — one deterministic source.
+    carries no evidence or no policy is available. Canonical ``analyze()`` uses
+    the richer evidence plan so suppression records and behavior stay aligned.
     """
-    if not getattr(request, "evidence", None):
-        return None
-    policy = _load_adjustment_policy()
-    if policy is None:
-        return None
-    return compute_player_adjustment(
-        player_context=request.player_context or {},
-        evidence=request.evidence,
-        league=request.league,
-        prop_type=request.prop_type,
-        policy=policy,
-        evidence_mode=resolve_evidence_mode(policy),
-    )
+    return _player_evidence_plan_for(request).adjustment
 
 
 def _game_adjustment_for(request: GameAnalysisRequest) -> PlaneAdjustment | None:
-    """Compute the structured-evidence adjustment for a game request."""
-    if not getattr(request, "evidence", None):
-        return None
-    policy = _load_adjustment_policy()
-    if policy is None:
-        return None
-    return compute_game_adjustment(
-        evidence=request.evidence,
-        league=request.league,
-        policy=policy,
-        evidence_mode=resolve_evidence_mode(policy),
-    )
+    """Compute handler evidence for direct fast-score callers."""
+    return _game_evidence_plan_for(request).adjustment
 
 
 def _apply_game_evidence(
@@ -569,22 +751,18 @@ def analyze_game(
     bankroll: float = 1000.0,
     *,
     evidence_adjustment: PlaneAdjustment | None = None,
+    evidence_plan: EvidenceExecutionPlan | None = None,
 ) -> GameAnalysisResponse:
     """Analyze a single game matchup. Never raises -- returns structured response.
 
-    ``evidence_adjustment`` is the precomputed game-plane structured-evidence
-    adjustment; when omitted it is derived from ``request.evidence``. In shadow
-    mode the team contexts are unchanged.
+    ``evidence_plan`` is the preferred backend-aware path for structured
+    evidence. ``evidence_adjustment`` remains accepted for direct fast-score
+    callers, but Markov always ignores handler adjustments and uses transition
+    modifiers from the plan.
     """
     now = datetime.now().isoformat()
     matchup = f"{request.away_team} @ {request.home_team}"
     archetype_name = get_archetype_name(request.league)
-
-    if evidence_adjustment is None:
-        evidence_adjustment = _game_adjustment_for(request)
-    home_ctx, away_ctx = _apply_game_evidence(
-        request.home_context, request.away_context, evidence_adjustment
-    )
 
     # Extract spread value so the engine can compute coverage probabilities.
     # Done before the engine call; odds may be absent.
@@ -608,17 +786,26 @@ def analyze_game(
         )
 
     use_markov = request.simulation_backend == "markov_state"
-    transition_modifiers: dict | None = None
-    if use_markov and request.evidence:
-        transition_modifiers = signals_to_transition_modifiers(
-            request.evidence, home_team=request.home_team
+    if evidence_plan is None:
+        evidence_plan = _game_evidence_plan_for(request)
+    effective_adjustment = None if use_markov else (
+        evidence_plan.adjustment if evidence_plan else evidence_adjustment
+    )
+    if not use_markov and effective_adjustment is None:
+        effective_adjustment = evidence_adjustment
+    home_ctx, away_ctx = _apply_game_evidence(
+        request.home_context, request.away_context, effective_adjustment
+    )
+
+    transition_modifiers: dict | None = (
+        evidence_plan.transition_modifiers if use_markov and evidence_plan else None
+    )
+    if transition_modifiers:
+        logger.debug(
+            "Markov modifiers from %d evidence signals: %s",
+            len(request.evidence),
+            transition_modifiers,
         )
-        if transition_modifiers:
-            logger.debug(
-                "Markov modifiers from %d evidence signals: %s",
-                len(request.evidence),
-                transition_modifiers,
-            )
 
     try:
         engine = (
@@ -827,6 +1014,13 @@ _B2B_FATIGUE: dict[str, float] = {"NBA": 0.94, "NHL": 0.95}
 _MLB_PARK_FACTOR_STATS = frozenset({"hr", "total_bases", "rbis"})
 
 
+def _coerce_optional_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _apply_game_context(
     player_context: dict[str, Any],
     game_context: dict[str, Any] | None,
@@ -863,21 +1057,32 @@ def _apply_game_context(
     # B2B fatigue: rest_days=0 means the team played the previous night.
     # Only applied for sports with consecutive-night schedules (NBA, NHL).
     _rest_days = game_context.get("rest_days")
-    if _rest_days is not None and int(_rest_days) == 0 and league_uc in _B2B_FATIGUE:
+    rest_days = _coerce_optional_float(_rest_days)
+    if rest_days is not None and int(rest_days) == 0 and league_uc in _B2B_FATIGUE:
         factor *= _B2B_FATIGUE[league_uc]
 
     # Pace scales counting stats proportionally (NBA, NHL, soccer).
     if (paf := game_context.get("pace_adjustment_factor")) is not None:
-        factor *= float(paf)
+        pace_factor = _coerce_optional_float(paf)
+        if pace_factor is not None:
+            factor *= pace_factor
 
     # MLB park factor boosts/suppresses power stats in hitter/pitcher-friendly parks.
     if league_uc == "MLB" and prop_type in _MLB_PARK_FACTOR_STATS:
         if (park := game_context.get("park_factor")) is not None:
-            factor *= float(park)
+            park_factor = _coerce_optional_float(park)
+            if park_factor is not None:
+                factor *= park_factor
 
-    ctx[mean_key] = ctx[mean_key] * factor
+    mean_value = _coerce_optional_float(ctx[mean_key])
+    if mean_value is None:
+        return ctx
+
+    ctx[mean_key] = mean_value * factor
     if std_key in ctx:
-        ctx[std_key] = ctx[std_key] * factor  # preserve coefficient of variation
+        std_value = _coerce_optional_float(ctx[std_key])
+        if std_value is not None:
+            ctx[std_key] = std_value * factor  # preserve coefficient of variation
     ctx["_context_factor_applied"] = round(factor, 4)
 
     # Structured evidence factor — applied after the legacy game_context factor.

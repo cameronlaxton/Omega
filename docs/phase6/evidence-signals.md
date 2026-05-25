@@ -43,6 +43,12 @@ deterministically. Each `signal_type` maps to a pure handler that produces a
 signals; `_apply_game_evidence()` is the game-plane twin that scales team
 `off_rating`. Both share one handler registry and one policy artifact.
 
+Markov game analysis is backend-specific: it consumes mapped evidence through
+`transition_modifiers` and does not also apply handler-based `off_rating`
+scaling. When matching game-plane and player-plane signals appear in one
+request, game-plane execution wins and the player-plane duplicate is persisted
+as `applied=false` with `suppressed_by_game_plane_dedup`.
+
 **Shadow mode** (the default) computes and records every adjustment in the trace
 but does not apply it to the live prediction. The seed policy `adj_v1_seed`
 transcribes the legacy hardcoded factors and is shadow — so Phases A and B are

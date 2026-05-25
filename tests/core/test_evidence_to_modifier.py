@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from omega.core.contracts.evidence import SIGNAL_REGISTRY, EvidenceSignal
 from omega.core.simulation.evidence_to_modifier import (
     MAPPED_SIGNAL_TYPES,
     signals_to_transition_modifiers,
@@ -12,16 +13,16 @@ from omega.core.simulation.evidence_to_modifier import (
 
 def _sig(signal_type: str, direction: str | None = None):
     """Minimal EvidenceSignal-compatible object for testing."""
-    from omega.core.contracts.evidence import EvidenceSignal
+    spec = SIGNAL_REGISTRY[signal_type]
 
     return EvidenceSignal(
         signal_type=signal_type,
-        category="situational",
+        category=spec.category,
         plane="game",
         value=True,
         source="test",
         confidence=0.75,
-        window="last_3",
+        window=spec.default_window,
         direction=direction,
     )
 

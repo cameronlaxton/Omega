@@ -1,0 +1,31 @@
+* text=auto
+
+# Keep source and project text files LF-normalized in the repository and
+# working tree so Windows autocrlf does not create noisy CRLF warnings.
+*.py text eol=lf
+*.pyi text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sql text eol=lf
+*.csv text eol=lf
+*.tsv text eol=lf
+
+# Windows command scripts should remain CRLF when present.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary artifacts.
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.zip binary

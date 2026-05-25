@@ -4,6 +4,8 @@ Tests for Omega core runtime: schemas, simulation, betting, config.
 Tests the deterministic core — no network, no LLM.
 """
 
+_GAME_CONTEXT = {"is_playoff": False, "rest_days": 2}
+
 
 class TestModuleImports:
     """Verify core modules import without error."""
@@ -50,6 +52,7 @@ class TestContractSchemas:
                 over_under=220.5,
             ),
             n_iterations=1000,
+            game_context=_GAME_CONTEXT,
         )
         assert req.home_team == "Boston Celtics"
         assert req.odds.moneyline_home == -150
@@ -289,6 +292,7 @@ class TestCalibration:
             seed=42,
             home_context={"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
             away_context={"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+            game_context=_GAME_CONTEXT,
             odds=OddsInput(
                 markets=[
                     MarketQuote(
@@ -325,6 +329,7 @@ class TestCalibration:
                         "away_team": "Boston Celtics",
                         "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
                         "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+                        "game_context": _GAME_CONTEXT,
                         "odds": {
                             "markets": [
                                 {
@@ -362,6 +367,7 @@ class TestCalibration:
                     "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
                     "n_iterations": 100,
                     "seed": 123,
+                    "game_context": _GAME_CONTEXT,
                 }
             ],
         )

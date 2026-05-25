@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+from omega.core.contracts.evidence import EvidenceSignal
 from omega.core.contracts.schemas import (
     BetSlip,
     EdgeDetail,
@@ -22,7 +23,9 @@ from omega.core.contracts.schemas import (
 )
 from omega.core.contracts.service import (
     _apply_game_context,
+    _game_evidence_plan_for,
     _pick_best_bet,
+    _player_evidence_plan_for,
     _resolve_game_market_odds,
     _stable_input_hash,
     analyze,
@@ -51,6 +54,8 @@ def _edge(side="home", team="Lakers", edge_pct=8.0, ev_pct=5.0, tier="A", odds=-
 
 _NBA_HOME_CTX = {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0}
 _NBA_AWAY_CTX = {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0}
+_GAME_CONTEXT = {"is_playoff": False, "rest_days": 2}
+_B2B_GAME_CONTEXT = {"is_playoff": False, "rest_days": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +129,7 @@ class TestAnalyzeGame:
             seed=42,
             home_context=_NBA_HOME_CTX,
             away_context=_NBA_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_game(req)
         assert resp.status == "success"
@@ -140,6 +146,7 @@ class TestAnalyzeGame:
             seed=42,
             home_context=_NBA_HOME_CTX,
             away_context=_NBA_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_game(req)
         assert resp.best_bet is None
@@ -157,6 +164,7 @@ class TestAnalyzeGame:
             seed=42,
             home_context=_NBA_HOME_CTX,
             away_context=_NBA_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
             odds=OddsInput(moneyline_home=300),
         )
         resp = analyze_game(req)
@@ -174,6 +182,7 @@ class TestAnalyzeGame:
             seed=42,
             home_context=_NBA_HOME_CTX,
             away_context=_NBA_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
             odds=OddsInput(moneyline_home=-150, moneyline_away=130),
         )
         resp = analyze_game(req)
@@ -186,6 +195,7 @@ class TestAnalyzeGame:
             away_team="Team B",
             league="NBA",
             n_iterations=100,
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_game(req)
         assert resp.status == "skipped"
@@ -199,6 +209,7 @@ class TestAnalyzeGame:
             league="NBA",
             n_iterations=100,
             allow_baseline=True,
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_game(req)
         assert resp.status == "success"
@@ -251,6 +262,7 @@ class TestAnalyzeGame:
             away_team="",
             league="NBA",
             n_iterations=100,
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_game(req)
         assert resp.status in ("success", "skipped", "error")
@@ -264,6 +276,7 @@ class TestAnalyzeGame:
             seed=42,
             home_context=_NBA_HOME_CTX,
             away_context=_NBA_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_game(req)
         assert resp.matchup == "Indiana Pacers @ Boston Celtics"
@@ -281,6 +294,7 @@ class TestAnalyzeTraceEnvelope:
                 "seed": 42,
                 "home_context": _NBA_HOME_CTX,
                 "away_context": _NBA_AWAY_CTX,
+                "game_context": _GAME_CONTEXT,
                 "odds": {"moneyline_home": -150, "moneyline_away": 130},
             },
             session_id="sess-20260518-core",
@@ -306,6 +320,7 @@ class TestAnalyzeTraceEnvelope:
             seed=42,
             home_context=_NBA_HOME_CTX,
             away_context=_NBA_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
         )
 
         with pytest.raises(ValueError):
@@ -321,6 +336,7 @@ class TestAnalyzeTraceEnvelope:
                 "league": "NBA",
                 "n_iterations": 100,
                 "allow_baseline": True,
+                "game_context": _GAME_CONTEXT,
             },
             session_id="sess-baseline",
             bankroll=1000.0,
@@ -329,6 +345,121 @@ class TestAnalyzeTraceEnvelope:
         assert trace["result"]["context_source"] == "league_default"
         assert trace["trace_quality"]["calibration_eligible"] is False
         assert "baseline_default_context" in trace["trace_quality"]["calibration_exclusion_reasons"]
+
+    def test_markov_live_evidence_uses_transition_path_only(self, monkeypatch):
+        monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "live")
+        signal = EvidenceSignal(
+            signal_type="b2b_fatigue",
+            category="situational",
+            plane="game",
+            value=True,
+            source="agent_reasoning",
+            confidence=0.8,
+            window="matchup",
+            direction="home",
+        )
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=100,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+            game_context={"is_playoff": True, "rest_days": 0},
+            simulation_backend="markov_state",
+            evidence=[signal],
+        )
+
+        plan = _game_evidence_plan_for(req)
+        trace = analyze(req, session_id="sess-markov-evidence", bankroll=1000.0)
+
+        assert plan.adjustment is None
+        assert plan.transition_modifiers == {"home_score_rate_scalar": pytest.approx(0.94)}
+        app = trace["evidence_application"][0]
+        assert app["target"] == "markov_transition"
+        assert app["applied"] is True
+        assert app["reason"] == "mapped_to_markov_transition_modifiers"
+        params = trace["result"]["simulation_distributions"][0]["distribution_params"]
+        assert params["transition_modifiers"]["home_score_rate_scalar"] == pytest.approx(0.94)
+
+    def test_markov_dual_plane_duplicate_suppresses_player_plane(self, monkeypatch):
+        monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "live")
+        game_signal = EvidenceSignal(
+            signal_type="b2b_fatigue",
+            category="situational",
+            plane="game",
+            value=True,
+            source="agent_reasoning",
+            confidence=0.8,
+            window="matchup",
+            direction="home",
+        )
+        player_signal = game_signal.model_copy(update={"plane": "player"})
+        req = GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=100,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+            game_context={"is_playoff": True, "rest_days": 0},
+            simulation_backend="markov_state",
+            evidence=[game_signal, player_signal],
+        )
+
+        trace = analyze(req, session_id="sess-markov-dedup", bankroll=1000.0)
+
+        apps = trace["evidence_application"]
+        assert apps[0]["target"] == "markov_transition"
+        assert apps[0]["applied"] is True
+        assert apps[1]["target"] == "skip"
+        assert apps[1]["applied"] is False
+        assert apps[1]["reason"] == "suppressed_by_game_plane_dedup"
+        params = trace["result"]["simulation_distributions"][0]["distribution_params"]
+        assert params["transition_modifiers"]["home_score_rate_scalar"] == pytest.approx(0.94)
+
+    def test_prop_dual_plane_duplicate_suppresses_player_in_shadow_and_live(self, monkeypatch):
+        game_signal = EvidenceSignal(
+            signal_type="b2b_fatigue",
+            category="situational",
+            plane="game",
+            value=True,
+            source="agent_reasoning",
+            confidence=0.8,
+            window="matchup",
+            direction="home",
+        )
+        player_signal = game_signal.model_copy(update={"plane": "player"})
+        req = PlayerPropRequest(
+            player_name="Test Player",
+            league="NBA",
+            prop_type="pts",
+            line=20.5,
+            odds_over=-110,
+            odds_under=-110,
+            player_context={"pts_mean": 24.0, "pts_std": 5.0},
+            game_context={"is_playoff": False, "rest_days": 0},
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            game_date="2026-05-25",
+            n_iterations=1000,
+            seed=77,
+            evidence=[game_signal, player_signal],
+        )
+
+        monkeypatch.delenv("OMEGA_EVIDENCE_MODE", raising=False)
+        shadow_plan = _player_evidence_plan_for(req)
+        assert shadow_plan.evidence_application[1]["reason"] == "suppressed_by_game_plane_dedup"
+        assert shadow_plan.evidence_application[1]["applied"] is False
+
+        monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "live")
+        live_plan = _player_evidence_plan_for(req)
+        assert live_plan.adjustment is not None
+        assert live_plan.adjustment.mean_factor == 1.0
+        assert live_plan.evidence_application[1]["reason"] == "suppressed_by_game_plane_dedup"
+        assert live_plan.evidence_application[1]["applied"] is False
 
     def test_stable_hash_excludes_volatile_odds_structures(self):
         base = {
@@ -370,6 +501,7 @@ class TestAnalyzePlayerProp:
             home_team="Los Angeles Lakers",
             away_team="Boston Celtics",
             game_date="2026-05-17",
+            game_context=_GAME_CONTEXT,
             player_context={},
         )
         resp = analyze_player_prop(req)
@@ -391,6 +523,7 @@ class TestAnalyzePlayerProp:
             n_iterations=500,
             seed=42,
             player_context={"pts_mean": 27.0, "pts_std": 5.5},
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_player_prop(req)
         assert resp.status == "success"
@@ -416,6 +549,7 @@ class TestAnalyzePlayerProp:
             n_iterations=1000,
             seed=42,
             player_context={"pts_mean": 32.0, "pts_std": 5.0},
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_player_prop(req, bankroll=1000.0)
 
@@ -440,6 +574,7 @@ class TestAnalyzePlayerProp:
             n_iterations=1000,
             seed=42,
             player_context={"pts_mean": 25.5, "pts_std": 5.0},
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_player_prop(req, bankroll=1000.0)
 
@@ -459,6 +594,7 @@ class TestAnalyzePlayerProp:
             away_team="Away Team",
             game_date="2026-05-17",
             player_context={"pts_mean": "not_a_number"},
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_player_prop(req)
         assert resp.status in ("error", "skipped")
@@ -482,6 +618,7 @@ class TestAnalyzePlayerProp:
                 "imputed_keys": ["pts_mean", "pts_std", "sample_size"],
                 "sample_size": 5,
             },
+            game_context=_GAME_CONTEXT,
         )
         resp = analyze_player_prop(req)
         assert resp.status == "success"
@@ -549,6 +686,7 @@ class TestEdgeDetailRecommendedUnits:
             seed=42,
             home_context=_NBA_HOME_CTX,
             away_context=_NBA_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
             odds=OddsInput(moneyline_home=300, moneyline_away=-350),
         )
         resp = analyze_game(req, bankroll=1000.0)
@@ -566,6 +704,7 @@ class TestEdgeDetailRecommendedUnits:
             seed=42,
             home_context=_NBA_HOME_CTX,
             away_context=_NBA_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
             # +300 home moneyline guarantees a large positive edge for home
             odds=OddsInput(moneyline_home=300),
         )
@@ -594,6 +733,7 @@ class TestRunLineCoverageProb:
             seed=42,
             home_context=self._MLB_HOME_CTX,
             away_context=self._MLB_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
             odds=OddsInput(spread_home=-1.5, spread_home_price=140),
         )
         resp = analyze_game(req, bankroll=1000.0)
@@ -613,6 +753,7 @@ class TestRunLineCoverageProb:
             seed=42,
             home_context=_NBA_HOME_CTX,
             away_context=_NBA_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
             odds=OddsInput(moneyline_home=-150, moneyline_away=130),
         )
         resp = analyze_game(req, bankroll=1000.0)
@@ -689,6 +830,12 @@ class TestApplyGameContext:
         # pts_mean absent → returned unchanged
         assert result is pc
 
+    def test_non_numeric_mean_returns_copy_for_structured_error_path(self):
+        pc = {"pts_mean": "not_a_number"}
+        result = _apply_game_context(pc, _GAME_CONTEXT, "pts", "NBA")
+        assert result is not pc
+        assert result["pts_mean"] == "not_a_number"
+
     def test_does_not_mutate_original(self):
         pc = {"pts_mean": 20.0, "pts_std": 4.0}
         _ = _apply_game_context(pc, {"is_playoff": True}, "pts", "NBA")
@@ -722,8 +869,9 @@ class TestApplyGameContext:
             n_iterations=2000,
             seed=42,
             player_context={"pts_mean": 12.0, "pts_std": 5.0},
+            game_context=_GAME_CONTEXT,
         )
-        playoff_req = base_req.model_copy(update={"game_context": {"is_playoff": True}})
+        playoff_req = base_req.model_copy(update={"game_context": {"is_playoff": True, "rest_days": 2}})
         resp_base = analyze_player_prop(base_req)
         resp_playoff = analyze_player_prop(playoff_req)
         assert resp_base.status == "success"

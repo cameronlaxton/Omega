@@ -205,9 +205,16 @@ If the user explicitly confirms they took a bet, include `bet_record` with actua
 
 ### 6c. Structured evidence (recommended)
 
+Evidence routing is backend-specific. Handler-based game and player adjustments
+follow `AdjustmentPolicy.mode` (`shadow` records only; `live` applies). Markov
+game analysis uses transition modifiers instead of handler `off_rating` scaling.
+Do not emit the same logical signal on both `plane="game"` and `plane="player"`
+in one request; the service suppresses player-plane duplicates when a matching
+game-plane signal is present.
+
 Express qualitative reasoning as typed `evidence` signals on the `analyze()` request — not as free text inside `player_context` / `game_context`, which the engine ignores. The `evidence` field is a list of `EvidenceSignal` objects (see `omega/core/contracts/evidence.py`); each carries `signal_type`, `category`, `plane` (`player`/`game`), `value`, `source`, `confidence` (0–1), `window`, and optional `direction`/`stat_key`. The signal taxonomy is multi-sport — `SIGNAL_REGISTRY` declares which sport archetypes each signal type applies to.
 
-The deterministic engine applies known signal types itself via a versioned `AdjustmentPolicy` (currently `mode=shadow` — recorded but not applied to predictions). Every signal is persisted to the `evidence_signals` table and scored retrospectively by `scripts/score_evidence_signals.py`. Set `confidence` honestly; it is measured against realized outcomes.
+The deterministic engine applies known signal types itself. Handler-based evidence is controlled by the versioned `AdjustmentPolicy` (currently `mode=shadow`, which records but does not apply handler factors). Markov game evidence uses backend transition modifiers. Every signal is persisted to the `evidence_signals` table and scored retrospectively by `scripts/score_evidence_signals.py`. Set `confidence` honestly; it is measured against realized outcomes.
 
 At session start, read the "Evidence signal performance" section (§6B) of the calibration report and weight your evidence accordingly: trust signal types/sources marked `predictive`, discount `noise`, treat `insufficient_n` as unproven.
 
@@ -229,8 +236,9 @@ When calling `omega_analyze_game` with `simulation_backend="markov_state"`, **on
 Rules:
 - Cumulative cap: no single modifier attribute shifts by more than ±15%, regardless of stacked signals.
 - Do NOT pre-adjust `home_context`/`away_context` ratings by hand to bake in these effects — the engine applies them from the signal.
+- Do NOT emit the same logical signal on both `plane="game"` and `plane="player"` in one request. The service suppresses player-plane duplicates when a matching game-plane signal is present.
 - Call `omega_markov_evidence_guide` (MCP prompt) for the full modifier table with scalar values.
-- **Shadow-mode note:** evidence modifiers are currently recorded but not yet applied to live predictions. This will change after the champion/challenger promotion gate clears.
+- **Evidence routing note:** Markov transition modifiers are the Markov evidence path. Handler-based shadow/live mode applies to fast-score game and player-prop adjustments.
 
 Example with evidence:
 

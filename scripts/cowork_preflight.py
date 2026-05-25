@@ -11,7 +11,6 @@ import argparse
 import ast
 import importlib
 import importlib.metadata
-import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -54,17 +53,26 @@ def clean_stale_bytecode(repo_root: Path) -> list[str]:
     """Remove stale .pyc and __pycache__ to prevent signature mismatches across Python versions."""
     errors: list[str] = []
 
-    for pycache_dir in repo_root.rglob("__pycache__"):
-        try:
-            shutil.rmtree(pycache_dir)
-        except Exception as e:
-            errors.append(f"Failed to remove {pycache_dir}: {e}")
-
     for pyc_file in repo_root.rglob("*.pyc"):
         try:
             pyc_file.unlink()
         except Exception as e:
             errors.append(f"Failed to remove {pyc_file}: {e}")
+
+    pycache_dirs = sorted(
+        repo_root.rglob("__pycache__"),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    )
+    for pycache_dir in pycache_dirs:
+        try:
+            pycache_dir.rmdir()
+        except Exception:
+            # Directory removal is best-effort on Windows: import scanners and
+            # antivirus can briefly hold handles or recreate pyc files while the
+            # preflight process is still healthy. Stale bytecode files above are
+            # the actual correctness risk, and pyc unlink errors are reported.
+            pass
 
     return errors
 
