@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import collections
+import errno
 import importlib
 import importlib.metadata
 import subprocess
@@ -52,12 +54,13 @@ def check_import(module: str, install_hint: str) -> list[str]:
 def clean_stale_bytecode(repo_root: Path) -> list[str]:
     """Remove stale .pyc and __pycache__ to prevent signature mismatches across Python versions."""
     errors: list[str] = []
+    unlink_failures: collections.defaultdict[int, int] = collections.defaultdict(int)
 
     for pyc_file in repo_root.rglob("*.pyc"):
         try:
             pyc_file.unlink()
-        except Exception as e:
-            errors.append(f"Failed to remove {pyc_file}: {e}")
+        except OSError as exc:
+            unlink_failures[exc.errno] += 1
 
     pycache_dirs = sorted(
         repo_root.rglob("__pycache__"),
@@ -73,6 +76,10 @@ def clean_stale_bytecode(repo_root: Path) -> list[str]:
             # preflight process is still healthy. Stale bytecode files above are
             # the actual correctness risk, and pyc unlink errors are reported.
             pass
+
+    for err_num, count in sorted(unlink_failures.items()):
+        err_name = errno.errorcode.get(err_num, f"Errno {err_num}")
+        errors.append(f"Skipped {count} stale .pyc file(s) ({err_name}); likely host-locked.")
 
     return errors
 
@@ -154,39 +161,29 @@ def _check_critical_files(repo_root: Path, diverged: list[str]) -> list[str]:
     return failures
 
 
-def verify_against_git(repo_root: Path, *, repair: bool = False) -> list[str]:
-    """Detect silent semantic truncation (Pattern C) by comparing tracked .py files to git HEAD.
-
-    The sandbox mount has been observed to deliver source files that are
-    syntactically valid but missing trailing function/class definitions. AST
-    parsing cannot catch these; only content equality with the git blob does.
-
-    A divergence does not by itself prove corruption: the operator may have
-    legitimate uncommitted changes. We report all divergences and let the
-    operator decide. In --repair-from-git mode, every divergent file is
-    restored via `git checkout HEAD --`, which writes through the mount cache
-    (Write-tool writes do not - see docs/session_bugs_20260521_mount_corruption.md).
-
-    Caution: --repair-from-git will clobber uncommitted local changes. Commit
-    or stash deliberate work before invoking it.
-    """
-    failures: list[str] = []
-
+def _tracked_python_files(repo_root: Path) -> tuple[list[str], list[str]]:
+    """Return tracked Python files from HEAD, plus any git inspection failures."""
     head_check = _git(repo_root, ["rev-parse", "--verify", "HEAD"])
     if head_check.returncode != 0:
-        return [
+        return [], [
             "verify_against_git: no HEAD commit available "
             "(detached/empty repo); skipping git-parity check."
         ]
 
-    ls_files = _git(repo_root, ["ls-tree", "-r", "-z", "--name-only", "HEAD", "--", "*.py"])
+    ls_files = _git(repo_root, ["ls-tree", "-r", "-z", "--name-only", "HEAD"])
     if ls_files.returncode != 0:
-        return [f"verify_against_git: `git ls-tree` failed: {ls_files.stderr.strip()}"]
+        return [], [f"verify_against_git: `git ls-tree` failed: {ls_files.stderr.strip()}"]
 
+    return [
+        rel_path
+        for rel_path in ls_files.stdout.split("\x00")
+        if rel_path and rel_path.endswith(".py")
+    ], []
+
+
+def _diverged_tracked_files(repo_root: Path, tracked_files: list[str]) -> list[str]:
     diverged: list[str] = []
-    for rel_path in ls_files.stdout.split("\x00"):
-        if not rel_path:
-            continue
+    for rel_path in tracked_files:
         abs_path = repo_root / rel_path
         if not abs_path.exists():
             continue
@@ -196,18 +193,71 @@ def verify_against_git(repo_root: Path, *, repair: bool = False) -> list[str]:
         wt_hash = _git(repo_root, ["hash-object", "--", str(abs_path)]).stdout.strip()
         if wt_hash and wt_hash != index_hash:
             diverged.append(rel_path)
+    return diverged
+
+
+def _syntax_corrupt_tracked_files(repo_root: Path, tracked_files: list[str]) -> list[str]:
+    corrupt: list[str] = []
+    for rel_path in tracked_files:
+        abs_path = repo_root / rel_path
+        if not abs_path.exists():
+            continue
+        try:
+            source = abs_path.read_text(encoding="utf-8", errors="replace")
+            ast.parse(source, filename=str(abs_path))
+        except (OSError, SyntaxError):
+            corrupt.append(rel_path)
+    return corrupt
+
+
+def verify_against_git(
+    repo_root: Path, *, repair: bool = False, force_repair: bool = False
+) -> list[str]:
+    """Detect silent semantic truncation (Pattern C) by comparing tracked .py files to git HEAD.
+
+    The sandbox mount has been observed to deliver source files that are
+    syntactically valid but missing trailing function/class definitions. AST
+    parsing cannot catch these; only content equality with the git blob does.
+
+    A divergence does not by itself prove corruption: the operator may have
+    legitimate uncommitted changes. We report all divergences and let the
+    operator decide. In --repair-from-git mode, syntax-corrupt tracked files
+    and known critical corruption targets are restored via `git checkout HEAD --`,
+    which writes through the mount cache (Write-tool writes do not - see
+    docs/session_bugs_20260521_mount_corruption.md).
+
+    Caution: --force-repair clobbers every divergent tracked Python file.
+    """
+    failures: list[str] = []
+
+    tracked_files, git_failures = _tracked_python_files(repo_root)
+    if git_failures:
+        return git_failures
+
+    diverged = _diverged_tracked_files(repo_root, tracked_files)
 
     if not diverged:
         return []
 
-    # Check critical files first, always with stricter warnings
-    critical_failures = _check_critical_files(repo_root, diverged)
-    if critical_failures:
-        failures.extend(critical_failures)
-
     if repair:
+        corrupt = set(_syntax_corrupt_tracked_files(repo_root, tracked_files))
+        critical = set(_CRITICAL_FILES).intersection(diverged)
+        repair_targets = set(diverged) if force_repair else corrupt.union(critical)
+        non_target_dirty = sorted(set(diverged) - repair_targets)
+        if non_target_dirty and not force_repair:
+            return [
+                "verify_against_git: Refusing to --repair-from-git because tracked "
+                "Python files outside repair targets are dirty. Uncommitted files: "
+                f"{', '.join(non_target_dirty)}. Use --force-repair to clobber."
+            ]
+        if not repair_targets:
+            return [
+                "verify_against_git: No repair targets found. "
+                "Use --force-repair to restore all divergent tracked Python files."
+            ]
+
         restored: list[str] = []
-        for rel_path in diverged:
+        for rel_path in sorted(repair_targets):
             result = _git(repo_root, ["checkout", "HEAD", "--", rel_path])
             if result.returncode == 0:
                 restored.append(rel_path)
@@ -220,7 +270,14 @@ def verify_against_git(repo_root: Path, *, repair: bool = False) -> list[str]:
             print(f"[repair] Restored {len(restored)} file(s) from git HEAD:")
             for path in restored:
                 print(f"  {path}")
+        remaining_diverged = _diverged_tracked_files(repo_root, tracked_files)
+        failures.extend(_check_critical_files(repo_root, remaining_diverged))
         return failures
+
+    # Check critical files first, always with stricter warnings
+    critical_failures = _check_critical_files(repo_root, diverged)
+    if critical_failures:
+        failures.extend(critical_failures)
 
     for rel_path in diverged:
         if rel_path not in _CRITICAL_FILES:
@@ -237,6 +294,7 @@ def run_checks(
     require_mcp: bool = True,
     repo_root: Path | None = None,
     repair_from_git: bool = False,
+    force_repair: bool = False,
 ) -> list[str]:
     failures: list[str] = []
     failures.extend(check_python())
@@ -245,6 +303,16 @@ def run_checks(
 
     if repo_root is None:
         repo_root = Path(__file__).parent.parent
+
+    if repair_from_git:
+        # Restore known-corrupt tracked files before AST parsing so hard
+        # truncations do not block the git-based repair path.
+        git_failures = verify_against_git(
+            repo_root, repair=True, force_repair=force_repair
+        )
+        if git_failures:
+            failures.extend(git_failures)
+            return failures
 
     # Source integrity must run before any import attempt. Null bytes or
     # hard-truncated files produce cryptic ImportError/SyntaxError otherwise.
@@ -257,12 +325,13 @@ def run_checks(
         )
         return failures
 
-    # Pattern C: silent trailing truncation that leaves the file AST-valid.
-    # Only git content equality catches it.
-    git_failures = verify_against_git(repo_root, repair=repair_from_git)
-    if git_failures:
-        failures.extend(git_failures)
-        return failures
+    if not repair_from_git:
+        # Pattern C: silent trailing truncation that leaves the file AST-valid.
+        # Only git content equality catches it.
+        git_failures = verify_against_git(repo_root)
+        if git_failures:
+            failures.extend(git_failures)
+            return failures
 
     # Clean stale bytecode after source is verified clean (BUG-2026-05-20-003).
     clean_errors = clean_stale_bytecode(repo_root)
@@ -302,10 +371,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--repair-from-git",
         action="store_true",
         help=(
-            "When a tracked file diverges from git HEAD, restore it via "
-            "`git checkout`. Used to recover from silent mount truncation. "
-            "Caution: clobbers uncommitted local changes."
+            "Restore syntax-corrupt tracked Python files and known critical "
+            "corruption targets via `git checkout`. Used to recover from "
+            "silent mount truncation."
         ),
+    )
+    parser.add_argument(
+        "--force-repair",
+        action="store_true",
+        help="Allow --repair-from-git to clobber all divergent tracked Python files.",
     )
     args = parser.parse_args(argv)
 
@@ -314,6 +388,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         require_mcp=not args.direct_only,
         repo_root=repo_root,
         repair_from_git=args.repair_from_git,
+        force_repair=args.force_repair,
     )
     if failures:
         print("cowork_preflight_failed:")

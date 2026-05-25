@@ -1,16 +1,16 @@
 # Omega Calibration Report — NBA
 
-Generated: `2026-05-24T20:13:02+00:00` | Window: last 30 days
+Generated: `2026-05-25T15:12:22+00:00` | Window: last 30 days
 
 ## 1. Coverage
 
 | Metric | Count |
 |---|---|
-| Traces (all) | 71 |
+| Traces (all) | 74 |
 | Traces with model predictions (calibration-eligible) | 0 |
-| Graded (any outcome) | 65 |
+| Graded (any outcome) | 68 |
 | &nbsp;&nbsp;of which game-graded | 9 |
-| &nbsp;&nbsp;of which prop-graded | 56 |
+| &nbsp;&nbsp;of which prop-graded | 59 |
 | **Graded + calibration-eligible (usable pairs)** | **0** |
 | With bet_record | 28 |
 | With closing_line | 0 |
@@ -39,6 +39,7 @@ _No CLV-resolvable bets in window._
 
 | session_id | traces | graded | model | closes | webfetch_fail | notes |
 |---|---|---|---|---|---|---|
+| `sess-20260524-nba1` | 3 | 3 | ? | ? | ? |  |
 | `sess-20260523-nba1` | 8 | 8 | claude-sonnet-4-6 | ? | 0 | Preflight: cowork_preflight.py truncated 1 line (recurring Pattern C); restored  |
 | `sess-20260521-nyk2` | 6 | 6 | ? | ? | ? |  |
 | `sess-20260520-g001` | 7 | 7 | claude-sonnet-4-6 | ? | 0 | [migrated from pre-schema sidecar] \| archived_keys: date="2026-05-20"; traces=[ |

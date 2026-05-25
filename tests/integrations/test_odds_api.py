@@ -4,6 +4,8 @@ import json
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+
 from omega.integrations.odds_api import (
     OddsApiClient,
     parse_event_markets,
@@ -215,3 +217,37 @@ def test_fetch_current_event_odds_builds_event_endpoint_with_betmgm(tmp_path: Pa
     assert "/v4/sports/basketball_nba/events/evt-1/odds" in captured["url"]
     assert "markets=player_points" in captured["url"]
     assert "bookmakers=betmgm" in captured["url"]
+
+
+def test_get_json_rejects_double_versioned_path_before_budget_mutation(tmp_path: Path):
+    captured: dict = {}
+    budget_file = tmp_path / "budget.json"
+    client = OddsApiClient(
+        api_key="test-key",
+        monthly_budget=100,
+        budget_file=str(budget_file),
+        url_opener=_fake_opener(captured, []),
+    )
+
+    with pytest.raises(ValueError, match='Use "/sports/baseball_mlb/odds"'):
+        client._get_json("/v4/sports/baseball_mlb/odds", {"regions": "us"})
+
+    assert not budget_file.exists()
+    assert captured == {}
+
+
+def test_get_json_preserves_correct_path_url_and_api_key(tmp_path: Path):
+    captured: dict = {}
+    client = OddsApiClient(
+        api_key="test-key",
+        monthly_budget=100,
+        budget_file=str(tmp_path / "budget.json"),
+        url_opener=_fake_opener(captured, []),
+    )
+
+    result = client._get_json("/sports/baseball_mlb/odds", {"regions": "us"})
+
+    assert result == []
+    assert "/v4/sports/baseball_mlb/odds" in captured["url"]
+    assert "regions=us" in captured["url"]
+    assert "apiKey=test-key" in captured["url"]

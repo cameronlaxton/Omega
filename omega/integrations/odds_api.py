@@ -231,6 +231,12 @@ class OddsApiClient:
     def _get_json(self, path: str, params: dict[str, Any], request_cost: int = 1) -> Any:
         if not self._api_key:
             raise OddsApiKeyMissing("OMEGA_ODDS_API_KEY not set")
+        if path == "/v4" or path.startswith("/v4/"):
+            corrected_path = path.removeprefix("/v4") or "/"
+            raise ValueError(
+                "Odds API path must not include /v4 prefix. "
+                f'Use "{corrected_path}", not "{path}".'
+            )
         self._consume_budget(request_cost)
         query = dict(params)
         query["apiKey"] = self._api_key

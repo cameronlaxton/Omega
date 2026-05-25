@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import sqlite3
 import tempfile
 from typing import Any
 
@@ -89,6 +90,53 @@ class TestSchema:
         store._ensure_schema()
         assert store.schema_version() == CURRENT_VERSION
         store.close()
+
+    def test_wal_failure_falls_back_to_delete(self, monkeypatch, tmp_path):
+        real_connect = sqlite3.connect
+
+        class WalFailConnection:
+            def __init__(self, path):
+                object.__setattr__(self, "_conn", real_connect(path))
+
+            def execute(self, sql, *args, **kwargs):
+                if sql == "PRAGMA journal_mode=WAL":
+                    raise sqlite3.OperationalError("wal unavailable")
+                return self._conn.execute(sql, *args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(self._conn, name)
+
+            def __setattr__(self, name, value):
+                return setattr(self._conn, name, value)
+
+        monkeypatch.setattr(sqlite3, "connect", lambda path: WalFailConnection(path))
+
+        store = TraceStore(db_path=str(tmp_path / "omega.db"))
+
+        assert store.schema_version() == CURRENT_VERSION
+        assert store._journal_mode == "delete"
+        store.close()
+
+    def test_non_journal_sqlite_failures_propagate(self, monkeypatch, tmp_path):
+        real_connect = sqlite3.connect
+
+        class SchemaFailConnection:
+            row_factory = None
+
+            def execute(self, sql, *args, **kwargs):
+                if sql.startswith("PRAGMA journal_mode"):
+                    return real_connect(":memory:").execute("PRAGMA journal_mode=MEMORY")
+                if sql == "PRAGMA foreign_keys=ON":
+                    return real_connect(":memory:").execute("PRAGMA foreign_keys=ON")
+                raise sqlite3.OperationalError("schema boom")
+
+            def executescript(self, _script):
+                raise sqlite3.OperationalError("schema boom")
+
+        monkeypatch.setattr(sqlite3, "connect", lambda _path: SchemaFailConnection())
+
+        with pytest.raises(sqlite3.OperationalError, match="schema boom"):
+            TraceStore(db_path=str(tmp_path / "omega.db"))
 
 
 # ---------------------------------------------------------------------------

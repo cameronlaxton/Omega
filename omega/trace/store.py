@@ -54,13 +54,24 @@ class TraceStore:
             db_path = str(repo_root / _DEFAULT_DB_PATH)
         self._db_path = db_path
         self._conn: sqlite3.Connection | None = None
+        self._journal_mode: str | None = None
         self._ensure_schema()
 
     @property
     def conn(self) -> sqlite3.Connection:
         if self._conn is None:
             self._conn = sqlite3.connect(self._db_path)
-            self._conn.execute("PRAGMA journal_mode=WAL")
+            try:
+                row = self._conn.execute("PRAGMA journal_mode=WAL").fetchone()
+            except sqlite3.OperationalError as exc:
+                logger.warning(
+                    "SQLite WAL mode unsupported on this mount. Falling back to DELETE mode. "
+                    "Concurrency degraded: ensure trace writes and calibration run sequentially. "
+                    "(%s)",
+                    exc,
+                )
+                row = self._conn.execute("PRAGMA journal_mode=DELETE").fetchone()
+            self._journal_mode = str(row[0]).lower() if row else None
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.row_factory = sqlite3.Row
         return self._conn

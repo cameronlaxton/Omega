@@ -56,9 +56,26 @@ python scripts/cowork_preflight.py --repair-from-git
 write propagates to the sandbox mount cache. **Never use the Write tool to
 repair source files in the cowork sandbox** — Windows-side writes do not
 invalidate the Linux mount cache, so the next read still sees the corrupt
-copy (see `docs/session_bugs_20260521_mount_corruption.md`). `--repair-from-git`
-will clobber any uncommitted in-session edits, so commit or stash deliberate
-work before invoking it.
+copy (see `docs/session_bugs_20260521_mount_corruption.md`).
+
+### 2b. Clean Cowork Session Hygiene
+
+- **SQLite concurrency limit:** If the FUSE mount forces `TraceStore` to fall
+  back from WAL to DELETE journal mode, run database writes sequentially.
+  Parallel calibration, trace ingestion, or outcome ingestion can hit
+  `sqlite3.OperationalError: database is locked`.
+- **Preflight repair restrictions:** `--repair-from-git` restores only tracked
+  Python files that are syntax-corrupt or known critical corruption targets.
+  It fails if other tracked `.py` files have uncommitted edits. Use
+  `--force-repair` only when you intentionally want to clobber every divergent
+  tracked Python file back to `HEAD`.
+- **Stale bytecode:** If preflight warns about host-locked `.pyc` files, add
+  `PYTHONDONTWRITEBYTECODE=1` to the Windows host environment. Preflight will
+  safely summarize and skip existing locked bytecode files.
+- **Odds API usage:** Do not write ad hoc Python scripts that call
+  `OddsApiClient._get_json()`. Use `omega_resolve_odds` or
+  `scripts/resolve_odds.py` so URL construction, BetMGM defaults, provenance,
+  and budget tracking stay on the typed path.
 
 Preferred path:
 
