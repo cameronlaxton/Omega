@@ -616,7 +616,7 @@ def analyze_game(
         if transition_modifiers:
             logger.debug(
                 "Markov modifiers from %d evidence signals: %s",
-                len(request.evidence_signals),
+                len(request.evidence),
                 transition_modifiers,
             )
 

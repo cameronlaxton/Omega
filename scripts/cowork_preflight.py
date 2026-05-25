@@ -124,6 +124,28 @@ def _git(repo_root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+_CRITICAL_FILES = frozenset({
+    "omega/core/contracts/service.py",  # Service layer; repeated corruption across sessions
+})
+
+
+def _check_critical_files(repo_root: Path, diverged: list[str]) -> list[str]:
+    """Flag critical files separately with stricter warnings.
+
+    These files have demonstrated repeated mount corruption and merit explicit
+    attention before any Omega execution proceeds.
+    """
+    failures: list[str] = []
+    critical_diverged = [p for p in diverged if p in _CRITICAL_FILES]
+    if critical_diverged:
+        for path in critical_diverged:
+            failures.append(
+                f"CRITICAL: {path} diverges from git HEAD (mount corruption risk). "
+                "Re-run preflight with --repair-from-git before engine execution."
+            )
+    return failures
+
+
 def verify_against_git(repo_root: Path, *, repair: bool = False) -> list[str]:
     """Detect silent semantic truncation (Pattern C) by comparing tracked .py files to git HEAD.
 
@@ -170,6 +192,11 @@ def verify_against_git(repo_root: Path, *, repair: bool = False) -> list[str]:
     if not diverged:
         return []
 
+    # Check critical files first, always with stricter warnings
+    critical_failures = _check_critical_files(repo_root, diverged)
+    if critical_failures:
+        failures.extend(critical_failures)
+
     if repair:
         restored: list[str] = []
         for rel_path in diverged:
@@ -188,11 +215,12 @@ def verify_against_git(repo_root: Path, *, repair: bool = False) -> list[str]:
         return failures
 
     for rel_path in diverged:
-        failures.append(
-            f"Source diverges from git HEAD: {rel_path}. "
-            "If this is mount corruption (truncation/null bytes), re-run preflight "
-            "with --repair-from-git. If this is your intentional edit, ignore."
-        )
+        if rel_path not in _CRITICAL_FILES:
+            failures.append(
+                f"Source diverges from git HEAD: {rel_path}. "
+                "If this is mount corruption (truncation/null bytes), re-run preflight "
+                "with --repair-from-git. If this is your intentional edit, ignore."
+            )
     return failures
 
 

@@ -1,0 +1,183 @@
+{
+  "trace": {
+    "trace_id": "sandbox-c4d07a11-e3fd",
+    "session_id": "sess-20260524-nba1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-24T23:53:00.498561+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 13.5,
+      "odds_over": -120.0,
+      "odds_under": -110.0,
+      "player_context": {
+        "reb_mean": 11.9,
+        "reb_std": 8.5,
+        "sample_size": 11
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2,
+        "opponent_def_rank": 4,
+        "blowout_risk": 0.15
+      },
+      "n_iterations": 50000,
+      "seed": 1569462448,
+      "evidence": [
+        {
+          "signal_type": "series_avg",
+          "category": "player_form",
+          "plane": "player",
+          "value": 11.9,
+          "source": "nba.com",
+          "confidence": 0.85,
+          "window": "series",
+          "direction": "under",
+          "stat_key": "reb",
+          "note": null
+        },
+        {
+          "signal_type": "def_matchup_strong",
+          "category": "matchup",
+          "plane": "player",
+          "value": true,
+          "source": "agent_reasoning",
+          "confidence": 0.8,
+          "window": "series",
+          "direction": "away",
+          "stat_key": "reb",
+          "note": null
+        },
+        {
+          "signal_type": "last_game_outlier",
+          "category": "player_form",
+          "plane": "player",
+          "value": true,
+          "source": "rotoballer.com",
+          "confidence": 0.85,
+          "window": "last_3",
+          "direction": null,
+          "stat_key": "reb",
+          "note": null
+        }
+      ],
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-24"
+    },
+    "result": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 13.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.4048,
+      "under_prob": 0.5952,
+      "projection_mean": 11.5698,
+      "projection_std": 8.2235,
+      "projection_p10": 1.0323,
+      "projection_p50": 11.5219,
+      "projection_p90": 22.1374,
+      "distribution_type": "normal",
+      "edge_over": -14.06,
+      "edge_under": 7.14,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.0749,
+      "recommended_units": 5.0,
+      "bet_side_odds": -110.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.40484,
+        "calibrated_prob": 0.40484,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.59516,
+        "calibrated_prob": 0.59516,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_distributions": [
+        {
+          "target": "player_stat",
+          "market": "player_prop",
+          "stat_key": "reb",
+          "distribution_type": "normal",
+          "distribution_params": {
+            "mu": 11.543,
+            "sigma": 8.245
+          },
+          "params_schema_version": 1,
+          "sample_mean": 11.569750826992832,
+          "sample_std": 8.22350394156502,
+          "p10": 1.0323234657956775,
+          "p50": 11.521858831168288,
+          "p90": 22.13735244882254,
+          "n_iterations": 50000,
+          "seed": 1569462448,
+          "context_hash": "b431c6e9",
+          "component_version": "player_prop_fast_v1"
+        }
+      ]
+    },
+    "downgrades": []
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "rotoballer.com",
+      "nba.com"
+    ],
+    "fields_gathered": [
+      "reb_mean",
+      "reb_std",
+      "sample_size",
+      "is_playoff",
+      "rest_days"
+    ],
+    "missing_fields": [
+      "full_series_reb_log"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": -120.0,
+      "odds_under": -110.0,
+      "line": 13.5
+    }
+  },
+  "reasoning_downgrade_rationale": "Thinner edge (7.1%) and very high std (8.5) versus line. Units should be reduced from engine cap. Noted.",
+  "reasoning_narrative": "Wemby's playoff reb avg is 11.9 (11 games). G3=4 (OKC targeted him off glass; held deliberately). G1=24 was 2OT outlier. High std (8.5) reflects genuine extreme variance. Under at -110 with 7.1% engine edge \u2014 weakest of the three plays. OKC has a demonstrated scheme to suppress his boards but G4 at SA is a home game where he dominates differently.",
+  "trace_quality": {
+    "aggregate_quality": null,
+    "downgrades": [],
+    "passed": true,
+    "evidence_status": "present",
+    "identity_status": "complete",
+    "context_source": "provided",
+    "baseline_used": false,
+    "calibration_eligible": true,
+    "calibration_exclusion_reasons": []
+  }
+}
