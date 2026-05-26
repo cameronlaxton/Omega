@@ -1,0 +1,352 @@
+{
+  "trace": {
+    "trace_id": "sandbox-e47ef200-6847",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-26T15:07:58.469206+00:00",
+    "kind": "game",
+    "session_id": "sess-20260526-auto",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "Boston Red Sox",
+      "away_team": "Atlanta Braves",
+      "league": "MLB",
+      "odds": {
+        "spread_home": -1.5,
+        "spread_home_price": 145.0,
+        "moneyline_home": -110.0,
+        "moneyline_away": -110.0,
+        "over_under": 8.5,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 10000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 113.0,
+        "def_rating": 112.0,
+        "pace": 94.8
+      },
+      "away_context": {
+        "off_rating": 116.0,
+        "def_rating": 108.0,
+        "pace": 95.5
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 1.05,
+        "weather_wind_mph": 8.7
+      },
+      "seed": 1501917815,
+      "evidence": [
+        {
+          "signal_type": "starter_era",
+          "category": "matchup",
+          "plane": "game",
+          "value": 3.0,
+          "source": "mlb.com",
+          "confidence": 0.82,
+          "window": "season",
+          "direction": "away",
+          "stat_key": null,
+          "note": null
+        },
+        {
+          "signal_type": "starter_era",
+          "category": "matchup",
+          "plane": "game",
+          "value": 2.4,
+          "source": "mlb.com",
+          "confidence": 0.88,
+          "window": "season",
+          "direction": "home",
+          "stat_key": null,
+          "note": null
+        },
+        {
+          "signal_type": "park_factor_evidence",
+          "category": "situational",
+          "plane": "game",
+          "value": 1.05,
+          "source": "fangraphs.com",
+          "confidence": 0.85,
+          "window": "matchup",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        },
+        {
+          "signal_type": "weather_wind",
+          "category": "situational",
+          "plane": "game",
+          "value": 8.7,
+          "source": "covers.com",
+          "confidence": 0.9,
+          "window": "matchup",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        }
+      ]
+    },
+    "result": {
+      "matchup": "Atlanta Braves @ Boston Red Sox",
+      "league": "MLB",
+      "analyzed_at": "2026-05-26T15:07:58.470500",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 10000,
+        "home_win_prob": 48.1,
+        "away_win_prob": 38.7,
+        "draw_prob": 13.2,
+        "predicted_spread": 0.3,
+        "predicted_total": 8.9,
+        "predicted_home_score": 4.6,
+        "predicted_away_score": 4.3,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Boston Red Sox",
+          "true_prob": 0.481,
+          "calibrated_prob": 0.481,
+          "market_implied": 0.4082,
+          "edge_pct": 7.28,
+          "ev_pct": 17.85,
+          "market_odds": 145.0,
+          "confidence_tier": "A",
+          "recommended_units": 5.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.48100000000000004,
+            "calibrated_prob": 0.48100000000000004,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Atlanta Braves",
+          "true_prob": 0.387,
+          "calibrated_prob": 0.387,
+          "market_implied": 0.5238,
+          "edge_pct": -13.68,
+          "ev_pct": -26.12,
+          "market_odds": -110.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.387,
+            "calibrated_prob": 0.387,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": {
+        "selection": "Boston Red Sox home",
+        "odds": 145.0,
+        "edge_pct": 7.28,
+        "ev_pct": 17.85,
+        "confidence_tier": "A",
+        "recommended_units": 5.0,
+        "kelly_fraction": 0.0615
+      },
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.6033,
+          "sample_std": 2.133618782725662,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 10000,
+          "seed": 1501917815,
+          "context_hash": "20a614d0836582b2",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.2631,
+          "sample_std": 2.0857320992878203,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 10000,
+          "seed": 1501917815,
+          "context_hash": "20a614d0836582b2",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 8.8664,
+          "sample_std": 2.984887106742965,
+          "p10": 5.0,
+          "p50": 9.0,
+          "p90": 13.0,
+          "n_iterations": 10000,
+          "seed": 1501917815,
+          "context_hash": "20a614d0836582b2",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 0.3402,
+          "sample_std": 2.982559967544682,
+          "p10": -3.0,
+          "p50": 0.0,
+          "p90": 4.0,
+          "n_iterations": 10000,
+          "seed": 1501917815,
+          "context_hash": "20a614d0836582b2",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 1.05,
+      "weather_wind_mph": 8.7
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "starter_era",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.12,
+        "reason": "starter_era: mean x1.1200 (raw 1.1200, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "starter_era",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.096,
+        "reason": "starter_era: mean x1.0960 (raw 1.0960, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "park_factor_evidence",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.05,
+        "reason": "park_factor_evidence: mean x1.0500 (raw 1.0500, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "weather_wind",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.0348,
+        "reason": "weather_wind: mean x1.0348 (raw 1.0348, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "mlb.com",
+      "covers.com",
+      "fangraphs.com"
+    ],
+    "fields_gathered": [
+      "off_rating",
+      "def_rating",
+      "pace",
+      "park_factor",
+      "weather_wind_mph",
+      "starter_era_home",
+      "starter_era_away"
+    ],
+    "missing_fields": [],
+    "market_context": {
+      "book": "betmgm",
+      "moneyline_home": -110,
+      "moneyline_away": -110,
+      "over_under": 8.5
+    }
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "Spencer Strider (3.00 ERA, 2-0) vs Ranger Suarez (2.40 ERA, 2-2) at Fenway. ATL #1 offense in MLB. Suarez has been elite (1 ER last 21.2 IP). Pick-em odds on ML; engine shows BOS +145 run line edge 7.28%. Fenway park factor 1.05 boosts totals; predicted total 8.87 vs line 8.5.",
+  "trace_quality": {
+    "aggregate_quality": 0.72
+  }
+}

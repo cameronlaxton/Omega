@@ -85,6 +85,14 @@ python -m omega.mcp.server
 
 MCP analyze tools call `omega.core.contracts.service.analyze()` directly. MCP is an adapter over the canonical core service, not a second betting engine.
 
+If the client cannot expose MCP tools, use the sanctioned direct-engine CLI for
+repeatable one-off or batch calls instead of creating scratch Python under
+`scripts/`:
+
+```bash
+python scripts/run_analyze.py --kind game --request-json request.json --session-id sess-YYYYMMDD-XXXX --bankroll 1000 --trace-out inbox/traces
+```
+
 Direct smoke test when no MCP client is available:
 
 ```bash
@@ -408,6 +416,11 @@ Write `inbox/sessions/<session_id>.json` at session end. All keys below are requ
   "agent_notes": "Free-text notes on session outcome, data quality issues, or anomalies."
 }
 ```
+
+Do not add inline `outcomes` or trace-level grading summaries to the sidecar.
+Game outcomes belong in `outcomes`, player-prop outcomes belong in
+`prop_outcomes`, and confirmed bet metadata belongs in the per-trace
+`bet_record`.
 
 `report_calibration.py` joins sidecar data with trace summaries by `session_id`. Validate sidecars before relying on report session sections:
 

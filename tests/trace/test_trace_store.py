@@ -117,6 +117,43 @@ class TestSchema:
         assert store._journal_mode == "delete"
         store.close()
 
+    def test_explicit_delete_journal_mode_skips_wal(self, monkeypatch, tmp_path):
+        executed: list[str] = []
+        real_connect = sqlite3.connect
+
+        class TrackingConnection:
+            def __init__(self, path):
+                object.__setattr__(self, "_conn", real_connect(path))
+
+            def execute(self, sql, *args, **kwargs):
+                if sql.startswith("PRAGMA journal_mode"):
+                    executed.append(sql)
+                return self._conn.execute(sql, *args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(self._conn, name)
+
+            def __setattr__(self, name, value):
+                return setattr(self._conn, name, value)
+
+        monkeypatch.setattr(sqlite3, "connect", lambda path: TrackingConnection(path))
+
+        store = TraceStore(db_path=str(tmp_path / "omega.db"), journal_mode="DELETE")
+
+        assert store.schema_version() == CURRENT_VERSION
+        assert "PRAGMA journal_mode=DELETE" in executed
+        assert "PRAGMA journal_mode=WAL" not in executed
+        store.close()
+
+    def test_cowork_env_auto_uses_delete_journal_mode(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("COWORK_SANDBOX", "1")
+
+        store = TraceStore(db_path=str(tmp_path / "omega.db"))
+
+        assert store.schema_version() == CURRENT_VERSION
+        assert store._journal_mode == "delete"
+        store.close()
+
     def test_non_journal_sqlite_failures_propagate(self, monkeypatch, tmp_path):
         real_connect = sqlite3.connect
 

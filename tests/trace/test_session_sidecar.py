@@ -39,3 +39,11 @@ def test_session_sidecar_rejects_legacy_timestamp_keys():
 
     with pytest.raises(ValidationError):
         SessionSidecar.model_validate(payload)
+
+
+def test_session_sidecar_rejects_inline_outcomes():
+    payload = _valid_sidecar()
+    payload["outcomes"] = {"SGA_pts_under_31.5": {"actual": 19.0, "result": "win"}}
+
+    with pytest.raises(ValidationError):
+        SessionSidecar.model_validate(payload)

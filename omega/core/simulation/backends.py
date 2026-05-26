@@ -61,6 +61,7 @@ class GameSimulationInput:
     away_context: dict[str, Any] | None = None
     seed: int | None = None
     spread_home: float | None = None
+    over_under: float | None = None
     allow_baseline: bool = False
     transition_modifiers: dict[str, float] | None = None
 

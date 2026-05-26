@@ -1,0 +1,15 @@
+{
+  "session_id": "sess-20260526-auto",
+  "opened_at": "2026-05-26T15:00:00Z",
+  "closed_at": "2026-05-26T15:15:50Z",
+  "model_version": "claude-sonnet-4-6",
+  "purpose": "MLB daily slate analysis May 26 2026 - automated scheduled task",
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {
+    "traces_emitted": 12,
+    "bets_recorded": 0,
+    "webfetch_failures": 0
+  },
+  "agent_notes": "Automated run. 7 game analyses (CIN@NYM, ATL@BOS, MIN@CWS, PHI@SD, HOU@TEX, TAM@BAL, WSH@CLE) + 5 prop analyses (Strider K, Burns K, Suarez K, Ryan K, Turner TB). Engine: fast_score backend. Evidence mode: shadow (adjustments recorded not applied). DB ingest via /tmp copy due to FUSE SQLite open failure on mount - copied back after ingest. Preflight divergence on 3 test files (mount corruption), engine smoke test passed. Draw prob ~13-14% in fast_score MLB games compresses win probs below market; run-line edge calculations compare ML win prob to spread market implied (methodological limitation to flag for calibration)."
+}

@@ -141,6 +141,18 @@ def _normal_sample(mu: float, sigma: float, size: int) -> list[float]:
     return [random.gauss(mu, sigma) for _ in range(size)]
 
 
+def _expected_against_allowed_rate(
+    team_off: float,
+    opponent_allowed: float,
+    league_avg_allowed: float,
+    pace_factor: float = 1.0,
+) -> float:
+    """Expected score when defense is an allowed-rate metric; lower is better."""
+    if opponent_allowed <= 0 or league_avg_allowed <= 0:
+        return team_off * pace_factor
+    return team_off * (opponent_allowed / league_avg_allowed) * pace_factor
+
+
 def _bernoulli_sample(p: float, size: int) -> list[int]:
     """Generate Bernoulli samples (0 or 1)."""
     p = max(0.001, min(0.999, p))
@@ -256,6 +268,7 @@ def _build_team_score_result(
     away_context: dict | None = None,
     archetype_name: str | None = None,
     spread_home: float | None = None,
+    over_under: float | None = None,
     context_source: str = "provided",
     baseline_used: bool = False,
     seed: int | None = None,
@@ -263,9 +276,17 @@ def _build_team_score_result(
     component_version: str = "fast_score_v1",
 ) -> dict:
     """Build a standardized result dict from team score simulations."""
+    archetype = get_archetype(league)
+    supports_draw = bool(archetype.supports_draw) if archetype is not None else True
     home_wins = sum(1 for h, a in zip(home_scores, away_scores) if h > a)
     away_wins = sum(1 for h, a in zip(home_scores, away_scores) if a > h)
     draws = n_iterations - home_wins - away_wins
+    reported_draws = draws
+    if not supports_draw and draws:
+        decided_home, decided_away = _allocate_ties(home_wins, away_wins, draws)
+        home_wins += decided_home
+        away_wins += decided_away
+        reported_draws = 0
 
     home_mean = sum(home_scores) / n_iterations
     away_mean = sum(away_scores) / n_iterations
@@ -279,7 +300,7 @@ def _build_team_score_result(
         "iterations": n_iterations,
         "home_win_prob": round(home_wins / n_iterations * 100, 1),
         "away_win_prob": round(away_wins / n_iterations * 100, 1),
-        "draw_prob": round(draws / n_iterations * 100, 1),
+        "draw_prob": round(reported_draws / n_iterations * 100, 1),
         "predicted_home_score": round(home_mean, 1),
         "predicted_away_score": round(away_mean, 1),
         "predicted_spread": round(home_mean - away_mean, 1),
@@ -305,6 +326,11 @@ def _build_team_score_result(
     ctx_hash = _context_hash(home_context, away_context)
     totals = [h + a for h, a in zip(home_scores, away_scores)]
     spreads = [h - a for h, a in zip(home_scores, away_scores)]
+    if over_under is not None:
+        over_hits = sum(1 for total in totals if total > over_under)
+        under_hits = sum(1 for total in totals if total < over_under)
+        result["over_prob"] = round(over_hits / n_iterations * 100, 1)
+        result["under_prob"] = round(under_hits / n_iterations * 100, 1)
     result["simulation_distributions"] = [
         _distribution_row(
             target="home_score",
@@ -357,6 +383,20 @@ def _build_team_score_result(
     ]
 
     return result
+
+
+def _allocate_ties(home_wins: int, away_wins: int, draws: int) -> tuple[int, int]:
+    """Resolve impossible draw samples for sports that always produce a winner."""
+    decided_home = 0
+    decided_away = 0
+    total_decided = home_wins + away_wins
+    home_share = (home_wins / total_decided) if total_decided else 0.5
+    for idx in range(draws):
+        if (idx + 0.5) / draws <= home_share:
+            decided_home += 1
+        else:
+            decided_away += 1
+    return decided_home, decided_away
 
 
 # ---------------------------------------------------------------------------
@@ -585,9 +625,16 @@ def _sim_basketball(
     league_avg_pace = config.get("avg_pace", 100.0)
     std = config.get("std", 12.0)
 
-    # ORtg-based expected score: (team_off * (league_avg / opp_def)) * (pace / 100)
-    home_expected = (home_off * (league_avg_pace / away_def)) * (game_pace / league_avg_pace)
-    away_expected = (away_off * (league_avg_pace / home_def)) * (game_pace / league_avg_pace)
+    # ORtg/DRtg score model. def_rating is points allowed per 100 possessions;
+    # lower opposing defense reduces expected scoring.
+    league_avg_rating = config.get("avg_total", 220.0) / 2.0
+    pace_factor = game_pace / league_avg_pace
+    home_expected = _expected_against_allowed_rate(
+        home_off, away_def, league_avg_rating, pace_factor
+    )
+    away_expected = _expected_against_allowed_rate(
+        away_off, home_def, league_avg_rating, pace_factor
+    )
 
     # Home court advantage
     hca = config.get("home_advantage", 3.0)
@@ -630,7 +677,7 @@ def _sim_baseball(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, conf
     """Baseball: Poisson run environment model.
 
     off_rating = runs scored per game, def_rating = runs allowed per game.
-    Expected runs = (team_off * league_avg / opp_def) adjusted for park factor.
+    Expected runs = (team_off * opp_runs_allowed / league_avg) adjusted for park factor.
     """
     league_avg_rpg = config.get("avg_total", 8.5) / 2.0  # ~4.25
 
@@ -645,9 +692,10 @@ def _sim_baseball(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, conf
     home_starter_era = home_ctx.get("starter_era")
     away_starter_era = away_ctx.get("starter_era")
 
-    # Expected runs for each team
-    home_lambda = (home_off * (league_avg_rpg / away_def)) * park_factor
-    away_lambda = (away_off * (league_avg_rpg / home_def)) * park_factor
+    # Expected runs for each team. def_rating is runs allowed per game; lower
+    # opposing defense reduces expected scoring.
+    home_lambda = _expected_against_allowed_rate(home_off, away_def, league_avg_rpg, park_factor)
+    away_lambda = _expected_against_allowed_rate(away_off, home_def, league_avg_rpg, park_factor)
 
     # Pitcher ERA adjustment: blend with 40% weight toward starter quality
     if away_starter_era is not None and away_starter_era > 0:
@@ -683,8 +731,8 @@ def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
     away_off = away_ctx.get("off_rating", league_avg_gpg)
     away_def = away_ctx.get("def_rating", league_avg_gpg)
 
-    home_lambda = home_off * (league_avg_gpg / away_def)
-    away_lambda = away_off * (league_avg_gpg / home_def)
+    home_lambda = _expected_against_allowed_rate(home_off, away_def, league_avg_gpg)
+    away_lambda = _expected_against_allowed_rate(away_off, home_def, league_avg_gpg)
 
     # Goalie save pct adjustment: if away goalie is elite, reduce home goals
     away_goalie_sv = away_ctx.get("goalie_sv_pct")
@@ -739,8 +787,8 @@ def _sim_soccer(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
     home_xga = home_ctx.get("xg_against", home_def)
     away_xga = away_ctx.get("xg_against", away_def)
 
-    home_lambda = (home_xg * (league_avg_gpg / away_xga)) if away_xga > 0 else home_xg
-    away_lambda = (away_xg * (league_avg_gpg / home_xga)) if home_xga > 0 else away_xg
+    home_lambda = _expected_against_allowed_rate(home_xg, away_xga, league_avg_gpg)
+    away_lambda = _expected_against_allowed_rate(away_xg, home_xga, league_avg_gpg)
 
     hca = config.get("home_advantage", 0.3)
     home_lambda += hca / 2.0
@@ -1146,6 +1194,7 @@ class FastScoreSimulationBackend:
             away_context=away_context,
             archetype_name=archetype_name,
             spread_home=request.spread_home,
+            over_under=request.over_under,
             context_source=context_source,
             baseline_used=baseline_used,
             seed=request.seed,
@@ -1248,6 +1297,7 @@ class MarkovGameSimulationBackend:
             away_context=request.away_context,
             archetype_name=archetype_name,
             spread_home=request.spread_home,
+            over_under=request.over_under,
             context_source="provided",
             baseline_used=False,
             seed=request.seed,
@@ -1288,6 +1338,7 @@ class OmegaSimulationEngine:
         away_context: dict | None = None,
         seed: int | None = None,
         spread_home: float | None = None,
+        over_under: float | None = None,
         allow_baseline: bool = False,
         transition_modifiers: dict | None = None,
     ) -> dict:
@@ -1317,6 +1368,7 @@ class OmegaSimulationEngine:
             away_context=away_context,
             seed=seed,
             spread_home=spread_home,
+            over_under=over_under,
             allow_baseline=allow_baseline,
             transition_modifiers=transition_modifiers,
         )
@@ -1404,13 +1456,6 @@ class OmegaSimulationEngine:
                         all_player_stats[player_name][stat_key] = []
                     all_player_stats[player_name][stat_key].append(value)
 
-        home_mean = sum(home_scores) / len(home_scores)
-        away_mean = sum(away_scores) / len(away_scores)
-
-        home_wins = sum(1 for h, a in zip(home_scores, away_scores) if h > a)
-        away_wins = sum(1 for h, a in zip(home_scores, away_scores) if a > h)
-        draws = n_iterations - home_wins - away_wins
-
         player_projections: dict[str, dict[str, dict[str, float]]] = {}
         for player_name, stats in all_player_stats.items():
             player_projections[player_name] = {}
@@ -1466,13 +1511,13 @@ class OmegaSimulationEngine:
             "league": league,
             "archetype": get_archetype_name(league),
             "iterations": n_iterations,
-            "home_win_prob": round(home_wins / n_iterations * 100, 1),
-            "away_win_prob": round(away_wins / n_iterations * 100, 1),
-            "draw_prob": round(draws / n_iterations * 100, 1),
-            "predicted_home_score": round(home_mean, 1),
-            "predicted_away_score": round(away_mean, 1),
-            "predicted_spread": round(home_mean - away_mean, 1),
-            "predicted_total": round(home_mean + away_mean, 1),
+            "home_win_prob": distribution_result["home_win_prob"],
+            "away_win_prob": distribution_result["away_win_prob"],
+            "draw_prob": distribution_result["draw_prob"],
+            "predicted_home_score": distribution_result["predicted_home_score"],
+            "predicted_away_score": distribution_result["predicted_away_score"],
+            "predicted_spread": distribution_result["predicted_spread"],
+            "predicted_total": distribution_result["predicted_total"],
             "missing_requirements": [],
             "home_context": home_context,
             "away_context": away_context,
