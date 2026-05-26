@@ -44,26 +44,217 @@ logger = logging.getLogger("omega.trace.store")
 
 _DEFAULT_DB_PATH = "omega_traces.db"
 
+# Path-resolution sources reported back to callers and tests so the redirect
+# decision is observable without parsing log lines.
+_PATH_SOURCE_REQUESTED = "requested"
+_PATH_SOURCE_ENV_OVERRIDE = "env_override"
+_PATH_SOURCE_AUTO_REDIRECT = "auto_redirect_network_fs"
+_PATH_SOURCE_DEFAULT = "default"
+
+_NETWORK_FS_TYPES = frozenset(
+    {"fuse", "fuse.exfat", "fuse.ntfs", "fuseblk", "cifs", "smb", "smb2", "smb3", "nfs", "nfs4"}
+)
+
+
+def _local_runtime_db_path() -> Path:
+    """Per-user runtime DB path that lives on the local SSD, not a mount.
+
+    Windows: %LOCALAPPDATA%\\omega\\runtime\\omega_traces.db
+    POSIX:   ~/.omega/runtime/omega_traces.db
+    """
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("USERPROFILE") or "."
+        return Path(base) / "omega" / "runtime" / _DEFAULT_DB_PATH
+    return Path.home() / ".omega" / "runtime" / _DEFAULT_DB_PATH
+
+
+def _is_network_filesystem(path: str | os.PathLike[str]) -> bool:
+    """Best-effort detection of a CIFS/SMB/FUSE/NFS mount under ``path``.
+
+    Pure prefix matching is not enough: WSL2 9p, mapped drives whose provider
+    is local virtualization, and bind-mounts can all look like network paths
+    superficially. This helper combines:
+      - UNC / ``\\?\\UNC\\`` prefix on Windows.
+      - ``ctypes.windll.kernel32.GetDriveTypeW`` returning DRIVE_REMOTE (4) for
+        the resolved drive letter (Windows only).
+      - ``/proc/self/mountinfo`` scan on POSIX for FUSE/CIFS/NFS-backed mounts
+        whose mount-point is a prefix of the resolved path.
+
+    Returns False on any inspection error — Layer 2's contract is soft-warn,
+    not hard-fail, so a false negative here just means the auto-redirect does
+    not trigger and the existing WAL→DELETE fallback in ``conn`` is the next
+    line of defense.
+    """
+    try:
+        target = Path(path).expanduser()
+    except (TypeError, ValueError):
+        return False
+
+    # Resolve far enough to follow symlinks, but only to the closest existing
+    # ancestor — the DB file itself may not exist yet on first use.
+    probe = target
+    for _ in range(8):
+        if probe.exists() or probe.parent == probe:
+            break
+        probe = probe.parent
+    try:
+        resolved = probe.resolve()
+    except (OSError, RuntimeError):
+        resolved = probe
+
+    resolved_str = str(resolved)
+
+    if os.name == "nt":
+        # UNC / extended UNC prefix.
+        if resolved_str.startswith("\\\\?\\UNC\\") or resolved_str.startswith("\\\\"):
+            return True
+        # Drive-letter remote check.
+        if len(resolved_str) >= 2 and resolved_str[1] == ":":
+            drive_root = resolved_str[:3] if len(resolved_str) >= 3 else resolved_str[:2] + "\\"
+            try:
+                import ctypes
+
+                DRIVE_REMOTE = 4
+                drive_type = ctypes.windll.kernel32.GetDriveTypeW(drive_root)  # type: ignore[attr-defined]
+                if drive_type == DRIVE_REMOTE:
+                    return True
+            except (AttributeError, OSError, ImportError):
+                pass
+        return False
+
+    # POSIX: scan /proc/self/mountinfo for the deepest mount point that is a
+    # prefix of the resolved path; check its fs type.
+    mountinfo = Path("/proc/self/mountinfo")
+    if not mountinfo.exists():
+        return False
+    try:
+        entries = mountinfo.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return False
+
+    best_mount = ""
+    best_fs = ""
+    for line in entries:
+        # mountinfo format: <id> <parent> <maj:min> <root> <mount-point> <opts> ... - <fs-type> <source> <super-opts>
+        parts = line.split(" - ")
+        if len(parts) != 2:
+            continue
+        left = parts[0].split()
+        right = parts[1].split()
+        if len(left) < 5 or len(right) < 1:
+            continue
+        mount_point = left[4]
+        fs_type = right[0]
+        if mount_point == "/" or resolved_str.startswith(mount_point.rstrip("/") + "/") or resolved_str == mount_point:
+            if len(mount_point) > len(best_mount):
+                best_mount = mount_point
+                best_fs = fs_type
+
+    if not best_fs:
+        return False
+    fs_lower = best_fs.lower()
+    if fs_lower in _NETWORK_FS_TYPES:
+        return True
+    # FUSE shows up as "fuse.<flavor>" for many backends.
+    if fs_lower.startswith("fuse"):
+        return True
+    return False
+
+
+def _resolve_db_path(requested: str | None) -> tuple[str, str]:
+    """Return (effective_path, source) for the TraceStore SQLite location.
+
+    Resolution order (BUG-FUSE-2):
+      1. ``OMEGA_TRACE_DB`` env override (absolute path).
+      2. The caller's ``requested`` path, unchanged, unless it resolves onto a
+         FUSE/SMB/CIFS/NFS mount — in which case we redirect to a local
+         per-user runtime DB and log a single WARNING. **No** ``atexit`` sync
+         hook is registered; archival back to the mount is owned by
+         ``scripts/sync_to_mount.ps1`` (see plan §Layer 3).
+      3. The default repo-root ``omega_traces.db``.
+    """
+    env_override = os.environ.get("OMEGA_TRACE_DB")
+    if env_override:
+        return env_override, _PATH_SOURCE_ENV_OVERRIDE
+
+    if requested is None:
+        repo_root = Path(__file__).parent.parent.parent
+        default_path = str(repo_root / _DEFAULT_DB_PATH)
+        if _is_network_filesystem(default_path):
+            redirect = _local_runtime_db_path()
+            redirect.parent.mkdir(parents=True, exist_ok=True)
+            logger.warning(
+                "TraceStore: default DB path %s is on a network/FUSE mount; "
+                "redirecting writes to %s. See OMEGA_COWORK.md §2c.",
+                default_path,
+                redirect,
+            )
+            return str(redirect), _PATH_SOURCE_AUTO_REDIRECT
+        return default_path, _PATH_SOURCE_DEFAULT
+
+    if _is_network_filesystem(requested):
+        redirect = _local_runtime_db_path()
+        redirect.parent.mkdir(parents=True, exist_ok=True)
+        logger.warning(
+            "TraceStore: requested DB path %s is on a network/FUSE mount; "
+            "redirecting writes to %s. See OMEGA_COWORK.md §2c.",
+            requested,
+            redirect,
+        )
+        return str(redirect), _PATH_SOURCE_AUTO_REDIRECT
+
+    return requested, _PATH_SOURCE_REQUESTED
+
 
 class TraceStore:
     """SQLite-backed trace persistence."""
 
-    def __init__(self, db_path: str | None = None, journal_mode: str | None = None) -> None:
-        if db_path is None:
-            # Default: repo root
-            repo_root = Path(__file__).parent.parent.parent
-            db_path = str(repo_root / _DEFAULT_DB_PATH)
+    def __init__(
+        self,
+        db_path: str | None = None,
+        journal_mode: str | None = None,
+        *,
+        read_only: bool = False,
+    ) -> None:
+        effective_path, source = _resolve_db_path(db_path)
         if journal_mode is not None and journal_mode.upper() not in {"WAL", "DELETE", "AUTO"}:
             raise ValueError("journal_mode must be 'WAL', 'DELETE', 'AUTO', or None")
-        self._db_path = db_path
+        self._db_path = effective_path
+        self._db_path_source = source
+        self._read_only = bool(read_only)
         self._conn: sqlite3.Connection | None = None
         self._journal_mode: str | None = None
         self._requested_journal_mode = (journal_mode or "AUTO").upper()
-        self._ensure_schema()
+        if not self._read_only:
+            self._ensure_schema()
+
+    @property
+    def db_path(self) -> str:
+        """The DB path the store will actually read/write."""
+        return self._db_path
+
+    @property
+    def db_path_source(self) -> str:
+        """How ``db_path`` was chosen: requested / env_override / auto_redirect_network_fs / default."""
+        return self._db_path_source
 
     @property
     def conn(self) -> sqlite3.Connection:
         if self._conn is None:
+            if self._read_only:
+                # Build a read-only URI that survives Windows paths with spaces
+                # and ``?`` characters. ``as_uri()`` handles the escaping.
+                uri = Path(self._db_path).resolve().as_uri() + "?mode=ro&immutable=0"
+                self._conn = sqlite3.connect(uri, uri=True)
+                # Read-only opens MUST NOT touch journal mode or schema — both
+                # would attempt writes.
+                self._conn.execute("PRAGMA query_only=ON")
+                self._conn.execute("PRAGMA busy_timeout=5000")
+                self._conn.execute("PRAGMA foreign_keys=ON")
+                self._conn.execute("PRAGMA temp_store=MEMORY")
+                self._conn.row_factory = sqlite3.Row
+                return self._conn
+
             self._conn = sqlite3.connect(self._db_path)
             requested = self._requested_journal_mode
             desired = "DELETE" if requested == "AUTO" and os.environ.get("COWORK_SANDBOX") else requested
@@ -82,7 +273,11 @@ class TraceStore:
                 )
                 row = self._conn.execute("PRAGMA journal_mode=DELETE").fetchone()
             self._journal_mode = str(row[0]).lower() if row else None
+            # PRAGMA hardening (BUG-FUSE-2): give writers room to wait when WAL
+            # is contended, and keep temp tables off whatever the mount is.
+            self._conn.execute("PRAGMA busy_timeout=5000")
             self._conn.execute("PRAGMA foreign_keys=ON")
+            self._conn.execute("PRAGMA temp_store=MEMORY")
             self._conn.row_factory = sqlite3.Row
         return self._conn
 

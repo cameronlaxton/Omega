@@ -64,6 +64,9 @@ def _init_repo(tmp_path: Path) -> Path:
     service.write_text("VALUE = 1\n", encoding="utf-8")
     other = repo / "other.py"
     other.write_text("VALUE = 1\n", encoding="utf-8")
+    test_file = repo / "tests" / "core" / "test_thing.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text("VALUE = 1\n", encoding="utf-8")
     _git(repo, "add", ".")
     _git(repo, "commit", "-m", "init")
     return repo
@@ -129,6 +132,77 @@ def test_force_repair_restores_all_divergent_tracked_python(tmp_path):
     assert failures == []
     assert service.read_text(encoding="utf-8") == "VALUE = 1\n"
     assert other.read_text(encoding="utf-8") == "VALUE = 1\n"
+
+
+def test_repair_from_git_proceeds_when_only_tests_are_dirty(tmp_path):
+    """BUG-PREFLIGHT-3: a dirty test file must not block repair of a corrupt
+    core source file. Core tier is restored; the test edit is left alone."""
+    repo = _init_repo(tmp_path)
+    service = repo / "omega" / "core" / "contracts" / "service.py"
+    test_file = repo / "tests" / "core" / "test_thing.py"
+    service.write_text("def broken(:\n", encoding="utf-8")
+    test_file.write_text("VALUE = 2\n", encoding="utf-8")
+
+    failures = cowork_preflight.verify_against_git(repo, repair=True)
+
+    assert failures == []
+    assert service.read_text(encoding="utf-8") == "VALUE = 1\n"
+    # The dirty test edit is preserved — we deliberately did not touch it.
+    assert test_file.read_text(encoding="utf-8") == "VALUE = 2\n"
+
+
+def test_non_repair_only_test_divergence_is_warning_not_failure(tmp_path, capsys):
+    """When the core tier is clean and only tests/ diverge, verify_against_git
+    returns no failures but logs a warning line on stdout."""
+    repo = _init_repo(tmp_path)
+    test_file = repo / "tests" / "core" / "test_thing.py"
+    test_file.write_text("VALUE = 2\n", encoding="utf-8")
+
+    failures = cowork_preflight.verify_against_git(repo)
+
+    assert failures == []
+    captured = capsys.readouterr().out
+    assert "tests/core/test_thing.py" in captured
+    assert "not blocking" in captured
+
+
+def test_dirty_core_still_blocks_repair_when_not_a_target(tmp_path):
+    """The original block-on-dirty-non-target behavior is preserved for the
+    core tier (other.py is at repo root, treated as core)."""
+    repo = _init_repo(tmp_path)
+    service = repo / "omega" / "core" / "contracts" / "service.py"
+    other = repo / "other.py"
+    service.write_text("def broken(:\n", encoding="utf-8")
+    other.write_text("VALUE = 2\n", encoding="utf-8")
+
+    failures = cowork_preflight.verify_against_git(repo, repair=True)
+
+    assert len(failures) == 1
+    assert "Refusing to --repair-from-git" in failures[0]
+    assert "other.py" in failures[0]
+    # Service.py left in its corrupt state because the guard blocked.
+    assert service.read_text(encoding="utf-8") == "def broken(:\n"
+
+
+def test_split_tiers_separates_tests_from_core():
+    core, test = cowork_preflight._split_tiers(
+        [
+            "omega/core/contracts/service.py",
+            "tests/core/test_engine.py",
+            "scripts/run_analyze.py",
+            "tests/scripts/test_cowork_preflight.py",
+            "OMEGA_COWORK.md",
+        ]
+    )
+    assert core == [
+        "omega/core/contracts/service.py",
+        "scripts/run_analyze.py",
+        "OMEGA_COWORK.md",
+    ]
+    assert test == [
+        "tests/core/test_engine.py",
+        "tests/scripts/test_cowork_preflight.py",
+    ]
 
 
 def test_clean_stale_bytecode_summarizes_unlink_failures(monkeypatch, tmp_path):

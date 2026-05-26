@@ -625,3 +625,133 @@ class TestSchemaV4SessionId:
         assert by_sess["sess-1"]["trace_count"] == 2
         assert by_sess["sess-2"]["trace_count"] == 1
         store.close()
+
+
+# ---------------------------------------------------------------------------
+# BUG-FUSE-2 — soft-warn + auto-redirect, read-only opens, PRAGMA hardening
+# ---------------------------------------------------------------------------
+
+
+class TestDbPathResolution:
+    """Layer 2 of the 20260526 plan: TraceStore must detect network-FS DB paths
+    and redirect writes to a local runtime path, register no atexit hook, and
+    expose the resolution decision via ``db_path_source``."""
+
+    def test_env_override_wins_over_argument(self, tmp_path, monkeypatch):
+        env_db = tmp_path / "env_override.db"
+        monkeypatch.setenv("OMEGA_TRACE_DB", str(env_db))
+        arg_db = tmp_path / "arg.db"
+
+        store = TraceStore(db_path=str(arg_db))
+        try:
+            assert store.db_path == str(env_db)
+            assert store.db_path_source == "env_override"
+        finally:
+            store.close()
+
+    def test_default_path_marked_as_default(self, monkeypatch):
+        from omega.trace import store as store_mod
+
+        monkeypatch.delenv("OMEGA_TRACE_DB", raising=False)
+        monkeypatch.setattr(store_mod, "_is_network_filesystem", lambda _p: False)
+
+        store = TraceStore()
+        try:
+            assert store.db_path_source == "default"
+            assert store.db_path.endswith("omega_traces.db")
+        finally:
+            store.close()
+
+    def test_network_fs_path_is_redirected_with_warning(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        from omega.trace import store as store_mod
+
+        monkeypatch.delenv("OMEGA_TRACE_DB", raising=False)
+        fake_mount = tmp_path / "fakemount" / "omega_traces.db"
+        fake_mount.parent.mkdir(parents=True, exist_ok=True)
+
+        # Force the detector to return True only for our fake path.
+        def fake_is_net(path):
+            return str(path) == str(fake_mount)
+
+        monkeypatch.setattr(store_mod, "_is_network_filesystem", fake_is_net)
+
+        # Pin the redirect target to a temp dir so we don't pollute the real
+        # user runtime path during tests.
+        redirect_target = tmp_path / "redirect" / "omega_traces.db"
+        monkeypatch.setattr(
+            store_mod, "_local_runtime_db_path", lambda: redirect_target
+        )
+
+        # Capture atexit registrations to assert nothing is hooked up.
+        registered = []
+        import atexit
+
+        monkeypatch.setattr(atexit, "register", lambda fn, *a, **kw: registered.append(fn))
+
+        with caplog.at_level("WARNING", logger="omega.trace.store"):
+            store = TraceStore(db_path=str(fake_mount))
+        try:
+            assert store.db_path == str(redirect_target)
+            assert store.db_path_source == "auto_redirect_network_fs"
+            assert any(
+                "network/FUSE mount" in record.message for record in caplog.records
+            )
+            assert registered == [], (
+                "TraceStore must not register an atexit sync-back hook; "
+                "archival is owned by scripts/sync_to_mount.ps1"
+            )
+        finally:
+            store.close()
+
+    def test_read_only_open_skips_schema_setup_and_writes(self, tmp_path):
+        # Seed a writable DB in DELETE journal mode so the seed step leaves no
+        # WAL/SHM sidecars of its own — this isolates the "read-only must not
+        # create sidecars" assertion below from WAL-checkpoint timing.
+        db_file = tmp_path / "ro_seed.db"
+        writable = TraceStore(db_path=str(db_file), journal_mode="DELETE")
+        writable.persist(_make_trace(trace_id="t-ro-seed"))
+        writable.close()
+
+        # Snapshot sidecar state right after the writable close — read-only
+        # open must not change it.
+        wal_before = (tmp_path / "ro_seed.db-wal").exists()
+        shm_before = (tmp_path / "ro_seed.db-shm").exists()
+
+        ro = TraceStore(db_path=str(db_file), read_only=True)
+        try:
+            row = ro.conn.execute(
+                "SELECT trace_id FROM traces WHERE trace_id = ?", ("t-ro-seed",)
+            ).fetchone()
+            assert row is not None
+            assert row["trace_id"] == "t-ro-seed"
+
+            # Writes against a query_only connection must raise.
+            with pytest.raises(sqlite3.OperationalError):
+                ro.conn.execute(
+                    "INSERT INTO traces (trace_id, run_id, timestamp, prompt, "
+                    "league, matchup, execution_mode, simulation_seed, "
+                    "aggregate_quality) VALUES (?,?,?,?,?,?,?,?,?)",
+                    ("t-x", "r-x", "2026-05-26T00:00:00Z", "", "NBA", "", "native_sim", 1, 0.8),
+                )
+        finally:
+            ro.close()
+
+        # Read-only open must not introduce sidecars that weren't already
+        # present at seed-close time.
+        assert (tmp_path / "ro_seed.db-wal").exists() == wal_before
+        assert (tmp_path / "ro_seed.db-shm").exists() == shm_before
+
+    def test_busy_timeout_and_foreign_keys_set_on_open(self, tmp_path):
+        store = TraceStore(db_path=str(tmp_path / "pragma.db"))
+        try:
+            fk = store.conn.execute("PRAGMA foreign_keys").fetchone()[0]
+            bt = store.conn.execute("PRAGMA busy_timeout").fetchone()[0]
+            ts = store.conn.execute("PRAGMA temp_store").fetchone()[0]
+            assert fk == 1
+            assert bt >= 5000
+            # temp_store: 0=DEFAULT, 1=FILE, 2=MEMORY
+            assert ts == 2
+        finally:
+            store.close()

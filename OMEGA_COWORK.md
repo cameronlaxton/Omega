@@ -60,15 +60,21 @@ copy (see `docs/session_bugs_20260521_mount_corruption.md`).
 
 ### 2b. Clean Cowork Session Hygiene
 
-- **SQLite concurrency limit:** If the FUSE mount forces `TraceStore` to fall
-  back from WAL to DELETE journal mode, run database writes sequentially.
-  Parallel calibration, trace ingestion, or outcome ingestion can hit
-  `sqlite3.OperationalError: database is locked`.
-- **Preflight repair restrictions:** `--repair-from-git` restores only tracked
-  Python files that are syntax-corrupt or known critical corruption targets.
-  It fails if other tracked `.py` files have uncommitted edits. Use
-  `--force-repair` only when you intentionally want to clobber every divergent
-  tracked Python file back to `HEAD`.
+- **SQLite on a network/FUSE mount:** `TraceStore` now detects FUSE/SMB/CIFS/NFS
+  DB paths at open time and auto-redirects writes to a per-user local runtime
+  path (`%LOCALAPPDATA%\omega\runtime\omega_traces.db` on Windows,
+  `~/.omega/runtime/omega_traces.db` on POSIX). A single WARNING is logged
+  when this happens. No `atexit` sync-back: archival back to the mount is
+  owned by `scripts/sync_to_mount.ps1` (see §2c). The redirect is a safety
+  net; the intended steady state is the local-workspace layout below.
+- **Preflight repair restrictions:** `--repair-from-git` now tiers its repair
+  set. Core-tier files (`omega/`, `scripts/`, MCP) are restored from `HEAD`
+  even when tracked files under `tests/` have uncommitted edits. The legacy
+  guard ("refusing because tracked files outside repair targets are dirty")
+  still fires for dirty *core* files. When the core tier is clean and only
+  tests diverge, preflight prints `cowork_preflight_core_ready` instead of
+  `cowork_preflight_failed`. Use `--force-repair` only when you intentionally
+  want to clobber every divergent tracked Python file (both tiers).
 - **Stale bytecode:** If preflight warns about host-locked `.pyc` files, add
   `PYTHONDONTWRITEBYTECODE=1` to the Windows host environment. Preflight will
   safely summarize and skip existing locked bytecode files.
@@ -76,6 +82,63 @@ copy (see `docs/session_bugs_20260521_mount_corruption.md`).
   `OddsApiClient._get_json()`. Use `omega_resolve_odds` or
   `scripts/resolve_odds.py` so URL construction, BetMGM defaults, provenance,
   and budget tracking stay on the typed path.
+
+### 2c. Local Workspace (preferred runtime layout)
+
+Running Omega from the network-mounted repo (`C:\repos\Omega` on the host,
+bind-mounted into the Linux sandbox) is the recurring root cause of both
+BUG-FUSE-2 (SQLite WAL/DELETE both fail) and BUG-PREFLIGHT-3 (Pattern C
+truncation, `index.lock` blocking `git checkout`). The supported steady-state
+is to run Omega from a host-local clone and treat the mount as an append-only
+archive.
+
+**Bootstrap (Windows host PowerShell, BEFORE launching the Cowork CLI):**
+
+```powershell
+.\scripts\cowork_bootstrap.ps1
+# Then:
+Set-Location $env:OMEGA_LOCAL_WORKSPACE
+# Launch the Cowork CLI from here.
+```
+
+`cowork_bootstrap.ps1` is idempotent. On first run it clones the upstream
+remote (NOT the mount, to avoid pulling Pattern C corruption into the local
+copy) into `%USERPROFILE%\.omega\workspace\Omega` and configures a `backup`
+remote pointing at the bare repo on the CIFS share. On subsequent runs it
+fast-forwards `main` and verifies the `backup` remote.
+
+**Session close (Windows host PowerShell, AFTER the Cowork CLI exits):**
+
+```powershell
+.\scripts\sync_to_mount.ps1
+# or, to inspect what would happen:
+.\scripts\sync_to_mount.ps1 -WhatIf
+```
+
+`sync_to_mount.ps1` is one-way (local → mount). It runs
+`cowork_preflight.py --direct-only` and `pytest -q --maxfail=3` first; if
+either fails, sync is aborted and a log file is written under
+`%USERPROFILE%\.omega\workspace\sync_failures\`. On success it:
+
+- pushes `main` and tags to the `backup` bare repo via `git push`,
+- mirrors `inbox\` and `reports\` to the mount via `robocopy /E` (append-only,
+  NOT `/MIR`; explicit excludes for `*.db`, `*.db-wal`, `*.db-shm`,
+  `*.db-journal`, `__pycache__`, `.pytest_cache`, `.venv`, `inbox\failed`),
+- snapshots `omega_traces.db` to a timestamped path under
+  `<mount>\backups\omega_traces\YYYYMMDD-HHMM.db` (write-once; never
+  overwrites the live DB on the mount).
+
+**Execution contract.** Both scripts are **host-side PowerShell**. They are
+not callable from inside the Linux sandbox — PowerShell is not present there
+and the scripts intentionally manipulate `%USERPROFILE%`, mapped drives, and
+the CIFS share. The agent's system prompt must not attempt to invoke either
+script. Schedule them via Task Scheduler or run them manually from a host
+PowerShell session.
+
+**`OMEGA_TRACE_DB` env var.** For sessions that have not yet migrated to the
+local workspace, you can point `TraceStore` at any writable path with
+`OMEGA_TRACE_DB=<absolute-path>`. This is the explicit-override path; the
+auto-redirect described in §2b is the implicit fallback.
 
 Preferred path:
 

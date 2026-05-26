@@ -1,0 +1,109 @@
+{
+  "trace": {
+    "trace_id": "sandbox-35276762-76cc",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-26T17:09:45.174094+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260526-nba1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 29.5,
+      "odds_over": -120.0,
+      "odds_under": -110.0,
+      "player_context": {
+        "pts_mean": 24.75,
+        "pts_std": 4.2
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 1,
+        "opponent_def_rank": 1
+      },
+      "n_iterations": 2000,
+      "seed": 2818422780,
+      "evidence": [],
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "San Antonio Spurs",
+      "game_date": "2026-05-26"
+    },
+    "result": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 29.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.0875,
+      "under_prob": 0.9125,
+      "projection_mean": 23.82,
+      "projection_std": 4.07,
+      "edge_over": -33.42,
+      "edge_under": 26.49,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.2782,
+      "recommended_units": 5.0,
+      "bet_side_odds": -110.0,
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.0875,
+        "calibrated_prob": 0.21125,
+        "path": "static_calibrated"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.9125,
+        "calibrated_prob": 0.78875,
+        "path": "static_calibrated"
+      }
+    },
+    "downgrades": [],
+    "trace_quality": {
+      "aggregate_quality": 0.65,
+      "passed": true,
+      "evidence_status": "empty",
+      "identity_status": "complete"
+    }
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "espn.com",
+      "nba.com",
+      "betmgm via the-odds-api"
+    ],
+    "fields_gathered": [
+      "player_name",
+      "league",
+      "prop_type",
+      "line",
+      "odds_over",
+      "odds_under",
+      "pts_mean_series",
+      "pts_std_estimated",
+      "rest_days",
+      "is_playoff",
+      "opponent_def_rank"
+    ],
+    "missing_fields": [
+      "confirmed_G1_pts",
+      "confirmed_G2_pts",
+      "confirmed_G3_pts",
+      "minutes_projection"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": -120.0,
+      "odds_under": -110.0,
+      "line": 29.5
+    }
+  },
+  "reasoning_downgrade_rationale": "pts_mean sourced from partial series data (confirmed G2=30, G4=19; G1 and G3 estimated). pts_std=4.2 derived from estimated series data \u2014 may understate true variance vs RS std of ~6-7. Calibration path is static_calibrated (raw 91.3% under pulled to 78.9%); recommend treating raw under prob with caution. Empty evidence per task constraint.",
+  "reasoning_narrative": "SGA is averaging 24.75 ppg in this WCF series (estimated from confirmed G2=30 and G4=19, series avg 24.8). The line at 29.5 is set 4.75 pts above his series mean and 1.6 pts below his RS avg (31.1). Market appears anchored to RS performance rather than series actuals. Engine projects 23.82 mean with 4.07 std \u2014 under prob calibrated to 78.9%. Hidden assumption: pts_std may be underestimated if only using series sample (n=4). Risk: if SGA regresses toward RS form on home court in an elimination-risk G5, the over could hit. SAS defense (rank 1) as opponent_def_rank input for SGA's own scoring is misapplied \u2014 this refers to OKC's defensive rank vs SGA; corrected assumption: SAS def is elite so this approximates OKC's D rank context.",
+  "trace_quality": {
+    "aggregate_quality": 0.65
+  }
+}

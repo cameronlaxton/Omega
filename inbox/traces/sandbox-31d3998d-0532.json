@@ -1,0 +1,98 @@
+{
+  "trace": {
+    "trace_id": "sandbox-31d3998d-0532",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-26T17:09:45.168368+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260526-nba1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 26.5,
+      "odds_over": -110.0,
+      "odds_under": -120.0,
+      "player_context": {
+        "pts_mean": 30.3,
+        "pts_std": 7.5
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 1,
+        "opponent_def_rank": 7
+      },
+      "n_iterations": 2000,
+      "seed": 3311494891,
+      "evidence": [],
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "San Antonio Spurs",
+      "game_date": "2026-05-26"
+    },
+    "result": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 26.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.638,
+      "under_prob": 0.362,
+      "projection_mean": 29.09,
+      "projection_std": 7.21,
+      "edge_over": 11.42,
+      "edge_under": -18.35,
+      "recommendation": "over",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.1199,
+      "recommended_units": 5.0,
+      "bet_side_odds": -110.0,
+      "imputed_fraction": 0.0
+    },
+    "downgrades": [],
+    "trace_quality": {
+      "aggregate_quality": 0.68,
+      "passed": true,
+      "evidence_status": "empty",
+      "identity_status": "complete"
+    }
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "espn.com",
+      "nba.com",
+      "betmgm via the-odds-api"
+    ],
+    "fields_gathered": [
+      "player_name",
+      "league",
+      "prop_type",
+      "line",
+      "odds_over",
+      "odds_under",
+      "pts_mean_series",
+      "pts_std_estimated",
+      "rest_days",
+      "is_playoff",
+      "opponent_def_rank"
+    ],
+    "missing_fields": [
+      "confirmed_pts_std_from_full_series",
+      "minutes_projection",
+      "foul_trouble_risk"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": -110.0,
+      "odds_under": -120.0,
+      "line": 26.5
+    }
+  },
+  "reasoning_downgrade_rationale": "Empty evidence array per task constraint: player-plane signals omitted to prevent cross-plane contamination. pts_std=7.5 estimated from 4-game series sample (G1=41 in 2OT inflates variance). Line (26.5) is set 3.8 pts below projected series mean, suggesting bookmaker awareness of Wembanyama's ceiling.",
+  "reasoning_narrative": "Wembanyama is averaging 30.3 ppg in the WCF (4 games). Line is 26.5, projecting 29.1 mean \u2014 2.6 pts above line. Over prob 63.8% vs ~52.4% market implied (+11.4% edge). Key risk: G1 was 2OT (41 pts inflates series mean); G2-G3 may have been closer to 23-24 range. Used series avg not regular season (28.4 RS), appropriate given playoff elevation. OKC ranks 7th in defensive opponent_def_rank \u2014 not a top-tier stopper for interior players. No player-plane evidence submitted per task constraint.",
+  "trace_quality": {
+    "aggregate_quality": 0.68
+  }
+}

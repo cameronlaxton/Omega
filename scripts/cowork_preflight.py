@@ -145,6 +145,23 @@ _CRITICAL_FILES = frozenset({
 })
 
 
+# Tiered repair targets (BUG-PREFLIGHT-3): test-tier divergence must never
+# block engine-source repair. Anything under tests/ is the test tier; every
+# other tracked .py file is the core tier (engine code, scripts, MCP).
+def _is_test_tier(rel_path: str) -> bool:
+    normalized = rel_path.replace("\\", "/")
+    return normalized.startswith("tests/") or normalized == "tests"
+
+
+def _split_tiers(rel_paths: list[str]) -> tuple[list[str], list[str]]:
+    """Return (core, test) partition of the given tracked-path list."""
+    core: list[str] = []
+    test: list[str] = []
+    for rel in rel_paths:
+        (test if _is_test_tier(rel) else core).append(rel)
+    return core, test
+
+
 def _check_critical_files(repo_root: Path, diverged: list[str]) -> list[str]:
     """Flag critical files separately with stricter warnings.
 
@@ -235,14 +252,20 @@ def verify_against_git(
     syntactically valid but missing trailing function/class definitions. AST
     parsing cannot catch these; only content equality with the git blob does.
 
-    A divergence does not by itself prove corruption: the operator may have
-    legitimate uncommitted changes. We report all divergences and let the
-    operator decide. In --repair-from-git mode, syntax-corrupt tracked files
-    and known critical corruption targets are restored via `git checkout HEAD --`,
-    which writes through the mount cache (Write-tool writes do not - see
+    Tiering (BUG-PREFLIGHT-3): divergence is split into a core tier (engine,
+    scripts, MCP) and a test tier (anything under ``tests/``). ``--repair-from-git``
+    is allowed to proceed when only test-tier files are dirty outside the
+    repair set; test-tier divergence on its own is a warning, not a failure.
+    Core-tier divergence still blocks unless every dirty core file is a repair
+    target or ``--force-repair`` is supplied.
+
+    In --repair-from-git mode, syntax-corrupt tracked files and known critical
+    corruption targets are restored via ``git checkout HEAD --``, which writes
+    through the mount cache (Write-tool writes do not — see
     docs/session_bugs_20260521_mount_corruption.md).
 
-    Caution: --force-repair clobbers every divergent tracked Python file.
+    Caution: --force-repair clobbers every divergent tracked Python file across
+    both tiers.
     """
     failures: list[str] = []
 
@@ -255,16 +278,31 @@ def verify_against_git(
     if not diverged:
         return []
 
+    core_diverged, test_diverged = _split_tiers(diverged)
+
     if repair:
         corrupt = set(_syntax_corrupt_tracked_files(repo_root, tracked_files))
         critical = set(_CRITICAL_FILES).intersection(diverged)
-        repair_targets = set(diverged) if force_repair else corrupt.union(critical)
-        non_target_dirty = sorted(set(diverged) - repair_targets)
-        if non_target_dirty and not force_repair:
+        if force_repair:
+            repair_targets = set(diverged)
+        else:
+            # Default repair set: every corrupt or critical file in EITHER tier
+            # gets restored. Test-tier corruption is restored too — that's
+            # still a real corruption event we want to heal — but a *clean*
+            # core tree with dirty test edits no longer blocks repair.
+            repair_targets = corrupt.union(critical)
+
+        # The blocking guard now only fires when CORE files are dirty without
+        # being repair targets. Test-tier divergence outside the repair set
+        # is intentionally non-blocking (BUG-PREFLIGHT-3): the engine is fine,
+        # only the test fixtures have local edits.
+        non_target_core_dirty = sorted(set(core_diverged) - repair_targets)
+        if non_target_core_dirty and not force_repair:
             return [
                 "verify_against_git: Refusing to --repair-from-git because tracked "
-                "Python files outside repair targets are dirty. Uncommitted files: "
-                f"{', '.join(non_target_dirty)}. Use --force-repair to clobber."
+                "core Python files outside repair targets are dirty. Uncommitted "
+                f"core files: {', '.join(non_target_core_dirty)}. "
+                "Use --force-repair to clobber."
             ]
         if not repair_targets:
             return [
@@ -298,18 +336,28 @@ def verify_against_git(
         failures.extend(_check_critical_files(repo_root, remaining_diverged))
         return failures
 
-    # Check critical files first, always with stricter warnings
-    critical_failures = _check_critical_files(repo_root, diverged)
+    # Non-repair report path. Tier the failures.
+    critical_failures = _check_critical_files(repo_root, core_diverged)
     if critical_failures:
         failures.extend(critical_failures)
 
-    for rel_path in diverged:
+    for rel_path in core_diverged:
         if rel_path not in _CRITICAL_FILES:
             failures.append(
                 f"Source diverges from git HEAD: {rel_path}. "
                 "If this is mount corruption (truncation/null bytes), re-run preflight "
                 "with --repair-from-git. If this is your intentional edit, ignore."
             )
+
+    # Test-tier divergence is a warning, never a failure. Surface it on stdout
+    # so the operator notices but does not block engine execution.
+    if test_diverged:
+        print(
+            f"[warning] verify_against_git: {len(test_diverged)} test file(s) "
+            "diverge from git HEAD (not blocking engine execution): "
+            + ", ".join(test_diverged)
+        )
+
     return failures
 
 
@@ -420,6 +468,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"- {failure}")
         print("- Do not emit formal Omega numeric outputs until preflight passes.")
         return 1
+
+    # BUG-PREFLIGHT-3 banner: when the core tier is clean and only test files
+    # diverge, emit cowork_preflight_core_ready so automated runs don't treat
+    # the warning as a hard failure. Detected by re-checking git parity once
+    # the rest of preflight has passed.
+    tracked_files, git_failures = _tracked_python_files(repo_root)
+    if not git_failures:
+        diverged = _diverged_tracked_files(repo_root, tracked_files)
+        core_diverged, test_diverged = _split_tiers(diverged)
+        if not core_diverged and test_diverged:
+            print(
+                "cowork_preflight_core_ready: python="
+                f"{_version_text(tuple(sys.version_info[:3]))} "
+                f"(test_tier_diverged={len(test_diverged)})"
+            )
+            return 0
 
     print(f"cowork_preflight_ready: python={_version_text(tuple(sys.version_info[:3]))}")
     return 0
