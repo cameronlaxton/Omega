@@ -24,7 +24,7 @@ from omega.core.contracts.service import analyze  # noqa: E402
 
 
 def _load_request(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as fh:
+    with path.open("r", encoding="utf-8-sig") as fh:
         payload = json.load(fh)
     if not isinstance(payload, dict):
         raise ValueError("request JSON must contain an object")

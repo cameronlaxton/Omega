@@ -69,3 +69,18 @@ def test_run_analyze_explicit_seed_wins(tmp_path):
     )
 
     assert trace["input_snapshot"]["seed"] == 12345
+
+
+def test_run_analyze_accepts_utf8_bom_request_json(tmp_path):
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_game_request()), encoding="utf-8-sig")
+
+    trace = run_analyze.run(
+        kind="game",
+        request_json=request_path,
+        session_id="sess-test",
+        bankroll=1000.0,
+    )
+
+    assert trace["kind"] == "game"
+    assert trace["result"]["status"] == "success"
