@@ -104,6 +104,81 @@ class TestSimulation:
         assert 0 <= result["away_win_prob"] <= 100
         assert result["iterations"] == 100
 
+    def test_allowed_rate_defense_is_monotonic_by_sport(self):
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        engine = OmegaSimulationEngine()
+        cases = [
+            (
+                "NBA",
+                {"off_rating": 114.0, "def_rating": 108.0, "pace": 100.0},
+                {"off_rating": 112.0, "def_rating": 100.0, "pace": 100.0},
+                {"off_rating": 112.0, "def_rating": 122.0, "pace": 100.0},
+            ),
+            (
+                "MLB",
+                {"off_rating": 4.6, "def_rating": 4.0},
+                {"off_rating": 4.0, "def_rating": 3.0},
+                {"off_rating": 4.0, "def_rating": 5.4},
+            ),
+            (
+                "NHL",
+                {"off_rating": 3.1, "def_rating": 3.0},
+                {"off_rating": 3.0, "def_rating": 2.4},
+                {"off_rating": 3.0, "def_rating": 3.8},
+            ),
+            (
+                "EPL",
+                {"off_rating": 1.8, "def_rating": 1.1},
+                {"off_rating": 1.4, "def_rating": 0.7},
+                {"off_rating": 1.4, "def_rating": 1.6},
+            ),
+        ]
+        for league, home, strong_def, weak_def in cases:
+            strong = engine.run_fast_game_simulation(
+                "Home",
+                "Away",
+                league=league,
+                n_iterations=4000,
+                seed=123,
+                home_context=home,
+                away_context=strong_def,
+            )
+            weak = engine.run_fast_game_simulation(
+                "Home",
+                "Away",
+                league=league,
+                n_iterations=4000,
+                seed=123,
+                home_context=home,
+                away_context=weak_def,
+            )
+            assert weak["predicted_home_score"] > strong["predicted_home_score"], league
+
+    def test_no_draw_sports_resolve_ties_into_two_way_probability(self):
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        engine = OmegaSimulationEngine()
+        for league, home, away in [
+            (
+                "NBA",
+                {"off_rating": 110.0, "def_rating": 110.0, "pace": 100.0},
+                {"off_rating": 110.0, "def_rating": 110.0, "pace": 100.0},
+            ),
+            ("MLB", {"off_rating": 4.2, "def_rating": 4.2}, {"off_rating": 4.2, "def_rating": 4.2}),
+        ]:
+            result = engine.run_fast_game_simulation(
+                "Home",
+                "Away",
+                league=league,
+                n_iterations=2000,
+                seed=321,
+                home_context=home,
+                away_context=away,
+            )
+            assert result["draw_prob"] == 0.0
+            assert abs(result["home_win_prob"] + result["away_win_prob"] - 100.0) <= 0.1
+
     def test_fast_game_simulation_skips_when_context_absent_by_default(self):
         from omega.core.simulation.engine import OmegaSimulationEngine
 

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -48,32 +47,23 @@ _DEFAULT_DB_PATH = "omega_traces.db"
 class TraceStore:
     """SQLite-backed trace persistence."""
 
-    def __init__(self, db_path: str | None = None, journal_mode: str | None = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         if db_path is None:
             # Default: repo root
             repo_root = Path(__file__).parent.parent.parent
             db_path = str(repo_root / _DEFAULT_DB_PATH)
-        if journal_mode is not None and journal_mode.upper() not in {"WAL", "DELETE", "AUTO"}:
-            raise ValueError("journal_mode must be 'WAL', 'DELETE', 'AUTO', or None")
         self._db_path = db_path
         self._conn: sqlite3.Connection | None = None
         self._journal_mode: str | None = None
-        self._requested_journal_mode = (journal_mode or "AUTO").upper()
         self._ensure_schema()
 
     @property
     def conn(self) -> sqlite3.Connection:
         if self._conn is None:
             self._conn = sqlite3.connect(self._db_path)
-            requested = self._requested_journal_mode
-            desired = "DELETE" if requested == "AUTO" and os.environ.get("COWORK_SANDBOX") else requested
-            if desired == "AUTO":
-                desired = "WAL"
             try:
-                row = self._conn.execute(f"PRAGMA journal_mode={desired}").fetchone()
+                row = self._conn.execute("PRAGMA journal_mode=WAL").fetchone()
             except sqlite3.OperationalError as exc:
-                if desired != "WAL":
-                    raise
                 logger.warning(
                     "SQLite WAL mode unsupported on this mount. Falling back to DELETE mode. "
                     "Concurrency degraded: ensure trace writes and calibration run sequentially. "

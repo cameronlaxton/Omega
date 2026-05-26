@@ -60,9 +60,14 @@ class OddsInput(BaseModel):
     spread_home_price: float | None = Field(
         default=-110, description="Juice on the home spread (American odds)"
     )
+    spread_away_price: float | None = Field(
+        default=-110, description="Juice on the away spread (American odds)"
+    )
     moneyline_home: float | None = Field(default=None, description="Home moneyline (American odds)")
     moneyline_away: float | None = Field(default=None, description="Away moneyline (American odds)")
     over_under: float | None = Field(default=None, description="Total line (e.g., 224.5)")
+    total_over_price: float | None = Field(default=-110, description="Over price (American odds)")
+    total_under_price: float | None = Field(default=-110, description="Under price (American odds)")
 
     # 3-way moneyline (hockey regulation, soccer)
     moneyline_draw: float | None = Field(
@@ -265,6 +270,8 @@ class EdgeDetail(BaseModel):
 
     side: str = Field(description="'home', 'away', or 'draw'")
     team: str
+    market: str = Field(default="moneyline", description="moneyline, spread, total, or draw")
+    line: float | None = Field(default=None, description="Market line for spread/total edges")
     true_prob: float = Field(description="Raw model probability (0-1)")
     calibrated_prob: float = Field(description="Calibrated probability (0-1)")
     market_implied: float = Field(description="Market implied probability (0-1)")

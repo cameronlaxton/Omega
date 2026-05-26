@@ -13,6 +13,7 @@ import collections
 import errno
 import importlib
 import importlib.metadata
+import os
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -210,6 +211,21 @@ def _syntax_corrupt_tracked_files(repo_root: Path, tracked_files: list[str]) -> 
     return corrupt
 
 
+def _sync_filesystem() -> None:
+    sync = getattr(os, "sync", None)
+    if callable(sync):
+        sync()
+
+
+def _ast_parse_file(path: Path) -> str | None:
+    try:
+        source = path.read_text(encoding="utf-8", errors="replace")
+        ast.parse(source, filename=str(path))
+    except (OSError, SyntaxError) as exc:
+        return str(exc)
+    return None
+
+
 def verify_against_git(
     repo_root: Path, *, repair: bool = False, force_repair: bool = False
 ) -> list[str]:
@@ -267,9 +283,17 @@ def verify_against_git(
                     f"{result.stderr.strip()}"
                 )
         if restored:
+            _sync_filesystem()
             print(f"[repair] Restored {len(restored)} file(s) from git HEAD:")
             for path in restored:
                 print(f"  {path}")
+            print("[repair] Re-parsing restored file(s):")
+            for path in restored:
+                parse_error = _ast_parse_file(repo_root / path)
+                if parse_error is None:
+                    print(f"  OK {path}")
+                else:
+                    failures.append(f"verify_against_git: AST parse failed after repair {path}: {parse_error}")
         remaining_diverged = _diverged_tracked_files(repo_root, tracked_files)
         failures.extend(_check_critical_files(repo_root, remaining_diverged))
         return failures

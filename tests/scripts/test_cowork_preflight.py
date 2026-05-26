@@ -80,6 +80,28 @@ def test_repair_from_git_restores_syntax_corrupt_tracked_file(tmp_path):
     assert service.read_text(encoding="utf-8") == "VALUE = 1\n"
 
 
+def test_repair_from_git_syncs_and_reparses(monkeypatch, tmp_path):
+    repo = _init_repo(tmp_path)
+    service = repo / "omega" / "core" / "contracts" / "service.py"
+    service.write_text("def broken(:\n", encoding="utf-8")
+    synced = []
+    parsed = []
+
+    monkeypatch.setattr(cowork_preflight.os, "sync", lambda: synced.append(True), raising=False)
+
+    def fake_parse(path: Path):
+        parsed.append(path.name)
+        return None
+
+    monkeypatch.setattr(cowork_preflight, "_ast_parse_file", fake_parse)
+
+    failures = cowork_preflight.verify_against_git(repo, repair=True)
+
+    assert failures == []
+    assert synced == [True]
+    assert "service.py" in parsed
+
+
 def test_repair_from_git_blocks_dirty_non_target_file(tmp_path):
     repo = _init_repo(tmp_path)
     service = repo / "omega" / "core" / "contracts" / "service.py"

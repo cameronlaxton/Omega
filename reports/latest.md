@@ -1,12 +1,12 @@
 # Omega Calibration Report — NBA
 
-Generated: `2026-05-25T15:12:22+00:00` | Window: last 30 days
+Generated: `2026-05-26T14:05:29+00:00` | Window: last 60 days
 
 ## 1. Coverage
 
 | Metric | Count |
 |---|---|
-| Traces (all) | 74 |
+| Traces (all) | 78 |
 | Traces with model predictions (calibration-eligible) | 0 |
 | Graded (any outcome) | 68 |
 | &nbsp;&nbsp;of which game-graded | 9 |
@@ -55,7 +55,18 @@ _No pending candidates._
 
 ## 6B. Evidence signal performance (retrospective)
 
-_No scored evidence signals yet — run `scripts/score_evidence_signals.py` after outcomes attach._
+| signal_type | source | window | n | dir_acc | mean_conf | cal_gap | brier | verdict |
+|---|---|---|---|---|---|---|---|---|
+| series_avg | nba.com | series | 4 | 0.50 | 0.88 | +0.38 | 0.391 | insufficient_n |
+| home_away_split | agent_reasoning | series | 2 | 0.00 | 0.57 | +0.57 | 0.331 | insufficient_n |
+| last_game_outlier | nba.com | last_1 | 2 | 0.50 | 0.78 | +0.28 | 0.301 | insufficient_n |
+| overtime_adjustment | agent_reasoning | last_1 | 1 | 1.00 | 0.70 | -0.30 | 0.090 | insufficient_n |
+| recent_form | nba.com | last_3 | 1 | 0.00 | 0.80 | +0.80 | 0.640 | insufficient_n |
+| recent_form | sportsbettingdime.com | last_5 | 1 | 1.00 | 0.80 | -0.20 | 0.040 | insufficient_n |
+| season_baseline | statmuse.com | season | 1 | 1.00 | 0.85 | -0.15 | 0.023 | insufficient_n |
+| series_avg | statmuse.com | series | 1 | 0.00 | 0.90 | +0.90 | 0.810 | insufficient_n |
+
+> Weight evidence by empirical accuracy: trust `predictive` signal types/sources, discount `noise`, treat `insufficient_n` as unproven. A positive `cal_gap` means the agent was overconfident in that signal.
 
 ## 7. Suggested actions
 

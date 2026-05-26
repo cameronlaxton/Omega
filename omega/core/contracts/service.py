@@ -643,6 +643,8 @@ def _build_edge(
     bankroll: float,
     n_iterations: int,
     calibration_audit: CalibrationAudit | None = None,
+    market: str = "moneyline",
+    line: float | None = None,
 ) -> EdgeDetail:
     """Compute edge detail for one side of a matchup."""
     market_prob = implied_probability(market_odds)
@@ -662,6 +664,8 @@ def _build_edge(
     return EdgeDetail(
         side=side,
         team=team,
+        market=market,
+        line=line,
         true_prob=round(true_prob, 4),
         calibrated_prob=round(calibrated_prob, 4),
         market_implied=round(market_prob, 4),
@@ -689,8 +693,14 @@ def _pick_best_bet(
         bankroll=bankroll,
         confidence_tier=best.confidence_tier,
     )
+    if best.market == "total":
+        selection = best.team
+    elif best.market == "spread" and best.line is not None:
+        selection = f"{best.team} {best.line:+g}"
+    else:
+        selection = f"{best.team} {best.side}"
     return BetSlip(
-        selection=f"{best.team} {best.side}",
+        selection=selection,
         odds=best.market_odds,
         edge_pct=best.edge_pct,
         ev_pct=best.ev_pct,
@@ -702,7 +712,12 @@ def _pick_best_bet(
 
 def _quote_matches_selection(quote: MarketQuote, *labels: str) -> bool:
     selection = quote.selection.strip().casefold()
-    return any(selection == label.strip().casefold() for label in labels if label)
+    return any(
+        selection == (label_text := label.strip().casefold())
+        or selection.startswith(f"{label_text} ")
+        for label in labels
+        if label
+    )
 
 
 def _market_quote(
@@ -723,22 +738,49 @@ def _resolve_game_market_odds(
     home_team: str,
     away_team: str,
 ) -> tuple[float | None, float | None]:
-    """Resolve home/away odds from normalized markets first, legacy fields second."""
-    home_spread = _market_quote(odds, "spread", home_team, "Home")
+    """Resolve home/away moneyline odds from normalized markets first, legacy fields second."""
     home_ml = _market_quote(odds, "moneyline", home_team, "Home")
     away_ml = _market_quote(odds, "moneyline", away_team, "Away")
 
-    # Only use spread_home_price when spread_home was explicitly supplied;
-    # otherwise fall through to moneyline_home. The spread_home_price field
-    # defaults to -110 which would otherwise shadow a real moneyline_home value.
-    legacy_home = odds.spread_home_price if odds.spread_home is not None else odds.moneyline_home
-    home_odds = (
-        home_spread.price
-        if home_spread is not None
-        else (home_ml.price if home_ml is not None else legacy_home)
-    )
+    home_odds = home_ml.price if home_ml is not None else odds.moneyline_home
     away_odds = away_ml.price if away_ml is not None else odds.moneyline_away
     return home_odds, away_odds
+
+
+def _resolve_game_spread_market(
+    odds: OddsInput,
+    home_team: str,
+    away_team: str,
+) -> tuple[float | None, float | None, float | None]:
+    """Resolve home spread line and both side prices."""
+    home_spread = _market_quote(odds, "spread", home_team, "Home")
+    away_spread = _market_quote(odds, "spread", away_team, "Away")
+    line = (
+        home_spread.line
+        if home_spread is not None and home_spread.line is not None
+        else odds.spread_home
+    )
+    if line is None:
+        return None, None, None
+    home_price = home_spread.price if home_spread is not None else odds.spread_home_price
+    away_price = away_spread.price if away_spread is not None else odds.spread_away_price
+    return line, home_price, away_price
+
+
+def _resolve_game_total_market(odds: OddsInput) -> tuple[float | None, float | None, float | None]:
+    """Resolve total line and over/under prices."""
+    over_q = _market_quote(odds, "total", "Over")
+    under_q = _market_quote(odds, "total", "Under")
+    line = (
+        over_q.line
+        if over_q is not None and over_q.line is not None
+        else (under_q.line if under_q is not None and under_q.line is not None else odds.over_under)
+    )
+    if line is None:
+        return None, None, None
+    over_price = over_q.price if over_q is not None else odds.total_over_price
+    under_price = under_q.price if under_q is not None else odds.total_under_price
+    return line, over_price, under_price
 
 
 # ---------------------------------------------------------------------------
@@ -764,15 +806,15 @@ def analyze_game(
     matchup = f"{request.away_team} @ {request.home_team}"
     archetype_name = get_archetype_name(request.league)
 
-    # Extract spread value so the engine can compute coverage probabilities.
+    # Extract market lines so the engine can compute coverage probabilities.
     # Done before the engine call; odds may be absent.
     spread_value: float | None = None
+    total_value: float | None = None
     if request.odds:
-        _hsq = _market_quote(request.odds, "spread", request.home_team, "Home")
-        if _hsq and _hsq.line is not None:
-            spread_value = _hsq.line
-        elif request.odds.spread_home is not None:
-            spread_value = request.odds.spread_home
+        spread_value, _, _ = _resolve_game_spread_market(
+            request.odds, request.home_team, request.away_team
+        )
+        total_value, _, _ = _resolve_game_total_market(request.odds)
 
     if request.simulation_backend not in {"fast_score", "markov_state"}:
         return GameAnalysisResponse(
@@ -822,6 +864,7 @@ def analyze_game(
             away_context=away_ctx,
             seed=request.seed,
             spread_home=spread_value,
+            over_under=total_value,
             allow_baseline=request.allow_baseline,
             transition_modifiers=transition_modifiers,
         )
@@ -885,52 +928,22 @@ def analyze_game(
             request.away_team,
         )
 
-        # Detect whether the home market is a spread/run-line so we can
-        # substitute coverage probability for outright win probability.
-        home_spread_q = _market_quote(request.odds, "spread", request.home_team, "Home")
-        home_ml_q = _market_quote(request.odds, "moneyline", request.home_team, "Home")
-        is_home_spread_market = (home_spread_q is not None) or (
-            request.odds.spread_home is not None
-            and home_ml_q is None
-            and request.odds.moneyline_home is None
-        )
-
         gc = request.game_context
         if home_odds is not None:
-            if is_home_spread_market and "home_cover_prob" in sim_result:
-                cover_prob = sim_result["home_cover_prob"] / 100.0
-                cal_cover, cover_audit = _calibrate_audited(
-                    cover_prob,
-                    league=request.league,
-                    context_hints=gc,
-                    plane="game",
-                    market="cover",
-                )
-                home_edge = _build_edge(
-                    "home",
-                    request.home_team,
-                    cover_prob,
-                    cal_cover,
-                    home_odds,
-                    bankroll,
-                    request.n_iterations,
-                    calibration_audit=cover_audit,
-                )
-                home_edge = home_edge.model_copy(update={"spread_coverage_prob": cover_prob})
-            else:
-                cal_home, home_audit = _calibrate_audited(
-                    home_prob, league=request.league, context_hints=gc, plane="game", market="home"
-                )
-                home_edge = _build_edge(
-                    "home",
-                    request.home_team,
-                    home_prob,
-                    cal_home,
-                    home_odds,
-                    bankroll,
-                    request.n_iterations,
-                    calibration_audit=home_audit,
-                )
+            cal_home, home_audit = _calibrate_audited(
+                home_prob, league=request.league, context_hints=gc, plane="game", market="home"
+            )
+            home_edge = _build_edge(
+                "home",
+                request.home_team,
+                home_prob,
+                cal_home,
+                home_odds,
+                bankroll,
+                request.n_iterations,
+                calibration_audit=home_audit,
+                market="moneyline",
+            )
             edges.append(home_edge)
 
         if away_odds is not None:
@@ -947,8 +960,111 @@ def analyze_game(
                     bankroll,
                     request.n_iterations,
                     calibration_audit=away_audit,
+                    market="moneyline",
                 )
             )
+
+        spread_line, home_spread_odds, away_spread_odds = _resolve_game_spread_market(
+            request.odds, request.home_team, request.away_team
+        )
+        if spread_line is not None and "home_cover_prob" in sim_result:
+            if home_spread_odds is not None:
+                cover_prob = sim_result["home_cover_prob"] / 100.0
+                cal_cover, cover_audit = _calibrate_audited(
+                    cover_prob,
+                    league=request.league,
+                    context_hints=gc,
+                    plane="game",
+                    market="cover",
+                )
+                home_edge = _build_edge(
+                    "home",
+                    request.home_team,
+                    cover_prob,
+                    cal_cover,
+                    home_spread_odds,
+                    bankroll,
+                    request.n_iterations,
+                    calibration_audit=cover_audit,
+                    market="spread",
+                    line=spread_line,
+                )
+                edges.append(
+                    home_edge.model_copy(update={"spread_coverage_prob": cover_prob})
+                )
+            if away_spread_odds is not None:
+                away_cover_prob = sim_result["away_cover_prob"] / 100.0
+                cal_away_cover, away_cover_audit = _calibrate_audited(
+                    away_cover_prob,
+                    league=request.league,
+                    context_hints=gc,
+                    plane="game",
+                    market="cover",
+                )
+                away_edge = _build_edge(
+                    "away",
+                    request.away_team,
+                    away_cover_prob,
+                    cal_away_cover,
+                    away_spread_odds,
+                    bankroll,
+                    request.n_iterations,
+                    calibration_audit=away_cover_audit,
+                    market="spread",
+                    line=-spread_line,
+                )
+                edges.append(
+                    away_edge.model_copy(update={"spread_coverage_prob": away_cover_prob})
+                )
+
+        total_line, over_odds, under_odds = _resolve_game_total_market(request.odds)
+        if total_line is not None and "over_prob" in sim_result and "under_prob" in sim_result:
+            if over_odds is not None:
+                over_prob = sim_result["over_prob"] / 100.0
+                cal_over, over_audit = _calibrate_audited(
+                    over_prob,
+                    league=request.league,
+                    context_hints=gc,
+                    plane="game",
+                    market="over",
+                )
+                edges.append(
+                    _build_edge(
+                        "over",
+                        f"Over {total_line:g}",
+                        over_prob,
+                        cal_over,
+                        over_odds,
+                        bankroll,
+                        request.n_iterations,
+                        calibration_audit=over_audit,
+                        market="total",
+                        line=total_line,
+                    )
+                )
+            if under_odds is not None:
+                under_prob = sim_result["under_prob"] / 100.0
+                cal_under, under_audit = _calibrate_audited(
+                    under_prob,
+                    league=request.league,
+                    context_hints=gc,
+                    plane="game",
+                    market="under",
+                )
+                edges.append(
+                    _build_edge(
+                        "under",
+                        f"Under {total_line:g}",
+                        under_prob,
+                        cal_under,
+                        under_odds,
+                        bankroll,
+                        request.n_iterations,
+                        calibration_audit=under_audit,
+                        market="total",
+                        line=total_line,
+                    )
+                )
 
         # 3-way moneyline (hockey regulation, soccer)
         if request.odds.moneyline_draw is not None and draw_prob_raw > 0:
@@ -965,6 +1081,7 @@ def analyze_game(
                     bankroll,
                     request.n_iterations,
                     calibration_audit=draw_audit,
+                    market="draw",
                 )
             )
 

@@ -1,0 +1,284 @@
+{
+  "trace": {
+    "trace_id": "sandbox-f276faf0-eeb5",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-26T15:07:58.489264+00:00",
+    "kind": "game",
+    "session_id": "sess-20260526-auto",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "San Diego Padres",
+      "away_team": "Philadelphia Phillies",
+      "league": "MLB",
+      "odds": {
+        "spread_home": -1.5,
+        "spread_home_price": 165.0,
+        "moneyline_home": -115.0,
+        "moneyline_away": -105.0,
+        "over_under": 7.5,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 10000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 110.0,
+        "def_rating": 108.0,
+        "pace": 93.5
+      },
+      "away_context": {
+        "off_rating": 114.0,
+        "def_rating": 110.0,
+        "pace": 94.1
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 0.92
+      },
+      "seed": 1752826279,
+      "evidence": [
+        {
+          "signal_type": "park_factor_evidence",
+          "category": "situational",
+          "plane": "game",
+          "value": 0.92,
+          "source": "fangraphs.com",
+          "confidence": 0.9,
+          "window": "matchup",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        }
+      ]
+    },
+    "result": {
+      "matchup": "Philadelphia Phillies @ San Diego Padres",
+      "league": "MLB",
+      "analyzed_at": "2026-05-26T15:07:58.490223",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 10000,
+        "home_win_prob": 43.6,
+        "away_win_prob": 42.2,
+        "draw_prob": 14.2,
+        "predicted_spread": 0.1,
+        "predicted_total": 8.8,
+        "predicted_home_score": 4.4,
+        "predicted_away_score": 4.3,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "San Diego Padres",
+          "true_prob": 0.436,
+          "calibrated_prob": 0.436,
+          "market_implied": 0.3774,
+          "edge_pct": 5.86,
+          "ev_pct": 15.54,
+          "market_odds": 165.0,
+          "confidence_tier": "A",
+          "recommended_units": 4.71,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.436,
+            "calibrated_prob": 0.436,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Philadelphia Phillies",
+          "true_prob": 0.422,
+          "calibrated_prob": 0.422,
+          "market_implied": 0.5122,
+          "edge_pct": -9.02,
+          "ev_pct": -17.61,
+          "market_odds": -105.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.42200000000000004,
+            "calibrated_prob": 0.42200000000000004,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": {
+        "selection": "San Diego Padres home",
+        "odds": 165.0,
+        "edge_pct": 5.86,
+        "ev_pct": 15.54,
+        "confidence_tier": "A",
+        "recommended_units": 4.71,
+        "kelly_fraction": 0.0471
+      },
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.4123,
+          "sample_std": 2.1203557979736227,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 10000,
+          "seed": 1752826279,
+          "context_hash": "a457615a061a9bf8",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.3399,
+          "sample_std": 2.085178167447563,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 10000,
+          "seed": 1752826279,
+          "context_hash": "a457615a061a9bf8",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 8.7522,
+          "sample_std": 2.9695782798235744,
+          "p10": 5.0,
+          "p50": 9.0,
+          "p90": 13.0,
+          "n_iterations": 10000,
+          "seed": 1752826279,
+          "context_hash": "a457615a061a9bf8",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 0.0724,
+          "sample_std": 2.9781467794586476,
+          "p10": -4.0,
+          "p50": 0.0,
+          "p90": 4.0,
+          "n_iterations": 10000,
+          "seed": 1752826279,
+          "context_hash": "a457615a061a9bf8",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 0.92
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "park_factor_evidence",
+        "target": "mean",
+        "applied": false,
+        "factor": 0.92,
+        "reason": "park_factor_evidence: mean x0.9200 (raw 0.9200, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "betmgm.com",
+      "fangraphs.com"
+    ],
+    "fields_gathered": [
+      "off_rating",
+      "def_rating",
+      "park_factor"
+    ],
+    "missing_fields": [
+      "starting_pitcher_both"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "moneyline_home": -115,
+      "moneyline_away": -105,
+      "over_under": 7.5
+    }
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "PHI at Petco Park (0.92 park factor). Engine gives PHI slightly better ratings but SD at +165 run line shows 5.86% edge. Predicted total 8.75 vs line 7.5 \u2014 significant Over lean. Missing pitcher assignments for both teams.",
+  "trace_quality": {
+    "aggregate_quality": 0.72
+  }
+}

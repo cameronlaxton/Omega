@@ -652,7 +652,7 @@ class TestResolveGameMarketOdds:
         assert home_odds == pytest.approx(-160)
         assert away_odds == pytest.approx(140)
 
-    def test_prefers_spread_over_moneyline_for_home(self):
+    def test_moneyline_resolver_does_not_conflate_spread(self):
         odds = OddsInput(
             moneyline_home=-200,
             markets=[
@@ -662,13 +662,64 @@ class TestResolveGameMarketOdds:
             ],
         )
         home_odds, away_odds = _resolve_game_market_odds(odds, "Home", "Away")
-        assert home_odds == pytest.approx(-110)
+        assert home_odds == pytest.approx(-200)
 
     def test_returns_none_when_no_odds(self):
         odds = OddsInput()
         home_odds, away_odds = _resolve_game_market_odds(odds, "Home", "Away")
         assert home_odds is None
         assert away_odds is None
+
+
+class TestGameMarkets:
+    def _request(self, backend: str) -> GameAnalysisRequest:
+        return GameAnalysisRequest(
+            home_team="Boston Celtics",
+            away_team="Indiana Pacers",
+            league="NBA",
+            n_iterations=300,
+            seed=42,
+            home_context=_NBA_HOME_CTX,
+            away_context=_NBA_AWAY_CTX,
+            game_context=_GAME_CONTEXT,
+            simulation_backend=backend,
+            odds=OddsInput(
+                moneyline_home=-150,
+                moneyline_away=130,
+                spread_home=-2.5,
+                spread_home_price=-110,
+                spread_away_price=-110,
+                over_under=218.5,
+                total_over_price=-110,
+                total_under_price=-110,
+            ),
+        )
+
+    def test_fast_score_and_markov_emit_same_market_set(self):
+        fast = analyze_game(self._request("fast_score"))
+        markov = analyze_game(self._request("markov_state"))
+
+        assert fast.status == "success"
+        assert markov.status == "success"
+        fast_markets = {(edge.market, edge.side) for edge in fast.edges}
+        markov_markets = {(edge.market, edge.side) for edge in markov.edges}
+        assert fast_markets == markov_markets
+        assert fast_markets == {
+            ("moneyline", "home"),
+            ("moneyline", "away"),
+            ("spread", "home"),
+            ("spread", "away"),
+            ("total", "over"),
+            ("total", "under"),
+        }
+
+    def test_edge_detail_serializes_market_and_line(self):
+        resp = analyze_game(self._request("fast_score"))
+
+        spread = next(edge for edge in resp.edges if edge.market == "spread" and edge.side == "home")
+        total = next(edge for edge in resp.edges if edge.market == "total" and edge.side == "over")
+        assert spread.line == pytest.approx(-2.5)
+        assert total.line == pytest.approx(218.5)
 
 
 # ---------------------------------------------------------------------------
