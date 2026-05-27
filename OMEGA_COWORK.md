@@ -71,10 +71,17 @@ copy (see `docs/session_bugs_20260521_mount_corruption.md`).
   set. Core-tier files (`omega/`, `scripts/`, MCP) are restored from `HEAD`
   even when tracked files under `tests/` have uncommitted edits. The legacy
   guard ("refusing because tracked files outside repair targets are dirty")
-  still fires for dirty *core* files. When the core tier is clean and only
-  tests diverge, preflight prints `cowork_preflight_core_ready` instead of
-  `cowork_preflight_failed`. Use `--force-repair` only when you intentionally
-  want to clobber every divergent tracked Python file (both tiers).
+  still fires for dirty *core* files. Use `--force-repair` only when you
+  intentionally want to clobber every divergent tracked Python file (both
+  tiers).
+- **Intentional core edits:** In the non-repair path, non-critical core
+  divergences (e.g. `store.py`, `scripts/run_action_plan.py`) are emitted as
+  `[warning]` lines rather than hard failures. Critical-file divergences
+  (`omega/core/contracts/service.py`) remain hard failures. When any tracked
+  files diverge but all checks pass, preflight prints
+  `cowork_preflight_core_ready` (with `core_dirty=N` and/or
+  `test_tier_diverged=N`) instead of `cowork_preflight_failed`. The engine
+  is safe to invoke in this state.
 - **Stale bytecode:** If preflight warns about host-locked `.pyc` files, add
   `PYTHONDONTWRITEBYTECODE=1` to the Windows host environment. Preflight will
   safely summarize and skip existing locked bytecode files.

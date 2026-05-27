@@ -166,6 +166,21 @@ def test_non_repair_only_test_divergence_is_warning_not_failure(tmp_path, capsys
     assert "not blocking" in captured
 
 
+def test_non_repair_non_critical_core_divergence_is_warning_not_failure(tmp_path, capsys):
+    """Non-critical core files with intentional edits emit a warning but do
+    not cause verify_against_git to return failures in the non-repair path."""
+    repo = _init_repo(tmp_path)
+    other = repo / "other.py"
+    other.write_text("VALUE = 2\n", encoding="utf-8")  # intentional edit
+
+    failures = cowork_preflight.verify_against_git(repo)
+
+    assert failures == []
+    captured = capsys.readouterr().out
+    assert "other.py" in captured
+    assert "[warning]" in captured
+
+
 def test_dirty_core_still_blocks_repair_when_not_a_target(tmp_path):
     """The original block-on-dirty-non-target behavior is preserved for the
     core tier (other.py is at repo root, treated as core)."""

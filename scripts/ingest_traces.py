@@ -159,8 +159,34 @@ def _warn_drift(trace_id: str, input_snap: dict[str, Any], bet_block: dict[str, 
                 )
 
 
+# Keys at the export-block root that are structural (not trace-level fields).
+# These are never promoted into the inner trace by _merge_top_level_compat_fields.
+_BLOCK_STRUCTURAL_KEYS = frozenset({"trace", "bet_record", "clv_capture_instructions"})
+
 _PROP_IDENTITY_FIELDS = ("player_name", "home_team", "away_team", "game_date", "line")
 _REASONING_INPUTS_REQUIRED_KEYS = ("sources", "fields_gathered", "missing_fields")
+
+
+def _merge_top_level_compat_fields(block: dict[str, Any]) -> None:
+    """Promote sibling fields from an export block's root into the inner trace.
+
+    Export blocks may carry reasoning/quality fields at the block root rather than
+    nested inside 'trace'. This merges them into block["trace"] in-place so that
+    PersistableTrace.from_analyze_output sees them. Inner values win: a key already
+    present (and non-None) in the trace is never overwritten.
+
+    Structural block keys ('trace', 'bet_record', 'clv_capture_instructions') are
+    never promoted. Pattern-B payloads (no siblings beyond structural keys) are
+    effectively a no-op.
+    """
+    trace = block.get("trace")
+    if not isinstance(trace, dict):
+        return
+    for key, value in block.items():
+        if key in _BLOCK_STRUCTURAL_KEYS:
+            continue
+        if key not in trace or trace[key] is None:
+            trace[key] = value
 
 
 def _warn_prop_identity(adapted: dict) -> None:
@@ -214,10 +240,13 @@ def _warn_reasoning_inputs(analyze_out: dict) -> None:
 def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> tuple[str, str | None]:
     """Ingest one file. Returns (trace_id, bet_id or None). Raises on error."""
     payload = _load_payload(path)
+    _merge_top_level_compat_fields(payload)
     analyze_out = payload["trace"]
 
     # session_id may live on the trace object (preferred) or at the export-block
     # top level (fallback). Trace-level value wins if both are present.
+    # _merge_top_level_compat_fields already handles this for blocks that carry
+    # session_id as a sibling; the guard below is kept for safety.
     if not analyze_out.get("session_id") and payload.get("session_id"):
         analyze_out = {**analyze_out, "session_id": payload["session_id"]}
 

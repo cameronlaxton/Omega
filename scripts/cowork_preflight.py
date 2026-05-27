@@ -337,16 +337,20 @@ def verify_against_git(
         return failures
 
     # Non-repair report path. Tier the failures.
+    # Critical-file divergences (highest Pattern C risk) are hard failures.
+    # Non-critical core divergences are surfaced as warnings only — they are
+    # most commonly intentional edits. The operator may run --repair-from-git
+    # to investigate further; blocking here prevents legitimate engine use.
     critical_failures = _check_critical_files(repo_root, core_diverged)
     if critical_failures:
         failures.extend(critical_failures)
 
     for rel_path in core_diverged:
         if rel_path not in _CRITICAL_FILES:
-            failures.append(
-                f"Source diverges from git HEAD: {rel_path}. "
-                "If this is mount corruption (truncation/null bytes), re-run preflight "
-                "with --repair-from-git. If this is your intentional edit, ignore."
+            print(
+                f"[warning] verify_against_git: {rel_path} diverges from git HEAD. "
+                "If this is mount corruption (truncation), re-run with --repair-from-git. "
+                "If this is your intentional edit, this is informational only."
             )
 
     # Test-tier divergence is a warning, never a failure. Surface it on stdout
@@ -469,19 +473,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("- Do not emit formal Omega numeric outputs until preflight passes.")
         return 1
 
-    # BUG-PREFLIGHT-3 banner: when the core tier is clean and only test files
-    # diverge, emit cowork_preflight_core_ready so automated runs don't treat
-    # the warning as a hard failure. Detected by re-checking git parity once
-    # the rest of preflight has passed.
+    # Banner: if any tracked files diverge from HEAD after all checks passed,
+    # the divergences are either non-critical core edits (warned above, not
+    # blocked) or test-tier edits.  Both are safe for engine execution —
+    # critical-file corruption and import failures were already blocked above.
+    # Emit cowork_preflight_core_ready so automated runs can distinguish this
+    # state from a hard failure.
     tracked_files, git_failures = _tracked_python_files(repo_root)
     if not git_failures:
         diverged = _diverged_tracked_files(repo_root, tracked_files)
         core_diverged, test_diverged = _split_tiers(diverged)
-        if not core_diverged and test_diverged:
+        if core_diverged or test_diverged:
+            dirty_parts = []
+            if core_diverged:
+                dirty_parts.append(f"core_dirty={len(core_diverged)}")
+            if test_diverged:
+                dirty_parts.append(f"test_tier_diverged={len(test_diverged)}")
             print(
                 "cowork_preflight_core_ready: python="
                 f"{_version_text(tuple(sys.version_info[:3]))} "
-                f"(test_tier_diverged={len(test_diverged)})"
+                f"({'  '.join(dirty_parts)})"
             )
             return 0
 
