@@ -1,15 +1,15 @@
 {
   "session_id": "sess-20260526-nba1",
-  "opened_at": "2026-05-26T17:00:00Z",
-  "closed_at": "2026-05-26T17:15:00Z",
+  "opened_at": "2026-05-26T22:10:00Z",
+  "closed_at": "2026-05-26T22:35:00Z",
   "model_version": "claude-sonnet-4-6",
-  "purpose": "NBA WCF Game 5 daily slate analysis May 26 2026 - automated scheduled task",
+  "purpose": "NBA WCF G5 OKC Thunder vs SA Spurs — 7-bet slate with auditable sidecar (RUN_TRACE.jsonl / RUN_AUDIT.md)",
   "bankroll": 1000.0,
-  "bankroll_confirmed": true,
+  "bankroll_confirmed": false,
   "exec_stats": {
-    "traces_emitted": 3,
+    "traces_emitted": 10,
     "bets_recorded": 0,
     "webfetch_failures": 0
   },
-  "agent_notes": "Automated run. 1 game analysis (SAS@OKC WCF G5, markov_state n=2000) + 2 prop analyses (Wembanyama pts, SGA pts). Preflight required file repair via git-show bash restore for 9 corrupt/truncated Python files (mount corruption pattern C); index.lock present on mount prevented git checkout. DB ingest via /tmp copy due to FUSE SQLite WAL failure on mount — copied back after ingest (same pattern as sess-20260526-auto). Calibration path: static_identity for all outputs (no fitted profile). Key flag: game total projected 205.4 vs market 217.5 — markov model appears to systematically underestimate NBA scoring (series avg G1-G3: 233 pts); Under edge (26.22%) likely inflated and should not drive sizing without calibration fit. Prop empty-evidence status expected per task constraint (player-plane signals omitted). SGA pts_std may be underestimated from small series sample."
+  "agent_notes": "10 candidates analyzed (3 game-level Markov, 7 props). 7 positive-edge bets surfaced; 3 rejected (rec=pass). Evidence schema corrections required on first run (category/window enums). PRA prop skipped and fixed. Game-level bets 1/2/3 are correlated from same simulation — flagged to user. Prop lines sourced from web consensus; BetMGM props API not called; user must confirm lines before placing. No confirmed bets this session. Calibration path: static_identity (no fitted profile). Outcomes attachment required after game."
 }
