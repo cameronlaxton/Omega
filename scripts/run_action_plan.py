@@ -39,6 +39,11 @@ Allowlist:
         args.mode: "shadow" (default "shadow"; live is manual-only)
         args.min_samples: int (default 30)
         args.verbose: bool (default false)
+    type=render_audit
+        args.session_ids: list[str]   (optional; explicit list to render)
+        args.all_open: bool           (optional; render every sidecar in inbox/sessions/)
+        args.verbose: bool (default false)
+        Exactly one of session_ids or all_open must be provided.
 
 Usage:
     python scripts/run_action_plan.py inbox/action_plans/<session_id>.json
@@ -283,6 +288,36 @@ def _validate_fit_adjustment_policy(args: dict[str, Any]) -> list[str]:
     return cmd
 
 
+def _validate_render_audit(args: dict[str, Any]) -> list[str]:
+    _reject_unknown_args("render_audit", args, {"session_ids", "all_open", "verbose"})
+    session_ids = args.get("session_ids")
+    all_open = args.get("all_open", False)
+
+    if not isinstance(all_open, bool):
+        raise ValueError("render_audit.args.all_open must be bool")
+    if session_ids is not None:
+        if not isinstance(session_ids, list) or not all(
+            isinstance(sid, str) and sid.strip() for sid in session_ids
+        ):
+            raise ValueError(
+                "render_audit.args.session_ids must be a list of non-empty strings"
+            )
+    if bool(session_ids) == bool(all_open):
+        raise ValueError(
+            "render_audit requires exactly one of session_ids or all_open=true"
+        )
+    verbose = _optional_bool("render_audit", args, "verbose")
+
+    cmd = [sys.executable, str(_REPO_ROOT / "scripts" / "render_session_audits.py")]
+    if all_open:
+        cmd.append("--all-open")
+    elif session_ids:
+        cmd += ["--session-ids", *session_ids]
+    if verbose:
+        cmd.append("--verbose")
+    return cmd
+
+
 # Strict allowlist. Adding a key here is a deliberate boundary change.
 _DISPATCH: dict[str, Any] = {
     "fit_calibration": _validate_fit_calibration,
@@ -293,6 +328,7 @@ _DISPATCH: dict[str, Any] = {
     "fetch_closing_lines": _validate_fetch_closing_lines,
     "score_evidence_signals": _validate_score_evidence_signals,
     "fit_adjustment_policy": _validate_fit_adjustment_policy,
+    "render_audit": _validate_render_audit,
 }
 
 

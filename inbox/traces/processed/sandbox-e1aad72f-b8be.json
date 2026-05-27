@@ -1,0 +1,456 @@
+{
+  "trace": {
+    "trace_id": "sandbox-e1aad72f-b8be",
+    "session_id": "sess-20260527-nba1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-27T13:11:55.528019+00:00",
+    "kind": "game",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "league": "NBA",
+      "odds": {
+        "spread_home": -3.5,
+        "spread_home_price": -110.0,
+        "spread_away_price": -110.0,
+        "moneyline_home": -165.0,
+        "moneyline_away": 135.0,
+        "over_under": 218.5,
+        "total_over_price": -110.0,
+        "total_under_price": -110.0,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 2000,
+      "allow_baseline": false,
+      "simulation_backend": "markov_state",
+      "home_context": {
+        "off_rating": 116.5,
+        "def_rating": 107.0,
+        "pace": 93.5
+      },
+      "away_context": {
+        "off_rating": 121.5,
+        "def_rating": 110.5,
+        "pace": 94.5
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2,
+        "blowout_risk": 0.15,
+        "opponent_def_rank": 2
+      },
+      "seed": 1563798801,
+      "evidence": [
+        {
+          "signal_type": "def_matchup_strong",
+          "category": "matchup",
+          "plane": "game",
+          "value": true,
+          "source": "nba.com/stats",
+          "confidence": 0.82,
+          "window": "series",
+          "direction": "home",
+          "stat_key": null,
+          "note": null
+        },
+        {
+          "signal_type": "usage_role_change",
+          "category": "situational",
+          "plane": "game",
+          "value": true,
+          "source": "injury_report",
+          "confidence": 0.72,
+          "window": "matchup",
+          "direction": "away",
+          "stat_key": null,
+          "note": null
+        },
+        {
+          "signal_type": "blowout_risk",
+          "category": "situational",
+          "plane": "game",
+          "value": 0.15,
+          "source": "agent_reasoning",
+          "confidence": 0.65,
+          "window": "matchup",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        }
+      ]
+    },
+    "result": {
+      "matchup": "Oklahoma City Thunder @ San Antonio Spurs",
+      "league": "NBA",
+      "analyzed_at": "2026-05-27T13:11:55.528053",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 2000,
+        "home_win_prob": 82.7,
+        "away_win_prob": 17.3,
+        "draw_prob": 0.0,
+        "predicted_spread": 14.1,
+        "predicted_total": 204.8,
+        "predicted_home_score": 109.5,
+        "predicted_away_score": 95.3,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "markov_state",
+        "component_version": "markov_state_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "San Antonio Spurs",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.827,
+          "calibrated_prob": 0.827,
+          "market_implied": 0.6226,
+          "edge_pct": 20.44,
+          "ev_pct": 32.82,
+          "market_odds": -165.0,
+          "confidence_tier": "A",
+          "recommended_units": 5.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.8270000000000001,
+            "calibrated_prob": 0.8270000000000001,
+            "league": "NBA",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Oklahoma City Thunder",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.173,
+          "calibrated_prob": 0.173,
+          "market_implied": 0.4255,
+          "edge_pct": -25.25,
+          "ev_pct": -59.34,
+          "market_odds": 135.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.17300000000000001,
+            "calibrated_prob": 0.17300000000000001,
+            "league": "NBA",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "home",
+          "team": "San Antonio Spurs",
+          "market": "spread",
+          "line": -3.5,
+          "true_prob": 0.76,
+          "calibrated_prob": 0.76,
+          "market_implied": 0.5238,
+          "edge_pct": 23.62,
+          "ev_pct": 45.09,
+          "market_odds": -110.0,
+          "confidence_tier": "A",
+          "recommended_units": 5.0,
+          "spread_coverage_prob": 0.76,
+          "calibration_audit": {
+            "raw_prob": 0.76,
+            "calibrated_prob": 0.76,
+            "league": "NBA",
+            "plane": "game",
+            "market": "cover",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Oklahoma City Thunder",
+          "market": "spread",
+          "line": 3.5,
+          "true_prob": 0.239,
+          "calibrated_prob": 0.239,
+          "market_implied": 0.5238,
+          "edge_pct": -28.48,
+          "ev_pct": -54.37,
+          "market_odds": -110.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": 0.239,
+          "calibration_audit": {
+            "raw_prob": 0.239,
+            "calibrated_prob": 0.239,
+            "league": "NBA",
+            "plane": "game",
+            "market": "cover",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "over",
+          "team": "Over 218.5",
+          "market": "total",
+          "line": 218.5,
+          "true_prob": 0.181,
+          "calibrated_prob": 0.181,
+          "market_implied": 0.5238,
+          "edge_pct": -34.28,
+          "ev_pct": -65.45,
+          "market_odds": -110.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.18100000000000002,
+            "calibrated_prob": 0.18100000000000002,
+            "league": "NBA",
+            "plane": "game",
+            "market": "over",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "under",
+          "team": "Under 218.5",
+          "market": "total",
+          "line": 218.5,
+          "true_prob": 0.82,
+          "calibrated_prob": 0.82,
+          "market_implied": 0.5238,
+          "edge_pct": 29.62,
+          "ev_pct": 56.55,
+          "market_odds": -110.0,
+          "confidence_tier": "A",
+          "recommended_units": 5.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.82,
+            "calibrated_prob": 0.82,
+            "league": "NBA",
+            "plane": "game",
+            "market": "under",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": {
+        "selection": "Under 218.5",
+        "odds": -110.0,
+        "edge_pct": 29.62,
+        "ev_pct": 56.55,
+        "confidence_tier": "A",
+        "recommended_units": 5.0,
+        "kelly_fraction": 0.311
+      },
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "basketball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "markov_state",
+      "component_version": "markov_state_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical_markov",
+          "distribution_params": {
+            "source": "markov_terminal_scores",
+            "base_possessions": 188,
+            "transition_matrix_ids": {
+              "home": "markov_state_v1:NBA:home_score_outcome",
+              "away": "markov_state_v1:NBA:away_score_outcome",
+              "momentum": "markov_state_v1:NBA:momentum_state",
+              "player": "markov_state_v1:NBA:player_stat_allocation"
+            },
+            "transition_modifiers": {
+              "away_score_rate_scalar": 0.8835,
+              "home_momentum_scalar": 0.98
+            }
+          },
+          "params_schema_version": 1,
+          "sample_mean": 109.4625,
+          "sample_std": 10.803684267415438,
+          "p10": 95.0,
+          "p50": 110.0,
+          "p90": 124.0,
+          "n_iterations": 2000,
+          "seed": 1563798801,
+          "context_hash": "cc22d458eef132e3",
+          "component_version": "markov_state_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical_markov",
+          "distribution_params": {
+            "source": "markov_terminal_scores",
+            "base_possessions": 188,
+            "transition_matrix_ids": {
+              "home": "markov_state_v1:NBA:home_score_outcome",
+              "away": "markov_state_v1:NBA:away_score_outcome",
+              "momentum": "markov_state_v1:NBA:momentum_state",
+              "player": "markov_state_v1:NBA:player_stat_allocation"
+            },
+            "transition_modifiers": {
+              "away_score_rate_scalar": 0.8835,
+              "home_momentum_scalar": 0.98
+            }
+          },
+          "params_schema_version": 1,
+          "sample_mean": 95.3135,
+          "sample_std": 10.528875426654055,
+          "p10": 82.0,
+          "p50": 95.0,
+          "p90": 109.0,
+          "n_iterations": 2000,
+          "seed": 1563798801,
+          "context_hash": "cc22d458eef132e3",
+          "component_version": "markov_state_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical_markov",
+          "distribution_params": {
+            "source": "markov_terminal_scores",
+            "base_possessions": 188,
+            "transition_matrix_ids": {
+              "home": "markov_state_v1:NBA:home_score_outcome",
+              "away": "markov_state_v1:NBA:away_score_outcome",
+              "momentum": "markov_state_v1:NBA:momentum_state",
+              "player": "markov_state_v1:NBA:player_stat_allocation"
+            },
+            "transition_modifiers": {
+              "away_score_rate_scalar": 0.8835,
+              "home_momentum_scalar": 0.98
+            }
+          },
+          "params_schema_version": 1,
+          "sample_mean": 204.776,
+          "sample_std": 14.982650766803623,
+          "p10": 186.0,
+          "p50": 204.0,
+          "p90": 224.0,
+          "n_iterations": 2000,
+          "seed": 1563798801,
+          "context_hash": "cc22d458eef132e3",
+          "component_version": "markov_state_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical_markov",
+          "distribution_params": {
+            "source": "markov_terminal_scores",
+            "base_possessions": 188,
+            "transition_matrix_ids": {
+              "home": "markov_state_v1:NBA:home_score_outcome",
+              "away": "markov_state_v1:NBA:away_score_outcome",
+              "momentum": "markov_state_v1:NBA:momentum_state",
+              "player": "markov_state_v1:NBA:player_stat_allocation"
+            },
+            "transition_modifiers": {
+              "away_score_rate_scalar": 0.8835,
+              "home_momentum_scalar": 0.98
+            }
+          },
+          "params_schema_version": 1,
+          "sample_mean": 14.149,
+          "sample_std": 15.187949137391763,
+          "p10": -6.0,
+          "p50": 14.0,
+          "p90": 34.0,
+          "n_iterations": 2000,
+          "seed": 1563798801,
+          "context_hash": "cc22d458eef132e3",
+          "component_version": "markov_state_v1"
+        }
+      ]
+    },
+    "downgrades": []
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "the-odds-api:betmgm",
+      "nba.com/stats",
+      "injury_report"
+    ],
+    "fields_gathered": [
+      "moneyline_home",
+      "moneyline_away",
+      "spread_home",
+      "over_under",
+      "is_playoff",
+      "rest_days",
+      "blowout_risk",
+      "opponent_def_rank",
+      "off_rating_home",
+      "def_rating_home",
+      "off_rating_away",
+      "def_rating_away"
+    ],
+    "missing_fields": [
+      "series_score",
+      "g5_final_score",
+      "williams_confirmed_status"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "moneyline_home": -165,
+      "moneyline_away": 135,
+      "spread_home": -3.5,
+      "over_under": 218.5,
+      "source": "the-odds-api:betmgm",
+      "captured_at": "2026-05-27T13:20:00.000000+00:00"
+    }
+  },
+  "reasoning_downgrade_rationale": "G5 result not yet confirmed via API; series score inferred from market structure (SA home favorite -165 suggests competitive series). Williams injury status confirmed questionable per prior session only. Calibration path static_identity (ECE=0.645 game plane) \u2014 structural overconfidence risk on game bets.",
+  "reasoning_narrative": "Markov model projects SA wins 82.7% of simulations driven by OKC away_score_rate suppression from combined def_matchup_strong and usage_role_change signals (-11.65% cumulative modifier). SA home at -165 ML (62.3% implied) gives a +20.4% edge but this is advance analysis 24h pre-game with uncalibrated static_identity path. All three game bets (ML, spread, total) are correlated \u2014 same Markov run. Recommend sizing down accordingly; do not stack all three at full Kelly.",
+  "trace_quality": {
+    "aggregate_quality": 0.71
+  },
+  "bet_record": null
+}

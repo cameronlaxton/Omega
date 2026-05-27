@@ -1,0 +1,148 @@
+{
+  "trace": {
+    "trace_id": "sandbox-88fe6d63-0e64",
+    "session_id": "sess-20260527-nba1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-27T13:12:29.140764+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 31.5,
+      "odds_over": -105.0,
+      "odds_under": -125.0,
+      "player_context": {
+        "pts_mean": 29.5,
+        "pts_std": 6.5
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2
+      },
+      "n_iterations": 2000,
+      "seed": 2451522596,
+      "evidence": [
+        {
+          "signal_type": "usage_role_change",
+          "category": "situational",
+          "plane": "player",
+          "value": true,
+          "source": "injury_report",
+          "confidence": 0.68,
+          "window": "matchup",
+          "direction": "over",
+          "stat_key": "pts",
+          "note": null
+        }
+      ],
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-28"
+    },
+    "result": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 31.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.302,
+      "under_prob": 0.698,
+      "projection_mean": 28.3972,
+      "projection_std": 6.2203,
+      "projection_p10": 20.1448,
+      "projection_p50": 28.3204,
+      "projection_p90": 36.6403,
+      "distribution_type": "normal",
+      "edge_over": -21.02,
+      "edge_under": 14.24,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.1602,
+      "recommended_units": 5.0,
+      "bet_side_odds": -125.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.302,
+        "calibrated_prob": 0.302,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.698,
+        "calibrated_prob": 0.698,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_distributions": [
+        {
+          "target": "player_stat",
+          "market": "player_prop",
+          "stat_key": "pts",
+          "distribution_type": "normal",
+          "distribution_params": {
+            "mu": 28.32,
+            "sigma": 6.24
+          },
+          "params_schema_version": 1,
+          "sample_mean": 28.39716348715897,
+          "sample_std": 6.2202764539072986,
+          "p10": 20.14480005517479,
+          "p50": 28.320407442132417,
+          "p90": 36.64026231188611,
+          "n_iterations": 2000,
+          "seed": 2451522596,
+          "context_hash": "5d135533",
+          "component_version": "player_prop_fast_v1"
+        }
+      ]
+    },
+    "downgrades": []
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "the-odds-api:betmgm",
+      "nba.com/stats",
+      "injury_report"
+    ],
+    "fields_gathered": [
+      "pts_mean",
+      "pts_std",
+      "is_playoff",
+      "rest_days"
+    ],
+    "missing_fields": [
+      "williams_status_confirmed"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "odds_under": -125,
+      "odds_over": -105,
+      "line": 31.5
+    }
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "Shai Gilgeous-Alexander pts U31.5: engine projects under at edge +14.24%. Advance analysis for May 28 WCF G6. Calibration: static_identity.",
+  "trace_quality": {
+    "aggregate_quality": 0.7
+  },
+  "bet_record": null
+}

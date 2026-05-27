@@ -1,0 +1,132 @@
+{
+  "trace": {
+    "trace_id": "sandbox-bfa070eb-c130",
+    "session_id": "sess-20260527-nba1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-27T13:12:29.187005+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "blk",
+      "line": 3.5,
+      "odds_over": -120.0,
+      "odds_under": -115.0,
+      "player_context": {
+        "blk_mean": 2.9,
+        "blk_std": 1.2
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2
+      },
+      "n_iterations": 2000,
+      "seed": 2672885582,
+      "evidence": [],
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-28"
+    },
+    "result": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "blk",
+      "line": 3.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.2965,
+      "under_prob": 0.7035,
+      "projection_mean": 2.7765,
+      "projection_std": 1.7168,
+      "projection_p10": 1.0,
+      "projection_p50": 3.0,
+      "projection_p90": 5.0,
+      "distribution_type": "poisson",
+      "edge_over": -24.9,
+      "edge_under": 16.86,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.1813,
+      "recommended_units": 5.0,
+      "bet_side_odds": -115.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.2965,
+        "calibrated_prob": 0.2965,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.7035,
+        "calibrated_prob": 0.7035,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_distributions": [
+        {
+          "target": "player_stat",
+          "market": "player_prop",
+          "stat_key": "blk",
+          "distribution_type": "poisson",
+          "distribution_params": {
+            "lambda": 2.755
+          },
+          "params_schema_version": 1,
+          "sample_mean": 2.7765,
+          "sample_std": 1.7168423777388606,
+          "p10": 1.0,
+          "p50": 3.0,
+          "p90": 5.0,
+          "n_iterations": 2000,
+          "seed": 2672885582,
+          "context_hash": "f02c7d9a",
+          "component_version": "player_prop_fast_v1"
+        }
+      ]
+    },
+    "downgrades": []
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "the-odds-api:betmgm",
+      "nba.com/stats",
+      "injury_report"
+    ],
+    "fields_gathered": [
+      "blk_mean",
+      "blk_std",
+      "is_playoff",
+      "rest_days"
+    ],
+    "missing_fields": [],
+    "market_context": {
+      "book": "betmgm",
+      "odds_under": -115,
+      "odds_over": -120,
+      "line": 3.5
+    }
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "Victor Wembanyama blk U3.5: engine projects under at edge +16.86%. Advance analysis for May 28 WCF G6. Calibration: static_identity.",
+  "trace_quality": {
+    "aggregate_quality": 0.7
+  },
+  "bet_record": null
+}

@@ -466,3 +466,73 @@ class TestPropMatchupDerivation:
         }
         adapted = ingest_traces._adapt_sandbox_trace(analyze_out)
         assert adapted["matchup"] == "Celtics @ Lakers"
+
+
+# ---------------------------------------------------------------------------
+# Wrapped-payload sibling merge: reasoning/quality fields attached at the
+# export-block top level are promoted into the inner trace before adaptation.
+# ---------------------------------------------------------------------------
+
+
+class TestTopLevelCompatMerge:
+    def _wrapped_with_siblings(self) -> dict[str, Any]:
+        block = _make_export_block("sandbox-sib-1", with_bet=False)
+        block["reasoning_inputs"] = {
+            "sources": ["espn", "rotowire"],
+            "fields_gathered": ["pace", "rest"],
+            "missing_fields": [],
+        }
+        block["reasoning_narrative"] = "Pace edge favors over."
+        block["reasoning_downgrade_rationale"] = ""
+        block["trace_quality"] = {
+            "aggregate_quality": 0.88,
+            "calibration_eligible": True,
+            "identity_status": "complete",
+            "context_source": "provided",
+            "evidence_status": "present",
+        }
+        return block
+
+    def test_sibling_fields_land_on_persistable_trace(self, workspace, monkeypatch):
+        inbox, db_path = workspace
+        _write_file(inbox, "sib.json", self._wrapped_with_siblings())
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "ingest_traces.py",
+                "--inbox",
+                str(inbox),
+                "--db",
+                str(db_path),
+            ],
+        )
+        assert ingest_traces.main() == 0
+
+        store = TraceStore(db_path=str(db_path))
+        trace = store.get_trace("sandbox-sib-1")
+        assert trace is not None
+        assert trace["reasoning_narrative"] == "Pace edge favors over."
+        assert trace["reasoning_inputs"]["sources"] == ["espn", "rotowire"]
+        assert trace["trace_quality"]["aggregate_quality"] == 0.88
+        assert trace["trace_quality"]["calibration_eligible"] is True
+        store.close()
+
+    def test_inner_trace_value_wins_over_sibling(self):
+        block = self._wrapped_with_siblings()
+        # Conflicting inner value: trace already carries reasoning_narrative.
+        block["trace"]["reasoning_narrative"] = "INNER WINS"
+        block["reasoning_narrative"] = "sibling should lose"
+
+        ingest_traces._merge_top_level_compat_fields(block)
+
+        assert block["trace"]["reasoning_narrative"] == "INNER WINS"
+
+    def test_raw_pattern_b_payloads_are_unaffected(self):
+        raw = _make_analyze_out("sandbox-rawb-1", kind="prop")
+        raw["reasoning_narrative"] = "already-nested"
+        # Pattern B has no outer wrapper, so the merge is a no-op.
+        payload = {"trace": raw, "bet_record": None}
+        ingest_traces._merge_top_level_compat_fields(payload)
+        assert payload["trace"]["reasoning_narrative"] == "already-nested"

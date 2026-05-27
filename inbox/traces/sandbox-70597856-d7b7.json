@@ -1,0 +1,288 @@
+{
+  "trace": {
+    "trace_id": "sandbox-70597856-d7b7",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-27T13:13:34.346948+00:00",
+    "kind": "game",
+    "session_id": "sess-20260527-mlb1",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "Toronto Blue Jays",
+      "away_team": "Miami Marlins",
+      "league": "MLB",
+      "odds": {
+        "spread_home": null,
+        "spread_home_price": -110.0,
+        "spread_away_price": -110.0,
+        "moneyline_home": -155.0,
+        "moneyline_away": 125.0,
+        "over_under": null,
+        "total_over_price": -110.0,
+        "total_under_price": -110.0,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 10000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 4.5,
+        "def_rating": 4.8
+      },
+      "away_context": {
+        "off_rating": 4.1,
+        "def_rating": 4.6
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 1.01,
+        "weather_wind_mph": 0.0
+      },
+      "seed": 2226989287,
+      "evidence": [
+        {
+          "signal_type": "park_factor_evidence",
+          "category": "situational",
+          "plane": "game",
+          "value": 1.01,
+          "source": "park_factor_reference",
+          "confidence": 0.85,
+          "window": "season",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        }
+      ]
+    },
+    "result": {
+      "matchup": "Miami Marlins @ Toronto Blue Jays",
+      "league": "MLB",
+      "analyzed_at": "2026-05-27T13:13:34.348986",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 10000,
+        "home_win_prob": 57.7,
+        "away_win_prob": 42.3,
+        "draw_prob": 0.0,
+        "predicted_spread": 0.5,
+        "predicted_total": 9.5,
+        "predicted_home_score": 5.0,
+        "predicted_away_score": 4.5,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Toronto Blue Jays",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.577,
+          "calibrated_prob": 0.577,
+          "market_implied": 0.6078,
+          "edge_pct": -3.08,
+          "ev_pct": -5.07,
+          "market_odds": -155.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.5770000000000001,
+            "calibrated_prob": 0.5770000000000001,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Miami Marlins",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.423,
+          "calibrated_prob": 0.423,
+          "market_implied": 0.4444,
+          "edge_pct": -2.14,
+          "ev_pct": -4.83,
+          "market_odds": 125.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.423,
+            "calibrated_prob": 0.423,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": null,
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.992,
+          "sample_std": 2.2114556292179515,
+          "p10": 2.0,
+          "p50": 5.0,
+          "p90": 8.0,
+          "n_iterations": 10000,
+          "seed": 2226989287,
+          "context_hash": "9cdaf0c261407685",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.4768,
+          "sample_std": 2.0841933115717026,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 10000,
+          "seed": 2226989287,
+          "context_hash": "9cdaf0c261407685",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 9.4688,
+          "sample_std": 3.025132486354935,
+          "p10": 6.0,
+          "p50": 9.0,
+          "p90": 13.0,
+          "n_iterations": 10000,
+          "seed": 2226989287,
+          "context_hash": "9cdaf0c261407685",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 0.5152,
+          "sample_std": 3.0524365611753304,
+          "p10": -3.0,
+          "p50": 1.0,
+          "p90": 4.0,
+          "n_iterations": 10000,
+          "seed": 2226989287,
+          "context_hash": "9cdaf0c261407685",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 1.01,
+      "weather_wind_mph": 0.0
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "park_factor_evidence",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.01,
+        "reason": "park_factor_evidence: mean x1.0100 (raw 1.0100, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "the-odds-api:betmgm",
+      "sportsgrid.com",
+      "web-search"
+    ],
+    "fields_gathered": [
+      "moneyline_home",
+      "moneyline_away",
+      "over_under",
+      "off_rating",
+      "def_rating",
+      "park_factor",
+      "weather_wind_mph"
+    ],
+    "missing_fields": [
+      "team_record",
+      "bullpen_era"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "moneyline_home": -155.0,
+      "moneyline_away": 125.0
+    }
+  },
+  "reasoning_downgrade_rationale": "Evidence mode=shadow; signals recorded not applied.",
+  "reasoning_narrative": "Home: Kevin Gausman (3.38 ERA) vs Eury Perez (4.91 ERA). Park 1.01. Wind 0.0 mph. Model: Toronto Blue Jays 57.7% win. Edge: none.",
+  "trace_quality": {
+    "aggregate_quality": 0.65
+  }
+}

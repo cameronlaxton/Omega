@@ -460,7 +460,7 @@ python scripts/run_action_plan.py inbox/action_plans/<session_id>.json
 
 ### Session Sidecar Schema (required)
 
-Write `inbox/sessions/<session_id>.json` at session end. All keys below are required; use exactly these key names.
+Write `inbox/sessions/<session_id>.json` via `omega.trace.session_sidecar.append_audit_events` (atomic). All top-level keys below are required; use exactly these key names.
 
 ```json
 {
@@ -476,14 +476,39 @@ Write `inbox/sessions/<session_id>.json` at session end. All keys below are requ
     "bets_recorded": 0,
     "webfetch_failures": 0
   },
-  "agent_notes": "Free-text notes on session outcome, data quality issues, or anomalies."
+  "agent_notes": "Free-text notes on session outcome, data quality issues, or anomalies.",
+  "audit_events": [
+    {
+      "ts": "2026-05-21T18:05:00Z",
+      "event_type": "preflight",
+      "step": "cowork_preflight",
+      "status": "ok",
+      "notes": "engine green; bankroll confirmed",
+      "trace_ids": []
+    }
+  ]
 }
 ```
+
+The sidecar has three distinct roles for state, no overlap:
+
+| Field | Owner | Purpose |
+|---|---|---|
+| `exec_stats` | Engine-emitted counts | Deterministic numeric tallies (`traces_emitted`, `bets_recorded`, `webfetch_failures`) |
+| `agent_notes` | LLM | Freeform end-of-session summary |
+| `audit_events` | LLM | Structured QA log of observable steps |
+
+**`audit_events` discipline:**
+- Each event has `ts`, `event_type` (one of `preflight`, `data_provenance`, `engine_run`, `candidate_rejected`, `downgrade`, `rationale`, `bug`, `command`, `step`, `note`), `step`, and `status` (`ok` | `warn` | `fail` | `skipped`). Optional: `notes`, `inputs`, `outputs`, `assumptions`, `bugs`, `trace_ids`.
+- **Never** put engine-owned quant values in `inputs`/`outputs`/`notes`: `edge_pct`, `ev_pct`, `kelly_fraction`, `units`, `confidence_tier`, `fair_price`, `no_vig_price`, `model_probability`, `over_prob`, `under_prob`. Those live in `omega_traces.db`. The writer raises `ProtectedValueError` and the append is rejected atomically — the on-disk file is untouched.
+- Do **not** hand-edit the sidecar JSON. Always go through `append_audit_events(...)`. Writes are temp-file + `os.replace`; readers never observe a partial file.
 
 Do not add inline `outcomes` or trace-level grading summaries to the sidecar.
 Game outcomes belong in `outcomes`, player-prop outcomes belong in
 `prop_outcomes`, and confirmed bet metadata belongs in the per-trace
 `bet_record`.
+
+**Retired:** `RUN_AUDIT.md` and `RUN_TRACE.jsonl`. Do not create either. The audit renderer at `omega/trace/audit_renderer.py` (invoked via the `render_audit` action plan step) produces `reports/run_audits/<session_id>.audit.md` from the sidecar + ledger.
 
 `report_calibration.py` joins sidecar data with trace summaries by `session_id`. Validate sidecars before relying on report session sections:
 
@@ -515,6 +540,11 @@ All paths are relative to the repo root.
 | `scripts/fetch_outcomes_mlb.py` | Attaches MLB game outcomes |
 | `scripts/fetch_outcomes_props.py` | Attaches player prop outcomes |
 | `scripts/backfill_closing_lines.py` | Backfills missed close windows |
+| `scripts/render_session_audits.py` | Renders `reports/run_audits/<session_id>.audit.md` from sidecar + ledger |
+| `omega/trace/audit_renderer.py` | Library entry point for the audit renderer |
+| `omega/trace/session_sidecar.py` | Sidecar contract + `append_audit_events` atomic writer |
+| `omega/trace/_atomic.py` | Atomic text-file write helper used by sidecar and renderer |
+| `reports/run_audits/` | Rendered session audit markdown (output of `render_audit`) |
 
 ## 10. Human Judgment Required
 

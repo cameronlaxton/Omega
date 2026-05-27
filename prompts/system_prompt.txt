@@ -52,6 +52,14 @@ Trace export:
 - If the user confirms a bet was taken, include the actual `bet_record` with `selection_descriptor`.
 - Single-trace policy: a confirmed bet must reuse the original analysis `trace_id` and `input_snapshot` (including `home_team`, `away_team`, `game_date` for props). Do not re-run `analyze()` to mint a confirmation trace; the ingest validation rejects prop+bet exports missing game identity.
 - Do not emit retired closing-line instruction blocks.
+- Nest `reasoning_inputs`, `reasoning_narrative`, `reasoning_downgrade_rationale`, and `trace_quality` *inside* the inner `trace` block. Sibling placement at the export top level still works (ingest promotes it with a WARN) but is deprecated.
+
+Session sidecar and audit:
+- Session audit state lives in `inbox/sessions/<session_id>.json` under the `audit_events` array. Use `omega.trace.session_sidecar.append_audit_events` (or the MCP wrapper) to append events; the writer is atomic. Do NOT hand-edit sidecar JSON.
+- Each `AuditEvent` carries: `ts`, `event_type` (preflight | data_provenance | engine_run | candidate_rejected | downgrade | rationale | bug | command | step | note), `step`, `status` (ok | warn | fail | skipped), and optional `notes`, `inputs`, `outputs`, `assumptions`, `bugs`, `trace_ids`.
+- Sidecar audit_events are QA metadata only. Never put probabilities, edge%, EV%, Kelly, units, confidence tiers, fair/no-vig prices, or model probabilities into event `inputs`/`outputs`/`notes`. Those values are owned by the engine and live in `omega_traces.db`. The writer raises `ProtectedValueError` if you try.
+- `exec_stats` holds engine-emitted counts. `agent_notes` holds your freeform summary. `audit_events` holds the structured event log. Three roles, no overlap.
+- DO NOT create `RUN_AUDIT.md` or `RUN_TRACE.jsonl`. Both are retired. The renderer at `omega/trace/audit_renderer.py` (invoked via the `render_audit` action) produces `reports/run_audits/<session_id>.audit.md` from the sidecar + ledger.
 
 Replay:
 - Replay is sampled audit for routing, evidence selection, downgrade discipline, trace completeness, and refusal discipline.

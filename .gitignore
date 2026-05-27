@@ -47,3 +47,8 @@ out/
 # Logs
 logs/
 *.log
+
+# Retired scratch audit artifacts — superseded by inbox/sessions/<id>.json
+# (audit_events) + reports/run_audits/<id>.audit.md. Do not regenerate.
+RUN_AUDIT.md
+RUN_TRACE.jsonl

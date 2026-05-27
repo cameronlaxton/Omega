@@ -1245,6 +1245,50 @@ class TraceStore:
             limit=limit,
         )
 
+    def query_by_session(self, session_id: str) -> list[dict[str, Any]]:
+        """Return every trace persisted under one session_id, with attached outcomes.
+
+        Used by the session audit renderer. Numeric/quant fields shown in the
+        audit must come from these rows, not from sidecar prose.
+        """
+        rows = self.conn.execute(
+            """SELECT t.trace_id, t.timestamp, t.league, t.matchup,
+                      t.execution_mode, t.aggregate_quality, t.full_trace,
+                      o.outcome_id, o.home_score, o.away_score, o.result
+               FROM traces t
+               LEFT JOIN outcomes o ON o.trace_id = t.trace_id
+               WHERE t.session_id = ?
+               ORDER BY t.timestamp""",
+            (session_id,),
+        ).fetchall()
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            trace = json.loads(row["full_trace"])
+            trace["_row"] = {
+                "trace_id": row["trace_id"],
+                "timestamp": row["timestamp"],
+                "kind": trace.get("kind"),
+                "league": row["league"],
+                "matchup": row["matchup"],
+                "execution_mode": row["execution_mode"],
+                "aggregate_quality": row["aggregate_quality"],
+            }
+            if row["outcome_id"]:
+                trace["_outcome"] = {
+                    "outcome_id": row["outcome_id"],
+                    "home_score": row["home_score"],
+                    "away_score": row["away_score"],
+                    "result": row["result"],
+                }
+            prop_rows = self.get_prop_outcomes(row["trace_id"])
+            if prop_rows:
+                trace["_prop_outcomes"] = prop_rows
+            bet_rows = self.get_bet_records(row["trace_id"])
+            if bet_rows:
+                trace["_bet_records"] = bet_rows
+            results.append(trace)
+        return results
+
     def get_session_summary(
         self, league: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:

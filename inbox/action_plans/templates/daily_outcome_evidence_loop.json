@@ -1,9 +1,13 @@
 {
   "template_id": "daily_outcome_evidence_loop",
   "session_id": "template-daily-outcome-evidence-loop",
-  "generated_at": "2026-05-25T00:00:00Z",
-  "description": "Attach outcomes, score structured evidence signals, and refresh NBA calibration health from canonical trace data.",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "description": "Drain the trace inbox, attach outcomes, score structured evidence signals, and refresh NBA calibration health from canonical trace data. ingest_traces runs first so downstream steps see the latest exports (fix: previously missing this step caused the loop to operate on a stale DB).",
   "actions": [
+    {
+      "type": "ingest_traces",
+      "args": { "verbose": true }
+    },
     {
       "type": "fetch_outcomes",
       "args": {
