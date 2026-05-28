@@ -23,7 +23,11 @@ from pathlib import Path
 from typing import Any
 
 from omega.trace.bet_record import BetRecord
-from omega.trace.market_snapshot import MarketMovement, MarketSnapshot
+from omega.trace.market_snapshot import (
+    EarlyMarketSnapshot,
+    MarketMovement,
+    MarketSnapshot,
+)
 from omega.trace.schema import (
     CURRENT_VERSION,
     SCHEMA_V1,
@@ -33,6 +37,7 @@ from omega.trace.schema import (
     SCHEMA_V6,
     SCHEMA_V9,
     SCHEMA_V10,
+    SCHEMA_V11,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
@@ -338,6 +343,13 @@ class TraceStore:
         self._record_version(
             10,
             "Phase 6k: simulation_distributions + dynamic outcome view",
+        )
+
+        # V11: early_market_snapshots (low-liquidity early lines; isolated from CLV)
+        self.conn.executescript(SCHEMA_V11)
+        self._record_version(
+            11,
+            "Phase 7: early_market_snapshots table (segregated from closing_lines)",
         )
 
     def _record_version(self, version: int, description: str) -> None:
@@ -1006,6 +1018,56 @@ class TraceStore:
             """SELECT closing_id, trace_id, market, selection_descriptor,
                       closing_line, closing_odds, closing_timestamp, source, captured_at
                FROM closing_lines WHERE trace_id = ? ORDER BY captured_at""",
+            (trace_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    # ------------------------------------------------------------------
+    # Early market snapshots (Phase 7 - low-liquidity early lines)
+    # ------------------------------------------------------------------
+    #
+    # These intentionally do NOT touch closing_lines. CLV reads only
+    # closing_lines, so early captures can never distort it. See red-team
+    # finding 4 in docs/phase7/MULTI_SPORT_EXPANSION.md.
+
+    def record_early_market_snapshot(self, snapshot: EarlyMarketSnapshot) -> str:
+        """Persist one early low-liquidity line capture idempotently.
+
+        Idempotent on (trace_id, league, market, selection_descriptor,
+        captured_at). Writes ONLY to early_market_snapshots — never to
+        closing_lines — so the CLV metric stays grounded in true closes.
+
+        Returns the early_id of the row (existing or newly inserted).
+        """
+        early_id = snapshot.stable_id()
+        self.conn.execute(
+            """INSERT OR IGNORE INTO early_market_snapshots
+               (early_id, trace_id, league, market, selection_descriptor,
+                early_line, early_odds, liquidity_profile, captured_at, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                early_id,
+                snapshot.trace_id,
+                snapshot.league.upper(),
+                snapshot.market,
+                snapshot.selection_descriptor,
+                snapshot.early_line,
+                snapshot.early_odds,
+                snapshot.liquidity_profile,
+                snapshot.captured_at,
+                snapshot.source,
+            ),
+        )
+        self.conn.commit()
+        return early_id
+
+    def get_early_market_snapshots(self, trace_id: str) -> list[dict[str, Any]]:
+        """Return all early-market snapshots captured for a trace."""
+        rows = self.conn.execute(
+            """SELECT early_id, trace_id, league, market, selection_descriptor,
+                      early_line, early_odds, liquidity_profile, captured_at,
+                      source, recorded_at
+               FROM early_market_snapshots WHERE trace_id = ? ORDER BY captured_at""",
             (trace_id,),
         ).fetchall()
         return [dict(row) for row in rows]

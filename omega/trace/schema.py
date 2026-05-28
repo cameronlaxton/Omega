@@ -66,6 +66,17 @@ Schema version 10 (additive):
 - v_distribution_outcomes: raw join substrate for dynamic metric computation
   (CRPS/Brier/etc. are recomputed by versioned report code, not stored here).
 
+Schema version 11 (additive):
+- early_market_snapshots: low-liquidity early-line captures for leagues flagged
+  liquidity_profile="low" (e.g. WNBA). Deliberately SEPARATE from closing_lines
+  because early lines move violently on sharp action and do not reflect closing
+  probability. The canonical CLV computation reads ONLY closing_lines and never
+  joins this table, so blending phantom early EV into CLV is impossible by
+  construction. The calibration fitter excludes early-market-tagged traces by
+  default (opt-in forces a separate context_slice="early_market_low_liq"). No FK
+  to traces — captures can land before a trace is persisted, matching the
+  market_snapshots pattern. (Phase 7 red-team finding 4.)
+
 Design rules:
 - Full trace stored as JSON blob to decouple trace evolution from SQLite schema
 - Denormalized columns exist for querying only — the blob is source of truth
@@ -77,7 +88,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 10
+CURRENT_VERSION = 11
 
 _logger = logging.getLogger("omega.trace.schema")
 
@@ -416,4 +427,33 @@ FROM simulation_distributions d
 LEFT JOIN outcomes o ON o.trace_id = d.trace_id
 LEFT JOIN prop_outcomes p ON p.trace_id = d.trace_id
     AND (d.stat_key IS NULL OR p.stat_type = d.stat_key);
+"""
+
+
+# V11 is purely additive (one new table) so it can be applied via executescript.
+# early_market_snapshots is intentionally a sibling of closing_lines, NOT an
+# extension of it: keeping them in separate tables makes it structurally
+# impossible for the CLV query (which reads only closing_lines) to pick up early
+# low-liquidity captures. liquidity_profile is copied from the league config at
+# capture time so a later analysis can slice on it without re-deriving.
+SCHEMA_V11 = """
+CREATE TABLE IF NOT EXISTS early_market_snapshots (
+    early_id              TEXT PRIMARY KEY,
+    trace_id              TEXT,
+    league                TEXT NOT NULL,
+    market                TEXT NOT NULL,
+    selection_descriptor  TEXT NOT NULL,
+    early_line            REAL,
+    early_odds            REAL NOT NULL,
+    liquidity_profile     TEXT NOT NULL,
+    captured_at           TEXT NOT NULL,
+    source                TEXT NOT NULL,
+    recorded_at           TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (trace_id, league, market, selection_descriptor, captured_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_early_market_snapshots_trace_id
+    ON early_market_snapshots(trace_id);
+CREATE INDEX IF NOT EXISTS idx_early_market_snapshots_league
+    ON early_market_snapshots(league, captured_at);
 """

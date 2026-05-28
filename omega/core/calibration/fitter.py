@@ -32,6 +32,26 @@ _MIN_SAMPLES = 30
 # Epsilon for log loss clipping
 _LOG_EPS = 1e-15
 
+# Phase 7 red-team finding 4: early low-liquidity captures carry phantom edges and
+# must not contaminate the production calibration profile. Traces tagged with this
+# liquidity profile are excluded from fitting by default; opting in routes them
+# into a dedicated context slice rather than the production base slice.
+EARLY_MARKET_SLICE = "early_market_low_liq"
+
+
+def _is_early_market_trace(trace: dict[str, Any]) -> bool:
+    """True if a graded trace was produced from an early low-liquidity capture.
+
+    Checked against either a ``context_labels.liquidity_profile`` label or a
+    top-level ``liquidity_profile`` field so it works regardless of how the
+    capture path tagged the trace.
+    """
+    labels = trace.get("context_labels") or {}
+    return (
+        labels.get("liquidity_profile") == EARLY_MARKET_SLICE
+        or trace.get("liquidity_profile") == EARLY_MARKET_SLICE
+    )
+
 
 class CalibrationFitter:
     """Fit calibration profiles from historical prediction-outcome pairs."""
@@ -43,6 +63,7 @@ class CalibrationFitter:
     @staticmethod
     def extract_pairs(
         graded_traces: list[dict[str, Any]],
+        include_early_snapshots: bool = False,
     ) -> tuple[list[float], list[int]]:
         """Extract (predicted_prob, actual_outcome) pairs from game-level
         graded traces.
@@ -53,6 +74,9 @@ class CalibrationFitter:
         Args:
             graded_traces: Output of TraceStore.get_graded_traces().
                 Each dict has ``predictions`` and ``_outcome`` keys.
+            include_early_snapshots: When False (default), traces tagged
+                ``liquidity_profile == EARLY_MARKET_SLICE`` are excluded so
+                phantom early-line edges never drift the production profile.
 
         Returns:
             (predictions, outcomes) — parallel lists of floats and 0/1 ints.
@@ -61,6 +85,8 @@ class CalibrationFitter:
         outcomes: list[int] = []
 
         for trace in graded_traces:
+            if not include_early_snapshots and _is_early_market_trace(trace):
+                continue
             preds = trace.get("predictions")
             outcome = trace.get("_outcome")
             if not preds or not outcome:
@@ -84,6 +110,7 @@ class CalibrationFitter:
     @staticmethod
     def extract_prop_pairs(
         graded_traces: list[dict[str, Any]],
+        include_early_snapshots: bool = False,
     ) -> tuple[list[float], list[int]]:
         """Extract (predicted_prob, actual_outcome) pairs from prop-level
         graded traces.
@@ -107,6 +134,8 @@ class CalibrationFitter:
         outcomes: list[int] = []
 
         for trace in graded_traces:
+            if not include_early_snapshots and _is_early_market_trace(trace):
+                continue
             preds = trace.get("predictions") or {}
             prop_outcomes = trace.get("_prop_outcomes")
             if not prop_outcomes:
@@ -175,12 +204,33 @@ class CalibrationFitter:
         fitter = CalibrationFitter()
         result: dict[str | None, tuple[list[float], list[int]]] = {}
         for label, traces in grouped.items():
+            # Within a partition, allow early-market traces — the partitioning is
+            # already the opt-in mechanism that quarantines them into their slice.
             if extractor == "prop":
-                preds, outcomes = fitter.extract_prop_pairs(traces)
+                preds, outcomes = fitter.extract_prop_pairs(traces, include_early_snapshots=True)
             else:
-                preds, outcomes = fitter.extract_pairs(traces)
+                preds, outcomes = fitter.extract_pairs(traces, include_early_snapshots=True)
             result[label] = (preds, outcomes)
         return result
+
+    @staticmethod
+    def extract_pairs_with_early_slice(
+        graded_traces: list[dict[str, Any]],
+        extractor: str = "game",
+    ) -> dict[str | None, tuple[list[float], list[int]]]:
+        """Opt-in partition that quarantines early-market traces in their slice.
+
+        Returns a dict whose ``None`` (base) slice contains only closing-line
+        grounded traces and whose ``EARLY_MARKET_SLICE`` key contains the early
+        low-liquidity captures. This is the ``include_early_snapshots=True`` path:
+        early traces still get a calibration candidate, but in a dedicated slice
+        so a promoted production profile never inherits phantom early edges.
+        """
+        return CalibrationFitter.extract_pairs_by_context(
+            graded_traces,
+            lambda t: EARLY_MARKET_SLICE if _is_early_market_trace(t) else None,
+            extractor=extractor,
+        )
 
     # ------------------------------------------------------------------
     # Isotonic fitting (PAV algorithm)

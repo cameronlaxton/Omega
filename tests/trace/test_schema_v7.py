@@ -71,10 +71,10 @@ class TestV7SchemaColumn:
         assert idx is not None
         store.close()
 
-    def test_current_version_is_seven(self):
+    def test_current_version_is_eleven(self):
         store = TraceStore(db_path=_tmp_db_path())
-        assert CURRENT_VERSION == 10
-        assert store.schema_version() == 10
+        assert CURRENT_VERSION == 11
+        assert store.schema_version() == 11
         store.close()
 
 

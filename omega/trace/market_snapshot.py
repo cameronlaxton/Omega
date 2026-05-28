@@ -50,6 +50,42 @@ class MarketSnapshot(BaseModel):
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20]
 
 
+class EarlyMarketSnapshot(BaseModel):
+    """A low-liquidity early-line capture, segregated from closing_lines.
+
+    Early WNBA (and future low-liquidity) markets move violently on sharp action
+    and do not reflect closing probability. These rows are captured to support an
+    "early-market lean" analysis and to size before the line moves — but they are
+    deliberately kept out of the canonical CLV path. ``liquidity_profile`` is
+    copied from the league config at capture time. (Phase 7 red-team finding 4.)
+    """
+
+    early_id: str | None = Field(default=None)
+    trace_id: str | None = None
+    league: str
+    market: str
+    selection_descriptor: str
+    early_line: float | None = None
+    early_odds: float
+    liquidity_profile: str
+    captured_at: str
+    source: str
+
+    def stable_id(self) -> str:
+        if self.early_id:
+            return self.early_id
+        raw = "|".join(
+            [
+                self.trace_id or "",
+                self.league.upper(),
+                self.market,
+                self.selection_descriptor,
+                self.captured_at,
+            ]
+        )
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20]
+
+
 class MarketMovement(BaseModel):
     market: str
     selection: str
