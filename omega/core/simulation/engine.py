@@ -39,7 +39,10 @@ from omega.core.simulation.archetypes import (
 from omega.core.simulation.backends import (
     GameSimulationBackend,
     GameSimulationInput,
+    PropSimulationInput,
     enforce_game_backend_contract,
+    register_game_backend,
+    register_prop_backend,
 )
 
 # ---------------------------------------------------------------------------
@@ -1694,3 +1697,49 @@ class OmegaSimulationEngine:
             "iterations": n_iterations,
             "missing_requirements": [],
         }
+
+
+# ---------------------------------------------------------------------------
+# Prop-simulation backend: distribution router
+# ---------------------------------------------------------------------------
+
+
+class PropDistributionRouterBackend:
+    """Default prop backend wrapping the existing select_distribution + sampler
+    logic in run_player_simulation(). Behavior is bit-identical to today's
+    direct callers; this is purely a registry-compatible adapter so new prop
+    backends (Negative Binomial, tennis serve) can be dispatched uniformly.
+    """
+
+    backend_name = "prop_distribution_router"
+    component_version = "prop_distribution_router_v1"
+
+    def run(self, request: PropSimulationInput) -> dict[str, Any]:
+        variance = (
+            request.projection_std ** 2
+            if request.projection_std is not None
+            else 1.0
+        )
+        player_proj = {
+            "league": request.league,
+            "stat_key": request.stat_type,
+            "mean": request.projection_mean,
+            "variance": variance,
+            "market_line": request.line,
+        }
+        return run_player_simulation(
+            player_proj, n_iter=request.n_iter, seed=request.seed
+        )
+
+
+# ---------------------------------------------------------------------------
+# Backend registration (import-time wiring)
+# ---------------------------------------------------------------------------
+#
+# Registering here — rather than in backends.py — keeps the registry module
+# free of the concrete simulator implementations and avoids an import cycle.
+# service.py imports this module, so registration is in place before dispatch.
+
+register_game_backend("fast_score", FastScoreSimulationBackend())
+register_game_backend("markov_state", MarkovGameSimulationBackend())
+register_prop_backend("prop_distribution_router", PropDistributionRouterBackend())

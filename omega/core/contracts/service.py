@@ -42,8 +42,8 @@ from omega.core.contracts.schemas import (
     SlateAnalysisResponse,
 )
 from omega.core.simulation.archetypes import get_archetype_name
+from omega.core.simulation.backends import resolve_game_backend
 from omega.core.simulation.engine import (
-    MarkovGameSimulationBackend,
     OmegaSimulationEngine,
     run_player_simulation,
     select_distribution,
@@ -816,7 +816,8 @@ def analyze_game(
         )
         total_value, _, _ = _resolve_game_total_market(request.odds)
 
-    if request.simulation_backend not in {"fast_score", "markov_state"}:
+    backend = resolve_game_backend(request.simulation_backend)
+    if backend is None:
         return GameAnalysisResponse(
             matchup=matchup,
             league=request.league,
@@ -827,7 +828,7 @@ def analyze_game(
             context_source="missing",
         )
 
-    use_markov = request.simulation_backend == "markov_state"
+    use_markov = backend.backend_name == "markov_state"
     if evidence_plan is None:
         evidence_plan = _game_evidence_plan_for(request)
     effective_adjustment = None if use_markov else (
@@ -851,9 +852,9 @@ def analyze_game(
 
     try:
         engine = (
-            OmegaSimulationEngine(game_backend=MarkovGameSimulationBackend())
-            if use_markov
-            else _engine
+            _engine
+            if backend.backend_name == "fast_score"
+            else OmegaSimulationEngine(game_backend=backend)
         )
         sim_result = engine.run_fast_game_simulation(
             home_team=request.home_team,

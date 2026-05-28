@@ -52,3 +52,7 @@ logs/
 # (audit_events) + reports/run_audits/<id>.audit.md. Do not regenerate.
 RUN_AUDIT.md
 RUN_TRACE.jsonl
+
+# Phase 7 ETL raw-response cache (knowable-at-the-time snapshot; not source).
+# Alias tables (data/aliases) and Sackmann CSV clones (data/external) ARE versioned.
+data/cache/
