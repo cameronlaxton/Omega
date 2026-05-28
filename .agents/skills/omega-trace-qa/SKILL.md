@@ -12,7 +12,7 @@ description: Full trace QA checklist for Omega sessions. Use after each analysis
 Run before `analyze()` if critical inputs are missing. Never fabricate — downgrade instead.
 
 **Thresholds:**
-- `aggregate_quality >= 0.7` → formal analysis permitted
+- `aggregate_quality >= 0.7` → quality gate permits proceeding to formal-output checks
 - `0.3 <= quality < 0.7` → narrative only; no Bet Card
 - `quality < 0.3` or < 3 confirmed facts → ultra-low-data text only
 
@@ -133,15 +133,19 @@ Writer raises `ProtectedValueError` and rejects the append atomically.
 ## 7. Ingest Readiness
 
 ```bash
-# SQLite workaround first (if on FUSE mount)
+# SQLite workaround first only if on FUSE/network mount or TraceStore redirects
 cp omega_traces.db /tmp/omega_traces.db
+export OMEGA_TRACE_DB=/tmp/omega_traces.db
 
 # Dry-run
-python scripts/ingest_traces.py --verbose --dry-run --db /tmp/omega_traces.db
+python scripts/ingest_traces.py --verbose --dry-run --db "$OMEGA_TRACE_DB"
 
 # Full ingest
-python scripts/ingest_traces.py --verbose --db /tmp/omega_traces.db
+python scripts/ingest_traces.py --verbose --db "$OMEGA_TRACE_DB"
 ```
+
+If `OMEGA_TRACE_DB` is unset, omit `--db` and let `TraceStore` resolve the repo
+default.
 
 Check `inbox/traces/failed/` — each rejected file has a `.error.txt` sidecar. Fix identity fields, re-drop.
 
@@ -165,12 +169,14 @@ Both are idempotent — re-running is safe.
 ## 9. Session Close Sequence
 
 ```bash
-python scripts/ingest_traces.py --verbose --db /tmp/omega_traces.db
+python scripts/ingest_traces.py --verbose --db "$OMEGA_TRACE_DB"
 python scripts/validate_session_sidecars.py
 python scripts/render_session_audits.py --session-id <session_id>
-python scripts/report_calibration.py --db /tmp/omega_traces.db --league NBA --window-days 30
+python scripts/report_calibration.py --db "$OMEGA_TRACE_DB" --league NBA --window-days 30
 python scripts/fetch_closing_lines.py --dry-run
 ```
+
+If `OMEGA_TRACE_DB` is unset, omit `--db`.
 
 ---
 
@@ -183,7 +189,7 @@ python scripts/fetch_closing_lines.py --dry-run
 | `ProtectedValueError` on sidecar | Engine value in audit event | Remove numeric value; keep in DB |
 | draw_prob > 0 on MLB | Run sentinel — check BUG-MLB-DRAW-PROB-001 | Suppress Bet Card if active |
 | Evidence signals all skipped | Invalid signal_type or window | Fix against HANDLER_REGISTRY |
-| `aggregate_quality` absent | `trace_quality` block missing from export | Add `trace_quality: {aggregate_quality: <float>}` |
+| `aggregate_quality` absent | No quality pass ran or `trace_quality` block missing from export | Run the quality pass or omit it intentionally; never invent a score |
 | Calibration missing session | Sidecar not written or invalid | Write sidecar; re-validate |
 
 ---

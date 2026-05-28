@@ -114,7 +114,8 @@
       "Bash(Select-String -NotMatch \"processed\")",
       "Bash(git commit -m 'Add session traces and bug report from 2026-05-25 *)",
       "Bash(Remove-Item -Force \"C:\\\\repos\\\\Omega\\\\.git\\\\index.lock\" -ErrorAction SilentlyContinue)",
-      "Bash(rm -f \".git/index.lock\")"
+      "Bash(rm -f \".git/index.lock\")",
+      "Bash(python scripts/report_calibration.py --league MLB)"
     ]
   }
 }

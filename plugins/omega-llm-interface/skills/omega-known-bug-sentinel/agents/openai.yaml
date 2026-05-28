@@ -1,0 +1,4 @@
+agent:
+  display_name: "Omega Known-Bug Sentinel"
+  short_description: "Check Omega bug gates before output."
+  default_prompt: "Use $omega-known-bug-sentinel to check live Omega bug gates before formal output."

@@ -42,9 +42,20 @@ python scripts/cowork_preflight.py --formal-output-gate
 
 ### Corruption Repair (Pattern C)
 
-**Do not use `--repair-from-git`** — it is a no-op on FUSE mounts (BUG-REPAIR-FROM-GIT-001).
+Use `--repair-from-git` when preflight recommends mount-corruption repair. The
+live Cowork contract restores syntax-corrupt tracked files through git, writes a
+repair-taint lockfile, and requires the follow-up formal-output gate cycle before
+formal output is authorized.
 
-Manual repair for each corrupt file:
+```bash
+python scripts/cowork_preflight.py --repair-from-git
+python scripts/cowork_preflight.py --formal-output-gate
+python scripts/cowork_preflight.py --formal-output-gate
+```
+
+If `--repair-from-git` fails to change the file or verification still reports the
+same corruption, fall back to manual repair for each corrupt file:
+
 ```bash
 git show HEAD:"omega/core/contracts/service.py" > /tmp/_service.py \
   && cp /tmp/_service.py omega/core/contracts/service.py
@@ -56,20 +67,28 @@ git show HEAD:"omega/core/contracts/service.py" > /tmp/_service.py \
 
 ## Step 3 — SQLite / TraceStore Workaround
 
-The repo DB at `omega_traces.db` is on a FUSE mount. SQLite WAL mode fails (BUG-SQLITE-WAL-FUSE-001).
+Use the repo default DB path for normal local runs. If running in Cowork,
+FUSE/SMB/CIFS/NFS, or if TraceStore reports a local-copy redirect, keep all
+TraceStore scripts pointed at the same working DB path and sync back through the
+repo-owned sync path at session close.
+
+Manual Linux-sandbox fallback:
 
 ```bash
-cp /sessions/<sandbox>/mnt/Omega/omega_traces.db /tmp/omega_traces.db
+cp omega_traces.db /tmp/omega_traces.db
 export OMEGA_TRACE_DB=/tmp/omega_traces.db
 ```
 
-Use `--db /tmp/omega_traces.db` on all TraceStore scripts:
+Use the configured DB path on all TraceStore scripts. If `OMEGA_TRACE_DB` is not
+set, omit `--db` and let `TraceStore` resolve the repo default.
+
 ```bash
-python scripts/report_calibration.py --db /tmp/omega_traces.db --league NBA --window-days 30
-python scripts/ingest_traces.py --db /tmp/omega_traces.db --verbose
+python scripts/report_calibration.py --db "$OMEGA_TRACE_DB" --league NBA --window-days 30
+python scripts/ingest_traces.py --db "$OMEGA_TRACE_DB" --verbose
 ```
 
-**Warning:** writes to `/tmp/omega_traces.db` are NOT auto-persisted. Sync manually at session close.
+**Warning:** writes to a redirected/local copy are NOT auto-persisted. Sync with
+`scripts/sync_to_mount.ps1` when the Cowork contract requires it.
 
 ---
 
@@ -121,7 +140,7 @@ python scripts/bug_sentinel.py --session-id sess-YYYYMMDD-XXXX
 
 This runs automatically via preflight (unless `--skip-bug-sentinel` is passed). Read the gate_summary. Any gate marked `suppressed` blocks Bet Cards for that sport/kind for the session.
 
-**Active bugs as of 2026-05-28:**
+**Known-bug snapshot as of 2026-05-28. Live sentinel output is authoritative:**
 
 | Bug | Status | Impact |
 |---|---|---|
@@ -129,8 +148,8 @@ This runs automatically via preflight (unless `--skip-bug-sentinel` is passed). 
 | MLB draw_prob leak | FIXED | None |
 | input_snapshot identity (props) | FIXED | None |
 | Evidence policy shadow mode | Present (design) | Signals recorded, not applied |
-| SQLite WAL FUSE failure | Present (HIGH) | Use /tmp workaround |
-| --repair-from-git no-op | Unknown (manual) | Use git show workaround |
+| SQLite WAL FUSE failure | Check live sentinel | Use TraceStore redirect or local DB fallback if present |
+| --repair-from-git no-op | Unknown (manual) | Use manual git-show repair only if repair verification fails |
 
 ---
 
@@ -143,13 +162,14 @@ Default $1000 unless user specifies otherwise. Record in sidecar `bankroll` and 
 ## Session Close Checklist
 
 ```bash
-python scripts/ingest_traces.py --db /tmp/omega_traces.db --verbose
+python scripts/ingest_traces.py --db "$OMEGA_TRACE_DB" --verbose
 python scripts/validate_session_sidecars.py
 python scripts/render_session_audits.py --session-id <session_id>
 python scripts/fetch_closing_lines.py --dry-run   # if bets placed
 ```
 
-Sync DB back to mount manually (host PowerShell `sync_to_mount.ps1`).
+If `OMEGA_TRACE_DB` is unset, omit `--db`. If using a redirected/local DB copy,
+sync back through `scripts/sync_to_mount.ps1` per `OMEGA_COWORK.md`.
 
 ---
 

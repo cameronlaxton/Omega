@@ -44,7 +44,10 @@ All checks are read-only. No engine writes, no network.
 | `unknown` | Manual check required |
 | `check_error` | Check itself failed — treat as unknown |
 
-**Gate Summary:** `clear` = formal analysis permitted; `suppressed` = do not emit Bet Cards for that sport+kind.
+**Gate Summary:** `clear` = this sentinel does not block the sport+kind;
+`suppressed` = do not emit Bet Cards for that sport+kind. A clear sentinel gate
+does not override preflight, calibration/output-mode, or deterministic engine
+requirements.
 
 ---
 
@@ -66,7 +69,10 @@ All checks are read-only. No engine writes, no network.
 
 ---
 
-## Known Bugs Summary (2026-05-28)
+## Known Bugs Snapshot (2026-05-28)
+
+This table is a convenience snapshot. The authoritative state is the live output
+from `python scripts/bug_sentinel.py --json` plus `omega/qa/bug_catalog.json`.
 
 | Bug ID | Severity | Status | Suppresses | Workaround |
 |---|---|---|---|---|
@@ -74,8 +80,8 @@ All checks are read-only. No engine writes, no network.
 | BUG-MLB-DRAW-PROB-001 | CRITICAL | Fixed | MLB game | None needed |
 | BUG-INPUT-SNAPSHOT-001 | CRITICAL | Fixed | prop ingest | None needed |
 | BUG-EVIDENCE-SHADOW-001 | LOW | Present (design) | None | Note in downgrade_rationale |
-| BUG-SQLITE-WAL-FUSE-001 | HIGH | Present | None | cp to /tmp; use --db |
-| BUG-REPAIR-FROM-GIT-001 | MEDIUM | Unknown | None | Manual git show workaround |
+| BUG-SQLITE-WAL-FUSE-001 | HIGH | Check live sentinel | None | TraceStore redirect or local DB fallback |
+| BUG-REPAIR-FROM-GIT-001 | MEDIUM | Unknown | None | Manual git-show repair only if repair verification fails |
 
 ---
 
