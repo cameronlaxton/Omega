@@ -35,6 +35,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from omega.integrations._guards import assert_not_replay_mode
+
 UTC = timezone.utc
 
 logger = logging.getLogger("omega.integrations.odds_api")
@@ -229,6 +231,7 @@ class OddsApiClient:
     # ------------------------------------------------------------------
 
     def _get_json(self, path: str, params: dict[str, Any], request_cost: int = 1) -> Any:
+        assert_not_replay_mode("Odds API fetch")
         if not self._api_key:
             raise OddsApiKeyMissing("OMEGA_ODDS_API_KEY not set")
         if path == "/v4" or path.startswith("/v4/"):

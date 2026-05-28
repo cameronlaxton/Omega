@@ -21,6 +21,8 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
+from omega.integrations._guards import assert_not_replay_mode
+
 logger = logging.getLogger("omega.integrations.espn_mlb")
 
 _SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"
@@ -138,6 +140,7 @@ def fetch_scoreboard(
         List of FinalGame (may include in-progress / scheduled if you call mid-day;
         consumers should filter by status == "final" for grading).
     """
+    assert_not_replay_mode("ESPN MLB scoreboard fetch")
     date_str = date.replace("-", "")
     query = urllib.parse.urlencode({"dates": date_str})
     url = f"{_SCOREBOARD_URL}?{query}"

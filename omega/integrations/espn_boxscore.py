@@ -49,6 +49,8 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any
 
+from omega.integrations._guards import assert_not_replay_mode
+
 logger = logging.getLogger("omega.integrations.espn_boxscore")
 
 _REQUEST_TIMEOUT_SECONDS = 15
@@ -278,6 +280,7 @@ def fetch_box_score(
 ) -> dict[str, Any]:
     """Fetch the raw ESPN summary JSON for an event. Use :func:`parse_box_score`
     on the result to extract player stats."""
+    assert_not_replay_mode("ESPN box score fetch")
     url_base = _SUMMARY_URLS.get(league.upper())
     if not url_base:
         raise ValueError(f"No ESPN summary endpoint configured for league={league!r}")

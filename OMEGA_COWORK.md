@@ -227,6 +227,8 @@ python scripts/resolve_odds.py --kind game --league NBA --home-team "Boston Celt
 
 BetMGM (`betmgm`) is the default sportsbook. Use line-shopping or all-books mode only when the user explicitly asks for line shopping, consensus, market comparison, or an audit. The resolver prepares engine-ready market inputs and provenance; it does not compute protected Omega outputs.
 
+For the full `prop_type` → stat key mapping (including MLB pitching keys and free vs. paid tier notes), see [`prompts/reference/prop_stat_keys.md`](prompts/reference/prop_stat_keys.md).
+
 Never print, paste, trace, report, or expose `OMEGA_ODDS_API_KEY`.
 
 ## 5. Session IDs
