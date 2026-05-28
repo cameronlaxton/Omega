@@ -1,0 +1,513 @@
+{
+  "trace": {
+    "schema_version": 1,
+    "trace_id": "sandbox-204ab967-a0be",
+    "run_id": "sandbox-204ab967-a0be",
+    "timestamp": "2026-05-27T13:13:34.420287+00:00",
+    "kind": "game",
+    "session_id": "sess-20260527-mlb1",
+    "input_snapshot": {
+      "home_team": "Pittsburgh Pirates",
+      "away_team": "Chicago Cubs",
+      "league": "MLB",
+      "odds": {
+        "spread_home": null,
+        "spread_home_price": -110.0,
+        "spread_away_price": -110.0,
+        "moneyline_home": -110.0,
+        "moneyline_away": -110.0,
+        "over_under": null,
+        "total_over_price": -110.0,
+        "total_under_price": -110.0,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 10000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 4.0,
+        "def_rating": 4.5
+      },
+      "away_context": {
+        "off_rating": 4.3,
+        "def_rating": 4.7
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 0.96,
+        "weather_wind_mph": 7.0
+      },
+      "seed": 3270516769,
+      "evidence": [
+        {
+          "signal_type": "park_factor_evidence",
+          "category": "situational",
+          "plane": "game",
+          "value": 0.96,
+          "source": "park_factor_reference",
+          "confidence": 0.85,
+          "window": "season",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        },
+        {
+          "signal_type": "weather_wind",
+          "category": "situational",
+          "plane": "game",
+          "value": 7.0,
+          "source": "weather_estimate",
+          "confidence": 0.55,
+          "window": "matchup",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        }
+      ]
+    },
+    "result": {
+      "matchup": "Chicago Cubs @ Pittsburgh Pirates",
+      "league": "MLB",
+      "analyzed_at": "2026-05-27T13:13:34.422494",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 10000,
+        "home_win_prob": 51.6,
+        "away_win_prob": 48.4,
+        "draw_prob": 0.0,
+        "predicted_spread": 0.2,
+        "predicted_total": 9.0,
+        "predicted_home_score": 4.6,
+        "predicted_away_score": 4.4,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Pittsburgh Pirates",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.516,
+          "calibrated_prob": 0.516,
+          "market_implied": 0.5238,
+          "edge_pct": -0.78,
+          "ev_pct": -1.49,
+          "market_odds": -110.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.516,
+            "calibrated_prob": 0.516,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Chicago Cubs",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.484,
+          "calibrated_prob": 0.484,
+          "market_implied": 0.5238,
+          "edge_pct": -3.98,
+          "ev_pct": -7.6,
+          "market_odds": -110.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.484,
+            "calibrated_prob": 0.484,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": null,
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.5909,
+          "sample_std": 2.1300087300290285,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 10000,
+          "seed": 3270516769,
+          "context_hash": "cade1868948e933f",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.432,
+          "sample_std": 2.1023263305206035,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 10000,
+          "seed": 3270516769,
+          "context_hash": "cade1868948e933f",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 9.0229,
+          "sample_std": 2.9915841271811576,
+          "p10": 5.0,
+          "p50": 9.0,
+          "p90": 13.0,
+          "n_iterations": 10000,
+          "seed": 3270516769,
+          "context_hash": "cade1868948e933f",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 0.1589,
+          "sample_std": 2.993969069646547,
+          "p10": -4.0,
+          "p50": 0.0,
+          "p90": 4.0,
+          "n_iterations": 10000,
+          "seed": 3270516769,
+          "context_hash": "cade1868948e933f",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 0.96,
+      "weather_wind_mph": 7.0
+    },
+    "calibration_audit": [
+      {
+        "raw_prob": 0.516,
+        "calibrated_prob": 0.516,
+        "league": "MLB",
+        "plane": "game",
+        "market": "home",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      {
+        "raw_prob": 0.484,
+        "calibrated_prob": 0.484,
+        "league": "MLB",
+        "plane": "game",
+        "market": "away",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      }
+    ],
+    "downgrades": [],
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "park_factor_evidence",
+        "target": "mean",
+        "applied": false,
+        "factor": 0.96,
+        "reason": "park_factor_evidence: mean x0.9600 (raw 0.9600, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "weather_wind",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.028,
+        "reason": "weather_wind: mean x1.0280 (raw 1.0280, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "simulation_distributions": [
+      {
+        "target": "home_score",
+        "market": "game_score",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 4.5909,
+        "sample_std": 2.1300087300290285,
+        "p10": 2.0,
+        "p50": 4.0,
+        "p90": 7.0,
+        "n_iterations": 10000,
+        "seed": 3270516769,
+        "context_hash": "cade1868948e933f",
+        "component_version": "fast_score_v1"
+      },
+      {
+        "target": "away_score",
+        "market": "game_score",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 4.432,
+        "sample_std": 2.1023263305206035,
+        "p10": 2.0,
+        "p50": 4.0,
+        "p90": 7.0,
+        "n_iterations": 10000,
+        "seed": 3270516769,
+        "context_hash": "cade1868948e933f",
+        "component_version": "fast_score_v1"
+      },
+      {
+        "target": "total",
+        "market": "game_total",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 9.0229,
+        "sample_std": 2.9915841271811576,
+        "p10": 5.0,
+        "p50": 9.0,
+        "p90": 13.0,
+        "n_iterations": 10000,
+        "seed": 3270516769,
+        "context_hash": "cade1868948e933f",
+        "component_version": "fast_score_v1"
+      },
+      {
+        "target": "spread",
+        "market": "game_spread",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 0.1589,
+        "sample_std": 2.993969069646547,
+        "p10": -4.0,
+        "p50": 0.0,
+        "p90": 4.0,
+        "n_iterations": 10000,
+        "seed": 3270516769,
+        "context_hash": "cade1868948e933f",
+        "component_version": "fast_score_v1"
+      }
+    ],
+    "prompt": "MLB game: Chicago Cubs @ Pittsburgh Pirates",
+    "league": "MLB",
+    "matchup": "Chicago Cubs @ Pittsburgh Pirates",
+    "execution_mode": "sandbox_game",
+    "simulation_seed": 3270516769,
+    "aggregate_quality": null,
+    "predictions": {
+      "iterations": 10000,
+      "home_win_prob": 51.6,
+      "away_win_prob": 48.4,
+      "draw_prob": 0.0,
+      "predicted_spread": 0.2,
+      "predicted_total": 9.0,
+      "predicted_home_score": 4.6,
+      "predicted_away_score": 4.4,
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1"
+    },
+    "recommendations": [
+      {
+        "side": "home",
+        "team": "Pittsburgh Pirates",
+        "market": "moneyline",
+        "line": null,
+        "true_prob": 0.516,
+        "calibrated_prob": 0.516,
+        "market_implied": 0.5238,
+        "edge_pct": -0.78,
+        "ev_pct": -1.49,
+        "market_odds": -110.0,
+        "confidence_tier": "Pass",
+        "recommended_units": 0.0,
+        "spread_coverage_prob": null,
+        "calibration_audit": {
+          "raw_prob": 0.516,
+          "calibrated_prob": 0.516,
+          "league": "MLB",
+          "plane": "game",
+          "market": "home",
+          "method_resolved": null,
+          "profile_id": null,
+          "context_slice": null,
+          "resolved_slice": null,
+          "path": "static_identity"
+        }
+      },
+      {
+        "side": "away",
+        "team": "Chicago Cubs",
+        "market": "moneyline",
+        "line": null,
+        "true_prob": 0.484,
+        "calibrated_prob": 0.484,
+        "market_implied": 0.5238,
+        "edge_pct": -3.98,
+        "ev_pct": -7.6,
+        "market_odds": -110.0,
+        "confidence_tier": "A",
+        "recommended_units": 0.0,
+        "spread_coverage_prob": null,
+        "calibration_audit": {
+          "raw_prob": 0.484,
+          "calibrated_prob": 0.484,
+          "league": "MLB",
+          "plane": "game",
+          "market": "away",
+          "method_resolved": null,
+          "profile_id": null,
+          "context_slice": null,
+          "resolved_slice": null,
+          "path": "static_identity"
+        }
+      }
+    ],
+    "odds_snapshot": {
+      "spread_home": null,
+      "spread_home_price": -110.0,
+      "spread_away_price": -110.0,
+      "moneyline_home": -110.0,
+      "moneyline_away": -110.0,
+      "over_under": null,
+      "total_over_price": -110.0,
+      "total_under_price": -110.0,
+      "moneyline_draw": null,
+      "markets": null
+    },
+    "model_version": "omega-core-phase6h",
+    "bankroll": 1000.0,
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    },
+    "quality_gate": null,
+    "reasoning_narrative": "Home: Bubba Chandler (4.79 ERA) vs Jameson Taillon (5.20 ERA). Park 0.96. Wind 7.0 mph. Model: Pittsburgh Pirates 51.6% win. Edge: none.",
+    "reasoning_inputs": {
+      "sources": [
+        "the-odds-api:betmgm",
+        "sportsgrid.com",
+        "web-search"
+      ],
+      "fields_gathered": [
+        "moneyline_home",
+        "moneyline_away",
+        "over_under",
+        "off_rating",
+        "def_rating",
+        "park_factor",
+        "weather_wind_mph"
+      ],
+      "missing_fields": [
+        "team_record",
+        "bullpen_era"
+      ],
+      "market_context": {
+        "book": "betmgm",
+        "moneyline_home": -110.0,
+        "moneyline_away": -110.0
+      }
+    },
+    "reasoning_downgrade_rationale": "Evidence mode=shadow; signals recorded not applied."
+  },
+  "bet_record": null,
+  "_export_meta": {
+    "exported_at": "2026-05-28T09:12:00Z",
+    "runtime_db": "/sessions/kind-youthful-ptolemy/.omega/runtime/omega_traces.db",
+    "outcome_attached": {
+      "home_score": 4,
+      "away_score": 10,
+      "result": "away_win",
+      "source": "api:espn"
+    },
+    "note": "Exported from ephemeral sandbox DB; re-ingest to restore traces. Outcomes already attached - skip fetch_outcomes after re-ingest."
+  }
+}

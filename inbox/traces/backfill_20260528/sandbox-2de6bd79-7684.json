@@ -1,0 +1,513 @@
+{
+  "trace": {
+    "schema_version": 1,
+    "trace_id": "sandbox-2de6bd79-7684",
+    "run_id": "sandbox-2de6bd79-7684",
+    "timestamp": "2026-05-27T13:13:34.442543+00:00",
+    "kind": "game",
+    "session_id": "sess-20260527-mlb1",
+    "input_snapshot": {
+      "home_team": "Chicago White Sox",
+      "away_team": "Minnesota Twins",
+      "league": "MLB",
+      "odds": {
+        "spread_home": null,
+        "spread_home_price": -110.0,
+        "spread_away_price": -110.0,
+        "moneyline_home": -130.0,
+        "moneyline_away": 105.0,
+        "over_under": null,
+        "total_over_price": -110.0,
+        "total_under_price": -110.0,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 10000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 4.2,
+        "def_rating": 4.0
+      },
+      "away_context": {
+        "off_rating": 4.6,
+        "def_rating": 4.5
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 1.05,
+        "weather_wind_mph": 12.0
+      },
+      "seed": 2157176222,
+      "evidence": [
+        {
+          "signal_type": "park_factor_evidence",
+          "category": "situational",
+          "plane": "game",
+          "value": 1.05,
+          "source": "park_factor_reference",
+          "confidence": 0.85,
+          "window": "season",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        },
+        {
+          "signal_type": "weather_wind",
+          "category": "situational",
+          "plane": "game",
+          "value": 12.0,
+          "source": "weather_estimate",
+          "confidence": 0.65,
+          "window": "matchup",
+          "direction": "neutral",
+          "stat_key": null,
+          "note": null
+        }
+      ]
+    },
+    "result": {
+      "matchup": "Minnesota Twins @ Chicago White Sox",
+      "league": "MLB",
+      "analyzed_at": "2026-05-27T13:13:34.444727",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 10000,
+        "home_win_prob": 55.2,
+        "away_win_prob": 44.8,
+        "draw_prob": 0.0,
+        "predicted_spread": 0.4,
+        "predicted_total": 8.8,
+        "predicted_home_score": 4.6,
+        "predicted_away_score": 4.2,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Chicago White Sox",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.552,
+          "calibrated_prob": 0.552,
+          "market_implied": 0.5652,
+          "edge_pct": -1.32,
+          "ev_pct": -2.34,
+          "market_odds": -130.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.552,
+            "calibrated_prob": 0.552,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Minnesota Twins",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.448,
+          "calibrated_prob": 0.448,
+          "market_implied": 0.4878,
+          "edge_pct": -3.98,
+          "ev_pct": -8.16,
+          "market_odds": 105.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.44799999999999995,
+            "calibrated_prob": 0.44799999999999995,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": null,
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.5609,
+          "sample_std": 2.1508814913890477,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 10000,
+          "seed": 2157176222,
+          "context_hash": "cda3f48ee209e29e",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.2095,
+          "sample_std": 2.036469923666994,
+          "p10": 2.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 10000,
+          "seed": 2157176222,
+          "context_hash": "cda3f48ee209e29e",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 8.7704,
+          "sample_std": 2.9516578121454864,
+          "p10": 5.0,
+          "p50": 9.0,
+          "p90": 13.0,
+          "n_iterations": 10000,
+          "seed": 2157176222,
+          "context_hash": "cda3f48ee209e29e",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 0.3514,
+          "sample_std": 2.972325359041269,
+          "p10": -3.0,
+          "p50": 0.0,
+          "p90": 4.0,
+          "n_iterations": 10000,
+          "seed": 2157176222,
+          "context_hash": "cda3f48ee209e29e",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 1.05,
+      "weather_wind_mph": 12.0
+    },
+    "calibration_audit": [
+      {
+        "raw_prob": 0.552,
+        "calibrated_prob": 0.552,
+        "league": "MLB",
+        "plane": "game",
+        "market": "home",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      {
+        "raw_prob": 0.44799999999999995,
+        "calibrated_prob": 0.44799999999999995,
+        "league": "MLB",
+        "plane": "game",
+        "market": "away",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      }
+    ],
+    "downgrades": [],
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "park_factor_evidence",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.05,
+        "reason": "park_factor_evidence: mean x1.0500 (raw 1.0500, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "weather_wind",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.048,
+        "reason": "weather_wind: mean x1.0480 (raw 1.0480, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "simulation_distributions": [
+      {
+        "target": "home_score",
+        "market": "game_score",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 4.5609,
+        "sample_std": 2.1508814913890477,
+        "p10": 2.0,
+        "p50": 4.0,
+        "p90": 7.0,
+        "n_iterations": 10000,
+        "seed": 2157176222,
+        "context_hash": "cda3f48ee209e29e",
+        "component_version": "fast_score_v1"
+      },
+      {
+        "target": "away_score",
+        "market": "game_score",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 4.2095,
+        "sample_std": 2.036469923666994,
+        "p10": 2.0,
+        "p50": 4.0,
+        "p90": 7.0,
+        "n_iterations": 10000,
+        "seed": 2157176222,
+        "context_hash": "cda3f48ee209e29e",
+        "component_version": "fast_score_v1"
+      },
+      {
+        "target": "total",
+        "market": "game_total",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 8.7704,
+        "sample_std": 2.9516578121454864,
+        "p10": 5.0,
+        "p50": 9.0,
+        "p90": 13.0,
+        "n_iterations": 10000,
+        "seed": 2157176222,
+        "context_hash": "cda3f48ee209e29e",
+        "component_version": "fast_score_v1"
+      },
+      {
+        "target": "spread",
+        "market": "game_spread",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 0.3514,
+        "sample_std": 2.972325359041269,
+        "p10": -3.0,
+        "p50": 0.0,
+        "p90": 4.0,
+        "n_iterations": 10000,
+        "seed": 2157176222,
+        "context_hash": "cda3f48ee209e29e",
+        "component_version": "fast_score_v1"
+      }
+    ],
+    "prompt": "MLB game: Minnesota Twins @ Chicago White Sox",
+    "league": "MLB",
+    "matchup": "Minnesota Twins @ Chicago White Sox",
+    "execution_mode": "sandbox_game",
+    "simulation_seed": 2157176222,
+    "aggregate_quality": null,
+    "predictions": {
+      "iterations": 10000,
+      "home_win_prob": 55.2,
+      "away_win_prob": 44.8,
+      "draw_prob": 0.0,
+      "predicted_spread": 0.4,
+      "predicted_total": 8.8,
+      "predicted_home_score": 4.6,
+      "predicted_away_score": 4.2,
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1"
+    },
+    "recommendations": [
+      {
+        "side": "home",
+        "team": "Chicago White Sox",
+        "market": "moneyline",
+        "line": null,
+        "true_prob": 0.552,
+        "calibrated_prob": 0.552,
+        "market_implied": 0.5652,
+        "edge_pct": -1.32,
+        "ev_pct": -2.34,
+        "market_odds": -130.0,
+        "confidence_tier": "Pass",
+        "recommended_units": 0.0,
+        "spread_coverage_prob": null,
+        "calibration_audit": {
+          "raw_prob": 0.552,
+          "calibrated_prob": 0.552,
+          "league": "MLB",
+          "plane": "game",
+          "market": "home",
+          "method_resolved": null,
+          "profile_id": null,
+          "context_slice": null,
+          "resolved_slice": null,
+          "path": "static_identity"
+        }
+      },
+      {
+        "side": "away",
+        "team": "Minnesota Twins",
+        "market": "moneyline",
+        "line": null,
+        "true_prob": 0.448,
+        "calibrated_prob": 0.448,
+        "market_implied": 0.4878,
+        "edge_pct": -3.98,
+        "ev_pct": -8.16,
+        "market_odds": 105.0,
+        "confidence_tier": "A",
+        "recommended_units": 0.0,
+        "spread_coverage_prob": null,
+        "calibration_audit": {
+          "raw_prob": 0.44799999999999995,
+          "calibrated_prob": 0.44799999999999995,
+          "league": "MLB",
+          "plane": "game",
+          "market": "away",
+          "method_resolved": null,
+          "profile_id": null,
+          "context_slice": null,
+          "resolved_slice": null,
+          "path": "static_identity"
+        }
+      }
+    ],
+    "odds_snapshot": {
+      "spread_home": null,
+      "spread_home_price": -110.0,
+      "spread_away_price": -110.0,
+      "moneyline_home": -130.0,
+      "moneyline_away": 105.0,
+      "over_under": null,
+      "total_over_price": -110.0,
+      "total_under_price": -110.0,
+      "moneyline_draw": null,
+      "markets": null
+    },
+    "model_version": "omega-core-phase6h",
+    "bankroll": 1000.0,
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    },
+    "quality_gate": null,
+    "reasoning_narrative": "Home: CWS-Starter (2.04 ERA) vs Connor Prielipp (4.03 ERA). Park 1.05. Wind 12.0 mph. Model: Chicago White Sox 55.2% win. Edge: none.",
+    "reasoning_inputs": {
+      "sources": [
+        "the-odds-api:betmgm",
+        "sportsgrid.com",
+        "web-search"
+      ],
+      "fields_gathered": [
+        "moneyline_home",
+        "moneyline_away",
+        "over_under",
+        "off_rating",
+        "def_rating",
+        "park_factor",
+        "weather_wind_mph"
+      ],
+      "missing_fields": [
+        "team_record",
+        "bullpen_era"
+      ],
+      "market_context": {
+        "book": "betmgm",
+        "moneyline_home": -130.0,
+        "moneyline_away": 105.0
+      }
+    },
+    "reasoning_downgrade_rationale": "Evidence mode=shadow; signals recorded not applied."
+  },
+  "bet_record": null,
+  "_export_meta": {
+    "exported_at": "2026-05-28T09:12:00Z",
+    "runtime_db": "/sessions/kind-youthful-ptolemy/.omega/runtime/omega_traces.db",
+    "outcome_attached": {
+      "home_score": 15,
+      "away_score": 2,
+      "result": "home_win",
+      "source": "api:espn"
+    },
+    "note": "Exported from ephemeral sandbox DB; re-ingest to restore traces. Outcomes already attached - skip fetch_outcomes after re-ingest."
+  }
+}

@@ -1,0 +1,519 @@
+{
+  "trace": {
+    "schema_version": 1,
+    "trace_id": "sandbox-a52944f8-db14",
+    "run_id": "sandbox-a52944f8-db14",
+    "timestamp": "2026-05-27T13:12:46.450788+00:00",
+    "kind": "game",
+    "session_id": "sess-20260527-mlb1",
+    "input_snapshot": {
+      "home_team": "Cleveland Guardians",
+      "away_team": "Washington Nationals",
+      "league": "MLB",
+      "odds": {
+        "spread_home": null,
+        "spread_home_price": -110.0,
+        "spread_away_price": -110.0,
+        "moneyline_home": -190.0,
+        "moneyline_away": 155.0,
+        "over_under": null,
+        "total_over_price": -110.0,
+        "total_under_price": -110.0,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 10000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 4.4,
+        "def_rating": 3.9
+      },
+      "away_context": {
+        "off_rating": 4.4,
+        "def_rating": 4.8
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 1,
+        "park_factor": 0.97,
+        "weather_wind_mph": 8.0
+      },
+      "seed": 911848939,
+      "evidence": [
+        {
+          "signal_type": "park_factor_evidence",
+          "category": "situational",
+          "plane": "game",
+          "value": 0.97,
+          "source": "park_factor_reference",
+          "confidence": 0.85,
+          "window": "season",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        },
+        {
+          "signal_type": "weather_wind",
+          "category": "situational",
+          "plane": "game",
+          "value": 8.0,
+          "source": "weather_estimate",
+          "confidence": 0.55,
+          "window": "matchup",
+          "direction": null,
+          "stat_key": null,
+          "note": null
+        }
+      ]
+    },
+    "result": {
+      "matchup": "Washington Nationals @ Cleveland Guardians",
+      "league": "MLB",
+      "analyzed_at": "2026-05-27T13:12:46.451578",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 10000,
+        "home_win_prob": 67.3,
+        "away_win_prob": 32.7,
+        "draw_prob": 0.0,
+        "predicted_spread": 1.2,
+        "predicted_total": 9.0,
+        "predicted_home_score": 5.1,
+        "predicted_away_score": 3.9,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Cleveland Guardians",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.673,
+          "calibrated_prob": 0.673,
+          "market_implied": 0.6552,
+          "edge_pct": 1.78,
+          "ev_pct": 2.72,
+          "market_odds": -190.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 1.29,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.6729999999999999,
+            "calibrated_prob": 0.6729999999999999,
+            "league": "MLB",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "Washington Nationals",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.327,
+          "calibrated_prob": 0.327,
+          "market_implied": 0.3922,
+          "edge_pct": -6.52,
+          "ev_pct": -16.62,
+          "market_odds": 155.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.327,
+            "calibrated_prob": 0.327,
+            "league": "MLB",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": null,
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": null,
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "baseball"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 5.1183,
+          "sample_std": 2.288821773314767,
+          "p10": 2.0,
+          "p50": 5.0,
+          "p90": 8.0,
+          "n_iterations": 10000,
+          "seed": 911848939,
+          "context_hash": "7a00450fe9e76d0f",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 3.9055,
+          "sample_std": 1.9924782934826266,
+          "p10": 1.0,
+          "p50": 4.0,
+          "p90": 7.0,
+          "n_iterations": 10000,
+          "seed": 911848939,
+          "context_hash": "7a00450fe9e76d0f",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 9.0238,
+          "sample_std": 3.0487757477388002,
+          "p10": 5.0,
+          "p50": 9.0,
+          "p90": 13.0,
+          "n_iterations": 10000,
+          "seed": 911848939,
+          "context_hash": "7a00450fe9e76d0f",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 1.2128,
+          "sample_std": 3.0203172283717663,
+          "p10": -3.0,
+          "p50": 1.0,
+          "p90": 5.0,
+          "n_iterations": 10000,
+          "seed": 911848939,
+          "context_hash": "7a00450fe9e76d0f",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "park_factor": 0.97,
+      "weather_wind_mph": 8.0
+    },
+    "calibration_audit": [
+      {
+        "raw_prob": 0.6729999999999999,
+        "calibrated_prob": 0.6729999999999999,
+        "league": "MLB",
+        "plane": "game",
+        "market": "home",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      {
+        "raw_prob": 0.327,
+        "calibrated_prob": 0.327,
+        "league": "MLB",
+        "plane": "game",
+        "market": "away",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      }
+    ],
+    "downgrades": [],
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "park_factor_evidence",
+        "target": "mean",
+        "applied": false,
+        "factor": 0.97,
+        "reason": "park_factor_evidence: mean x0.9700 (raw 0.9700, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "weather_wind",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.032,
+        "reason": "weather_wind: mean x1.0320 (raw 1.0320, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "simulation_distributions": [
+      {
+        "target": "home_score",
+        "market": "game_score",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 5.1183,
+        "sample_std": 2.288821773314767,
+        "p10": 2.0,
+        "p50": 5.0,
+        "p90": 8.0,
+        "n_iterations": 10000,
+        "seed": 911848939,
+        "context_hash": "7a00450fe9e76d0f",
+        "component_version": "fast_score_v1"
+      },
+      {
+        "target": "away_score",
+        "market": "game_score",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 3.9055,
+        "sample_std": 1.9924782934826266,
+        "p10": 1.0,
+        "p50": 4.0,
+        "p90": 7.0,
+        "n_iterations": 10000,
+        "seed": 911848939,
+        "context_hash": "7a00450fe9e76d0f",
+        "component_version": "fast_score_v1"
+      },
+      {
+        "target": "total",
+        "market": "game_total",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 9.0238,
+        "sample_std": 3.0487757477388002,
+        "p10": 5.0,
+        "p50": 9.0,
+        "p90": 13.0,
+        "n_iterations": 10000,
+        "seed": 911848939,
+        "context_hash": "7a00450fe9e76d0f",
+        "component_version": "fast_score_v1"
+      },
+      {
+        "target": "spread",
+        "market": "game_spread",
+        "stat_key": null,
+        "distribution_type": "empirical",
+        "distribution_params": {
+          "source": "monte_carlo_scores"
+        },
+        "params_schema_version": 1,
+        "sample_mean": 1.2128,
+        "sample_std": 3.0203172283717663,
+        "p10": -3.0,
+        "p50": 1.0,
+        "p90": 5.0,
+        "n_iterations": 10000,
+        "seed": 911848939,
+        "context_hash": "7a00450fe9e76d0f",
+        "component_version": "fast_score_v1"
+      }
+    ],
+    "prompt": "MLB game: Washington Nationals @ Cleveland Guardians",
+    "league": "MLB",
+    "matchup": "Washington Nationals @ Cleveland Guardians",
+    "execution_mode": "sandbox_game",
+    "simulation_seed": 911848939,
+    "aggregate_quality": null,
+    "predictions": {
+      "iterations": 10000,
+      "home_win_prob": 67.3,
+      "away_win_prob": 32.7,
+      "draw_prob": 0.0,
+      "predicted_spread": 1.2,
+      "predicted_total": 9.0,
+      "predicted_home_score": 5.1,
+      "predicted_away_score": 3.9,
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1"
+    },
+    "recommendations": [
+      {
+        "side": "home",
+        "team": "Cleveland Guardians",
+        "market": "moneyline",
+        "line": null,
+        "true_prob": 0.673,
+        "calibrated_prob": 0.673,
+        "market_implied": 0.6552,
+        "edge_pct": 1.78,
+        "ev_pct": 2.72,
+        "market_odds": -190.0,
+        "confidence_tier": "Pass",
+        "recommended_units": 1.29,
+        "spread_coverage_prob": null,
+        "calibration_audit": {
+          "raw_prob": 0.6729999999999999,
+          "calibrated_prob": 0.6729999999999999,
+          "league": "MLB",
+          "plane": "game",
+          "market": "home",
+          "method_resolved": null,
+          "profile_id": null,
+          "context_slice": null,
+          "resolved_slice": null,
+          "path": "static_identity"
+        }
+      },
+      {
+        "side": "away",
+        "team": "Washington Nationals",
+        "market": "moneyline",
+        "line": null,
+        "true_prob": 0.327,
+        "calibrated_prob": 0.327,
+        "market_implied": 0.3922,
+        "edge_pct": -6.52,
+        "ev_pct": -16.62,
+        "market_odds": 155.0,
+        "confidence_tier": "A",
+        "recommended_units": 0.0,
+        "spread_coverage_prob": null,
+        "calibration_audit": {
+          "raw_prob": 0.327,
+          "calibrated_prob": 0.327,
+          "league": "MLB",
+          "plane": "game",
+          "market": "away",
+          "method_resolved": null,
+          "profile_id": null,
+          "context_slice": null,
+          "resolved_slice": null,
+          "path": "static_identity"
+        }
+      }
+    ],
+    "odds_snapshot": {
+      "spread_home": null,
+      "spread_home_price": -110.0,
+      "spread_away_price": -110.0,
+      "moneyline_home": -190.0,
+      "moneyline_away": 155.0,
+      "over_under": null,
+      "total_over_price": -110.0,
+      "total_under_price": -110.0,
+      "moneyline_draw": null,
+      "markets": null
+    },
+    "model_version": "omega-core-phase6h",
+    "bankroll": 1000.0,
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    },
+    "quality_gate": null,
+    "reasoning_narrative": "Home: Gavin Williams (3.25 ERA) vs Away: Miles Mikolas (6.17 ERA). Park factor 0.97 (neutral). Wind 8 mph. Model: Cleveland Guardians win prob 67.3%. Best edge: Cleveland Guardians (1.78% edge, Pass tier).",
+    "reasoning_inputs": {
+      "sources": [
+        "the-odds-api:betmgm",
+        "sportsgrid.com",
+        "fanduel-research",
+        "web-search"
+      ],
+      "fields_gathered": [
+        "moneyline_home",
+        "moneyline_away",
+        "over_under",
+        "off_rating",
+        "def_rating",
+        "park_factor",
+        "weather_wind_mph",
+        "home_pitcher",
+        "away_pitcher",
+        "pitcher_era"
+      ],
+      "missing_fields": [
+        "sample_size",
+        "team_record",
+        "bullpen_era"
+      ],
+      "market_context": {
+        "book": "betmgm",
+        "moneyline_home": -190.0,
+        "moneyline_away": 155.0,
+        "over_under": 7.5
+      }
+    },
+    "reasoning_downgrade_rationale": "Evidence mode=shadow: park_factor and wind signals recorded but not applied to simulation. Pitcher ERA differential captured as context only; not reflected in off/def ratings."
+  },
+  "bet_record": null,
+  "_export_meta": {
+    "exported_at": "2026-05-28T09:12:00Z",
+    "runtime_db": "/sessions/kind-youthful-ptolemy/.omega/runtime/omega_traces.db",
+    "outcome_attached": {
+      "home_score": 3,
+      "away_score": 2,
+      "result": "home_win",
+      "source": "api:espn"
+    },
+    "note": "Exported from ephemeral sandbox DB; re-ingest to restore traces. Outcomes already attached - skip fetch_outcomes after re-ingest."
+  }
+}
