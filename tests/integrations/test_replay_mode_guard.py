@@ -101,3 +101,33 @@ def test_odds_api_get_json_blocked_in_replay_mode(monkeypatch):
     client = OddsApiClient(api_key="fake-key-for-test")
     with pytest.raises(OmegaReplayModeError, match="OMEGA_REPLAY_MODE=1"):
         client._get_json("/sports", {})
+
+
+# ---------------------------------------------------------------------------
+# Static discipline: every integration module must reference the guard
+# ---------------------------------------------------------------------------
+#
+# Phase 7 standard: it is easy to forget assert_not_replay_mode() in a new
+# adapter — the failure is silent until a backtest accidentally hits the
+# network. This static scan fails CI the moment a new module under
+# omega/integrations/ omits the guard symbol. __init__.py is exempt (no fetch).
+
+
+def test_every_integration_module_references_guard():
+    import pathlib
+
+    import omega.integrations as integrations_pkg
+
+    pkg_dir = pathlib.Path(integrations_pkg.__file__).parent
+    offenders = []
+    for path in sorted(pkg_dir.glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        source = path.read_text(encoding="utf-8")
+        if "assert_not_replay_mode" not in source:
+            offenders.append(path.name)
+    assert not offenders, (
+        "integration modules missing assert_not_replay_mode reference: "
+        f"{offenders}. Every adapter that can fetch live data must guard "
+        "against OMEGA_REPLAY_MODE."
+    )

@@ -1,0 +1,25 @@
+{
+  "canonical": [
+    "Atlanta Dream",
+    "Chicago Sky",
+    "Connecticut Sun",
+    "Dallas Wings",
+    "Golden State Valkyries",
+    "Indiana Fever",
+    "Las Vegas Aces",
+    "Los Angeles Sparks",
+    "Minnesota Lynx",
+    "New York Liberty",
+    "Phoenix Mercury",
+    "Seattle Storm",
+    "Washington Mystics"
+  ],
+  "aliases": {
+    "LV Aces": "Las Vegas Aces",
+    "Vegas Aces": "Las Vegas Aces",
+    "NY Liberty": "New York Liberty",
+    "LA Sparks": "Los Angeles Sparks",
+    "GS Valkyries": "Golden State Valkyries",
+    "Golden State": "Golden State Valkyries"
+  }
+}
