@@ -1,77 +1,10 @@
 ---
 name: omega-mcp-operator
-description: Operate the Omega sports analytics repo through its local MCP server and typed tools. Use when Codex, Claude Code, or another LLM agent needs to run Omega analysis, call Omega MCP tools, inspect the MCP server, repair missing inputs, or preserve the boundary between LLM reasoning and deterministic simulation/calibration/edge/staking logic.
+description: Operate Omega through repo-local MCP tools while preserving deterministic engine boundaries.
 ---
 
 # Omega MCP Operator
 
-## Core Rule
-
-Use typed Omega tools before shell scripts or prose math. The LLM may plan,
-route, gather missing evidence, explain, and downgrade. Omega's deterministic
-engine owns simulation, calibration, edge, EV, Kelly, staking, backtesting, and
-grading.
-
-## Tool Order
-
-1. Prefer the local MCP server:
-   `python -m omega.mcp.server`
-2. If MCP is unavailable, use the local repo engine path documented in
-   `OMEGA_COWORK.md`.
-3. If no deterministic path can run, produce qualitative Standard Text only.
-
-## Cowork Startup Hygiene
-
-1. Run `python scripts/cowork_preflight.py` before formal Omega output.
-2. If preflight reports source corruption, inspect `git status --short` before
-   repair.
-3. Use `python scripts/cowork_preflight.py --repair-from-git` only for
-   syntax-corrupt files or known critical mount-corruption targets.
-4. Use `--force-repair` only when intentionally clobbering all divergent
-   tracked Python files back to `HEAD`.
-5. Treat SQLite WAL fallback as sequential-write mode; do not run parallel
-   trace ingestion, outcome ingestion, or calibration writes.
-6. Use `omega_resolve_odds` or `scripts/resolve_odds.py` for market inputs.
-   Do not call `OddsApiClient._get_json()` from ad hoc scripts.
-
-## MCP Tools
-
-- `omega_analyze_game`: deterministic single-game analysis.
-- `omega_analyze_prop`: deterministic player-prop analysis.
-- `omega_analyze_slate`: deterministic slate analysis.
-- `omega_chat_orchestrate`: explicit unsupported response until the current
-  repo has a real orchestrator.
-- `omega_replay_bundle`: replay-plane audit from frozen facts with live
-  fetching disabled.
-- `omega_trace_get`, `omega_trace_query`, `omega_trace_attach_outcome`: trace
-  persistence and post-decision outcome attachment.
-- `omega_calibration_fit_preview`: dry-run calibration fitting only.
-- `omega_evidence_retrieve`: no-live-fetch placeholder for explicit slots.
-- `omega_resolve_odds`: BetMGM-default Odds API input resolver. Use
-  line-shopping/all-books only when explicitly requested.
-
-## Workflow
-
-1. Read `docs/LLM_MCP_INTERFACE.md` when you need the full contract.
-2. Validate the request shape against `omega/core/contracts/schemas.py`.
-3. Call the narrowest Omega MCP tool that satisfies the task.
-4. If a result is skipped or downgraded, inspect `missing_requirements`,
-   `skip_reason`, and trace downgrades.
-5. Retrieve only missing pre-decision inputs; use `omega_resolve_odds` for
-   current odds when local API access is available and preserve source notes.
-6. Rerun the same deterministic tool.
-7. Render Bet Cards only from successful deterministic output.
-
-## Input Mapping
-
-For package prop analysis, player context uses sport-specific keys:
-
-- `stat_mean` maps to `{prop_type}_mean`
-- `stat_std_dev` maps to `{prop_type}_std`
-
-There is no standalone fallback bridge in Phase 6h.
-
-## References
-
-- Read `references/tool-contract.md` for exact tools, resources, prompts, and
-  cross-client setup notes.
+Use `python -m omega.mcp.server` when MCP is available. For exact tools and
+ownership rules, read `docs/LLM_MCP_INTERFACE.md` and the repo skill at
+`.agents/skills/omega-mcp-operator/SKILL.md`.

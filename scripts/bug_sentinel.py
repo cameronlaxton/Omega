@@ -398,9 +398,9 @@ def build_report(results: list[dict[str, Any]], repo_root: Path) -> dict[str, An
 # Human-readable output
 # ---------------------------------------------------------------------------
 
-STATUS_EMOJI = {
-    STATUS_FIXED: "✓",
-    STATUS_PRESENT: "✗",
+STATUS_MARKER = {
+    STATUS_FIXED: "OK",
+    STATUS_PRESENT: "BUG",
     STATUS_UNKNOWN: "?",
     STATUS_SHADOW: "~",
     STATUS_ERROR: "!",
@@ -423,24 +423,24 @@ def print_report(report: dict[str, Any]) -> None:
     print("=" * 68)
 
     for r in results:
-        icon = STATUS_EMOJI.get(r["status"], "?")
+        marker = STATUS_MARKER.get(r["status"], "?")
         sev = SEVERITY_LABEL.get(r["severity"], r["severity"].upper()[:8])
         label = r["status"].upper().replace("_", " ")
-        print(f"\n  {icon} [{sev}] {r['bug_id']} — {label}")
+        print(f"\n  {marker:<3} [{sev}] {r['bug_id']} - {label}")
         print(f"    {r['title']}")
         print(f"    Evidence : {r['evidence']}")
         if r["status"] == STATUS_PRESENT and r.get("workaround"):
             print(f"    Workaround: {r['workaround']}")
         if r["status"] == STATUS_PRESENT and r.get("status_at_last_audit") in ("fixed",):
-            print(f"    !! REGRESSION — was fixed at last audit ({r['last_audited']})")
+            print(f"    !! REGRESSION - was fixed at last audit ({r['last_audited']})")
 
     print()
     print("-" * 68)
     print("  Gate Summary")
     print("-" * 68)
     for gate, state in sorted(report["gate_summary"].items()):
-        icon = "✓" if state == "clear" else "✗"
-        print(f"  {icon}  {gate:<20} {state}")
+        marker = "OK" if state == "clear" else "BLOCK"
+        print(f"  {marker:<5} {gate:<20} {state}")
 
     print()
     print("-" * 68)
@@ -457,9 +457,9 @@ def print_report(report: dict[str, Any]) -> None:
         summary_parts.append(f"{report['unknown_count']} unknown (manual)")
 
     if report["all_clear"]:
-        print("  ✓ ALL CLEAR — no critical/high bugs or regressions detected")
+        print("  OK ALL CLEAR - no critical/high bugs or regressions detected")
     else:
-        print(f"  ✗ ISSUES: {', '.join(summary_parts)}")
+        print(f"  ISSUES: {', '.join(summary_parts)}")
     print("=" * 68)
     print()
 
@@ -533,57 +533,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--ci", action="store_true",
-        help="CI mode: exit 1 if any critical bug is present or a regression detected."
-    )
-    parser.add_argument(
-        "--session-id", metavar="SESSION_ID",
-        help="If provided, append sentinel results to the session sidecar as an audit event."
-    )
-    parser.add_argument(
-        "--repo-root", metavar="PATH", default=str(REPO_ROOT),
-        help="Path to Omega repo root (default: parent of this script)."
-    )
-    parser.add_argument(
-        "--catalog", metavar="PATH", default=str(CATALOG_PATH),
-        help="Path to bug catalog JSON (default: omega/qa/bug_catalog.json)."
-    )
-    args = parser.parse_args(argv)
-
-    repo_root = Path(args.repo_root).resolve()
-    catalog_path = Path(args.catalog).resolve()
-
-    try:
-        bugs = load_catalog(catalog_path)
-    except (FileNotFoundError, KeyError, json.JSONDecodeError) as exc:
-        print(f"[sentinel] Cannot load catalog: {exc}", file=sys.stderr)
-        return 2
-
-    results = [run_check(bug, repo_root) for bug in bugs]
-    report = build_report(results, repo_root)
-
-    if args.json:
-        print(json.dumps(report, indent=2))
-    else:
-        print_report(report)
-
-    if args.session_id:
-        write_to_sidecar(args.session_id, report, repo_root)
-
-    if args.ci:
-        if report["open_critical"] > 0 or report["regression_count"] > 0:
-            print(
-                f"[sentinel] CI FAIL: {report['open_critical']} critical bug(s) open, "
-                f"{report['regression_count']} regression(s).",
-                file=sys.stderr,
-            )
-            return 1
-        print("[sentinel] CI PASS", file=sys.stderr)
-
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
         help="CI mode: exit 1 if any critical bug is present or a regression detected."
     )
     parser.add_argument(
