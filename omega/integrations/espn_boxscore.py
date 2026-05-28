@@ -56,6 +56,7 @@ logger = logging.getLogger("omega.integrations.espn_boxscore")
 _REQUEST_TIMEOUT_SECONDS = 15
 _SUMMARY_URLS = {
     "NBA": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary",
+    "WNBA": "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/summary",
     "MLB": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary",
 }
 
@@ -82,6 +83,10 @@ NBA_STAT_KEYS: dict[str, tuple[str, ...]] = {
     "threes": ("3PTM", "3PM", "threePointFieldGoalsMade-threePointFieldGoalsAttempted"),
     "pra": ("PRA",),
 }
+
+# WNBA box-score stat keys are identical to the NBA layout (same ESPN basketball
+# summary shape). Aliased rather than copied so the two never drift apart.
+WNBA_STAT_KEYS: dict[str, tuple[str, ...]] = NBA_STAT_KEYS
 
 # Batting and pitching live under separate categories — we surface them
 # both and let the caller pick by prop_type semantics.
@@ -150,6 +155,8 @@ def _stat_key_map_for(
     """Pick the appropriate stat-type map by league and category."""
     if league.upper() == "NBA":
         return NBA_STAT_KEYS
+    if league.upper() == "WNBA":
+        return WNBA_STAT_KEYS
     if league.upper() == "MLB":
         cat = (category_name or "").lower()
         key_set = {str(key) for key in (keys or [])}

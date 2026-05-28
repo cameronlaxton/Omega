@@ -1206,6 +1206,133 @@ class FastScoreSimulationBackend:
         )
 
 
+def run_markov_game_simulation(
+    request: GameSimulationInput,
+    *,
+    backend_name: str,
+    component_version: str,
+    context_source: str = "provided",
+    baseline_used: bool = False,
+) -> dict[str, Any]:
+    """Shared Markov team-score simulation body.
+
+    Owns the possession-level Markov run used by both the generic
+    ``markov_state`` backend and sport-tuned variants (WNBA, etc.). Keeping the
+    body here — rather than duplicating it per backend — preserves a single
+    calibration path (CLAUDE.md hard rule against parallel pipelines). Callers
+    pass their own ``backend_name`` / ``component_version`` for provenance and
+    set ``context_source`` / ``baseline_used`` when they injected league
+    defaults into the contexts before calling.
+    """
+    if request.seed is not None:
+        random.seed(request.seed)
+        if np is not None:
+            np.random.seed(request.seed)
+
+    league = request.league.upper()
+    archetype = get_archetype(league)
+    archetype_name = get_archetype_name(league)
+    if archetype is None or archetype_name is None:
+        return _skip_result(
+            request.home_team,
+            request.away_team,
+            league,
+            skip_reason=f"No Markov simulation model for league '{league}'.",
+            missing_requirements=["league_model"],
+        )
+    if archetype.result_type != "team_score":
+        return _skip_result(
+            request.home_team,
+            request.away_team,
+            league,
+            skip_reason=f"Markov backend only supports team_score archetypes, got {archetype.result_type}.",
+            missing_requirements=["team_score_archetype"],
+        )
+
+    if request.home_context is None or request.away_context is None:
+        return _skip_result(
+            request.home_team,
+            request.away_team,
+            league,
+            skip_reason="Missing home_context or away_context for Markov backend",
+            missing_requirements=["home_context", "away_context"],
+        )
+
+    home_missing = _validate_required_keys(
+        request.home_context,
+        "home",
+        archetype.required_team_keys,
+        league,
+    )
+    away_missing = _validate_required_keys(
+        request.away_context,
+        "away",
+        archetype.required_team_keys,
+        league,
+    )
+    all_missing = home_missing + away_missing
+    if all_missing:
+        return _skip_result(
+            request.home_team,
+            request.away_team,
+            league,
+            skip_reason=(
+                f"Missing required inputs for Markov {archetype.display_name}: "
+                f"{', '.join(all_missing)}"
+            ),
+            missing_requirements=all_missing,
+        )
+
+    from omega.core.simulation.markov_engine import MarkovSimulator
+
+    simulator = MarkovSimulator(
+        league=league,
+        players=[],
+        home_context=request.home_context,
+        away_context=request.away_context,
+        transition_modifiers=request.transition_modifiers,
+    )
+    n_possessions = simulator._base_n_possessions
+    home_scores: list[float] = []
+    away_scores: list[float] = []
+    for _ in range(request.n_iterations):
+        state = simulator.simulate_game(n_possessions)
+        home_scores.append(state.home_score)
+        away_scores.append(state.away_score)
+
+    result = _build_team_score_result(
+        request.home_team,
+        request.away_team,
+        league,
+        request.n_iterations,
+        home_scores,
+        away_scores,
+        home_context=request.home_context,
+        away_context=request.away_context,
+        archetype_name=archetype_name,
+        spread_home=request.spread_home,
+        over_under=request.over_under,
+        context_source=context_source,
+        baseline_used=baseline_used,
+        seed=request.seed,
+        backend_name=backend_name,
+        component_version=component_version,
+    )
+    for row in result["simulation_distributions"]:
+        params = dict(row.get("distribution_params") or {})
+        params.update(
+            {
+                "source": "markov_terminal_scores",
+                "base_possessions": n_possessions,
+                "transition_matrix_ids": simulator.transition_matrix_ids,
+                "transition_modifiers": request.transition_modifiers or {},
+            }
+        )
+        row["distribution_type"] = "empirical_markov"
+        row["distribution_params"] = params
+    return result
+
+
 class MarkovGameSimulationBackend:
     """Markov state-transition backend implementing the game simulation contract."""
 
@@ -1213,113 +1340,11 @@ class MarkovGameSimulationBackend:
     component_version = "markov_state_v1"
 
     def run(self, request: GameSimulationInput) -> dict[str, Any]:
-        if request.seed is not None:
-            random.seed(request.seed)
-            if np is not None:
-                np.random.seed(request.seed)
-
-        league = request.league.upper()
-        archetype = get_archetype(league)
-        archetype_name = get_archetype_name(league)
-        if archetype is None or archetype_name is None:
-            return _skip_result(
-                request.home_team,
-                request.away_team,
-                league,
-                skip_reason=f"No Markov simulation model for league '{league}'.",
-                missing_requirements=["league_model"],
-            )
-        if archetype.result_type != "team_score":
-            return _skip_result(
-                request.home_team,
-                request.away_team,
-                league,
-                skip_reason=f"Markov backend only supports team_score archetypes, got {archetype.result_type}.",
-                missing_requirements=["team_score_archetype"],
-            )
-
-        if request.home_context is None or request.away_context is None:
-            return _skip_result(
-                request.home_team,
-                request.away_team,
-                league,
-                skip_reason="Missing home_context or away_context for Markov backend",
-                missing_requirements=["home_context", "away_context"],
-            )
-
-        home_missing = _validate_required_keys(
-            request.home_context,
-            "home",
-            archetype.required_team_keys,
-            league,
-        )
-        away_missing = _validate_required_keys(
-            request.away_context,
-            "away",
-            archetype.required_team_keys,
-            league,
-        )
-        all_missing = home_missing + away_missing
-        if all_missing:
-            return _skip_result(
-                request.home_team,
-                request.away_team,
-                league,
-                skip_reason=(
-                    f"Missing required inputs for Markov {archetype.display_name}: "
-                    f"{', '.join(all_missing)}"
-                ),
-                missing_requirements=all_missing,
-            )
-
-        from omega.core.simulation.markov_engine import MarkovSimulator
-
-        simulator = MarkovSimulator(
-            league=league,
-            players=[],
-            home_context=request.home_context,
-            away_context=request.away_context,
-            transition_modifiers=request.transition_modifiers,
-        )
-        n_possessions = simulator._base_n_possessions
-        home_scores: list[float] = []
-        away_scores: list[float] = []
-        for _ in range(request.n_iterations):
-            state = simulator.simulate_game(n_possessions)
-            home_scores.append(state.home_score)
-            away_scores.append(state.away_score)
-
-        result = _build_team_score_result(
-            request.home_team,
-            request.away_team,
-            league,
-            request.n_iterations,
-            home_scores,
-            away_scores,
-            home_context=request.home_context,
-            away_context=request.away_context,
-            archetype_name=archetype_name,
-            spread_home=request.spread_home,
-            over_under=request.over_under,
-            context_source="provided",
-            baseline_used=False,
-            seed=request.seed,
+        return run_markov_game_simulation(
+            request,
             backend_name=self.backend_name,
             component_version=self.component_version,
         )
-        for row in result["simulation_distributions"]:
-            params = dict(row.get("distribution_params") or {})
-            params.update(
-                {
-                    "source": "markov_terminal_scores",
-                    "base_possessions": n_possessions,
-                    "transition_matrix_ids": simulator.transition_matrix_ids,
-                    "transition_modifiers": request.transition_modifiers or {},
-                }
-            )
-            row["distribution_type"] = "empirical_markov"
-            row["distribution_params"] = params
-        return result
 
 
 class OmegaSimulationEngine:
@@ -1743,3 +1768,13 @@ class PropDistributionRouterBackend:
 register_game_backend("fast_score", FastScoreSimulationBackend())
 register_game_backend("markov_state", MarkovGameSimulationBackend())
 register_prop_backend("prop_distribution_router", PropDistributionRouterBackend())
+
+# Phase 7 sport backends. Imported here (after run_markov_game_simulation is
+# defined) so registration happens whenever the engine module loads. Each new
+# sport module does a lazy import of the shared run helper inside run(), so this
+# import does not create a cycle.
+from omega.core.simulation.markov_wnba import (  # noqa: E402
+    MarkovWNBAGameSimulationBackend,
+)
+
+register_game_backend("markov_state_wnba", MarkovWNBAGameSimulationBackend())

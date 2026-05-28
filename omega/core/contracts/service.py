@@ -41,6 +41,7 @@ from omega.core.contracts.schemas import (
     SlateAnalysisRequest,
     SlateAnalysisResponse,
 )
+from omega.core.config.leagues import get_league_config
 from omega.core.simulation.archetypes import get_archetype_name
 from omega.core.simulation.backends import resolve_game_backend
 from omega.core.simulation.engine import (
@@ -549,13 +550,35 @@ def _markov_evidence_applications(
     return applications
 
 
+def _effective_game_backend_name(request: GameAnalysisRequest) -> str:
+    """Resolve the backend a request will actually run on.
+
+    When the caller leaves ``simulation_backend`` at its ``"fast_score"`` default,
+    the league's ``default_game_backend`` (e.g. ``markov_state_wnba`` for WNBA)
+    takes over. An explicitly-chosen backend is always honored. This is the one
+    place the league default is consulted, so dispatch and evidence-plan
+    construction never disagree about which backend is in play.
+    """
+    name = request.simulation_backend
+    if name == "fast_score":
+        league_default = get_league_config(request.league).get("default_game_backend")
+        if league_default:
+            return str(league_default)
+    return name
+
+
+def _is_markov_family(backend_name: str) -> bool:
+    """True for any Markov state-transition backend (markov_state, markov_state_wnba)."""
+    return backend_name.startswith("markov_state")
+
+
 def _game_evidence_plan_for(request: GameAnalysisRequest) -> EvidenceExecutionPlan:
     evidence = list(getattr(request, "evidence", None) or [])
     if not evidence:
         return EvidenceExecutionPlan()
 
     suppressed = _suppressed_player_signal_indices(evidence)
-    if request.simulation_backend == "markov_state":
+    if _is_markov_family(_effective_game_backend_name(request)):
         active_indices = {idx for idx in range(len(evidence)) if idx not in suppressed}
         active_evidence = [sig for idx, sig in enumerate(evidence) if idx in active_indices]
         transition_modifiers = signals_to_transition_modifiers(
@@ -816,19 +839,20 @@ def analyze_game(
         )
         total_value, _, _ = _resolve_game_total_market(request.odds)
 
-    backend = resolve_game_backend(request.simulation_backend)
+    effective_backend_name = _effective_game_backend_name(request)
+    backend = resolve_game_backend(effective_backend_name)
     if backend is None:
         return GameAnalysisResponse(
             matchup=matchup,
             league=request.league,
             analyzed_at=now,
             status="skipped",
-            skip_reason=f"Unsupported simulation_backend={request.simulation_backend!r}",
+            skip_reason=f"Unsupported simulation_backend={effective_backend_name!r}",
             missing_requirements=["simulation_backend"],
             context_source="missing",
         )
 
-    use_markov = backend.backend_name == "markov_state"
+    use_markov = _is_markov_family(backend.backend_name)
     if evidence_plan is None:
         evidence_plan = _game_evidence_plan_for(request)
     effective_adjustment = None if use_markov else (
