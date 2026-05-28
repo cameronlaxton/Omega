@@ -53,11 +53,32 @@ PROMPT_NAMES = (
 
 
 def _formal_output_gate_failures() -> list[str]:
-    """Return formal-output preflight failures for MCP analysis tools."""
+    """Return formal-output preflight failures for MCP analysis tools.
+
+    Checks the EOF sentinel in cowork_preflight.py before invoking the gate
+    so that a Pattern C truncation of the preflight script is detected here
+    in the calling layer rather than silently producing an empty response.
+    """
     try:
         from scripts import cowork_preflight
     except Exception as exc:  # noqa: BLE001
         return [f"Could not import cowork_preflight formal gate: {exc}"]
+
+    # Sentinel check must run in the calling layer (VUL-1 fix: a truncated
+    # preflight script cannot verify its own completeness).
+    _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+    preflight_path = _REPO_ROOT / "scripts" / "cowork_preflight.py"
+    try:
+        preflight_text = preflight_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return [f"Cannot read cowork_preflight.py for sentinel check: {exc}"]
+    if cowork_preflight._PREFLIGHT_SENTINEL not in preflight_text:
+        return [
+            f"cowork_preflight.py is missing its EOF sentinel "
+            f"({cowork_preflight._PREFLIGHT_SENTINEL!r}). "
+            "The script is likely truncated (Pattern C). "
+            "Restore from git: git checkout HEAD -- scripts/cowork_preflight.py"
+        ]
 
     return cowork_preflight.run_formal_output_gate(require_mcp=False)
 

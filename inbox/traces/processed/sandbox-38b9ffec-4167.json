@@ -1,0 +1,121 @@
+{
+  "trace": {
+    "trace_id": "sandbox-38b9ffec-4167",
+    "session_id": "sess-20260528-nba1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-28T18:35:47.507543+00:00",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Victor Wembanyama",
+      "prop_type": "pts",
+      "line": 27.5,
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-28"
+    },
+    "result": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 27.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.2062,
+      "under_prob": 0.7938,
+      "projection_mean": 22.038,
+      "projection_std": 6.6477,
+      "projection_p10": 13.5721,
+      "projection_p50": 22.0248,
+      "projection_p90": 30.5617,
+      "distribution_type": "normal",
+      "edge_over": -33.93,
+      "edge_under": 26.77,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.2825,
+      "recommended_units": 5.0,
+      "bet_side_odds": -111.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.2062,
+        "calibrated_prob": 0.2062,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.7938,
+        "calibrated_prob": 0.7938,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_distributions": [
+        {
+          "target": "player_stat",
+          "market": "player_prop",
+          "stat_key": "pts",
+          "distribution_type": "normal",
+          "distribution_params": {
+            "mu": 21.983999999999998,
+            "sigma": 6.72
+          },
+          "params_schema_version": 1,
+          "sample_mean": 22.038027114805356,
+          "sample_std": 6.647744554985028,
+          "p10": 13.572137274083449,
+          "p50": 22.02479007317651,
+          "p90": 30.561662678149265,
+          "n_iterations": 10000,
+          "seed": 3356485161,
+          "context_hash": "954216d5",
+          "component_version": "player_prop_fast_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "kind": "prop"
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "statmuse.com",
+      "espn.com",
+      "the-odds-api:betmgm"
+    ],
+    "fields_gathered": [
+      "pts_mean",
+      "pts_std",
+      "sample_size",
+      "minutes",
+      "usage_rate",
+      "is_playoff",
+      "rest_days"
+    ],
+    "missing_fields": [],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": -120,
+      "odds_under": -111
+    }
+  },
+  "reasoning_narrative": "Wemby pts 22.9 playoff avg vs line 27.5. OKC elite defense. Model: 79.8% UNDER.",
+  "reasoning_downgrade_rationale": null,
+  "trace_quality": {
+    "aggregate_quality": 0.74
+  },
+  "bet_record": null
+}

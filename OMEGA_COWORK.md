@@ -62,6 +62,27 @@ repair source files in the cowork sandbox** — Windows-side writes do not
 invalidate the Linux mount cache, so the next read still sees the corrupt
 copy (see `docs/session_bugs_20260521_mount_corruption.md`).
 
+#### Repair taint two-pass cycle
+
+After `--repair-from-git` completes successfully, a **repair taint lockfile** is
+written to `.omega_cache/.repair_taint`. The gate enforces a mandatory re-verification
+pass before formal output is re-authorized:
+
+| Pass | Command | Expected output | Gate state |
+|---|---|---|---|
+| **1 — Repair** | `--repair-from-git` | Files restored; `[repair] Taint lockfile written` | Taint set — formal output blocked |
+| **2 — Verification** | `--formal-output-gate` | `cowork_preflight_taint_cleared_re-run_required` | Taint cleared — still not authorized |
+| **3 — Authorization** | `--formal-output-gate` | `cowork_preflight_ready` | Gate open |
+
+**Never skip Pass 3.** `cowork_preflight_taint_cleared_re-run_required` is a soft
+failure that removes the lockfile and proves all checks pass on a clean read — but
+formal output requires a subsequent clean gate run with no taint present. Skipping
+Pass 3 means the agent begins formal output on a sidecar that was assembled while
+the source tree was in a repaired-but-unverified state.
+
+If Pass 2 reveals post-repair failures (e.g. a second corrupt file exposed after
+the first was restored), fix the new failure before running Pass 3.
+
 ### 2b. Clean Cowork Session Hygiene
 
 - **SQLite on a network/FUSE mount:** `TraceStore` now detects FUSE/SMB/CIFS/NFS
@@ -220,6 +241,57 @@ The deleted lite quality gate is not an automated fallback path. The agent must 
 - Use ultra-low-data text only when fewer than 3 real facts are available and quality is below `0.3`.
 - If an engine result has `status: "skipped"` or `status: "error"`, repair missing pre-decision inputs and rerun, or produce qualitative research only.
 - Never emit edge, EV, Kelly, units, confidence tiers, or trace IDs unless they came from Python execution.
+
+## 3a. Research Candidate Protocol
+
+When any of the following conditions hold, **all formal Omega output is locked to
+`RESEARCH_CANDIDATE` mode** — Bet Cards, edge%, EV%, Kelly, units, confidence
+tiers, and trace IDs are prohibited for that league/session:
+
+| Condition | Where to see it |
+|---|---|
+| No fitted calibration profile | §2 of `reports/latest.md` shows "static fallback" |
+| 0 calibration-eligible traces in window | Coverage table: `with_predictions = 0` |
+| Invalid or missing session sidecar | sidecar fails JSON parse / schema validation |
+| No `bet_record` in window | Coverage table: `with_bet = 0` |
+
+`scripts/report_calibration.py` emits an **"Agent Directive — Output Mode"**
+section at the very top of `reports/latest.md`. **Read it before beginning any
+analysis.** The classification is derived automatically from live DB counts and
+the calibration registry — it is not an editorial judgment.
+
+### In RESEARCH_CANDIDATE mode
+
+**Permitted:**
+- Qualitative matchup narrative, news synthesis, recent form discussion
+- Listed sportsbook lines from a cited public source
+- Research-only lean labels (no edge%, EV%, Kelly, confidence tier, or trace_id)
+- Stakes up to **1u maximum**
+
+**Forbidden language** (blocked phrases — do not emit in any output):
+- "best bet" / "Best Bet"
+- "Tier A" / "Tier B"
+- "engine-confirmed"
+- "actionable bet" / "Actionable Bet"
+
+If a Bet Card would otherwise be warranted, replace it with a
+`### Research Candidate` block containing qualitative narrative only,
+clearly labeled as uncalibrated.
+
+### Current calibration status (as of 2026-05-28)
+
+| League | Mode | Reason | Pairs needed for fit |
+|---|---|---|---|
+| NBA | `RESEARCH_CANDIDATE` | Static fallback; 0 calibration-eligible traces | ~30 graded+eligible |
+| MLB | `RESEARCH_CANDIDATE` | Static fallback; ~11 graded+eligible pairs accumulated | ~19 more |
+
+These statuses update automatically each time `report_calibration.py` runs.
+Regenerate before each session:
+
+```bash
+python scripts/report_calibration.py --league NBA
+python scripts/report_calibration.py --league MLB
+```
 
 ## 4. Current Odds Resolution
 

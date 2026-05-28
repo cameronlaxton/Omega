@@ -47,6 +47,7 @@ from omega.strategy.distribution_metrics import (  # noqa: E402
     METRIC_VERSION as DISTRIBUTION_METRIC_VERSION,
 )
 from omega.strategy.distribution_metrics import crps_from_distribution_row  # noqa: E402
+from omega.synthesis.output_guard import OutputMode, classify_output_mode  # noqa: E402
 from omega.trace.clv import compute_clv  # noqa: E402
 from omega.trace.session_sidecar import SessionSidecar  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
@@ -444,6 +445,58 @@ def _render(
     lines.append("")
     lines.append(f"Generated: `{now}` | Window: last {window_days} days")
     lines.append("")
+
+    # ── Agent Directive ──────────────────────────────────────────────────────
+    # Derived from Coverage + Calibration state.  The consuming LLM reads this
+    # before acting; it governs what formal output is permitted this session.
+    output_mode = classify_output_mode(
+        calibration_profile=production_profile_id,
+        trace_count=counts["with_predictions"],
+        # Sidecar validity is a per-session concern; at the aggregate report
+        # level we treat it as valid (individual sessions are filtered upstream).
+        sidecar_valid=True,
+        has_bet_record=counts["with_bet"] > 0,
+    )
+    lines.append("## Agent Directive — Output Mode")
+    lines.append("")
+    if output_mode is OutputMode.RESEARCH_CANDIDATE:
+        lines.append(
+            "**`RESEARCH_CANDIDATE`** — formal output (Bet Cards, edge%, Kelly, "
+            "confidence tiers) is **not authorized** for this league in this window."
+        )
+        lines.append("")
+        reasons: list[str] = []
+        if production_profile_id is None:
+            reasons.append("No fitted calibration profile — static fallback is active.")
+        if counts["with_predictions"] == 0:
+            reasons.append("0 calibration-eligible traces in window.")
+        if counts["with_bet"] == 0:
+            reasons.append("No bet_records in window — execution history absent.")
+        if reasons:
+            lines.append("**Reason(s):**")
+            for r in reasons:
+                lines.append(f"- {r}")
+        lines.append("")
+        lines.append(
+            "**Permitted:** qualitative matchup narrative, news synthesis, "
+            "recent form, listed sportsbook lines from a cited source."
+        )
+        lines.append(
+            '**Forbidden language:** “best bet”, “Tier A”, '
+            '“Tier B”, “engine-confirmed”, '
+            '“actionable bet”. Stake cap: ≤ 1u.'
+        )
+    else:
+        lines.append(
+            "**`ACTIONABLE`** — engine-backed formal output is authorized. "
+            f"Active calibration profile: `{production_profile_id}`."
+        )
+        lines.append("")
+        lines.append(
+            "Proceed with the standard Bet Card flow per §8–§11 of system_prompt.txt."
+        )
+    lines.append("")
+    # ─────────────────────────────────────────────────────────────────────────
 
     lines.append("## 1. Coverage")
     lines.append("")
