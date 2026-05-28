@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -69,3 +70,18 @@ def test_claude_marketplace_lists_omega_plugin():
     market = json.loads(market_path.read_text(encoding="utf-8"))
     names = [p["name"] for p in market["plugins"]]
     assert "omega-llm-interface" in names
+
+
+def test_daily_prompts_are_league_first_not_props_siloed():
+    daily_dir = ROOT / "prompts" / "daily"
+
+    for name in ("nba_daily.md", "wnba_daily.md", "mlb_daily.md"):
+        text = (daily_dir / name).read_text(encoding="utf-8").lower()
+        assert "complete" in text
+        assert "player props" in text
+        assert re.search(r"do\s+not run a separate\s+props prompt", text)
+        assert "quality_gate/null_data_audit" in text
+
+    props_text = (daily_dir / "props_daily.md").read_text(encoding="utf-8").lower()
+    assert "deprecated" in props_text
+    assert "use the league prompt instead" in props_text

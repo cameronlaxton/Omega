@@ -1,93 +1,165 @@
-# NBA Daily Analysis Session
+# NBA Daily League Session
 
-Follow [OMEGA_COWORK.md](../../OMEGA_COWORK.md) and [prompts/system_prompt.txt](../system_prompt.txt) throughout.
+Use this prompt for the complete NBA betting surface: game moneylines, spreads,
+totals, team totals where supported, and player props. Do not run a separate
+props prompt. Props and game bets share the same league context,
+injury map, rest map, odds provenance, sidecar, and session audit.
+
+Follow [OMEGA_COWORK.md](../../OMEGA_COWORK.md) and
+[prompts/system_prompt.txt](../system_prompt.txt) throughout.
 
 ---
 
-## Step 0 — Regenerate calibration report
+## Step 0 - Calibration Snapshot
 
-Run this before anything else so §6B evidence weights are current:
+Run:
 
 ```bash
 python scripts/report_calibration.py --league NBA --window-days 30
 ```
 
-Then read `reports/latest.md` — specifically:
-- §3: current Brier/ECE on game plane (flag if ECE > 0.05)
-- §3B: prop plane pair count (metrics suppressed if < 10)
-- §6B: evidence signal performance — trust `predictive`, discount `noise`, treat `insufficient_n` as unproven and positive `cal_gap` as overconfident
+Read `reports/latest.md` before analysis:
+- Section 3: game-plane Brier/ECE; flag ECE > 0.05.
+- Section 3B: prop-plane pair count; metrics may be suppressed if n < 10.
+- Section 6B: evidence signal performance; trust `predictive`, discount
+  `noise`, treat `insufficient_n` as unproven.
 
 ---
 
-## Step 1 — Preflight
+## Step 1 - Formal Gate And Session
+
+Run:
 
 ```bash
 python scripts/cowork_preflight.py --formal-output-gate
 ```
 
-Mint session ID: `sess-YYYYMMDD-nba1` (replace date with today's date, e.g. `sess-20260528-nba1`).
+If this does not print `cowork_preflight_ready`, do not emit Bet Cards.
+Research-only narrative is allowed, without model probability, edge, EV,
+Kelly, units, confidence tier, or trace_id.
 
-Bootstrap sidecar and append first audit event:
-- `event_type=preflight`, `step=cowork_preflight`, `status=ok|warn|fail`
-- notes: engine green/warn/fail + bankroll confirmed
+Mint one league session ID: `sess-YYYYMMDD-nba1`.
+
+Bootstrap or update `inbox/sessions/<session_id>.json` and append:
+- `event_type=preflight`
+- `step=cowork_preflight`
+- `status=ok|warn|fail`
+- notes with engine state and bankroll confirmation only
 
 ---
 
-## Step 2 — Resolve odds
+## Step 2 - Build One League Slate
+
+Create one candidate list containing both game markets and player props:
+
+```text
+candidate_id | market_family | matchup | player | market | line | source | status
+```
+
+Market families:
+- `game`: moneyline, spread, total, team_total where sourced.
+- `prop`: player points, rebounds, assists, 3pm, PRA, steals, blocks, and other
+  supported NBA prop types from [prop_stat_keys.md](../reference/prop_stat_keys.md).
+
+Do not rank or discard props before the injury/rest/context pass. A player prop
+can be the best NBA bet of the day even when the game market is a pass.
+
+---
+
+## Step 3 - Resolve Odds
+
+Resolve direct market odds before analysis.
+
+Game markets:
 
 ```bash
 python scripts/resolve_odds.py --kind game --league NBA --home-team "Team A" --away-team "Team B"
 ```
 
-Default book: BetMGM. Append `data_provenance` events per source used. Never expose `OMEGA_ODDS_API_KEY` in notes.
+Player props:
+
+```bash
+python scripts/resolve_odds.py --kind prop --league NBA --player "Player Name" --prop-type pts --line 22.5
+```
+
+Default book is BetMGM unless the user asks for broader line shopping. Append
+`data_provenance` audit events for sources used. Never expose API keys.
+
+If a prop line is unavailable from the typed resolver or a direct sportsbook
+board, keep it research-only. Do not pass guessed or milestone-derived lines
+to `analyze()`.
 
 ---
 
-## Step 3 — Gather evidence (NBA)
+## Step 4 - League Context And Injury Translation
 
-Express all material evidence as typed `EvidenceSignal` objects. Never bake adjustments into hand-tuned context means.
+Gather one shared NBA context pack before any `analyze()` call:
+- injury statuses, minute limits, questionable/probable notes
+- starting lineup or role changes
+- rest days and back-to-back flags
+- pace environment
+- defensive matchup notes
+- blowout risk
+- sportsbook line source and timestamp
 
-Injury/news protocol: when you identify an anomaly such as an ankle/hamstring
-restriction, questionable status, minutes limit, or role change, translate it
-before `analyze()` into usage/minutes assumptions, `game_context` fields, and
-typed `EvidenceSignal` records. If you cannot quantify the impact on
-`off_rating`, pace, `pts_mean`, usage, or minutes from cited pre-decision
-sources, append a `quality_gate/null_data_audit` event and downgrade the
-candidate to research-only.
+Injury/news protocol:
+1. Noticing news is not enough.
+2. Translate the news into structured model inputs before analysis:
+   - game plane: `off_rating`, `def_rating`, `pace`, and typed evidence
+   - prop plane: `minutes`, `usage_rate`, `{stat}_mean`, `{stat}_std`, or
+     explicit `injury_impact`
+3. If the impact cannot be quantified from cited pre-decision sources, append
+   a `quality_gate/null_data_audit` event and downgrade that candidate to
+   research-only.
 
-Basketball `home_context` and `away_context` require possession-adjusted
-ratings (`off_rating`, `def_rating`, `pace`). Do not pass raw FG%, opponent
-FG%, or other fractional proxies as ratings.
+Basketball team contexts require possession-adjusted ratings:
 
-**For game plane (`plane="game"`) — Markov-approved signal types only:**
+```python
+home_context={"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0}
+away_context={"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0}
+```
 
-| signal_type | effect | direction required? |
-|---|---|---|
-| `pace_up` | +6% game pace | no |
-| `pace_down` | -8% game pace | no |
-| `rest_advantage` | +4% scoring rate rested team | yes (`home`/`away`) |
-| `b2b_fatigue` | -6% scoring rate fatigued team | yes (`home`/`away`) |
-| `def_matchup_weak` | +5% offense vs. weak defender | yes (`home`/`away`) |
-| `def_matchup_strong` | -5% offense vs. strong defender | yes (`home`/`away`) |
-| `usage_role_change` | -7% team rate when key player restricted/elevated | yes (`home`/`away`) |
-| `blowout_risk` | -2% momentum variance | no |
+Never pass raw FG%, opponent FG%, eFG%, or other fractional proxies as
+`off_rating` or `def_rating`.
 
-All other signal types are audit-only (scored retrospectively, no Markov effect).
-
-**`game_context` is mandatory for calibration:**
+`game_context` is mandatory for every NBA game and prop trace:
 
 ```python
 game_context={
-    "is_playoff": True,   # bool — always required; False for regular season
-    "rest_days": 1,       # int — days since last game; 0 = back-to-back
+    "is_playoff": False,
+    "rest_days": 2,
+    "injury_impact": 1.0,  # include when relevant; omit only if not applicable
 }
 ```
 
 ---
 
-## Step 4 — Run engine
+## Step 5 - Typed Evidence
 
-NBA default backend: `simulation_backend="markov_state"`. Use `"fast_score"` only if Markov skips.
+Express material evidence as `EvidenceSignal` objects. Do not hide predictive
+metrics in prose.
+
+Markov-approved game-plane signal types:
+
+| signal_type | effect | direction |
+|---|---|---|
+| `pace_up` | faster game environment | optional |
+| `pace_down` | slower game environment | optional |
+| `rest_advantage` | rested team scoring boost | `home` or `away` |
+| `b2b_fatigue` | fatigued team scoring penalty | `home` or `away` |
+| `def_matchup_weak` | offense vs weak defender | `home` or `away` |
+| `def_matchup_strong` | offense vs strong defender | `home` or `away` |
+| `usage_role_change` | key player restricted/elevated | `home` or `away` |
+| `blowout_risk` | variance/routing downgrade signal | optional |
+
+All other signal types are audit-only unless the engine maps them.
+
+---
+
+## Step 6 - Run Game Engine
+
+NBA default backend: `simulation_backend="markov_state"`. Use `fast_score`
+only if Markov skips and the downgrade is recorded.
 
 ```python
 analyze({
@@ -97,53 +169,103 @@ analyze({
     "game_date": "YYYY-MM-DD",
     "home_context": {"off_rating": ..., "def_rating": ..., "pace": ...},
     "away_context": {"off_rating": ..., "def_rating": ..., "pace": ...},
-    "game_context": {"is_playoff": True, "rest_days": 2},
+    "game_context": {"is_playoff": False, "rest_days": 2},
     "odds": {...},
     "evidence": [...],
     "simulation_backend": "markov_state",
     "n_iterations": 10000,
     "seed": <sha256_seed>,
-}, session_id="sess-20260528-nba1", bankroll=1000.0)
+}, session_id="sess-YYYYMMDD-nba1", bankroll=1000.0)
 ```
 
-Seed derivation: `int.from_bytes(hashlib.sha256(f"{prompt}|{date}".encode()).digest()[:4], "big")`
+---
+
+## Step 7 - Run Prop Engine
+
+Every prop trace must include `home_team`, `away_team`, and `game_date`.
+
+```python
+analyze({
+    "player_name": "Player Name",
+    "league": "NBA",
+    "prop_type": "pts",
+    "line": 22.5,
+    "home_team": "Boston Celtics",
+    "away_team": "Indiana Pacers",
+    "game_date": "YYYY-MM-DD",
+    "odds_over": -115,
+    "odds_under": -105,
+    "player_context": {
+        "pts_mean": 23.1,
+        "pts_std": 6.2,
+        "sample_size": 10,
+        "minutes": 36,
+        "usage_rate": 0.29
+    },
+    "game_context": {"is_playoff": False, "rest_days": 2},
+    "evidence": [...],
+    "n_iterations": 10000,
+    "seed": <sha256_seed>,
+}, session_id="sess-YYYYMMDD-nba1", bankroll=1000.0)
+```
+
+Minimum prop context:
+- `{prop_type}_mean`
+- `{prop_type}_std`, observed if possible
+- `sample_size`
+- usage/minutes when injury or role changes are relevant
+
+If `sample_size < 5`, observed std is unavailable, or the injury adjustment is
+not quantified, downgrade or keep research-only.
 
 ---
 
-## Step 5 — Export traces
+## Step 8 - NULL / Missing Data Audit
 
-Write to `inbox/traces/<trace_id>.json` after each analyze call. Nest `reasoning_inputs`, `reasoning_narrative`, `reasoning_downgrade_rationale`, and `trace_quality` **inside** the inner `trace` block.
+Before exporting any trace or presenting a Bet Card:
+- Confirm `game_context.is_playoff` and `game_context.rest_days` are present.
+- Confirm injury impacts were translated or explicitly audited as missing.
+- Confirm engine output did not return NULL/0.0 for protected fields such as
+  `recommended_units`, `model_prob`, or `edge_pct`.
 
----
+If missing data is found, append a `quality_gate/null_data_audit` event listing
+variable names only. Do not put edge, EV, Kelly, units, confidence tier, or
+model probability in sidecar notes.
 
-## Step 6 — Audit events
-
-Append after each major step:
-- `engine_run` per analyze call (include `trace_ids`, note what was provided/missing)
-- `candidate_rejected` for any game/prop dropped before analysis
-- `downgrade` when confidence tier was lowered (include rationale)
-- `bug` for any anomaly (reference file + trace_id)
-- **Never** put edge%, EV%, Kelly, units, confidence tier, model probabilities into event notes
-
----
-
-## Step 7 — Bet confirmation (optional)
-
-If user confirms a bet: re-export the **same trace** with `bet_record` populated. Reuse the original `trace_id` and `input_snapshot`. Do NOT re-run `analyze()`.
+Critical missing data means research-only; drop the Bet Card.
 
 ---
 
-## Step 8 — Close session
+## Step 9 - Export, Confirm, Close
 
-Set `closed_at`, write final `agent_notes` summary, stop. Do not run `ingest_traces` or `render_audit` from inside this session.
+After each successful `analyze()` call, write `inbox/traces/<trace_id>.json`.
+Nest `reasoning_inputs`, `reasoning_narrative`,
+`reasoning_downgrade_rationale`, and `trace_quality` inside the inner `trace`
+block.
+
+Append audit events for:
+- `engine_run`
+- `candidate_rejected`
+- `downgrade`
+- `quality_gate`
+- `bug`
+
+If the user confirms a bet, re-export the same trace with `bet_record`
+populated. Reuse the original `trace_id`; do not rerun `analyze()`.
+
+Close the session by setting `closed_at` and a short `agent_notes` summary.
+Do not run ingest or audit rendering inside the live betting session.
 
 ---
 
-## Post-session (run separately after session closes)
+## Post-Session
+
+Run separately after session close:
 
 ```bash
 python scripts/run_action_plan.py inbox/action_plans/templates/daily_trace_intake.json
 python scripts/run_action_plan.py inbox/action_plans/templates/render_session_audits.json
 ```
 
-After games are final (~midnight ET), also run the outcome loop (see [ops/fetch_outcomes.md](../ops/fetch_outcomes.md)).
+After games are final, run the outcome loop described in
+[ops/fetch_outcomes.md](../ops/fetch_outcomes.md).
