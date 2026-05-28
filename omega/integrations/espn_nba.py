@@ -1,36 +1,18 @@
 """
-omega.integrations.espn_nba — ESPN public scoreboard for NBA final scores.
-
-The ESPN site API serves public scoreboards at:
-  https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=YYYYMMDD
-
-No authentication required. Returns events with team abbreviations, names,
-locations, scores, and status. We expose two things:
-  - `fetch_scoreboard(date)` — raw HTTP fetch + JSON parse, returns FinalGame list
-  - `canonical_team(name_or_alias)` — fuzzy lookup against a known alias table
-
-Stale aliases are the most common source of unmatched outcomes. When the
-weekly health report flags an unmapped team string, add it to TEAM_ALIASES.
+omega.integrations.espn_nba -- ESPN public scoreboard for NBA final scores.
 """
-
 from __future__ import annotations
-
 import json
 import logging
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-
 from omega.integrations._guards import assert_not_replay_mode
 
 logger = logging.getLogger("omega.integrations.espn_nba")
-
 _SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
 _REQUEST_TIMEOUT_SECONDS = 15
 
-
-# Canonical team names (left side = canonical, right side = aliases)
-# Canonical name matches the official label used by the core contracts.
 NBA_TEAMS: dict[str, list[str]] = {
     "Atlanta Hawks": ["atl", "hawks", "atlanta"],
     "Boston Celtics": ["bos", "celtics", "boston"],
@@ -64,7 +46,6 @@ NBA_TEAMS: dict[str, list[str]] = {
     "Washington Wizards": ["was", "wsh", "wizards", "washington"],
 }
 
-# Reverse map: alias (lowercased) → canonical name
 _ALIAS_TO_CANONICAL: dict[str, str] = {}
 for _canonical, _aliases in NBA_TEAMS.items():
     _ALIAS_TO_CANONICAL[_canonical.lower()] = _canonical
@@ -74,125 +55,74 @@ for _canonical, _aliases in NBA_TEAMS.items():
 
 @dataclass(frozen=True)
 class FinalGame:
-    """A completed NBA game with attributed final scores."""
-
-    event_id: str  # ESPN event id
-    date: str  # YYYY-MM-DD (Eastern game date)
-    home_team: str  # canonical name
-    away_team: str  # canonical name
+    event_id: str
+    date: str
+    home_team: str
+    away_team: str
     home_score: int
     away_score: int
-    status: str  # "final", "in_progress", "scheduled", "postponed", ...
-
-
-# ---------------------------------------------------------------------------
-# Alias resolution
-# ---------------------------------------------------------------------------
+    status: str
 
 
 def canonical_team(name_or_alias: str) -> str | None:
-    """Resolve a team string to its canonical NBA team name.
-
-    Returns None if the string does not match any known alias. Callers should
-    log unmapped strings so the table can be extended.
-    """
     if not name_or_alias:
         return None
     key = name_or_alias.strip().lower()
     if key in _ALIAS_TO_CANONICAL:
         return _ALIAS_TO_CANONICAL[key]
-    # Substring match only for aliases >= 4 chars to avoid false matches
-    # (e.g. "ZZZ Not A Team" contains "no" — the 2-letter Pelicans abbreviation).
     for alias_key, canonical in _ALIAS_TO_CANONICAL.items():
         if len(alias_key) >= 4 and alias_key in key:
             return canonical
     return None
 
 
-# ---------------------------------------------------------------------------
-# HTTP
-# ---------------------------------------------------------------------------
-
-
-def fetch_scoreboard(
-    date: str,
-    url_opener=urllib.request.urlopen,
-) -> list[FinalGame]:
-    """Fetch the ESPN NBA scoreboard for a given Eastern game date.
-
-    Args:
-        date: YYYY-MM-DD or YYYYMMDD.
-        url_opener: injectable for tests (defaults to urllib.request.urlopen).
-
-    Returns:
-        List of FinalGame (may include in-progress / scheduled if you call mid-day;
-        consumers should filter by status == "final" for grading).
-    """
+def fetch_scoreboard(date: str, url_opener=urllib.request.urlopen) -> list[FinalGame]:
     assert_not_replay_mode("ESPN NBA scoreboard fetch")
     date_str = date.replace("-", "")
     query = urllib.parse.urlencode({"dates": date_str})
     url = f"{_SCOREBOARD_URL}?{query}"
     logger.debug("fetching ESPN scoreboard: %s", url)
-
     with url_opener(url, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
         payload = json.loads(resp.read().decode("utf-8"))
-
     return parse_scoreboard(payload)
 
 
 def parse_scoreboard(payload: dict) -> list[FinalGame]:
-    """Parse the ESPN JSON envelope into a list of FinalGame.
-
-    Public for testability — feed it a fixture dict to verify field extraction
-    without making a network call.
-    """
     results: list[FinalGame] = []
     for event in payload.get("events") or []:
         event_id = str(event.get("id") or "")
-        iso_date = (event.get("date") or "")[:10]  # YYYY-MM-DD
+        iso_date = (event.get("date") or "")[:10]
         competitions = event.get("competitions") or []
         if not competitions:
             continue
         comp = competitions[0]
-
         status_obj = (comp.get("status") or {}).get("type") or {}
         status = (status_obj.get("name") or "").lower()
-        # ESPN uses: STATUS_FINAL, STATUS_IN_PROGRESS, STATUS_SCHEDULED, STATUS_POSTPONED
         status_short = status.replace("status_", "")
-
         home = away = None
         home_score = away_score = 0
         for competitor in comp.get("competitors") or []:
             team_blob = competitor.get("team") or {}
             display_name = team_blob.get("displayName") or team_blob.get("name") or ""
-            canonical = canonical_team(display_name) or canonical_team(
-                team_blob.get("abbreviation", "")
-            )
+            canonical = canonical_team(display_name) or canonical_team(team_blob.get("abbreviation", ""))
             if not canonical:
-                logger.warning(
-                    "Unmapped ESPN team: %r (abbr=%r)", display_name, team_blob.get("abbreviation")
-                )
-                canonical = display_name  # preserve raw so caller can flag
+                logger.warning("Unmapped ESPN team: %r (abbr=%r)", display_name, team_blob.get("abbreviation"))
+                canonical = display_name
             score = int(competitor.get("score") or 0)
             if competitor.get("homeAway") == "home":
                 home, home_score = canonical, score
             elif competitor.get("homeAway") == "away":
                 away, away_score = canonical, score
-
         if not home or not away:
-            logger.debug("skipping event %s — missing home/away", event_id)
+            logger.debug("skipping event %s - missing home/away", event_id)
             continue
-
-        results.append(
-            FinalGame(
-                event_id=event_id,
-                date=iso_date,
-                home_team=home,
-                away_team=away,
-                home_score=home_score,
-                away_score=away_score,
-                status=status_short,
-            )
-        )
-
+        results.append(FinalGame(
+            event_id=event_id,
+            date=iso_date,
+            home_team=home,
+            away_team=away,
+            home_score=home_score,
+            away_score=away_score,
+            status=status_short,
+        ))
     return results

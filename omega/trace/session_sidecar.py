@@ -113,11 +113,7 @@ def bootstrap_payload(
     bankroll: float,
     bankroll_confirmed: bool = False,
 ) -> dict[str, Any]:
-    """Return a minimal dict suitable for ``SessionSidecar.model_validate``.
-
-    Used by the audit renderer to synthesize an in-memory sidecar when no
-    sidecar file exists, so the DB cross-section can still be rendered.
-    """
+    """Return a minimal dict suitable for SessionSidecar.model_validate."""
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
         "session_id": session_id,
@@ -145,13 +141,7 @@ def _check_protected_fields(event: AuditEvent) -> None:
 
 
 def append_audit_events(path: Path, events: list[dict[str, Any]]) -> None:
-    """Atomically append audit events to a session sidecar.
-
-    Reads the sidecar, validates and appends *events*, then writes back via
-    temp-file + os.replace.  Raises ``ProtectedValueError`` if any event
-    carries an engine-owned quant key in ``inputs`` or ``outputs``; the
-    on-disk file is untouched on any error.
-    """
+    """Atomically append audit events to a session sidecar."""
     from omega.trace._atomic import atomic_write_text
 
     validated = [AuditEvent.model_validate(e) for e in events]

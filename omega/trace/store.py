@@ -1351,3 +1351,57 @@ class TraceStore:
         if self._conn:
             self._conn.close()
             self._conn = None
+        params: list[Any] = []
+        if league:
+            clauses.append("t.league = ?")
+            params.append(league)
+        where = " WHERE " + " AND ".join(clauses)
+        params.append(limit)
+
+        rows = self.conn.execute(
+            f"""
+            SELECT t.session_id,
+                   COUNT(*) AS trace_count,
+                   SUM(
+                       CASE WHEN
+                           EXISTS (
+                               SELECT 1 FROM outcomes o
+                               WHERE o.trace_id = t.trace_id
+                           )
+                           OR EXISTS (
+                               SELECT 1 FROM prop_outcomes p
+                               WHERE p.trace_id = t.trace_id
+                           )
+                       THEN 1 ELSE 0 END
+                   ) AS graded_count,
+                   MIN(t.timestamp) AS first_ts,
+                   MAX(t.timestamp) AS last_ts
+            FROM traces t
+            {where}
+            GROUP BY t.session_id
+            ORDER BY last_ts DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    # ------------------------------------------------------------------
+    # Metadata
+    # ------------------------------------------------------------------
+
+    def schema_version(self) -> int:
+        """Return the current schema version."""
+        row = self.conn.execute("SELECT MAX(version) as v FROM schema_versions").fetchone()
+        return row["v"] if row and row["v"] else 0
+
+    def count(self) -> int:
+        """Return total number of persisted traces."""
+        row = self.conn.execute("SELECT COUNT(*) as n FROM traces").fetchone()
+        return row["n"]
+
+    def close(self) -> None:
+        """Close the database connection."""
+        if self._conn:
+            self._conn.close()
+            self._conn = None
