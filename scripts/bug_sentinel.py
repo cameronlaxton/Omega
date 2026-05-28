@@ -584,3 +584,54 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+        help="CI mode: exit 1 if any critical bug is present or a regression detected."
+    )
+    parser.add_argument(
+        "--session-id", metavar="SESSION_ID",
+        help="If provided, append sentinel results to the session sidecar as an audit event."
+    )
+    parser.add_argument(
+        "--repo-root", metavar="PATH", default=str(REPO_ROOT),
+        help="Path to Omega repo root (default: parent of this script)."
+    )
+    parser.add_argument(
+        "--catalog", metavar="PATH", default=str(CATALOG_PATH),
+        help="Path to bug catalog JSON (default: omega/qa/bug_catalog.json)."
+    )
+    args = parser.parse_args(argv)
+
+    repo_root = Path(args.repo_root).resolve()
+    catalog_path = Path(args.catalog).resolve()
+
+    try:
+        bugs = load_catalog(catalog_path)
+    except (FileNotFoundError, KeyError, json.JSONDecodeError) as exc:
+        print(f"[sentinel] Cannot load catalog: {exc}", file=sys.stderr)
+        return 2
+
+    results = [run_check(bug, repo_root) for bug in bugs]
+    report = build_report(results, repo_root)
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print_report(report)
+
+    if args.session_id:
+        write_to_sidecar(args.session_id, report, repo_root)
+
+    if args.ci:
+        if report["open_critical"] > 0 or report["regression_count"] > 0:
+            print(
+                f"[sentinel] CI FAIL: {report['open_critical']} critical bug(s) open, "
+                f"{report['regression_count']} regression(s).",
+                file=sys.stderr,
+            )
+            return 1
+        print("[sentinel] CI PASS", file=sys.stderr)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

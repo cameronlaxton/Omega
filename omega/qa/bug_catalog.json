@@ -21,7 +21,7 @@
       },
       "status_at_last_audit": "fixed",
       "last_audited": "2026-05-28",
-      "fix_direction": "Use _expected_against_allowed_rate(home_off, away_def, league_avg_rpg, park_factor) which computes team_off * (opp_allowed / league_avg) correctly.",
+      "fix_direction": "Use _expected_against_allowed_rate(home_off, away_def, league_avg_rpg, park_factor).",
       "workaround": "Suppress MLB/NHL game-line Bet Cards if bug_present"
     },
     {
@@ -51,7 +51,7 @@
         "expected_draw_prob": 0.0,
         "present_means": "fixed",
         "absent_means": "bug_present",
-        "note": "Baseball supports_draw=False. draw_prob must be 0.0. Non-zero means tie samples not reallocated."
+        "note": "Baseball supports_draw=False. draw_prob must be 0.0."
       },
       "status_at_last_audit": "fixed",
       "last_audited": "2026-05-28",
@@ -71,6 +71,7 @@
       "check": {
         "module": "omega.core.contracts.service",
         "function": "analyze",
+        "check_action": "analyze_fixture",
         "fixture": {
           "player_name": "Sentinel Test",
           "league": "NBA",
@@ -92,13 +93,13 @@
       },
       "status_at_last_audit": "fixed",
       "last_audited": "2026-05-28",
-      "fix_direction": "PersistableTrace.from_analyze_output() now pulls identity fields from the request dict into input_snapshot.",
-      "workaround": "If bug_present: copy player_name, home_team, away_team, game_date from result into input_snapshot before ingest."
+      "fix_direction": "PersistableTrace.from_analyze_output() pulls identity fields into input_snapshot.",
+      "workaround": "If bug_present: copy identity fields from result into input_snapshot before ingest."
     },
     {
       "bug_id": "BUG-EVIDENCE-SHADOW-001",
-      "title": "Evidence adjustment policy in shadow mode — win_streak/series_lead computed but not applied",
-      "description": "The active AdjustmentPolicy has mode=shadow. Evidence signals including win_streak and series_lead are computed and recorded but do NOT modify simulation inputs. This is the current design state, not a crash bug.",
+      "title": "Evidence adjustment policy in shadow mode — signals computed but not applied",
+      "description": "The active AdjustmentPolicy has mode=shadow. Evidence signals including win_streak and series_lead are computed and recorded but do NOT modify simulation inputs. This is current design state.",
       "severity": "low",
       "sport_gates": [],
       "analysis_kind_gates": ["game", "prop"],
@@ -117,7 +118,7 @@
       "status_at_last_audit": "shadow_mode",
       "last_audited": "2026-05-28",
       "fix_direction": "Promote policy to mode=live via scripts/promote_adjustment_policy.py after shadow review validates signal accuracy.",
-      "workaround": "Note in reasoning_downgrade_rationale that structured evidence signals are recorded but not applied. Qualitatively adjust confidence tier if strong signals present."
+      "workaround": "Note in reasoning_downgrade_rationale that evidence signals are recorded but not applied."
     },
     {
       "bug_id": "BUG-SQLITE-WAL-FUSE-001",
@@ -142,8 +143,8 @@
     },
     {
       "bug_id": "BUG-REPAIR-FROM-GIT-001",
-      "title": "--repair-from-git no-op on FUSE mount (git checkout writes ignored by mount cache)",
-      "description": "cowork_preflight.py --repair-from-git exits without actually restoring corrupt files because the mount cache is not invalidated by git checkout writes.",
+      "title": "--repair-from-git no-op on FUSE mount",
+      "description": "cowork_preflight.py --repair-from-git exits without actually restoring corrupt files because git checkout writes do not invalidate the FUSE mount cache.",
       "severity": "medium",
       "sport_gates": [],
       "analysis_kind_gates": [],
@@ -155,7 +156,7 @@
       },
       "status_at_last_audit": "present",
       "last_audited": "2026-05-28",
-      "fix_direction": "Use manual workaround: git show HEAD:<file> > /tmp/_f && cp /tmp/_f <file>. Fix repair path to call subprocess git checkout then os.sync().",
+      "fix_direction": "Fix repair path to shell out to subprocess git checkout then os.sync().",
       "workaround": "for f in <files>; do git show HEAD:\"$f\" > /tmp/_$(basename $f) && cp /tmp/_$(basename $f) \"$f\"; done"
     }
   ]
