@@ -23,6 +23,30 @@ from omega.core.contracts.schemas import GameAnalysisRequest, PlayerPropRequest 
 from omega.core.contracts.service import analyze  # noqa: E402
 from scripts import cowork_preflight  # noqa: E402
 
+_PREFLIGHT_SCRIPT = _REPO_ROOT / "scripts" / "cowork_preflight.py"
+
+
+def _check_preflight_sentinel() -> str | None:
+    """Read cowork_preflight.py as raw text and verify the EOF sentinel is present.
+
+    If the sentinel is missing the file was truncated (Pattern C). This check is
+    intentionally performed by the calling layer — the sentinel logic cannot protect
+    itself when the truncation removes the logic along with it.
+    """
+    try:
+        text = _PREFLIGHT_SCRIPT.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return f"Cannot read preflight script: {exc}"
+    if cowork_preflight._PREFLIGHT_SENTINEL not in text:
+        return (
+            f"cowork_preflight.py is missing its EOF sentinel "
+            f"({cowork_preflight._PREFLIGHT_SENTINEL!r}). "
+            "The script is likely truncated (Pattern C mount corruption). "
+            "Restore from git before running the engine: "
+            "git checkout HEAD -- scripts/cowork_preflight.py"
+        )
+    return None
+
 
 def _load_request(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8-sig") as fh:
@@ -85,6 +109,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int)
     parser.add_argument("--trace-out", type=Path)
     args = parser.parse_args(argv)
+
+    sentinel_error = _check_preflight_sentinel()
+    if sentinel_error:
+        print("preflight_sentinel_missing:")
+        print(f"- {sentinel_error}")
+        print("- Do not emit formal Omega numeric outputs until the gate passes.")
+        return 2
 
     gate_failures = cowork_preflight.run_formal_output_gate(require_mcp=False)
     if gate_failures:

@@ -20,6 +20,13 @@ from collections.abc import Sequence
 from pathlib import Path
 
 MIN_PYTHON = (3, 10)
+_REPAIR_TAINT_FILENAME = ".repair_taint"
+_OMEGA_CACHE_DIRNAME = ".omega_cache"
+_PREFLIGHT_SENTINEL = "# EOF: cowork_preflight_completed"
+
+
+def _get_repair_taint_path(repo_root: Path) -> Path:
+    return repo_root / _OMEGA_CACHE_DIRNAME / _REPAIR_TAINT_FILENAME
 
 
 def _version_text(version_info: Sequence[int]) -> str:
@@ -49,6 +56,35 @@ def check_import(module: str, install_hint: str) -> list[str]:
         importlib.import_module(module)
     except ImportError as exc:
         return [f"Missing import '{module}': {exc}. Run: {install_hint}"]
+    return []
+
+
+def check_git_health(repo_root: Path) -> list[str]:
+    """Verify git environment is functional and not mid-operation.
+
+    Detects index.lock (another git process is running) and git command failures
+    that would make content-equality checks unreliable.
+    """
+    index_lock = repo_root / ".git" / "index.lock"
+    if index_lock.exists():
+        return [
+            "GitEnvironmentCorrupt: .git/index.lock exists — another git process may be "
+            "running or a prior git operation crashed. Remove the lock file before continuing."
+        ]
+
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return [
+            f"GitEnvironmentCorrupt: `git status` failed (exit {result.returncode}): "
+            f"{result.stderr.strip() or '(no stderr)'}. "
+            "Resolve git environment issues before running engine checks."
+        ]
     return []
 
 
@@ -332,8 +368,24 @@ def verify_against_git(
                     print(f"  OK {path}")
                 else:
                     failures.append(f"verify_against_git: AST parse failed after repair {path}: {parse_error}")
+            taint_path = _get_repair_taint_path(repo_root)
+            try:
+                taint_path.parent.mkdir(parents=True, exist_ok=True)
+                taint_path.write_text("repair_tainted\n", encoding="utf-8")
+                print(f"[repair] Taint lockfile written: {taint_path}")
+            except OSError as exc:
+                failures.append(f"[repair] Could not write repair taint lockfile: {exc}")
         remaining_diverged = _diverged_tracked_files(repo_root, tracked_files)
         failures.extend(_check_critical_files(repo_root, remaining_diverged))
+        # Full parse sweep of all tracked Python files to catch any remaining
+        # truncation after repair (BUG-PREFLIGHT-4: partial repair blind spots).
+        if not failures:
+            post_repair_corrupt = _syntax_corrupt_tracked_files(repo_root, tracked_files)
+            for rel_path in post_repair_corrupt:
+                failures.append(
+                    f"Source corrupt after repair (AST parse failed): {rel_path}. "
+                    "Manual restoration may be required."
+                )
         return failures
 
     # Non-repair report path. Tier the failures.
@@ -380,6 +432,11 @@ def run_checks(
     if repo_root is None:
         repo_root = Path(__file__).parent.parent
 
+    # Fail fast on git environment problems before any content equality checks.
+    failures.extend(check_git_health(repo_root))
+    if failures:
+        return failures
+
     if repair_from_git:
         # Restore known-corrupt tracked files before AST parsing so hard
         # truncations do not block the git-based repair path.
@@ -414,6 +471,19 @@ def run_checks(
     if clean_errors:
         for error in clean_errors:
             print(f"[warning] {error}")
+
+    # Parse critical runtime files before import (catches silent content-valid truncation
+    # that AST-parity and null-byte checks may miss on files not yet diverged from HEAD).
+    for critical_rel in sorted(_CRITICAL_FILES):
+        crit_path = repo_root / critical_rel
+        if crit_path.exists():
+            err = _ast_parse_file(crit_path)
+            if err is not None:
+                failures.append(
+                    f"Critical runtime file AST parse failed: {critical_rel}: {err}"
+                )
+    if failures:
+        return failures
 
     failures.extend(check_distribution())
     failures.extend(check_import("pydantic", "python -m pip install -e .[mcp]"))
@@ -498,7 +568,26 @@ def run_formal_output_gate(
             f"changes first. Diverged tracked Python files: {', '.join(diverged)}"
         ]
 
-    return check_formal_output_smoke()
+    smoke_failures = check_formal_output_smoke()
+    if smoke_failures:
+        return smoke_failures
+
+    # Source is verified clean. If a repair-taint lockfile is present from a prior
+    # repair run, clear it now and require one additional clean invocation to confirm
+    # the gate is open. This prevents formal output from being emitted in the same
+    # session as a repair without an independent confirmation pass.
+    taint_path = _get_repair_taint_path(repo_root)
+    if taint_path.exists():
+        try:
+            taint_path.unlink()
+        except OSError:
+            pass
+        return [
+            "TAINT_CLEARED: Source was repaired in a prior run and has now been verified "
+            "clean. Re-run preflight --formal-output-gate to confirm and open the gate."
+        ]
+
+    return []
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -582,3 +671,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+# EOF: cowork_preflight_completed
