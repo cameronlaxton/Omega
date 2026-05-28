@@ -10,6 +10,7 @@ from omega.trace.session_sidecar import (
     ProtectedValueError,
     SessionSidecar,
     append_audit_events,
+    append_null_data_audit,
 )
 
 
@@ -81,6 +82,18 @@ def test_session_sidecar_accepts_valid_audit_events():
     assert sidecar.audit_events[0].status == "ok"
 
 
+def test_audit_event_accepts_quality_gate_type():
+    event = _valid_event()
+    event["event_type"] = "quality_gate"
+    event["step"] = "null_data_audit"
+    event["status"] = "warn"
+
+    validated = AuditEvent.model_validate(event)
+
+    assert validated.event_type == "quality_gate"
+    assert validated.step == "null_data_audit"
+
+
 def test_audit_event_rejects_invalid_event_type():
     event = _valid_event()
     event["event_type"] = "unknown_type"
@@ -149,3 +162,23 @@ def test_append_audit_events_rejects_protected_outputs_key(tmp_path):
 
     sidecar = SessionSidecar.from_path(path)
     assert sidecar.audit_events == []
+
+
+def test_append_null_data_audit_writes_quality_gate_event(tmp_path):
+    path = tmp_path / "sess.json"
+    path.write_text(json.dumps(_valid_sidecar()), encoding="utf-8")
+
+    append_null_data_audit(
+        path,
+        ["game_context.rest_days", "injury_impact"],
+        critical=True,
+        trace_ids=["sandbox-null"],
+    )
+
+    sidecar = SessionSidecar.from_path(path)
+    event = sidecar.audit_events[0]
+    assert event.event_type == "quality_gate"
+    assert event.step == "null_data_audit"
+    assert event.status == "fail"
+    assert event.notes == "NULL detected: game_context.rest_days, injury_impact"
+    assert event.trace_ids == ["sandbox-null"]

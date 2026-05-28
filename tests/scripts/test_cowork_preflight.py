@@ -232,3 +232,33 @@ def test_clean_stale_bytecode_summarizes_unlink_failures(monkeypatch, tmp_path):
     errors = cowork_preflight.clean_stale_bytecode(tmp_path)
 
     assert errors == ["Skipped 1 stale .pyc file(s) (EPERM); likely host-locked."]
+
+
+def test_formal_output_gate_requires_clean_git_parity(monkeypatch, tmp_path):
+    monkeypatch.setattr(cowork_preflight, "run_checks", lambda **_kwargs: [])
+    monkeypatch.setattr(cowork_preflight, "_tracked_python_files", lambda _repo: (["a.py"], []))
+    monkeypatch.setattr(cowork_preflight, "_diverged_tracked_files", lambda _repo, _files: ["a.py"])
+
+    failures = cowork_preflight.run_formal_output_gate(repo_root=tmp_path, require_mcp=False)
+
+    assert len(failures) == 1
+    assert "clean source parity" in failures[0]
+    assert "a.py" in failures[0]
+
+
+def test_formal_output_gate_runs_smoke_when_clean(monkeypatch, tmp_path):
+    smoke_called = []
+
+    monkeypatch.setattr(cowork_preflight, "run_checks", lambda **_kwargs: [])
+    monkeypatch.setattr(cowork_preflight, "_tracked_python_files", lambda _repo: ([], []))
+    monkeypatch.setattr(cowork_preflight, "_diverged_tracked_files", lambda _repo, _files: [])
+    monkeypatch.setattr(
+        cowork_preflight,
+        "check_formal_output_smoke",
+        lambda: smoke_called.append(True) or [],
+    )
+
+    failures = cowork_preflight.run_formal_output_gate(repo_root=tmp_path, require_mcp=False)
+
+    assert failures == []
+    assert smoke_called == [True]

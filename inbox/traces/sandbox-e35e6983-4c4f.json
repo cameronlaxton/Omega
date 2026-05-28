@@ -1,0 +1,61 @@
+{
+  "trace_id": "sandbox-e35e6983-4c4f",
+  "trace_type": "prop",
+  "session_id": "sess-20260528-wnb1",
+  "model_version": "omega-core-phase6h",
+  "ran_at": "2026-05-28T15:10:43.164824+00:00",
+  "reasoning_inputs": {
+    "player": "Paige Bueckers",
+    "league": "WNBA",
+    "prop_type": "pts",
+    "line": 19.5,
+    "odds_over": -130.0,
+    "odds_under": 110.0,
+    "player_context": {
+      "season_avg": 19.3,
+      "recent_form": [
+        24.0,
+        7.0,
+        24.0
+      ],
+      "std_dev": 6.8,
+      "sample_size": 7
+    },
+    "game_context": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "opponent_def_rank": 8,
+      "blowout_risk": 0.15
+    },
+    "line_notes": "DK 20+ milestone at -130; under estimated +110; outlier risk"
+  },
+  "reasoning_narrative": "Bueckers pts 19.5: avg=19.3, line=19.5, rec=None, tier=None. edge_over=0.000, edge_under=0.000.",
+  "reasoning_downgrade_rationale": [
+    "engine_skipped"
+  ],
+  "result": {
+    "recommendation": null,
+    "confidence_tier": null,
+    "edge_over": 0,
+    "edge_under": 0,
+    "ev_over": null,
+    "ev_under": null,
+    "recommended_units": null
+  },
+  "trace_quality": {
+    "aggregate_quality": null,
+    "downgrades": [
+      "engine_skipped"
+    ],
+    "passed": false,
+    "evidence_status": "present",
+    "identity_status": "complete",
+    "context_source": null,
+    "baseline_used": false,
+    "calibration_eligible": false,
+    "calibration_exclusion_reasons": [
+      "engine_skipped",
+      "legacy_missing_context_source"
+    ]
+  }
+}

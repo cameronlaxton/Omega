@@ -14,23 +14,34 @@ class TestValidDataPassthrough:
         assert result == {"off_rating": 112.5, "def_rating": 108.3, "pace": 100.0}
 
     def test_football_valid_context(self):
-        ctx = {"off_rating": 95.0, "def_rating": 90.0, "pass_eff": 7.5, "rush_eff": 4.2}
+        ctx = {"off_rating": 24.0, "def_rating": 21.0, "pass_eff": 7.5, "rush_eff": 4.2}
         result = validate_sim_context(ctx, "NFL", "away")
         assert result == ctx
 
     def test_baseball_valid_context(self):
-        ctx = {"off_rating": 100.0, "def_rating": 98.0, "era": 3.50, "batting_avg": 0.265}
+        ctx = {
+            "off_rating": 4.5,
+            "def_rating": 4.2,
+            "starter_era": 3.50,
+            "park_factor": 1.02,
+            "weather_wind_mph": 8.0,
+        }
         result = validate_sim_context(ctx, "MLB", "home")
         assert result == ctx
 
     def test_hockey_valid_context(self):
-        ctx = {"off_rating": 105.0, "def_rating": 100.0, "save_pct": 0.920, "shots_per_game": 32.0}
+        ctx = {"off_rating": 3.2, "def_rating": 2.8, "save_pct": 0.920, "shots_per_game": 32.0}
         result = validate_sim_context(ctx, "NHL", "home")
         assert result == ctx
 
     def test_soccer_valid_context(self):
-        ctx = {"off_rating": 110.0, "def_rating": 95.0, "xg_for": 1.8, "possession_pct": 55.0}
+        ctx = {"off_rating": 1.8, "def_rating": 1.1, "xg_for": 1.8, "possession_pct": 55.0}
         result = validate_sim_context(ctx, "EPL", "home")
+        assert result == ctx
+
+    def test_wnba_pace_below_nba_range_is_valid(self):
+        ctx = {"off_rating": 105.0, "def_rating": 102.0, "pace": 82.0}
+        result = validate_sim_context(ctx, "WNBA", "home", strict=True)
         assert result == ctx
 
     def test_tennis_valid_context(self):
@@ -105,6 +116,11 @@ class TestBoundsRejection:
         result = validate_sim_context(ctx, "NBA", "home")
         assert result == {"off_rating": 80.0, "def_rating": 140.0}
 
+    def test_baseball_rejects_basketball_scaled_ratings(self):
+        ctx = {"off_rating": 100.0, "def_rating": 98.0, "starter_era": 3.5}
+        result = validate_sim_context(ctx, "MLB", "home")
+        assert result == {"starter_era": 3.5}
+
 
 # ---------------------------------------------------------------------------
 # Garbage rejection
@@ -150,8 +166,6 @@ class TestGarbageRejection:
 
     def test_bool_dropped(self):
         ctx = {"off_rating": True}
-        # True is technically an int in Python but coerces to 1.0 — within bounds or not
-        # depends on the key. For off_rating bounds [80, 140], 1.0 is out of bounds.
         result = validate_sim_context(ctx, "NBA", "home")
         assert "off_rating" not in result
 

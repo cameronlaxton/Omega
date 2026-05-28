@@ -25,6 +25,7 @@ direct engine imports:
 python --version
 python -m pip install -e .[mcp]
 python scripts/cowork_preflight.py
+python scripts/cowork_preflight.py --formal-output-gate
 ```
 
 If `python --version` is below 3.10, stop and switch to a Python 3.10+
@@ -40,8 +41,11 @@ python -m pip install -e .[mcp]
 python scripts/cowork_preflight.py
 ```
 
-Only after the preflight prints `cowork_preflight_ready` may the agent render
-formal Omega numeric output from MCP or `analyze()`.
+Only after the formal gate prints `cowork_preflight_ready` may the agent
+render formal Omega numeric output from MCP or `analyze()`. A plain
+`cowork_preflight_core_ready` state is valid for qualitative research and
+debugging only; it is not betting-grade and must not produce Bet Cards.
+The direct `scripts/run_analyze.py` CLI enforces this gate before execution.
 
 If preflight reports `Source diverges from git HEAD: <file>`, the mount has
 delivered a corrupt copy of a tracked file (Pattern C: a silent truncation
@@ -283,6 +287,19 @@ Additional keys to supply when known:
 | `is_dome` | bool | NFL only |
 
 Any additional matchup context (scheme advantages, defensive matchup weaknesses, etc.) may be included under any key — the engine passes all keys through to `context_labels` in the trace, where the calibration fitter can use them.
+
+Injury/news protocol: noticing an injury, restriction, or role anomaly is not
+enough. Before calling `analyze()`, translate it into structured model inputs:
+minutes/usage shifts for player props, explicit `injury_impact` or
+`pace_adjustment_factor` in `game_context`, and/or typed `EvidenceSignal`
+entries such as `usage_role_change`. If the impact cannot be quantified from
+pre-decision sources, append a `quality_gate/null_data_audit` event and
+downgrade to research-only rather than emitting a Bet Card.
+
+Never use raw percentages as basketball `off_rating` or `def_rating`.
+Basketball team contexts require possession-adjusted ratings on the usual
+points-per-100-possessions scale. Fractional proxies such as FG% are invalid
+simulation inputs and are blocked at the service boundary.
 
 Example game request:
 

@@ -332,6 +332,10 @@ class AnalysisMetadata(BaseModel):
     engine_version: str = "2.0-dse"
     data_sources: list[str] = Field(default_factory=lambda: ["simulation"])
     archetype: str | None = Field(default=None, description="Sport archetype used for simulation")
+    suppressed_markets: list[str] = Field(
+        default_factory=list,
+        description="Non-quant list of markets intentionally suppressed by service policy.",
+    )
 
 
 # -- Top-Level Response Models -----------------------------------------------

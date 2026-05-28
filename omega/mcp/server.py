@@ -52,6 +52,27 @@ PROMPT_NAMES = (
 )
 
 
+def _formal_output_gate_failures() -> list[str]:
+    """Return formal-output preflight failures for MCP analysis tools."""
+    try:
+        from scripts import cowork_preflight
+    except Exception as exc:  # noqa: BLE001
+        return [f"Could not import cowork_preflight formal gate: {exc}"]
+
+    return cowork_preflight.run_formal_output_gate(require_mcp=False)
+
+
+def _formal_output_blocked(tool: str, failures: list[str]) -> dict[str, Any]:
+    return _error(
+        tool,
+        "formal_output_blocked",
+        {
+            "failures": failures,
+            "message": "Formal Omega outputs require clean preflight plus deterministic smoke.",
+        },
+    )
+
+
 def omega_analyze_game(
     request: dict[str, Any],
     bankroll: float,
@@ -96,6 +117,9 @@ def omega_analyze_game(
 
     try:
         typed = GameAnalysisRequest(**request)
+        gate_failures = _formal_output_gate_failures()
+        if gate_failures:
+            return _formal_output_blocked("omega_analyze_game", gate_failures)
         trace = analyze(typed, bankroll=bankroll, session_id=session_id, trace_quality=trace_quality)
         return _ok("omega_analyze_game", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
@@ -118,6 +142,9 @@ def omega_analyze_prop(
 
     try:
         typed = PlayerPropRequest(**request)
+        gate_failures = _formal_output_gate_failures()
+        if gate_failures:
+            return _formal_output_blocked("omega_analyze_prop", gate_failures)
         trace = analyze(typed, bankroll=bankroll, session_id=session_id, trace_quality=trace_quality)
         return _ok("omega_analyze_prop", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
@@ -140,6 +167,9 @@ def omega_analyze_slate(
 
     try:
         typed = SlateAnalysisRequest(**request)
+        gate_failures = _formal_output_gate_failures()
+        if gate_failures:
+            return _formal_output_blocked("omega_analyze_slate", gate_failures)
         trace = analyze(typed, bankroll=bankroll, session_id=session_id, trace_quality=trace_quality)
         return _ok("omega_analyze_slate", trace=trace, result=trace.get("result"))
     except ValidationError as exc:

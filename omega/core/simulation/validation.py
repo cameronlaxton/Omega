@@ -46,7 +46,9 @@ SIM_INPUT_BOUNDS: dict[str, tuple[float, float]] = {
     "slg": (0.250, 0.700),
     "whip": (0.70, 2.50),
     "bullpen_era": (0.5, 10.0),
+    "starter_era": (0.5, 10.0),
     "park_factor": (0.80, 1.20),
+    "weather_wind_mph": (0.0, 40.0),
     # Hockey
     "shots_per_game": (20.0, 45.0),
     "save_pct": (0.850, 0.970),
@@ -101,8 +103,58 @@ SIM_INPUT_BOUNDS: dict[str, tuple[float, float]] = {
 }
 
 
+ARCHETYPE_INPUT_BOUNDS: dict[str, dict[str, tuple[float, float]]] = {
+    # Shared keys use sport-specific units outside basketball.
+    "american_football": {
+        "off_rating": (0.0, 80.0),
+        "def_rating": (0.0, 80.0),
+        "pace": (90.0, 180.0),
+    },
+    "baseball": {
+        "off_rating": (0.0, 15.0),
+        "def_rating": (0.0, 15.0),
+        "pace": (20.0, 60.0),
+    },
+    "hockey": {
+        "off_rating": (0.0, 8.0),
+        "def_rating": (0.0, 8.0),
+        "pace": (40.0, 90.0),
+    },
+    "soccer": {
+        "off_rating": (0.0, 6.0),
+        "def_rating": (0.0, 6.0),
+        "pace": (20.0, 80.0),
+    },
+}
+
+
+LEAGUE_INPUT_BOUNDS: dict[str, dict[str, tuple[float, float]]] = {
+    # Basketball remains possession-adjusted for off/def ratings, but non-NBA
+    # leagues can have substantially lower pace.
+    "WNBA": {"pace": (65.0, 105.0)},
+    "NCAAB": {"pace": (55.0, 95.0)},
+    "NCAAM": {"pace": (55.0, 95.0)},
+    "EUROLEAGUE": {"pace": (55.0, 95.0)},
+    "FIBA": {"pace": (55.0, 95.0)},
+}
+
+
+def _bounds_for(key: str, league: str, archetype_name: str) -> tuple[float, float] | None:
+    league_bounds = LEAGUE_INPUT_BOUNDS.get(league.upper(), {})
+    if key in league_bounds:
+        return league_bounds[key]
+
+    archetype_bounds = ARCHETYPE_INPUT_BOUNDS.get(archetype_name, {})
+    if key in archetype_bounds:
+        return archetype_bounds[key]
+
+    return SIM_INPUT_BOUNDS.get(key)
+
+
 def _coerce_numeric(value: Any) -> float | None:
     """Try to coerce a value to float. Returns None if impossible."""
+    if isinstance(value, bool):
+        return None
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
@@ -180,7 +232,7 @@ def validate_sim_context(
                 logger.warning("Dropped %s", msg)
             continue
 
-        bounds = SIM_INPUT_BOUNDS.get(key)
+        bounds = _bounds_for(key, league, archetype.name)
         if bounds is not None:
             lo, hi = bounds
             if numeric < lo or numeric > hi:

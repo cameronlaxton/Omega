@@ -21,6 +21,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from omega.core.contracts.schemas import GameAnalysisRequest, PlayerPropRequest  # noqa: E402
 from omega.core.contracts.service import analyze  # noqa: E402
+from scripts import cowork_preflight  # noqa: E402
 
 
 def _load_request(path: Path) -> dict[str, Any]:
@@ -84,6 +85,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int)
     parser.add_argument("--trace-out", type=Path)
     args = parser.parse_args(argv)
+
+    gate_failures = cowork_preflight.run_formal_output_gate(require_mcp=False)
+    if gate_failures:
+        print("formal_output_blocked:")
+        for failure in gate_failures:
+            print(f"- {failure}")
+        print("- Do not emit formal Omega numeric outputs until the gate passes.")
+        return 2
 
     trace = run(
         kind=args.kind,

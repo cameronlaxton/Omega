@@ -1,0 +1,105 @@
+{
+  "trace": {
+    "trace_id": "sandbox-f67c055d-4171",
+    "session_id": "sess-20260528-mlb1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-28T14:54:24.812895+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Chris Sale",
+      "league": "MLB",
+      "prop_type": "strikeouts_pitched",
+      "line": 7.5,
+      "odds_over": -120.0,
+      "odds_under": -110.0,
+      "player_context": {
+        "strikeouts_pitched_mean": 7.2,
+        "strikeouts_pitched_std": 2.1,
+        "sample_size": 10,
+        "is_playoff": false,
+        "rest_days": 4,
+        "opponent_def_rank": 22
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 4
+      },
+      "n_iterations": 10000,
+      "seed": 3081177840,
+      "evidence": [
+        {
+          "signal_type": "series_avg",
+          "category": "player_form",
+          "plane": "player",
+          "value": 7.2,
+          "source": "espn.com",
+          "confidence": 0.85,
+          "window": "last_10",
+          "direction": "under",
+          "stat_key": "strikeouts_pitched",
+          "note": null
+        },
+        {
+          "signal_type": "recent_form",
+          "category": "player_form",
+          "plane": "player",
+          "value": "Sale last 5: 7,6,7,3,6 \u2014 inconsistent output",
+          "source": "espn.com",
+          "confidence": 0.75,
+          "window": "last_5",
+          "direction": "under",
+          "stat_key": "strikeouts_pitched",
+          "note": null
+        }
+      ],
+      "home_team": "Boston Red Sox",
+      "away_team": "Atlanta Braves",
+      "game_date": "2026-05-28"
+    },
+    "result": {
+      "player_name": "Chris Sale",
+      "prop_type": "strikeouts_pitched",
+      "line": 7.5,
+      "home_team": "Boston Red Sox",
+      "away_team": "Atlanta Braves",
+      "game_date": "2026-05-28",
+      "status": "success",
+      "projection_mean": 7.1917,
+      "over_prob": 0.4269,
+      "under_prob": 0.5731,
+      "edge_over": -11.86,
+      "edge_under": 4.93,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "recommended_units": 5.0
+    },
+    "downgrades": []
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "espn.com",
+      "the-odds-api:betmgm"
+    ],
+    "fields_gathered": [
+      "strikeouts_pitched_mean",
+      "strikeouts_pitched_std",
+      "sample_size",
+      "is_playoff",
+      "rest_days",
+      "opponent_def_rank"
+    ],
+    "missing_fields": [],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": -120,
+      "odds_under": -110
+    }
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "Sale K mean 7.2 vs line 7.5. Last 5 starts: 7,6,7,3,6 \u2014 mean below line. Under at -110 (flat juice).",
+  "trace_quality": {
+    "aggregate_quality": null
+  },
+  "bet_record": null
+}

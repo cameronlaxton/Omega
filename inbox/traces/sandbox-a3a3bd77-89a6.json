@@ -1,0 +1,59 @@
+{
+  "trace_id": "sandbox-a3a3bd77-89a6",
+  "trace_type": "prop",
+  "session_id": "sess-20260528-wnb1",
+  "model_version": "omega-core-phase6h",
+  "ran_at": "2026-05-28T15:11:53.369487+00:00",
+  "reasoning_inputs": {
+    "player": "A'ja Wilson",
+    "league": "WNBA",
+    "prop_type": "pts",
+    "line": 24.5,
+    "odds_over": -128.0,
+    "odds_under": 108.0,
+    "player_context": {
+      "name": "A'ja Wilson",
+      "pts_mean": 24.8,
+      "pts_std": 9.8,
+      "reb_mean": 7.2,
+      "ast_mean": 2.7,
+      "usage_rate": 0.32,
+      "minutes": 28.8,
+      "recent_form": [
+        24.0,
+        20.0,
+        45.0
+      ],
+      "sample_size": 6
+    },
+    "game_context": {
+      "is_playoff": false,
+      "rest_days": 1,
+      "opponent_def_rank": 5,
+      "blowout_risk": 0.35
+    },
+    "line_notes": "DK 25+ milestone at -128; treated as over 24.5; under +108 estimated"
+  },
+  "reasoning_narrative": "Wilson pts 24.5: rec=pass, tier=None, edge_over=-5.540, edge_under=1.320.",
+  "reasoning_downgrade_rationale": [],
+  "result": {
+    "recommendation": "pass",
+    "confidence_tier": null,
+    "edge_over": -5.54,
+    "edge_under": 1.32,
+    "ev_over": null,
+    "ev_under": null,
+    "recommended_units": null
+  },
+  "trace_quality": {
+    "aggregate_quality": null,
+    "downgrades": [],
+    "passed": true,
+    "evidence_status": "present",
+    "identity_status": "complete",
+    "context_source": "provided",
+    "baseline_used": false,
+    "calibration_eligible": true,
+    "calibration_exclusion_reasons": []
+  }
+}

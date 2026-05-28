@@ -434,6 +434,73 @@ def run_checks(
     return failures
 
 
+def check_formal_output_smoke() -> list[str]:
+    """Run a deterministic direct-engine smoke for formal output readiness."""
+    try:
+        from omega.core.contracts.service import analyze
+
+        trace = analyze(
+            {
+                "home_team": "Boston Celtics",
+                "away_team": "Indiana Pacers",
+                "league": "NBA",
+                "n_iterations": 100,
+                "seed": 20260528,
+                "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+                "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+                "game_context": {"is_playoff": False, "rest_days": 2},
+                "odds": {"moneyline_home": -150, "moneyline_away": 130},
+            },
+            session_id="sess-preflight-smoke",
+            bankroll=1000.0,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return [f"Formal output smoke failed: {exc}"]
+
+    result = trace.get("result") or {}
+    if result.get("status") != "success":
+        return [f"Formal output smoke returned status={result.get('status')!r}"]
+    if not trace.get("trace_id", "").startswith("sandbox-"):
+        return ["Formal output smoke did not return an engine-minted sandbox trace_id"]
+    if not result.get("edges"):
+        return ["Formal output smoke returned no deterministic edge rows"]
+    return []
+
+
+def run_formal_output_gate(
+    *,
+    require_mcp: bool = True,
+    repo_root: Path | None = None,
+    repair_from_git: bool = False,
+    force_repair: bool = False,
+) -> list[str]:
+    """Hard gate for betting-grade output: clean preflight + engine smoke."""
+    if repo_root is None:
+        repo_root = Path(__file__).parent.parent
+
+    failures = run_checks(
+        require_mcp=require_mcp,
+        repo_root=repo_root,
+        repair_from_git=repair_from_git,
+        force_repair=force_repair,
+    )
+    if failures:
+        return failures
+
+    tracked_files, git_failures = _tracked_python_files(repo_root)
+    if git_failures:
+        return git_failures
+    diverged = _diverged_tracked_files(repo_root, tracked_files)
+    if diverged:
+        return [
+            "Formal output gate requires clean source parity with git HEAD. "
+            "Run non-formal research only or repair/commit intentional source "
+            f"changes first. Diverged tracked Python files: {', '.join(diverged)}"
+        ]
+
+    return check_formal_output_smoke()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verify Omega Cowork runtime dependencies before engine execution.",
@@ -457,15 +524,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Allow --repair-from-git to clobber all divergent tracked Python files.",
     )
+    parser.add_argument(
+        "--formal-output-gate",
+        action="store_true",
+        help="Require clean preflight plus deterministic smoke before Bet Cards.",
+    )
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).parent.parent
-    failures = run_checks(
-        require_mcp=not args.direct_only,
-        repo_root=repo_root,
-        repair_from_git=args.repair_from_git,
-        force_repair=args.force_repair,
-    )
+    if args.formal_output_gate:
+        failures = run_formal_output_gate(
+            require_mcp=not args.direct_only,
+            repo_root=repo_root,
+            repair_from_git=args.repair_from_git,
+            force_repair=args.force_repair,
+        )
+    else:
+        failures = run_checks(
+            require_mcp=not args.direct_only,
+            repo_root=repo_root,
+            repair_from_git=args.repair_from_git,
+            force_repair=args.force_repair,
+        )
     if failures:
         print("cowork_preflight_failed:")
         for failure in failures:

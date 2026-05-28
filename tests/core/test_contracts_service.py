@@ -346,6 +346,59 @@ class TestAnalyzeTraceEnvelope:
         assert trace["trace_quality"]["calibration_eligible"] is False
         assert "baseline_default_context" in trace["trace_quality"]["calibration_exclusion_reasons"]
 
+    def test_analyze_skips_invalid_basketball_fractional_ratings_before_dispatch(self):
+        trace = analyze(
+            {
+                "home_team": "Dallas Wings",
+                "away_team": "Las Vegas Aces",
+                "league": "WNBA",
+                "n_iterations": 100,
+                "seed": 42,
+                "home_context": {"off_rating": 0.462, "def_rating": 0.504, "pace": 69.6},
+                "away_context": {"off_rating": 0.504, "def_rating": 0.462, "pace": 69.8},
+                "game_context": {"is_playoff": False, "rest_days": 1},
+                "odds": {"moneyline_home": 154, "moneyline_away": -185},
+            },
+            session_id="sess-invalid-context",
+            bankroll=1000.0,
+        )
+
+        assert trace["result"]["status"] == "skipped"
+        assert "Invalid simulation context" in trace["result"]["skip_reason"]
+        assert trace["trace_quality"]["calibration_eligible"] is False
+        assert "engine_skipped" in trace["trace_quality"]["calibration_exclusion_reasons"]
+
+    def test_analyze_accepts_structured_mlb_context_fields(self):
+        trace = analyze(
+            {
+                "home_team": "Texas Rangers",
+                "away_team": "Houston Astros",
+                "league": "MLB",
+                "n_iterations": 200,
+                "seed": 42,
+                "home_context": {
+                    "off_rating": 4.5,
+                    "def_rating": 4.2,
+                    "starter_era": 3.45,
+                    "park_factor": 1.02,
+                    "weather_wind_mph": 8.0,
+                },
+                "away_context": {
+                    "off_rating": 4.1,
+                    "def_rating": 4.4,
+                    "starter_era": 4.10,
+                },
+                "game_context": {"is_playoff": False, "rest_days": 4},
+                "odds": {"moneyline_home": -120, "moneyline_away": 105},
+            },
+            session_id="sess-mlb-context",
+            bankroll=1000.0,
+        )
+
+        assert trace["result"]["status"] == "success"
+        assert trace["input_snapshot"]["home_context"]["starter_era"] == pytest.approx(3.45)
+        assert trace["input_snapshot"]["home_context"]["weather_wind_mph"] == pytest.approx(8.0)
+
     def test_markov_live_evidence_uses_transition_path_only(self, monkeypatch):
         monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "live")
         signal = EvidenceSignal(
@@ -720,6 +773,30 @@ class TestGameMarkets:
         total = next(edge for edge in resp.edges if edge.market == "total" and edge.side == "over")
         assert spread.line == pytest.approx(-2.5)
         assert total.line == pytest.approx(218.5)
+
+    def test_wnba_total_market_is_suppressed_without_best_bet_exception(self):
+        req = GameAnalysisRequest(
+            home_team="Dallas Wings",
+            away_team="Las Vegas Aces",
+            league="WNBA",
+            n_iterations=300,
+            seed=42,
+            home_context={"off_rating": 105.0, "def_rating": 102.0, "pace": 82.0},
+            away_context={"off_rating": 108.0, "def_rating": 101.0, "pace": 82.0},
+            game_context={"is_playoff": False, "rest_days": 1},
+            odds=OddsInput(
+                over_under=166.5,
+                total_over_price=-110,
+                total_under_price=-110,
+            ),
+        )
+
+        resp = analyze_game(req)
+
+        assert resp.status == "success"
+        assert resp.edges == []
+        assert resp.best_bet is None
+        assert resp.metadata.suppressed_markets == ["WNBA:total"]
 
 
 # ---------------------------------------------------------------------------

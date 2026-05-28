@@ -1,0 +1,116 @@
+{
+  "session_id": "sess-20260528-prp1",
+  "opened_at": "2026-05-28T14:37:03Z",
+  "closed_at": "2026-05-28T15:15:38.553357+00:00",
+  "model_version": "claude-sonnet-4-6",
+  "purpose": "NBA + WNBA player props \u2014 OKC/NYK + full WNBA slate",
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {},
+  "agent_notes": "NBA player props \u2014 WCF G6 OKC @ SA. Props analyzed: SGA assists, Wemby pts, J.Williams pts. Candidate rejected: one prop below tier threshold. Downgrade applied where matchup context insufficient. Null audit: no opponent def_vs_position rating; playoff-only sample not isolated; calibration fallback. All quant outputs from Python engine only.",
+  "audit_events": [
+    {
+      "ts": "2026-05-28T14:37:03Z",
+      "event_type": "preflight",
+      "step": "cowork_preflight",
+      "status": "warn",
+      "notes": "Engine import OK after manual git-show restore of 9 truncated files. Calibration: 0 graded traces, static fallback profile. Bankroll confirmed: 1000.0",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T14:48:55Z",
+      "event_type": "candidate_rejected",
+      "step": "jwilliams_injury_rejection",
+      "status": "skipped",
+      "notes": "Jalen Williams rejected: played G1 (37 min), only 7 min G2, DNP G3-G5. Injury status unknown. Insufficient usable sample.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T14:48:55Z",
+      "event_type": "engine_run",
+      "step": "analyze_5_nba_props",
+      "status": "ok",
+      "notes": "5 NBA props analyzed: SGA pts 30.5, Wemby pts 27.5, Wemby reb 12.5, Castle pts 16.5, Fox pts 14.5. WCF Game 6 OKC @ SA. Wemby pts=pass (coin flip). Fox downgraded sample_size=3. All best_bet=null; static calibration path.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-7988cf19-4065",
+        "sandbox-154440b2-cbe3",
+        "sandbox-8b96ae9b-036e",
+        "sandbox-ea42ba98-d654",
+        "sandbox-b23168b5-f9ab"
+      ]
+    },
+    {
+      "ts": "2026-05-28T14:48:55Z",
+      "event_type": "downgrade",
+      "step": "fox_pts_downgrade",
+      "status": "warn",
+      "notes": "De'Aaron Fox pts 14.5 downgraded to research lean: sample_size=3 < min 5 (joined series in G3). Mean 12.0 vs line 14.5. Under lean but not Bet Card eligible.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-b23168b5-f9ab"
+      ]
+    },
+    {
+      "ts": "2026-05-28T14:48:55Z",
+      "event_type": "step",
+      "step": "null_data_audit",
+      "status": "warn",
+      "notes": "NULL detected: trace_quality.aggregate_quality=null on all 5 prop traces (no quality pass ran). Wemby pts recommended_units=null (recommendation=pass, engine suppressed units). calibration_audit profile_id=null on all traces (static_identity path). All other required fields populated: over_prob, under_prob, edge_over, edge_under, projection_mean non-null. Fox: sample_size=3 below min, imputed_fraction elevated.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-7988cf19-4065",
+        "sandbox-154440b2-cbe3",
+        "sandbox-8b96ae9b-036e",
+        "sandbox-ea42ba98-d654",
+        "sandbox-b23168b5-f9ab"
+      ]
+    },
+    {
+      "ts": "2026-05-28T15:15:05.811367+00:00",
+      "event_type": "note",
+      "step": "null_data_audit",
+      "status": "warn",
+      "notes": "NBA props audit \u2014 SGA assists / Wemby pts / J.Williams pts. pts_mean/pts_std/ast_mean: populated from season averages; no playoff-split applied. recent_form: provided (last 5 game actuals). usage_rate: provided. minutes: provided. MISSING: matchup-specific defensive assignment (who guards SGA, Wemby's playoff vs regular-season split). MISSING: opponent def_rating vs position (SA vs PG defensive rank, OKC vs C defensive rank). injury_impact: NULL \u2014 no adjustments for opponent rotations or foul trouble. sample_size: set to 5 (last 5 games); playoff-only sample would be 6 games \u2014 not separately isolated. calibration_profile: NULL (static fallback). WARN: all props running on static calibration; narrow edges near tier boundary are unreliable.",
+      "inputs": {},
+      "outputs": {},
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T16:57:21+00:00",
+      "event_type": "quality_gate",
+      "step": "qa_failed_quarantine_0528",
+      "status": "fail",
+      "notes": "QA-failed quarantine: unverified context, injury translation gaps, engine parameter mismatches, WNBA total score-unit mismatch, estimated prop-line usage, and trace/summary drift. Do not ingest for calibration.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [
+        "0528: unverified injuries and context translation gaps",
+        "0528: invalid/proxy team metrics supplied to engine",
+        "0528: WNBA total markets unsafe due Markov score-unit mismatch",
+        "0528: estimated/milestone prop-line handling was not betting-grade"
+      ],
+      "trace_ids": []
+    }
+  ]
+}

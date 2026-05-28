@@ -1,0 +1,104 @@
+{
+  "trace": {
+    "trace_id": "sandbox-ea42ba98-d654",
+    "session_id": "sess-20260528-prp1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-28T14:48:39.096754+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Stephon Castle",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 16.5,
+      "odds_over": -130.0,
+      "odds_under": -105.0,
+      "player_context": {
+        "pts_mean": 18.6,
+        "pts_std": 5.6,
+        "sample_size": 5,
+        "opponent_def_rank": 3
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2
+      },
+      "n_iterations": 10000,
+      "seed": 1582118426,
+      "evidence": [
+        {
+          "signal_type": "home_away_split",
+          "category": "situational",
+          "plane": "player",
+          "value": "Castle home G3=14,G4=13 avg 13.5; away 17,25,24",
+          "source": "espn.com",
+          "confidence": 0.85,
+          "window": "series",
+          "direction": "under",
+          "stat_key": "pts",
+          "note": null
+        },
+        {
+          "signal_type": "series_avg",
+          "category": "player_form",
+          "plane": "player",
+          "value": 18.6,
+          "source": "espn.com",
+          "confidence": 0.85,
+          "window": "series",
+          "direction": "over",
+          "stat_key": "pts",
+          "note": null
+        }
+      ],
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-28"
+    },
+    "result": {
+      "player_name": "Stephon Castle",
+      "prop_type": "pts",
+      "line": 16.5,
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-28",
+      "status": "success",
+      "projection_mean": 17.838,
+      "over_prob": 0.5996,
+      "under_prob": 0.4004,
+      "edge_over": 3.44,
+      "edge_under": -11.18,
+      "recommendation": "over",
+      "confidence_tier": "A",
+      "recommended_units": 3.95,
+      "best_bet": null
+    },
+    "downgrades": []
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "espn.com",
+      "the-odds-api:betmgm"
+    ],
+    "fields_gathered": [
+      "pts_mean",
+      "pts_std",
+      "sample_size",
+      "opponent_def_rank",
+      "is_playoff",
+      "rest_days"
+    ],
+    "missing_fields": [],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": -130,
+      "odds_under": -105
+    }
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "Castle series mean 18.6 above line. Home split unfavorable (13.5 avg at SA). Conflicting signals; engine leans Over on mean but home split leans Under.",
+  "trace_quality": {
+    "aggregate_quality": null
+  },
+  "bet_record": null
+}

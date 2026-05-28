@@ -40,9 +40,11 @@ if str(_REPO_ROOT) not in sys.path:
 
 from omega.trace.bet_record import BetRecord  # noqa: E402
 from omega.trace.persistable import PersistableTrace  # noqa: E402
+from omega.trace.session_sidecar import SessionSidecar  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 logger = logging.getLogger("ingest_traces")
+_QA_FAILED_FORCED_REASON = "qa_failed_forced_ingest"
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +239,55 @@ def _warn_reasoning_inputs(analyze_out: dict) -> None:
             )
 
 
-def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> tuple[str, str | None]:
+def _session_has_failed_quality_gate(
+    sidecar_dir: Path | None,
+    session_id: str | None,
+) -> bool:
+    if sidecar_dir is None or not session_id:
+        return False
+    path = sidecar_dir / f"{session_id}.json"
+    if not path.exists():
+        return False
+    sidecar = SessionSidecar.from_path(path)
+    return any(
+        event.event_type == "quality_gate" and event.status == "fail"
+        for event in sidecar.audit_events
+    )
+
+
+def _append_once(values: list[Any], value: str) -> list[Any]:
+    return values if value in values else [*values, value]
+
+
+def _force_trace_calibration_ineligible(adapted: dict[str, Any]) -> None:
+    """Persist forced QA-failed ingest traces as permanently fitter-invisible."""
+    trace_quality = dict(adapted.get("trace_quality") or {})
+    reasons = list(trace_quality.get("calibration_exclusion_reasons") or [])
+    downgrades = list(trace_quality.get("downgrades") or adapted.get("downgrades") or [])
+
+    trace_quality["calibration_eligible"] = False
+    trace_quality["passed"] = False
+    trace_quality["calibration_exclusion_reasons"] = _append_once(
+        reasons,
+        _QA_FAILED_FORCED_REASON,
+    )
+    trace_quality["downgrades"] = _append_once(downgrades, _QA_FAILED_FORCED_REASON)
+
+    adapted["trace_quality"] = trace_quality
+    adapted["downgrades"] = _append_once(
+        list(adapted.get("downgrades") or []),
+        _QA_FAILED_FORCED_REASON,
+    )
+
+
+def ingest_file(
+    path: Path,
+    store: TraceStore,
+    dry_run: bool = False,
+    *,
+    sidecar_dir: Path | None = _REPO_ROOT / "inbox" / "sessions",
+    force_ingest_qa_failed: bool = False,
+) -> tuple[str, str | None]:
     """Ingest one file. Returns (trace_id, bet_id or None). Raises on error."""
     payload = _load_payload(path)
     _merge_top_level_compat_fields(payload)
@@ -260,6 +310,20 @@ def ingest_file(path: Path, store: TraceStore, dry_run: bool = False) -> tuple[s
     _warn_prop_identity(adapted)
     _warn_empty_evidence(adapted)
     _warn_reasoning_inputs(analyze_out)
+
+    session_id = adapted.get("session_id")
+    qa_failed = _session_has_failed_quality_gate(
+        sidecar_dir,
+        str(session_id) if session_id else None,
+    )
+    if qa_failed and not force_ingest_qa_failed:
+        raise ValueError(
+            f"Session {session_id} has a failed quality_gate sidecar event. "
+            "Ingest is blocked by default; use --force-ingest-qa-failed only "
+            "for audit storage."
+        )
+    if qa_failed:
+        _force_trace_calibration_ineligible(adapted)
 
     # Pre-persist validation: a bet_record on a prop trace must come with
     # full game identity (BUG-4 defense). Warnings about line/odds drift
@@ -352,6 +416,20 @@ def main() -> int:
         action="store_true",
         help="Parse and adapt but skip writes; do not move files",
     )
+    parser.add_argument(
+        "--sidecar-dir",
+        type=Path,
+        default=_REPO_ROOT / "inbox" / "sessions",
+        help="Directory containing <session_id>.json sidecars for QA gates",
+    )
+    parser.add_argument(
+        "--force-ingest-qa-failed",
+        action="store_true",
+        help=(
+            "Allow ingest of QA-failed sessions for audit storage. Persisted "
+            "traces are forced calibration-ineligible."
+        ),
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -379,7 +457,13 @@ def main() -> int:
 
     for path in files:
         try:
-            trace_id, bet_id = ingest_file(path, store, dry_run=args.dry_run)
+            trace_id, bet_id = ingest_file(
+                path,
+                store,
+                dry_run=args.dry_run,
+                sidecar_dir=args.sidecar_dir,
+                force_ingest_qa_failed=args.force_ingest_qa_failed,
+            )
         except Exception as exc:  # noqa: BLE001 — we want to capture every failure
             failed += 1
             logger.warning("FAILED %s: %s", path.name, exc)

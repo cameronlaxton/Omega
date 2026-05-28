@@ -22,7 +22,7 @@ Then read `reports/latest.md` — specifically:
 ## Step 1 — Preflight
 
 ```bash
-python scripts/cowork_preflight.py
+python scripts/cowork_preflight.py --formal-output-gate
 ```
 
 Mint session ID: `sess-YYYYMMDD-nba1` (replace date with today's date, e.g. `sess-20260528-nba1`).
@@ -46,6 +46,18 @@ Default book: BetMGM. Append `data_provenance` events per source used. Never exp
 ## Step 3 — Gather evidence (NBA)
 
 Express all material evidence as typed `EvidenceSignal` objects. Never bake adjustments into hand-tuned context means.
+
+Injury/news protocol: when you identify an anomaly such as an ankle/hamstring
+restriction, questionable status, minutes limit, or role change, translate it
+before `analyze()` into usage/minutes assumptions, `game_context` fields, and
+typed `EvidenceSignal` records. If you cannot quantify the impact on
+`off_rating`, pace, `pts_mean`, usage, or minutes from cited pre-decision
+sources, append a `quality_gate/null_data_audit` event and downgrade the
+candidate to research-only.
+
+Basketball `home_context` and `away_context` require possession-adjusted
+ratings (`off_rating`, `def_rating`, `pace`). Do not pass raw FG%, opponent
+FG%, or other fractional proxies as ratings.
 
 **For game plane (`plane="game"`) — Markov-approved signal types only:**
 

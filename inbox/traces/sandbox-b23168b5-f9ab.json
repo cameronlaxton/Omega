@@ -1,0 +1,96 @@
+{
+  "trace": {
+    "trace_id": "sandbox-b23168b5-f9ab",
+    "session_id": "sess-20260528-prp1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-28T14:48:39.105397+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "De'Aaron Fox",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 14.5,
+      "odds_over": -125.0,
+      "odds_under": -105.0,
+      "player_context": {
+        "pts_mean": 12.0,
+        "pts_std": 3.1,
+        "sample_size": 3,
+        "opponent_def_rank": 3
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2
+      },
+      "n_iterations": 10000,
+      "seed": 2157717185,
+      "evidence": [
+        {
+          "signal_type": "recent_trend",
+          "category": "player_form",
+          "plane": "player",
+          "value": "Fox G3=15,G4=12,G5=9 declining",
+          "source": "espn.com",
+          "confidence": 0.75,
+          "window": "last_3",
+          "direction": "under",
+          "stat_key": "pts",
+          "note": null
+        }
+      ],
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-28"
+    },
+    "result": {
+      "player_name": "De'Aaron Fox",
+      "prop_type": "pts",
+      "line": 14.5,
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-28",
+      "status": "success",
+      "projection_mean": 11.5351,
+      "over_prob": 0.157,
+      "under_prob": 0.843,
+      "edge_over": -39.86,
+      "edge_under": 33.08,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "recommended_units": 5.0,
+      "best_bet": null
+    },
+    "downgrades": [
+      "sample_size=3 < min 5; research lean only"
+    ]
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "espn.com",
+      "the-odds-api:betmgm"
+    ],
+    "fields_gathered": [
+      "pts_mean",
+      "pts_std",
+      "sample_size",
+      "opponent_def_rank",
+      "is_playoff",
+      "rest_days"
+    ],
+    "missing_fields": [
+      "sample_size_low"
+    ],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": -125,
+      "odds_under": -105
+    }
+  },
+  "reasoning_downgrade_rationale": "sample_size=3 < min 5; research lean only",
+  "reasoning_narrative": "Fox declining trend n=3 (joined series in G3). Mean 12.0 vs line 14.5. DOWNGRADED: sample_size < 5.",
+  "trace_quality": {
+    "aggregate_quality": null
+  },
+  "bet_record": null
+}

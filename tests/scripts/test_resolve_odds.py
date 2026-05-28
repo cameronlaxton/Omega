@@ -140,6 +140,23 @@ def test_resolve_prop_returns_exact_betmgm_patch():
     assert result["request_patch"] == {"line": 27.5, "odds_over": -115, "odds_under": -105}
 
 
+def test_resolve_wnba_points_prop_uses_standard_ou_market():
+    result = resolve_odds(
+        kind="prop",
+        league="WNBA",
+        home_team="Los Angeles Lakers",
+        away_team="Boston Celtics",
+        player_name="Jayson Tatum",
+        prop_type="pts",
+        line=27.5,
+        client=FakeOddsClient(),
+    )
+
+    assert result["status"] == "success"
+    assert result["request_patch"] == {"line": 27.5, "odds_over": -115, "odds_under": -105}
+    assert {q["provider_market_key"] for q in result["quotes"]} == {"player_points"}
+
+
 def test_resolve_prop_does_not_fallback_when_betmgm_market_missing():
     result = resolve_odds(
         kind="prop",

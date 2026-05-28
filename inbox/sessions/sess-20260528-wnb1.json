@@ -1,0 +1,179 @@
+{
+  "session_id": "sess-20260528-wnb1",
+  "opened_at": "2026-05-28T15:04:51Z",
+  "closed_at": "2026-05-28T15:15:38.597325+00:00",
+  "model_version": "omega-core-phase6h",
+  "purpose": "WNBA regular season game + props analysis \u2014 2026-05-28",
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {},
+  "agent_notes": "WNBA regular season slate \u2014 2 games + 3 player props. Games: LV Aces @ Dallas Wings, Indiana Fever @ GS Valkyries. Props: A'ja Wilson pts 24.5 (pass), Paige Bueckers pts 19.5 (under, tier-A, 3.07u), Caitlin Clark pts 21.5 (over, tier-A, 5.0u \u2014 LINE ESTIMATED, verify before acting). Total market suppressed both games: Markov ~25 internal units incompatible with real WNBA totals. Valid edges: Wings ML +154 (tier-A), Wings +4.5 (tier-A), Fever +1.5 (tier-A). Null audit: injury_impact NULL; Clark line estimated; no opponent def_vs_position; calibration fallback. All quant outputs from Python engine only.",
+  "audit_events": [
+    {
+      "ts": "2026-05-28T15:04:51.543249+00:00",
+      "event_type": "preflight",
+      "step": "engine_check",
+      "status": "ok",
+      "notes": "markov_state backend confirmed; static_identity calibration (0 graded traces); WNBA season 2026 week 6",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T15:04:51.543281+00:00",
+      "event_type": "data_provenance",
+      "step": "odds_and_stats",
+      "status": "ok",
+      "notes": "Odds: DraftKings via ESPN core API. Stats: ESPN scoreboard season averages (5-7 games). off_rating=FG%, def_rating=opponent FG% (proxy; direct defensive rating unavailable). pace=FGA/game (proxy). rest_days=1 assumed (no schedule lookup performed).",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T15:04:59.195438+00:00",
+      "event_type": "engine_run",
+      "step": "game_analysis",
+      "status": "ok",
+      "notes": "Ran 2 WNBA games. G1 sandbox-1c4aee30-4398: Wings ML+154 edge+9.23% tier-A; Wings +4.5 edge+17.92% tier-A. G2 sandbox-59688662-98a4: Fever +1.5 edge+5.92% tier-A; Fever ML+105 tier-Pass (below threshold). G2 total market DOWNGRADED (Markov unit scaling).",
+      "inputs": null,
+      "outputs": {
+        "traces": [
+          "sandbox-1c4aee30-4398",
+          "sandbox-59688662-98a4"
+        ]
+      },
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T15:04:59.195455+00:00",
+      "event_type": "downgrade",
+      "step": "total_market_suppression",
+      "status": "warn",
+      "notes": "Game 2 (sandbox-59688662-98a4): Under 166.5 showed edge=33.08% / EV=63.7% \u2014 artifact. Markov backend predicts ~25 internal pts/game vs real WNBA total 166.5. Total market suppressed for both WNBA games; ML + spread edges valid.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T15:04:59.195458+00:00",
+      "event_type": "note",
+      "step": "null_data_audit",
+      "status": "warn",
+      "notes": "NULL/MISSING context audit: (1) def_rating: direct defensive efficiency unavailable from ESPN scoreboard; FG% used as proxy. (2) pace: direct possession data unavailable; FGA/game used as proxy. (3) rest_days: assumed=1 for all teams \u2014 no schedule lookup performed. (4) injury status: not verified pre-game. (5) home/away split stats: not factored into team contexts.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T15:05:18.167684+00:00",
+      "event_type": "downgrade",
+      "step": "total_market_suppression_g1",
+      "status": "warn",
+      "notes": "Game 1 (sandbox-1c4aee30-4398): Under 178.5 showed edge=33.78% \u2014 same Markov unit scaling artifact as Game 2. Total suppressed. Valid bets: Wings ML, Wings +4.5 only.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T15:10:43.196176+00:00",
+      "event_type": "engine_run",
+      "step": "prop_analysis",
+      "status": "ok",
+      "notes": "3 WNBA props. Wilson 24.5 (sandbox-63de750e-c947): rec=None tier=None. Bueckers 19.5 (sandbox-e35e6983-4c4f): rec=None tier=None. Clark 21.5 (sandbox-3290304e-4446): rec=None tier=None [line ESTIMATED].",
+      "inputs": null,
+      "outputs": {
+        "prop_traces": [
+          "sandbox-63de750e-c947",
+          "sandbox-e35e6983-4c4f",
+          "sandbox-3290304e-4446"
+        ]
+      },
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T15:10:43.196195+00:00",
+      "event_type": "note",
+      "step": "null_data_audit",
+      "status": "warn",
+      "notes": "WNBA prop NULL audit: (1) No standard O/U prop lines available \u2014 only DK milestone props. Clark line ESTIMATED (21.5); Wilson/Bueckers derived from milestones. (2) Bueckers: high variance game (std=6.8), outlier 7-pt game in L3. (3) Clark: only 5 games sample. (4) No opponent defensive prop splits available.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T15:11:53.433673+00:00",
+      "event_type": "engine_run",
+      "step": "prop_analysis",
+      "status": "ok",
+      "notes": "3 WNBA props. Wilson 24.5 (sandbox-a3a3bd77-89a6): rec=pass tier=None. Bueckers 19.5 (sandbox-ac3d4861-2ce8): rec=under tier=A. Clark 21.5 (sandbox-f39d6de8-990e): rec=over tier=A [line ESTIMATED].",
+      "inputs": null,
+      "outputs": {
+        "prop_traces": [
+          "sandbox-a3a3bd77-89a6",
+          "sandbox-ac3d4861-2ce8",
+          "sandbox-f39d6de8-990e"
+        ]
+      },
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T15:11:53.433699+00:00",
+      "event_type": "note",
+      "step": "null_data_audit",
+      "status": "warn",
+      "notes": "WNBA prop NULL audit: (1) No standard O/U prop lines \u2014 only DK milestone props; Clark line ESTIMATED. (2) Bueckers: high variance (std=6.8), 7-pt outlier in L3 \u2014 unstable std estimate. (3) Clark: only n=5 games; pts_std may overfit. (4) No opponent defensive splits vs specific stat available. (5) injury status unverified for all players.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T15:15:17.448234+00:00",
+      "event_type": "note",
+      "step": "null_data_audit",
+      "status": "warn",
+      "notes": "WNBA consolidated quality_gate audit \u2014 both games + 3 props. is_playoff: False (regular season). rest_days: provided. pace: provided. injury_impact: NULL \u2014 no specific player-level injury adjustments applied. Aces: Cooper-Dyke injury not quantified in context (assumed healthy roster). Wings: no injury flags applied despite thin roster depth. WNBA season averages used for pts_mean/pts_std \u2014 sample_size=5 for recent form. MISSING: opponent def_vs_position rating (none of the three prop traces include matchup-specific defensive rank). MISSING: home/away split for WNBA (new franchises like Wings and Valkyries have limited home game data). Caitlin Clark line (21.5): ESTIMATED from ESPN milestone threshold movement \u2014 no standard O/U line available. Total market: SUPPRESSED for both games (Markov ~25 internal scoring units incompatible with real WNBA totals 166-178). calibration_profile: NULL (static fallback). CRITICAL: Clark prop line is estimated \u2014 verify against live book before acting.",
+      "inputs": {},
+      "outputs": {},
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T16:57:21+00:00",
+      "event_type": "quality_gate",
+      "step": "qa_failed_quarantine_0528",
+      "status": "fail",
+      "notes": "QA-failed quarantine: unverified context, injury translation gaps, engine parameter mismatches, WNBA total score-unit mismatch, estimated prop-line usage, and trace/summary drift. Do not ingest for calibration.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [
+        "0528: unverified injuries and context translation gaps",
+        "0528: invalid/proxy team metrics supplied to engine",
+        "0528: WNBA total markets unsafe due Markov score-unit mismatch",
+        "0528: estimated/milestone prop-line handling was not betting-grade"
+      ],
+      "trace_ids": []
+    }
+  ]
+}

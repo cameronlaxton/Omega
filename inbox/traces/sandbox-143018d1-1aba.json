@@ -1,0 +1,105 @@
+{
+  "trace": {
+    "trace_id": "sandbox-143018d1-1aba",
+    "session_id": "sess-20260528-mlb1",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-28T14:54:24.801246+00:00",
+    "kind": "prop",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Spencer Arrighetti",
+      "league": "MLB",
+      "prop_type": "strikeouts_pitched",
+      "line": 5.5,
+      "odds_over": 110.0,
+      "odds_under": -150.0,
+      "player_context": {
+        "strikeouts_pitched_mean": 5.7,
+        "strikeouts_pitched_std": 2.4,
+        "sample_size": 7,
+        "is_playoff": false,
+        "rest_days": 4,
+        "opponent_def_rank": 20
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 4
+      },
+      "n_iterations": 10000,
+      "seed": 1598522017,
+      "evidence": [
+        {
+          "signal_type": "series_avg",
+          "category": "player_form",
+          "plane": "player",
+          "value": 5.7,
+          "source": "espn.com",
+          "confidence": 0.8,
+          "window": "last_10",
+          "direction": "over",
+          "stat_key": "strikeouts_pitched",
+          "note": null
+        },
+        {
+          "signal_type": "recent_form",
+          "category": "player_form",
+          "plane": "player",
+          "value": "Arrighetti last 3: 8,3,10 K \u2014 last game 10 Ks",
+          "source": "espn.com",
+          "confidence": 0.7,
+          "window": "last_3",
+          "direction": "over",
+          "stat_key": "strikeouts_pitched",
+          "note": null
+        }
+      ],
+      "home_team": "Texas Rangers",
+      "away_team": "Houston Astros",
+      "game_date": "2026-05-28"
+    },
+    "result": {
+      "player_name": "Spencer Arrighetti",
+      "prop_type": "strikeouts_pitched",
+      "line": 5.5,
+      "home_team": "Texas Rangers",
+      "away_team": "Houston Astros",
+      "game_date": "2026-05-28",
+      "status": "success",
+      "projection_mean": 5.7084,
+      "over_prob": 0.502,
+      "under_prob": 0.498,
+      "edge_over": 2.58,
+      "edge_under": -10.2,
+      "recommendation": "pass",
+      "confidence_tier": null,
+      "recommended_units": null
+    },
+    "downgrades": []
+  },
+  "reasoning_inputs": {
+    "sources": [
+      "espn.com",
+      "the-odds-api:betmgm"
+    ],
+    "fields_gathered": [
+      "strikeouts_pitched_mean",
+      "strikeouts_pitched_std",
+      "sample_size",
+      "is_playoff",
+      "rest_days",
+      "opponent_def_rank"
+    ],
+    "missing_fields": [],
+    "market_context": {
+      "book": "betmgm",
+      "odds_over": 110,
+      "odds_under": -150
+    }
+  },
+  "reasoning_downgrade_rationale": null,
+  "reasoning_narrative": "Arrighetti K mean 5.7 above line 5.5. Elite ERA (1.32) suggests dominance. Last start: 10 Ks.",
+  "trace_quality": {
+    "aggregate_quality": null
+  },
+  "bet_record": null
+}

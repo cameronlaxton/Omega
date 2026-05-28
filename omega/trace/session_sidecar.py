@@ -28,6 +28,7 @@ _VALID_EVENT_TYPES: frozenset[str] = frozenset({
     "engine_run",
     "candidate_rejected",
     "downgrade",
+    "quality_gate",
     "rationale",
     "bug",
     "command",
@@ -151,3 +152,37 @@ def append_audit_events(path: Path, events: list[dict[str, Any]]) -> None:
     sidecar = SessionSidecar.from_path(path)
     sidecar.audit_events.extend(validated)
     atomic_write_text(path, json.dumps(sidecar.model_dump(mode="json"), indent=2))
+
+
+def append_null_data_audit(
+    path: Path,
+    missing_variables: list[str],
+    *,
+    critical: bool = False,
+    trace_ids: list[str] | None = None,
+) -> None:
+    """Append a structured NULL/missing-data audit event.
+
+    ``missing_variables`` must contain variable names or paths only. Protected
+    engine-owned numeric values remain in traces/ledger rows, not sidecar prose.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
+    variables = [str(v) for v in missing_variables if str(v).strip()]
+    notes = (
+        "NULL detected: " + ", ".join(variables)
+        if variables
+        else "NULL audit ran: no missing variables detected"
+    )
+    append_audit_events(
+        path,
+        [
+            {
+                "ts": now,
+                "event_type": "quality_gate",
+                "step": "null_data_audit",
+                "status": "fail" if critical else "warn",
+                "notes": notes,
+                "trace_ids": trace_ids or [],
+            }
+        ],
+    )

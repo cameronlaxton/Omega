@@ -1,0 +1,145 @@
+{
+  "session_id": "sess-20260528-mlb1",
+  "opened_at": "2026-05-28T14:37:03Z",
+  "closed_at": "2026-05-28T15:15:38.565066+00:00",
+  "model_version": "claude-sonnet-4-6",
+  "purpose": "MLB daily \u2014 game lines + player props",
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {},
+  "agent_notes": "MLB regular season slate \u2014 full game bets + pitcher K props. Engine: fast_score (games), markov_state (K props). CRITICAL BUGS ACTIVE: def_rating inverted (engine.py:648-649) and draw_prob leak (~13%); all game-line and run-line edges are CORRUPT. Do NOT act on game-line outputs from this session. K prop edges may still be valid (not affected by game-line bugs). Null audit: no park factors, no bullpen fatigue, no weather; calibration fallback. Flagged in downgrade events and null_data_audit.",
+  "audit_events": [
+    {
+      "ts": "2026-05-28T14:37:03Z",
+      "event_type": "preflight",
+      "step": "cowork_preflight",
+      "status": "warn",
+      "notes": "Engine import OK after manual git-show restore of 9 truncated files. Calibration: 0 graded traces, static fallback profile. Bankroll confirmed: 1000.0",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T14:52:49Z",
+      "event_type": "step",
+      "step": "bug5_gate_check",
+      "status": "ok",
+      "notes": "test_spread_edge_uses_cover_prob_not_moneyline_prob PASSED. Run-line edges are trustworthy.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T14:52:49Z",
+      "event_type": "engine_run",
+      "step": "analyze_3_mlb_games",
+      "status": "ok",
+      "notes": "ATL@BOS, HOU@TEX, CHC@PIT analyzed. ATL ML best_bet confirmed. HOU/TEX and CHC/PIT totals downgraded: season RS/G context inflates total projection.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-5bc12e6d-9106",
+        "sandbox-9577f5e8-0ac3",
+        "sandbox-54cde86d-8459"
+      ]
+    },
+    {
+      "ts": "2026-05-28T14:52:49Z",
+      "event_type": "downgrade",
+      "step": "mlb_total_context_quality",
+      "status": "warn",
+      "notes": "HOU@TEX Over 7.0 and CHC@PIT Over 7.5 downgraded: off_rating/def_rating inputs are team season RS/G averages. fast_score backend does not apply starter_era evidence to total projection. Arrighetti (1.32 ERA) and Skenes (3.00 ERA) create downward total pressure not captured in context. Total market outputs for these two games are research-only.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-9577f5e8-0ac3",
+        "sandbox-54cde86d-8459"
+      ]
+    },
+    {
+      "ts": "2026-05-28T14:52:49Z",
+      "event_type": "step",
+      "step": "null_data_audit",
+      "status": "warn",
+      "notes": "NULL detected: trace_quality.aggregate_quality=null on all 3 MLB game traces. calibration_audit profile_id=null (static_identity, no fitted MLB profile). CHC@PIT and HOU@TEX: missing_fields=[pitcher_adjusted_run_expectancy]. All model_prob and recommended_units populated.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-5bc12e6d-9106",
+        "sandbox-9577f5e8-0ac3",
+        "sandbox-54cde86d-8459"
+      ]
+    },
+    {
+      "ts": "2026-05-28T14:54:24Z",
+      "event_type": "engine_run",
+      "step": "analyze_3_mlb_props",
+      "status": "ok",
+      "notes": "Arrighetti K 5.5, Sale K 7.5, Skenes K 6.5 analyzed. All pitcher_strikeouts props. n>=7 for all.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-143018d1-1aba",
+        "sandbox-f67c055d-4171",
+        "sandbox-2555af3c-e104"
+      ]
+    },
+    {
+      "ts": "2026-05-28T14:54:24Z",
+      "event_type": "step",
+      "step": "null_data_audit",
+      "status": "warn",
+      "notes": "NULL detected: trace_quality.aggregate_quality=null on all 3 MLB prop traces. calibration_audit profile_id=null (no fitted MLB profile). All projection_mean, over_prob, under_prob non-null. recommended_units populated.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-143018d1-1aba",
+        "sandbox-f67c055d-4171",
+        "sandbox-2555af3c-e104"
+      ]
+    },
+    {
+      "ts": "2026-05-28T15:15:05.831372+00:00",
+      "event_type": "note",
+      "step": "null_data_audit",
+      "status": "warn",
+      "notes": "MLB slate audit \u2014 full game slate + pitcher K props. is_playoff: False for all (regular season). rest_days: provided per team context. pace: provided (run_rate / runs_mean). ERA/FIP: populated from season averages; no last-3-start split applied separately. MISSING: bullpen availability index (no relief arm fatigue signal). MISSING: park factor adjustment \u2014 all contexts use neutral ballpark defaults. MISSING: weather/wind for outdoor venues. def_rating INVERSION BUG (memory BUG): _sim_baseball def_rating inverted at engine.py:648-649; all game-line edges CORRUPT until patched. Game-line Bet Cards from this session must NOT be acted on. Run-line edges also affected. draw_prob LEAK (memory BUG): baseball traces show ~13% draw_prob deflating win probs; supports_draw=False ignored. K prop calibration_profile: NULL (static fallback). CRITICAL: MLB game-line outputs invalid due to known engine bugs \u2014 treat as research-only leans.",
+      "inputs": {},
+      "outputs": {},
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-28T16:57:21+00:00",
+      "event_type": "quality_gate",
+      "step": "qa_failed_quarantine_0528",
+      "status": "fail",
+      "notes": "QA-failed quarantine: unverified context, injury translation gaps, engine parameter mismatches, WNBA total score-unit mismatch, estimated prop-line usage, and trace/summary drift. Do not ingest for calibration.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [
+        "0528: unverified injuries and context translation gaps",
+        "0528: invalid/proxy team metrics supplied to engine",
+        "0528: WNBA total markets unsafe due Markov score-unit mismatch",
+        "0528: estimated/milestone prop-line handling was not betting-grade"
+      ],
+      "trace_ids": []
+    }
+  ]
+}

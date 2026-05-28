@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import omega.mcp.server as mcp_server
 from omega.mcp.server import (
     PROMPT_NAMES,
     RESOURCE_URIS,
@@ -52,7 +53,9 @@ def test_calibration_resource_path_is_readable():
     assert "universal_v1.0" in data
 
 
-def test_analyze_game_tool_delegates_to_core_service():
+def test_analyze_game_tool_delegates_to_core_service(monkeypatch):
+    monkeypatch.setattr(mcp_server, "_formal_output_gate_failures", lambda: [])
+
     result = omega_analyze_game(
         {
             "home_team": "Boston Celtics",
@@ -78,6 +81,32 @@ def test_analyze_game_tool_delegates_to_core_service():
     assert result["trace"]["bankroll"] == 2500.0
     assert result["trace"]["model_version"] == "omega-core-phase6h"
     assert result["result"]["status"] == "success"
+
+
+def test_analyze_game_tool_blocks_when_formal_gate_fails(monkeypatch):
+    monkeypatch.setattr(
+        mcp_server,
+        "_formal_output_gate_failures",
+        lambda: ["source integrity failed"],
+    )
+
+    result = omega_analyze_game(
+        {
+            "home_team": "Boston Celtics",
+            "away_team": "Indiana Pacers",
+            "league": "NBA",
+            "n_iterations": 100,
+            "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+            "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+            "game_context": {"is_playoff": False, "rest_days": 2},
+        },
+        bankroll=2500.0,
+        session_id="sess-20260518-mcp",
+    )
+
+    assert result["status"] == "error"
+    assert result["error_code"] == "formal_output_blocked"
+    assert result["detail"]["failures"] == ["source integrity failed"]
 
 
 def test_analyze_prop_tool_returns_validation_errors():

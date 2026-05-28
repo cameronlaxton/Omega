@@ -1,4 +1,4 @@
-# Player Props Daily Session (NBA + MLB)
+# Player Props Daily Session (NBA + WNBA + MLB)
 
 Props analysis is safe regardless of game analysis bug status. Follow [OMEGA_COWORK.md](../../OMEGA_COWORK.md) and [prompts/system_prompt.txt](../system_prompt.txt) throughout.
 
@@ -19,7 +19,7 @@ Read `reports/latest.md` §3B (prop plane pairs) and §6B (evidence signal perfo
 ## Step 1 — Preflight + session ID
 
 ```bash
-python scripts/cowork_preflight.py
+python scripts/cowork_preflight.py --formal-output-gate
 ```
 
 Session ID format: `sess-YYYYMMDD-prp1` (e.g. `sess-20260528-prp1`) or append to an existing game session if props are part of the same analysis run.
@@ -34,6 +34,12 @@ python scripts/resolve_odds.py --kind prop --league NBA --player "Player Name" -
 
 Supported prop_type values by league — see [reference/prop_stat_keys.md](../reference/prop_stat_keys.md) for the full mapping.
 
+WNBA prop rule: query direct sportsbook/Odds API prop boards first through the
+typed resolver (for example `--league WNBA --prop-type pts`). Standard O/U
+player props are valid when returned by the typed odds path. Milestone props
+and manually estimated lines are research-only and must not be passed to
+`analyze()` as formal odds.
+
 ---
 
 ## Step 3 — Gather player context
@@ -47,6 +53,12 @@ Minimum required inputs for a calibration-eligible prop trace:
 | `sample_size` | Number of games in the average | < 8 → quality degraded |
 | `is_playoff` | Matchup context | Always required |
 | `rest_days` | Days since last game | 0 = back-to-back |
+
+Injury/news protocol: translate injury status, minutes limits, and role changes
+into the player context (`pts_mean`, usage/minutes-derived means, observed
+standard deviations), `game_context`, and typed evidence before calling
+`analyze()`. If you cannot quantify the impact, append a
+`quality_gate/null_data_audit` event and downgrade to research-only.
 
 **Minimum stat fields by prop_type:**
 
@@ -80,10 +92,12 @@ analyze({
     "player_context": {
         "pts_mean": 23.1,
         "pts_std": 6.2,
-        "sample_size": 10,
+        "sample_size": 10
+    },
+    "game_context": {
         "is_playoff": True,
         "rest_days": 2,
-        "opponent_def_rank": 8,
+        "opponent_def_rank": 8
     },
     "evidence": [...],
     "n_iterations": 10000,

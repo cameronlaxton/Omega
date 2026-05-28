@@ -206,7 +206,9 @@ BASEBALL = SportArchetype(
         "era",
         "whip",
         "bullpen_era",
+        "starter_era",
         "park_factor",
+        "weather_wind_mph",
     ),
     required_player_keys=("name", "role"),  # role: "pitcher" or "batter"
     optional_player_keys=(

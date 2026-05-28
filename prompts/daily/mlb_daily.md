@@ -32,7 +32,7 @@ Read `reports/latest.md` §6B before gathering evidence — weight signals by em
 ## Step 1 — Preflight
 
 ```bash
-python scripts/cowork_preflight.py
+python scripts/cowork_preflight.py --formal-output-gate
 ```
 
 Mint session ID: `sess-YYYYMMDD-mlb1` (e.g. `sess-20260528-mlb1`).
@@ -61,15 +61,19 @@ For prop stat key reference: see [reference/prop_stat_keys.md](../reference/prop
 | `def_matchup_weak` / `strong` | Pitcher ERA vs. lineup handedness | `direction=home` or `away` |
 | `blowout_risk` | Large talent gap + depleted bullpen on one side | no direction |
 
-**Evidence fields specific to MLB:**
+**Structured context fields specific to MLB:**
 
 ```python
-# game_context fields for MLB
-game_context={
-    "is_playoff": False,        # always required
-    "rest_days": 4,             # starter's days of rest
-    "park_factor": 1.05,        # >1 = hitter-friendly; ESPN park factors
-    "weather_wind_mph": 12.0,   # optional; >10 mph out = slight offense
+# game_context fields remain universal calibration context
+game_context={"is_playoff": False, "rest_days": 4}
+
+# team contexts carry the predictive run environment fields consumed by engine
+home_context={
+    "off_rating": 4.5,          # runs scored per game
+    "def_rating": 3.8,          # runs allowed per game
+    "starter_era": 3.45,
+    "park_factor": 1.05,
+    "weather_wind_mph": 12.0,
 }
 ```
 
@@ -112,9 +116,19 @@ analyze({
     "home_team": "...",
     "away_team": "...",
     "game_date": "YYYY-MM-DD",
-    "home_context": {"off_rating": 4.5, "def_rating": 3.8, "pace": 92.0},
-    "away_context": {"off_rating": 4.1, "def_rating": 4.2, "pace": 91.5},
-    "game_context": {"is_playoff": False, "rest_days": 4, "park_factor": 1.02},
+    "home_context": {
+        "off_rating": 4.5,
+        "def_rating": 3.8,
+        "starter_era": 3.45,
+        "park_factor": 1.02,
+        "weather_wind_mph": 8.0,
+    },
+    "away_context": {
+        "off_rating": 4.1,
+        "def_rating": 4.2,
+        "starter_era": 4.10,
+    },
+    "game_context": {"is_playoff": False, "rest_days": 4},
     "odds": {...},
     "evidence": [...],
     "simulation_backend": "fast_score",

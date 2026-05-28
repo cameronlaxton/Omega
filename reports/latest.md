@@ -1,6 +1,6 @@
 # Omega Calibration Report — NBA
 
-Generated: `2026-05-28T09:12:03+00:00` | Window: last 30 days
+Generated: `2026-05-28T14:36:25+00:00` | Window: last 30 days
 
 ## 1. Coverage
 

@@ -49,6 +49,7 @@ from omega.core.simulation.engine import (
     run_player_simulation,
     select_distribution,
 )
+from omega.core.simulation.validation import validate_sim_context
 from omega.core.simulation.evidence_handlers import (
     AdjustmentRecord,
     PlaneAdjustment,
@@ -160,6 +161,41 @@ def _safe_dump(obj: Any) -> dict[str, Any]:
     return {"value": str(obj)}
 
 
+def _validation_skip_response(
+    request: GameAnalysisRequest,
+    errors: list[str],
+    ran_at: str,
+) -> GameAnalysisResponse:
+    matchup = f"{request.away_team} @ {request.home_team}"
+    return GameAnalysisResponse(
+        matchup=matchup,
+        league=request.league,
+        analyzed_at=ran_at,
+        status="skipped",
+        skip_reason="Invalid simulation context: " + "; ".join(errors),
+        missing_requirements=errors,
+        context_source="missing",
+    )
+
+
+def _strict_game_context_errors(request: GameAnalysisRequest) -> list[str]:
+    """Validate provided team contexts once at the service boundary.
+
+    Missing contexts are handled by the engine's existing skip/baseline logic.
+    Provided contexts are strict-validated here so invalid proxies (for example
+    raw basketball FG% passed as off_rating) cannot reach backend dispatch.
+    """
+    errors: list[str] = []
+    for side, context in (("home", request.home_context), ("away", request.away_context)):
+        if context is None:
+            continue
+        try:
+            validate_sim_context(context, request.league, side, strict=True)
+        except ValueError as exc:
+            errors.append(str(exc))
+    return errors
+
+
 def _result_downgrades(result: Any) -> list[str]:
     """Expose minimal trace-level downgrades without reviving the lite gate."""
     status = getattr(result, "status", None)
@@ -218,6 +254,10 @@ def analyze(
     trace_id = _new_trace_id(typed_req)
     ran_at = datetime.now(UTC).isoformat()
 
+    validation_errors: list[str] = []
+    if isinstance(typed_req, GameAnalysisRequest):
+        validation_errors = _strict_game_context_errors(typed_req)
+
     # Structured evidence is planned once here, then passed into the analyzer.
     # The same plan supplies both the applied effect and the per-signal
     # applications recorded on the trace, so there is exactly one evaluation per
@@ -225,11 +265,14 @@ def analyze(
     evidence_plan: EvidenceExecutionPlan | None = None
     if isinstance(typed_req, PlayerPropRequest):
         evidence_plan = _player_evidence_plan_for(typed_req)
-    elif isinstance(typed_req, GameAnalysisRequest):
+    elif isinstance(typed_req, GameAnalysisRequest) and not validation_errors:
         evidence_plan = _game_evidence_plan_for(typed_req)
 
     result: GameAnalysisResponse | PlayerPropResponse | SlateAnalysisResponse
-    if isinstance(typed_req, GameAnalysisRequest):
+    if isinstance(typed_req, GameAnalysisRequest) and validation_errors:
+        result = _validation_skip_response(typed_req, validation_errors, ran_at)
+        kind = "game"
+    elif isinstance(typed_req, GameAnalysisRequest):
         result = analyze_game(typed_req, bankroll=bankroll, evidence_plan=evidence_plan)
         kind = "game"
     elif isinstance(typed_req, PlayerPropRequest):
@@ -833,11 +876,16 @@ def analyze_game(
     # Done before the engine call; odds may be absent.
     spread_value: float | None = None
     total_value: float | None = None
+    suppressed_markets: list[str] = []
+    suppress_total_market = request.league.upper() == "WNBA"
     if request.odds:
         spread_value, _, _ = _resolve_game_spread_market(
             request.odds, request.home_team, request.away_team
         )
         total_value, _, _ = _resolve_game_total_market(request.odds)
+        if suppress_total_market and total_value is not None:
+            suppressed_markets.append("WNBA:total")
+            total_value = None
 
     effective_backend_name = _effective_game_backend_name(request)
     backend = resolve_game_backend(effective_backend_name)
@@ -1043,7 +1091,12 @@ def analyze_game(
                 )
 
         total_line, over_odds, under_odds = _resolve_game_total_market(request.odds)
-        if total_line is not None and "over_prob" in sim_result and "under_prob" in sim_result:
+        if (
+            not suppress_total_market
+            and total_line is not None
+            and "over_prob" in sim_result
+            and "under_prob" in sim_result
+        ):
             if over_odds is not None:
                 over_prob = sim_result["over_prob"] / 100.0
                 cal_over, over_audit = _calibrate_audited(
@@ -1129,6 +1182,7 @@ def analyze_game(
         metadata=AnalysisMetadata(
             data_sources=data_sources,
             archetype=archetype_name,
+            suppressed_markets=suppressed_markets,
         ),
     )
 

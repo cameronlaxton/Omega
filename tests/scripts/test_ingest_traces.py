@@ -149,6 +149,36 @@ def _write_file(inbox: Path, name: str, payload: dict[str, Any]) -> Path:
     return p
 
 
+def _write_sidecar(sidecar_dir: Path, session_id: str, *, qa_failed: bool) -> Path:
+    sidecar_dir.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {
+        "session_id": session_id,
+        "opened_at": "2026-05-28T18:00:00Z",
+        "closed_at": "2026-05-28T19:00:00Z",
+        "model_version": "omega-core-phase6h",
+        "purpose": "ingest gate test",
+        "bankroll": 1000.0,
+        "bankroll_confirmed": True,
+        "exec_stats": {},
+        "agent_notes": "",
+        "audit_events": [],
+    }
+    if qa_failed:
+        payload["audit_events"].append(
+            {
+                "ts": "2026-05-28T18:30:00Z",
+                "event_type": "quality_gate",
+                "step": "qa_failed_quarantine_0528",
+                "status": "fail",
+                "notes": "QA-failed quarantine",
+                "trace_ids": [],
+            }
+        )
+    path = sidecar_dir / f"{session_id}.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
 # ---------------------------------------------------------------------------
 # Shape A: export block
 # ---------------------------------------------------------------------------
@@ -397,6 +427,67 @@ class TestDryRun:
         assert path.exists()  # not moved
         store = TraceStore(db_path=str(db_path))
         assert store.get_trace("sandbox-dry") is None  # not persisted
+        store.close()
+
+
+# ---------------------------------------------------------------------------
+# QA-failed sidecar quarantine
+# ---------------------------------------------------------------------------
+
+
+class TestQaFailedQuarantine:
+    def test_qa_failed_session_blocks_ingest_by_default(self, workspace, tmp_path):
+        inbox, db_path = workspace
+        session_id = "sess-qa-failed"
+        sidecar_dir = tmp_path / "sessions"
+        _write_sidecar(sidecar_dir, session_id, qa_failed=True)
+
+        payload = _make_export_block("sandbox-qa-block", with_bet=False)
+        payload["trace"]["session_id"] = session_id
+        path = _write_file(inbox, "qa_block.json", payload)
+
+        store = TraceStore(db_path=str(db_path))
+        with pytest.raises(ValueError, match="failed quality_gate"):
+            ingest_traces.ingest_file(path, store, sidecar_dir=sidecar_dir)
+        assert store.get_trace("sandbox-qa-block") is None
+        store.close()
+
+    def test_force_qa_failed_ingest_marks_trace_calibration_ineligible(
+        self, workspace, tmp_path
+    ):
+        inbox, db_path = workspace
+        session_id = "sess-qa-failed"
+        sidecar_dir = tmp_path / "sessions"
+        _write_sidecar(sidecar_dir, session_id, qa_failed=True)
+
+        payload = _make_export_block("sandbox-qa-force", with_bet=False)
+        payload["trace"]["session_id"] = session_id
+        payload["trace"]["trace_quality"] = {
+            "calibration_eligible": True,
+            "context_source": "provided",
+            "identity_status": "complete",
+            "evidence_status": "present",
+            "downgrades": [],
+            "calibration_exclusion_reasons": [],
+        }
+        path = _write_file(inbox, "qa_force.json", payload)
+
+        store = TraceStore(db_path=str(db_path))
+        trace_id, _ = ingest_traces.ingest_file(
+            path,
+            store,
+            sidecar_dir=sidecar_dir,
+            force_ingest_qa_failed=True,
+        )
+        trace = store.get_trace(trace_id)
+        assert trace is not None
+        tq = trace["trace_quality"]
+        assert tq["calibration_eligible"] is False
+        assert "qa_failed_forced_ingest" in tq["calibration_exclusion_reasons"]
+        assert "qa_failed_forced_ingest" in trace["downgrades"]
+        assert store.query_traces(calibration_eligible_only=True) == []
+        store.attach_prop_outcome(trace_id, "Jayson Tatum", "pts", 31.0, 27.5, "over")
+        assert store.get_graded_traces() == []
         store.close()
 
 
