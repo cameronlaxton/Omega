@@ -49,6 +49,7 @@ from omega.strategy.distribution_metrics import (  # noqa: E402
 from omega.strategy.distribution_metrics import crps_from_distribution_row  # noqa: E402
 from omega.synthesis.output_guard import OutputMode, classify_output_mode  # noqa: E402
 from omega.trace.clv import compute_clv  # noqa: E402
+from omega.trace.report_header import header_for_store  # noqa: E402
 from omega.trace.session_sidecar import load_sidecar_safe  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
@@ -709,9 +710,17 @@ def main() -> int:
     prod = registry.get_production(args.league)
     candidates = _section_pending_candidates(registry, args.league)
     signal_perf = _section_signal_performance(store, args.league)
+
+    # Build the derived-artifact front-matter BEFORE closing the store: it reads
+    # the effective DB path / source / trace count off the live store so the
+    # report names the DB it was generated from (docs/phase6/ARTIFACT_AUTHORITY.md).
+    header = header_for_store(
+        store,
+        ["omega_traces.db", "inbox/sessions/*.json (sidecars)", "calibration registry"],
+    )
     store.close()
 
-    rendered = _render(
+    rendered = header + _render(
         league=args.league,
         window_days=args.window_days,
         counts=counts,

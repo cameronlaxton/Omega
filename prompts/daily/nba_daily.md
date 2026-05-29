@@ -3,6 +3,8 @@
 Use this prompt for the complete NBA betting surface: game moneylines, spreads,
 totals, team totals where supported, and player props. Props and game bets share the same league context,
 injury map, rest map, odds provenance, sidecar, and session audit.
+Do not run a separate props prompt — player props are NBA markets within this
+league session.
 
 Follow [OMEGA_COWORK.md](../../OMEGA_COWORK.md) and
 [prompts/system_prompt.txt](../system_prompt.txt) throughout.

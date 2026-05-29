@@ -1,6 +1,13 @@
 """
 scripts/fetch_outcomes_props.py — attach ESPN box-score stats to ungraded prop traces.
 
+Adapter, not a separate domain: player props are league-scoped player-stat
+markets (market_family=player_prop), NOT a top-level domain parallel to leagues.
+This script is the player_prop outcome-attachment adapter — it exists alongside
+fetch_outcomes_nba/mlb because the grading shape (per-player stat vs game score)
+genuinely differs, but it operates within each league's identity/schedule. See
+docs/phase6/ARTIFACT_AUTHORITY.md ("Player props are league-scoped").
+
 Workflow:
     1. Determine the date range (default: yesterday in UTC).
     2. For each date, query ungraded prop traces in the date window for each

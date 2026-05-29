@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from omega.trace._atomic import atomic_write_text
+from omega.trace.report_header import header_for_store
 from omega.trace.session_sidecar import (
     SessionSidecar,
     bootstrap_payload,
@@ -70,10 +71,15 @@ def render_session_audit(
     store = TraceStore(db_path=str(db_path) if db_path else None, read_only=False)
     try:
         rows = store.query_by_session(session_id)
+        # Derived-artifact front-matter, built from the live store so the audit
+        # always names the DB it was rendered from (ARTIFACT_AUTHORITY.md).
+        header = header_for_store(
+            store, ["omega_traces.db", f"inbox/sessions/{session_id}.json"]
+        )
     finally:
         store.close()
 
-    markdown = _render_markdown(sidecar, rows, degraded=degraded)
+    markdown = header + _render_markdown(sidecar, rows, degraded=degraded)
 
     out_path = Path(out_dir) / f"{session_id}.audit.md"
     atomic_write_text(out_path, markdown)

@@ -627,3 +627,59 @@ class TestTopLevelCompatMerge:
         payload = {"trace": raw, "bet_record": None}
         ingest_traces._merge_top_level_compat_fields(payload)
         assert payload["trace"]["reasoning_narrative"] == "already-nested"
+
+
+class TestPrePersistExportGate:
+    """The pre-persist export gate (omega/trace/export_validator.py).
+
+    Default is lenient: its error set mirrors what ingest already rejected, so
+    the default gate is zero-behavior-change. --strict (strict=True) adds fresh-
+    export quality checks (e.g. NBA game_context). Structurally unsafe wrapper
+    shapes fail before persist. The fix for a rejected export is to re-wrap/re-
+    export — never to re-run analyze().
+    """
+
+    def test_lenient_default_preserves_current_behavior(self, workspace):
+        inbox, db_path = workspace
+        # A normal export with no game_context ingests fine under the default gate.
+        path = _write_file(inbox, "lenient.json", _make_export_block("sandbox-lenient-1", with_bet=False))
+        store = TraceStore(db_path=str(db_path))
+        trace_id, _ = ingest_traces.ingest_file(path, store, sidecar_dir=None)
+        assert trace_id == "sandbox-lenient-1"
+        assert store.get_trace("sandbox-lenient-1") is not None
+        store.close()
+
+    def test_strict_rejects_fresh_export_missing_game_context_before_persist(self, workspace):
+        inbox, db_path = workspace
+        # The prop export omits game_context (is_playoff/rest_days); strict mode
+        # hard-fails NBA traces that lack it.
+        path = _write_file(inbox, "strict.json", _make_export_block("sandbox-strict-1", with_bet=False))
+        store = TraceStore(db_path=str(db_path))
+        with pytest.raises(ValueError, match="pre-persist validation"):
+            ingest_traces.ingest_file(path, store, sidecar_dir=None, strict=True)
+        # The gate fires before store.persist(): nothing was written.
+        assert store.get_trace("sandbox-strict-1") is None
+        store.close()
+
+    def test_unsafe_wrapper_shape_fails_before_persist(self, workspace):
+        inbox, db_path = workspace
+        # Neither shape A ({"trace": ...}) nor shape B (top-level trace_id+kind).
+        path = _write_file(inbox, "bad.json", {"not_a_trace": True})
+        store = TraceStore(db_path=str(db_path))
+        with pytest.raises(ValueError):
+            ingest_traces.ingest_file(path, store, sidecar_dir=None)
+        # No row created.
+        n = store.conn.execute("SELECT COUNT(*) AS n FROM traces").fetchone()["n"]
+        assert n == 0
+        store.close()
+
+    def test_gate_error_says_rewrap_not_rerun_analyze(self, workspace):
+        inbox, db_path = workspace
+        path = _write_file(inbox, "strict2.json", _make_export_block("sandbox-strict-2", with_bet=False))
+        store = TraceStore(db_path=str(db_path))
+        with pytest.raises(ValueError) as exc:
+            ingest_traces.ingest_file(path, store, sidecar_dir=None, strict=True)
+        msg = str(exc.value).lower()
+        assert "re-wrap" in msg or "re-drop" in msg
+        assert "do not re-run analyze" in msg
+        store.close()

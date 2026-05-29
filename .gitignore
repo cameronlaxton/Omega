@@ -49,9 +49,11 @@ logs/
 *.log
 
 # Retired scratch audit artifacts — superseded by inbox/sessions/<id>.json
-# (audit_events) + reports/run_audits/<id>.audit.md. Do not regenerate.
-RUN_AUDIT.md
-RUN_TRACE.jsonl
+# (audit_events) + reports/run_audits/<id>.audit.md. Root-anchored so the
+# committed copies under archive/legacy/ are unaffected; these must never
+# reappear at the repo root. Do not regenerate.
+/RUN_AUDIT.md
+/RUN_TRACE.jsonl
 
 # Phase 7 ETL raw-response cache (knowable-at-the-time snapshot; not source).
 # Alias tables (data/aliases) and Sackmann CSV clones (data/external) ARE versioned.

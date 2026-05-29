@@ -1,4 +1,14 @@
-"""Versioned contract for `inbox/sessions/<session_id>.json` sidecars."""
+"""Versioned contract for `inbox/sessions/<session_id>.json` sidecars.
+
+Authority order (see docs/phase6/ARTIFACT_AUTHORITY.md): the ledger
+(`omega_traces.db`) is the source of truth for numbers/model state; this sidecar
+is a derived session summary — the human session view (`exec_stats`,
+`agent_notes`, the `audit_events` narrative) and never the source of truth for
+quant values. The sibling `<session_id>.events.jsonl` is a recovery mirror only
+and is NOT promoted to canonical here. A human inspecting a failed run reads the
+rendered audit, then the JSONL mirror if the sidecar was quarantined; scripts
+trust the ledger.
+"""
 
 from __future__ import annotations
 

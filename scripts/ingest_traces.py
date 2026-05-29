@@ -11,10 +11,21 @@ Idempotent: re-running over the same processed/ directory is a no-op
 (`TraceStore.persist()` uses INSERT OR IGNORE on trace_id, and bet_records uses
 INSERT OR IGNORE on the (trace_id, market, selection_descriptor) UNIQUE).
 
+Pre-persist export gate:
+    Each file is validated by `omega/trace/export_validator.py` BEFORE any write.
+    A wrong wrapper or incomplete export is rejected (routed to failed/) — the
+    fix is to re-wrap/re-export, never to re-run analyze(). The default (lenient)
+    error set mirrors what ingest already rejects (zero behavior change). Use
+    --strict for fresh exports to also require export-quality fields, or
+    --no-validate to bypass the gate entirely (rollback escape hatch).
+
 Usage:
     python scripts/ingest_traces.py
     python scripts/ingest_traces.py --inbox <path> --db <path>
     python scripts/ingest_traces.py --dry-run
+    python scripts/ingest_traces.py --explain        # no-write validation report
+    python scripts/ingest_traces.py --strict         # fresh-export discipline
+    python scripts/ingest_traces.py --no-validate    # bypass gate (rollback)
 
 Exit codes:
     0 — all files processed (some may have failed; check failed/)
@@ -290,8 +301,23 @@ def ingest_file(
     *,
     sidecar_dir: Path | None = _REPO_ROOT / "inbox" / "sessions",
     force_ingest_qa_failed: bool = False,
+    validate: bool = True,
+    strict: bool = False,
 ) -> tuple[str, str | None]:
-    """Ingest one file. Returns (trace_id, bet_id or None). Raises on error."""
+    """Ingest one file. Returns (trace_id, bet_id or None). Raises on error.
+
+    The pre-persist export gate (`validate`/`strict`) runs the canonical export
+    validator (`omega/trace/export_validator.py`) *before* any write. The default
+    is `strict=False` (lenient): its error set mirrors what ingest already
+    rejects, so the default gate is zero-behavior-change — it just routes the same
+    rejections through one validator and catches a wrong wrapper shape loudly,
+    with the fix being re-wrap/re-export, never re-running analyze(). `strict=True`
+    (CLI `--strict`) additionally hard-fails fresh exports on missing export-
+    quality fields (session_id, result.status, predictions, identity, NBA
+    game_context). `validate=False` (`--no-validate`) is the rollback escape
+    hatch — it skips the gate, but the inline integrity checks below (BUG-4 prop
+    identity, manual-no-predictions) still apply.
+    """
     payload = _load_payload(path)
     _merge_top_level_compat_fields(payload)
     analyze_out = payload["trace"]
@@ -302,6 +328,20 @@ def ingest_file(
     # session_id as a sibling; the guard below is kept for safety.
     if not analyze_out.get("session_id") and payload.get("session_id"):
         analyze_out = {**analyze_out, "session_id": payload["session_id"]}
+
+    # Pre-persist export-shape/quality gate. A wrong wrapper or incomplete export
+    # fails HERE, before any write — the fix is to re-wrap/re-export, never to
+    # re-run analyze(). This is the single seam where the canonical validator
+    # (omega/trace/export_validator.py) is enforced on the write path.
+    if validate:
+        report = validate_export_block(payload, strict=strict)
+        if not report.ok:
+            reasons = "; ".join(f"{i.code}: {i.message}" for i in report.errors)
+            raise ValueError(
+                f"trace export failed pre-persist validation "
+                f"({'strict' if strict else 'lenient'}): {reasons}. "
+                "Fix the export wrapper and re-drop the file; do NOT re-run analyze()."
+            )
 
     adapted = _adapt_sandbox_trace(analyze_out)
     if not adapted["trace_id"]:
@@ -452,6 +492,24 @@ def main() -> int:
             "traces are forced calibration-ineligible."
         ),
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Hard-fail fresh exports on missing export-quality fields (session_id, "
+            "result.status, predictions, identity, NBA game_context) before persist. "
+            "Default (lenient) mirrors the historical ingest hard-fail set."
+        ),
+    )
+    parser.add_argument(
+        "--no-validate",
+        action="store_true",
+        help=(
+            "ROLLBACK ESCAPE HATCH: skip the pre-persist export gate entirely. "
+            "Core integrity checks (BUG-4 prop identity, manual-no-predictions) "
+            "still apply. Use only to bypass a regression in the gate."
+        ),
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -475,6 +533,14 @@ def main() -> int:
 
     store = TraceStore(db_path=args.db)
     log_effective_db(store, logger)
+    if args.no_validate:
+        logger.warning(
+            "PRE-PERSIST EXPORT GATE DISABLED (--no-validate): traces are being "
+            "ingested without export-shape/quality validation. Inline integrity "
+            "checks still apply."
+        )
+    elif args.strict:
+        logger.info("Pre-persist export gate: STRICT mode (fresh exports).")
     ok = 0
     failed = 0
 
@@ -516,6 +582,8 @@ def main() -> int:
                 dry_run=dry_run,
                 sidecar_dir=args.sidecar_dir,
                 force_ingest_qa_failed=args.force_ingest_qa_failed,
+                validate=not args.no_validate,
+                strict=args.strict,
             )
         except Exception as exc:  # noqa: BLE001 — we want to capture every failure
             failed += 1
