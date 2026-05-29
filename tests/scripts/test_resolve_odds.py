@@ -6,7 +6,7 @@ from omega.integrations.odds_api import (
     EventOdds,
     HistoricalEvent,
 )
-from scripts.resolve_odds import resolve_odds
+from omega.integrations.odds_resolver import resolve_odds
 
 
 class FakeOddsClient:

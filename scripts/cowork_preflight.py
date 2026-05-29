@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
 
 MIN_PYTHON = (3, 10)
@@ -59,18 +60,51 @@ def check_import(module: str, install_hint: str) -> list[str]:
     return []
 
 
+def _index_lock_backup_path(repo_root: Path) -> Path:
+    git_dir = repo_root / ".git"
+    candidate = git_dir / "index.lock.bak"
+    if not candidate.exists():
+        return candidate
+
+    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    stamped = git_dir / f"index.lock.bak.{stamp}"
+    counter = 1
+    while stamped.exists():
+        stamped = git_dir / f"index.lock.bak.{stamp}.{counter}"
+        counter += 1
+    return stamped
+
+
+def _relocate_stale_index_lock(repo_root: Path) -> tuple[Path | None, str | None]:
+    """Move a stale git index lock without unlinking it."""
+    index_lock = repo_root / ".git" / "index.lock"
+    if not index_lock.exists():
+        return None, None
+
+    backup_path = _index_lock_backup_path(repo_root)
+    try:
+        os.rename(str(index_lock), str(backup_path))
+    except OSError as exc:
+        return None, (
+            "GitEnvironmentCorrupt: .git/index.lock exists and FUSE-safe "
+            f"rename to {backup_path} failed: {exc}. Close any active git "
+            "processes or manually move the lock aside; avoid unlink/delete on "
+            "the Cowork FUSE mount."
+        )
+    return backup_path, None
+
+
 def check_git_health(repo_root: Path) -> list[str]:
     """Verify git environment is functional and not mid-operation.
 
     Detects index.lock (another git process is running) and git command failures
     that would make content-equality checks unreliable.
     """
-    index_lock = repo_root / ".git" / "index.lock"
-    if index_lock.exists():
-        return [
-            "GitEnvironmentCorrupt: .git/index.lock exists — another git process may be "
-            "running or a prior git operation crashed. Remove the lock file before continuing."
-        ]
+    relocated_lock, relocate_error = _relocate_stale_index_lock(repo_root)
+    if relocate_error:
+        return [relocate_error]
+    if relocated_lock is not None:
+        print(f"[repair] Moved stale .git/index.lock to {relocated_lock}")
 
     result = subprocess.run(
         ["git", "status", "--porcelain"],
@@ -80,12 +114,40 @@ def check_git_health(repo_root: Path) -> list[str]:
         text=True,
     )
     if result.returncode != 0:
+        lock_note = (
+            f" after moving .git/index.lock to {relocated_lock}"
+            if relocated_lock is not None
+            else ""
+        )
         return [
-            f"GitEnvironmentCorrupt: `git status` failed (exit {result.returncode}): "
+            f"GitEnvironmentCorrupt: `git status` failed{lock_note} "
+            f"(exit {result.returncode}): "
             f"{result.stderr.strip() or '(no stderr)'}. "
             "Resolve git environment issues before running engine checks."
         ]
     return []
+
+
+def check_omega_import_binding(repo_root: Path) -> list[str]:
+    """Ensure the active interpreter imports Omega from this checkout."""
+    try:
+        omega_mod = importlib.import_module("omega")
+    except ImportError as exc:
+        return [f"Missing import 'omega': {exc}. Run: python -m pip install -e .[mcp]"]
+
+    omega_file = getattr(omega_mod, "__file__", None)
+    if not omega_file:
+        return ["Omega import binding check failed: omega.__file__ is missing."]
+
+    resolved_repo = repo_root.resolve()
+    resolved_omega = Path(omega_file).resolve()
+    if resolved_omega == resolved_repo or resolved_repo in resolved_omega.parents:
+        return []
+    return [
+        "Omega import binding mismatch: active interpreter imports "
+        f"{resolved_omega}, expected a module under {resolved_repo}. "
+        "Run from the active checkout and reinstall with: python -m pip install -e .[mcp]"
+    ]
 
 
 def clean_stale_bytecode(repo_root: Path) -> list[str]:
@@ -486,6 +548,7 @@ def run_checks(
         return failures
 
     failures.extend(check_distribution())
+    failures.extend(check_omega_import_binding(repo_root))
     failures.extend(check_import("pydantic", "python -m pip install -e .[mcp]"))
     failures.extend(check_import("numpy", "python -m pip install -e .[mcp]"))
     failures.extend(

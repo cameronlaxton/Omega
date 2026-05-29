@@ -4,6 +4,7 @@
     "trace_id": "sandbox-204ab967-a0be",
     "run_id": "sandbox-204ab967-a0be",
     "timestamp": "2026-05-27T13:13:34.420287+00:00",
+    "ran_at": "2026-05-27T13:13:34.420287+00:00",
     "kind": "game",
     "session_id": "sess-20260527-mlb1",
     "input_snapshot": {

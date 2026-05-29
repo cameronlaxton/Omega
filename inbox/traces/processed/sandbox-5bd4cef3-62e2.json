@@ -1,0 +1,188 @@
+{
+  "trace_id": "sandbox-5bd4cef3-62e2",
+  "session_id": "sess-20260529-mlb1",
+  "model_version": "omega-core-phase6h",
+  "ran_at": "2026-05-29T20:30:29.050620+00:00",
+  "kind": "game",
+  "bankroll": 1000.0,
+  "input_snapshot": {
+    "home_team": "Seattle Mariners",
+    "away_team": "Arizona Diamondbacks",
+    "league": "MLB",
+    "odds": {
+      "spread_home": null,
+      "spread_home_price": -110.0,
+      "spread_away_price": -110.0,
+      "moneyline_home": null,
+      "moneyline_away": null,
+      "over_under": null,
+      "total_over_price": -110.0,
+      "total_under_price": -110.0,
+      "moneyline_draw": null,
+      "markets": null
+    },
+    "n_iterations": 10000,
+    "allow_baseline": false,
+    "simulation_backend": "fast_score",
+    "home_context": {
+      "off_rating": 4.21,
+      "def_rating": 3.79,
+      "starter_era": 2.84,
+      "park_factor": 0.96
+    },
+    "away_context": {
+      "off_rating": 4.64,
+      "def_rating": 4.38,
+      "starter_era": 4.8
+    },
+    "game_context": {
+      "is_playoff": false,
+      "rest_days": 1
+    },
+    "seed": 573118062,
+    "evidence": [
+      {
+        "signal_type": "def_matchup_strong",
+        "category": "matchup",
+        "plane": "game",
+        "value": "Kirby 2.84 ERA 5-2 in 11 starts; SEA RA/G 3.79 top-10 MLB",
+        "source": "champsorchumps.us",
+        "confidence": 0.7,
+        "window": "season",
+        "direction": "home",
+        "stat_key": null,
+        "note": null
+      },
+      {
+        "signal_type": "def_matchup_weak",
+        "category": "matchup",
+        "plane": "game",
+        "value": "Gallen 4.80 ERA, 10.67 ERA in last 3 May starts (SI.com)",
+        "source": "si.com",
+        "confidence": 0.7,
+        "window": "last_3",
+        "direction": "home",
+        "stat_key": null,
+        "note": null
+      }
+    ],
+    "game_date": "2026-05-29"
+  },
+  "trace": {
+    "matchup": "Arizona Diamondbacks @ Seattle Mariners",
+    "league": "MLB",
+    "analyzed_at": "2026-05-29T20:30:29.053455",
+    "status": "success",
+    "simulation": {
+      "iterations": 10000,
+      "home_win_prob": 69.3,
+      "away_win_prob": 30.7,
+      "draw_prob": 0.0,
+      "predicted_spread": 1.3,
+      "predicted_total": 7.8,
+      "predicted_home_score": 4.5,
+      "predicted_away_score": 3.3,
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1"
+    },
+    "edges": [],
+    "best_bet": null,
+    "metadata": {
+      "engine_version": "2.0-dse",
+      "data_sources": [
+        "simulation",
+        "user_provided"
+      ],
+      "archetype": "baseball",
+      "suppressed_markets": []
+    },
+    "reasoning_inputs": {
+      "off_rating_home": 4.21,
+      "def_rating_home": 3.79,
+      "starter_era_home": 2.84,
+      "park_factor": 0.96,
+      "off_rating_away": 4.64,
+      "def_rating_away": 4.38,
+      "starter_era_away": 4.8,
+      "is_playoff": false,
+      "rest_days": 1,
+      "evidence_signals": [
+        "def_matchup_strong",
+        "def_matchup_weak"
+      ],
+      "sources": [
+        "champsorchumps.us",
+        "dknetwork.draftkings.com",
+        "fantasyteamadvice.com",
+        "world-weather.info",
+        "actionnetwork.com",
+        "winnersandwhiners.com",
+        "espn.com"
+      ],
+      "fields_gathered": [
+        "off_rating_home",
+        "def_rating_home",
+        "starter_era_home",
+        "park_factor",
+        "off_rating_away",
+        "def_rating_away",
+        "starter_era_away",
+        "is_playoff",
+        "rest_days",
+        "home_ml",
+        "away_ml",
+        "total"
+      ],
+      "missing_fields": [
+        "run_line_odds"
+      ],
+      "market_context": {
+        "book": "betmgm",
+        "home_ml": -144,
+        "away_ml": 122,
+        "total": 7.5
+      }
+    },
+    "reasoning_narrative": "2026-05-29 ARI@SEA game analysis. Engine: fast_score. Home win prob: 69.3% / Away: 30.7%. Predicted total: 7.8 runs. Predicted spread: 1.3. Evidence policy: shadow mode (signals recorded, not applied). Session: sess-20260529-mlb1.",
+    "reasoning_downgrade_rationale": "Evidence policy v1 mode=shadow: all EvidenceSignal records computed and stored but NOT applied to sim inputs. This is a known design limitation (BUG-EVIDENCE-SHADOW-001). Simulation ran on base context only.",
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "downgrades": [],
+  "evidence_mode": "shadow",
+  "evidence_application": [
+    {
+      "signal_type": "def_matchup_strong",
+      "target": "skip",
+      "applied": false,
+      "factor": 1.0,
+      "reason": "signal does not apply to sport archetype 'baseball'",
+      "policy_version": "adj_v1_seed",
+      "evidence_mode": "shadow"
+    },
+    {
+      "signal_type": "def_matchup_weak",
+      "target": "skip",
+      "applied": false,
+      "factor": 1.0,
+      "reason": "signal does not apply to sport archetype 'baseball'",
+      "policy_version": "adj_v1_seed",
+      "evidence_mode": "shadow"
+    }
+  ],
+  "context_labels": {
+    "is_playoff": false,
+    "rest_days": 1
+  }
+}

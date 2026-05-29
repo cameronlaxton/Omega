@@ -1,0 +1,210 @@
+{
+  "trace_id": "sandbox-84ee9a86-7070",
+  "session_id": "sess-20260529-mlb1",
+  "model_version": "omega-core-phase6h",
+  "ran_at": "2026-05-29T20:31:48.965180+00:00",
+  "kind": "game",
+  "bankroll": 1000.0,
+  "input_snapshot": {
+    "home_team": "St. Louis Cardinals",
+    "away_team": "Chicago Cubs",
+    "league": "MLB",
+    "odds": {
+      "spread_home": null,
+      "spread_home_price": -110.0,
+      "spread_away_price": -110.0,
+      "moneyline_home": null,
+      "moneyline_away": null,
+      "over_under": null,
+      "total_over_price": -110.0,
+      "total_under_price": -110.0,
+      "moneyline_draw": null,
+      "markets": null
+    },
+    "n_iterations": 10000,
+    "allow_baseline": false,
+    "simulation_backend": "fast_score",
+    "home_context": {
+      "off_rating": 4.35,
+      "def_rating": 4.54,
+      "starter_era": 4.44,
+      "park_factor": 0.96,
+      "weather_wind_mph": 7.5
+    },
+    "away_context": {
+      "off_rating": 4.73,
+      "def_rating": 4.48,
+      "starter_era": 2.32
+    },
+    "game_context": {
+      "is_playoff": false,
+      "rest_days": 0
+    },
+    "seed": 1183430325,
+    "evidence": [
+      {
+        "signal_type": "def_matchup_weak",
+        "category": "matchup",
+        "plane": "game",
+        "value": "Leahy ERA 4.44 / xERA 6.29 regression risk vs CHC lineup",
+        "source": "draftkings.com",
+        "confidence": 0.7,
+        "window": "season",
+        "direction": "away",
+        "stat_key": null,
+        "note": null
+      },
+      {
+        "signal_type": "pace_down",
+        "category": "situational",
+        "plane": "game",
+        "value": "40% rain / E wind 5-10 mph Busch Stadium tonight",
+        "source": "world-weather.info",
+        "confidence": 0.55,
+        "window": "season",
+        "direction": null,
+        "stat_key": null,
+        "note": null
+      },
+      {
+        "signal_type": "rest_advantage",
+        "category": "situational",
+        "plane": "game",
+        "value": "CHC b2b (played May 28 vs PIT); STL 1 rest day",
+        "source": "mlb.com/schedule",
+        "confidence": 0.6,
+        "window": "last_1",
+        "direction": "home",
+        "stat_key": null,
+        "note": null
+      }
+    ],
+    "game_date": "2026-05-29"
+  },
+  "trace": {
+    "matchup": "Chicago Cubs @ St. Louis Cardinals",
+    "league": "MLB",
+    "analyzed_at": "2026-05-29T20:31:48.969151",
+    "status": "success",
+    "simulation": {
+      "iterations": 10000,
+      "home_win_prob": 34.2,
+      "away_win_prob": 65.8,
+      "draw_prob": 0.0,
+      "predicted_spread": -1.0,
+      "predicted_total": 8.5,
+      "predicted_home_score": 3.8,
+      "predicted_away_score": 4.8,
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1"
+    },
+    "edges": [],
+    "best_bet": null,
+    "metadata": {
+      "engine_version": "2.0-dse",
+      "data_sources": [
+        "simulation",
+        "user_provided"
+      ],
+      "archetype": "baseball",
+      "suppressed_markets": []
+    },
+    "reasoning_inputs": {
+      "off_rating_home": 4.35,
+      "def_rating_home": 4.54,
+      "starter_era_home": 4.44,
+      "park_factor": 0.96,
+      "off_rating_away": 4.73,
+      "def_rating_away": 4.48,
+      "starter_era_away": 2.32,
+      "is_playoff": false,
+      "rest_days": 0,
+      "evidence_signals": [
+        "def_matchup_weak",
+        "pace_down",
+        "rest_advantage"
+      ],
+      "sources": [
+        "champsorchumps.us",
+        "dknetwork.draftkings.com",
+        "fantasyteamadvice.com",
+        "world-weather.info",
+        "actionnetwork.com",
+        "winnersandwhiners.com",
+        "espn.com"
+      ],
+      "fields_gathered": [
+        "off_rating_home",
+        "def_rating_home",
+        "starter_era_home",
+        "park_factor",
+        "weather_wind_mph",
+        "off_rating_away",
+        "def_rating_away",
+        "starter_era_away",
+        "is_playoff",
+        "rest_days",
+        "home_ml",
+        "away_ml",
+        "total"
+      ],
+      "missing_fields": [],
+      "market_context": {
+        "book": "betmgm",
+        "home_ml": 120,
+        "away_ml": -142,
+        "total": 8.0
+      }
+    },
+    "reasoning_narrative": "2026-05-29 CHC@STL game analysis. Engine: fast_score. Home win prob: 34.2% / Away: 65.8%. Predicted total: 8.5 runs. Predicted spread: -1.0. Evidence policy: shadow mode (signals recorded, not applied). Session: sess-20260529-mlb1.",
+    "reasoning_downgrade_rationale": "Evidence policy v1 mode=shadow: all EvidenceSignal records computed and stored but NOT applied to sim inputs. This is a known design limitation (BUG-EVIDENCE-SHADOW-001). Simulation ran on base context only.",
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "downgrades": [],
+  "evidence_mode": "shadow",
+  "evidence_application": [
+    {
+      "signal_type": "def_matchup_weak",
+      "target": "skip",
+      "applied": false,
+      "factor": 1.0,
+      "reason": "signal does not apply to sport archetype 'baseball'",
+      "policy_version": "adj_v1_seed",
+      "evidence_mode": "shadow"
+    },
+    {
+      "signal_type": "pace_down",
+      "target": "skip",
+      "applied": false,
+      "factor": 1.0,
+      "reason": "signal does not apply to sport archetype 'baseball'",
+      "policy_version": "adj_v1_seed",
+      "evidence_mode": "shadow"
+    },
+    {
+      "signal_type": "rest_advantage",
+      "target": "mean",
+      "applied": false,
+      "factor": 1.0,
+      "reason": "rest_advantage: mean x1.0000 (raw 1.0000, mode=shadow)",
+      "policy_version": "adj_v1_seed",
+      "evidence_mode": "shadow"
+    }
+  ],
+  "context_labels": {
+    "is_playoff": false,
+    "rest_days": 0
+  }
+}

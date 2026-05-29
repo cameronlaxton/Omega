@@ -89,7 +89,7 @@ the first was restored), fix the new failure before running Pass 3.
   DB paths at open time and auto-redirects writes to a per-user local runtime
   path (`%LOCALAPPDATA%\omega\runtime\omega_traces.db` on Windows,
   `~/.omega/runtime/omega_traces.db` on POSIX). No `atexit` sync-back: archival
-  back to the mount is owned by `scripts/sync_to_mount.ps1` (one-way, see §2c).
+  back to the mount is owned by `scripts/sync_to_mount.ps1` (one-way, see §2d).
   The redirect is a safety net; the intended steady state is the local-workspace
   layout below.
 - **Empty-history guard (no silent fresh DB):** because the sync is one-way, a
@@ -140,7 +140,22 @@ the first was restored), fix the new failure before running Pass 3.
   `scripts/resolve_odds.py` so URL construction, BetMGM defaults, provenance,
   and budget tracking stay on the typed path.
 
-### 2c. Local Workspace (preferred runtime layout)
+### 2c. Git Command Protocol
+
+On Cowork/FUSE-mounted sessions, do not use `git show HEAD:path` to read blob
+contents or file history. Use `git cat-file -p HEAD:path` instead, for example:
+
+```bash
+git cat-file -p HEAD:omega/core/contracts/service.py
+```
+
+This avoids git commands that can create or collide with background
+`.git/index.lock` activity on the Windows-to-Linux mount. For source repair,
+prefer `python scripts/cowork_preflight.py --repair-from-git`; use manual
+`git cat-file -p ... > /tmp/file && cp /tmp/file target` only when the preflight
+repair path explicitly fails.
+
+### 2d. Local Workspace (preferred runtime layout)
 
 Running Omega from the network-mounted repo (`C:\repos\Omega` on the host,
 bind-mounted into the Linux sandbox) is the recurring root cause of both
@@ -196,6 +211,21 @@ PowerShell session.
 local workspace, you can point `TraceStore` at any writable path with
 `OMEGA_TRACE_DB=<absolute-path>`. This is the explicit-override path; the
 auto-redirect described in §2b is the implicit fallback.
+
+### 2e. Native Linux Container (preferred long-term runtime)
+
+For sustained development or repeated formal sessions, use the native Linux
+devcontainer in `.devcontainer/`. It runs the active workspace from the Docker
+named volume `omega-linux-workspace`, not from the Windows `C:\repos\Omega` bind
+mount, and validates:
+
+- `python scripts/cowork_preflight.py --direct-only`
+- `python scripts/bug_sentinel.py --json`
+- SQLite `PRAGMA journal_mode=WAL` on a Linux-native filesystem
+
+Use git inside the container to sync source changes back to the remote. Mirror
+reports or trace exports to a Windows-visible checkout only after the session
+closes; do not write live SQLite files through the FUSE mount.
 
 Preferred path:
 

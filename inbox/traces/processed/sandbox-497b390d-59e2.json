@@ -1,0 +1,188 @@
+{
+  "trace_id": "sandbox-497b390d-59e2",
+  "session_id": "sess-20260529-mlb1",
+  "model_version": "omega-core-phase6h",
+  "ran_at": "2026-05-29T20:30:29.038667+00:00",
+  "kind": "game",
+  "bankroll": 1000.0,
+  "input_snapshot": {
+    "home_team": "New York Mets",
+    "away_team": "Miami Marlins",
+    "league": "MLB",
+    "odds": {
+      "spread_home": null,
+      "spread_home_price": -110.0,
+      "spread_away_price": -110.0,
+      "moneyline_home": null,
+      "moneyline_away": null,
+      "over_under": null,
+      "total_over_price": -110.0,
+      "total_under_price": -110.0,
+      "moneyline_draw": null,
+      "markets": null
+    },
+    "n_iterations": 10000,
+    "allow_baseline": false,
+    "simulation_backend": "fast_score",
+    "home_context": {
+      "off_rating": 3.82,
+      "def_rating": 4.34,
+      "starter_era": 3.52,
+      "park_factor": 0.94
+    },
+    "away_context": {
+      "off_rating": 4.23,
+      "def_rating": 4.46,
+      "starter_era": 2.52
+    },
+    "game_context": {
+      "is_playoff": false,
+      "rest_days": 1
+    },
+    "seed": 906969890,
+    "evidence": [
+      {
+        "signal_type": "def_matchup_strong",
+        "category": "matchup",
+        "plane": "game",
+        "value": "Meyer 2.52 ERA / 10.1 K/9; MIA 5-0 with Meyer this season",
+        "source": "draftkings.com",
+        "confidence": 0.75,
+        "window": "season",
+        "direction": "away",
+        "stat_key": null,
+        "note": null
+      },
+      {
+        "signal_type": "def_matchup_weak",
+        "category": "matchup",
+        "plane": "game",
+        "value": "Peralta command issues: 9 BB last 3 starts",
+        "source": "draftkings.com",
+        "confidence": 0.65,
+        "window": "last_3",
+        "direction": "away",
+        "stat_key": null,
+        "note": null
+      }
+    ],
+    "game_date": "2026-05-29"
+  },
+  "trace": {
+    "matchup": "Miami Marlins @ New York Mets",
+    "league": "MLB",
+    "analyzed_at": "2026-05-29T20:30:29.040280",
+    "status": "success",
+    "simulation": {
+      "iterations": 10000,
+      "home_win_prob": 44.6,
+      "away_win_prob": 55.4,
+      "draw_prob": 0.0,
+      "predicted_spread": -0.3,
+      "predicted_total": 6.9,
+      "predicted_home_score": 3.3,
+      "predicted_away_score": 3.6,
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1"
+    },
+    "edges": [],
+    "best_bet": null,
+    "metadata": {
+      "engine_version": "2.0-dse",
+      "data_sources": [
+        "simulation",
+        "user_provided"
+      ],
+      "archetype": "baseball",
+      "suppressed_markets": []
+    },
+    "reasoning_inputs": {
+      "off_rating_home": 3.82,
+      "def_rating_home": 4.34,
+      "starter_era_home": 3.52,
+      "park_factor": 0.94,
+      "off_rating_away": 4.23,
+      "def_rating_away": 4.46,
+      "starter_era_away": 2.52,
+      "is_playoff": false,
+      "rest_days": 1,
+      "evidence_signals": [
+        "def_matchup_strong",
+        "def_matchup_weak"
+      ],
+      "sources": [
+        "champsorchumps.us",
+        "dknetwork.draftkings.com",
+        "fantasyteamadvice.com",
+        "world-weather.info",
+        "actionnetwork.com",
+        "winnersandwhiners.com",
+        "espn.com"
+      ],
+      "fields_gathered": [
+        "off_rating_home",
+        "def_rating_home",
+        "starter_era_home",
+        "park_factor",
+        "off_rating_away",
+        "def_rating_away",
+        "starter_era_away",
+        "is_playoff",
+        "rest_days",
+        "home_ml",
+        "away_ml",
+        "total"
+      ],
+      "missing_fields": [
+        "weather_wind_mph"
+      ],
+      "market_context": {
+        "book": "betmgm",
+        "home_ml": -124,
+        "away_ml": 106,
+        "total": 7.5
+      }
+    },
+    "reasoning_narrative": "2026-05-29 MIA@NYM game analysis. Engine: fast_score. Home win prob: 44.6% / Away: 55.4%. Predicted total: 6.9 runs. Predicted spread: -0.3. Evidence policy: shadow mode (signals recorded, not applied). Session: sess-20260529-mlb1.",
+    "reasoning_downgrade_rationale": "Evidence policy v1 mode=shadow: all EvidenceSignal records computed and stored but NOT applied to sim inputs. This is a known design limitation (BUG-EVIDENCE-SHADOW-001). Simulation ran on base context only.",
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "downgrades": [],
+  "evidence_mode": "shadow",
+  "evidence_application": [
+    {
+      "signal_type": "def_matchup_strong",
+      "target": "skip",
+      "applied": false,
+      "factor": 1.0,
+      "reason": "signal does not apply to sport archetype 'baseball'",
+      "policy_version": "adj_v1_seed",
+      "evidence_mode": "shadow"
+    },
+    {
+      "signal_type": "def_matchup_weak",
+      "target": "skip",
+      "applied": false,
+      "factor": 1.0,
+      "reason": "signal does not apply to sport archetype 'baseball'",
+      "policy_version": "adj_v1_seed",
+      "evidence_mode": "shadow"
+    }
+  ],
+  "context_labels": {
+    "is_playoff": false,
+    "rest_days": 1
+  }
+}

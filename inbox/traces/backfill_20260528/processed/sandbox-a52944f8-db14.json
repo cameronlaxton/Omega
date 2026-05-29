@@ -1,21 +1,22 @@
 {
   "trace": {
     "schema_version": 1,
-    "trace_id": "sandbox-7d29ab18-288e",
-    "run_id": "sandbox-7d29ab18-288e",
-    "timestamp": "2026-05-27T13:12:46.730210+00:00",
+    "trace_id": "sandbox-a52944f8-db14",
+    "run_id": "sandbox-a52944f8-db14",
+    "timestamp": "2026-05-27T13:12:46.450788+00:00",
+    "ran_at": "2026-05-27T13:12:46.450788+00:00",
     "kind": "game",
     "session_id": "sess-20260527-mlb1",
     "input_snapshot": {
-      "home_team": "New York Mets",
-      "away_team": "Cincinnati Reds",
+      "home_team": "Cleveland Guardians",
+      "away_team": "Washington Nationals",
       "league": "MLB",
       "odds": {
         "spread_home": null,
         "spread_home_price": -110.0,
         "spread_away_price": -110.0,
-        "moneyline_home": -120.0,
-        "moneyline_away": 100.0,
+        "moneyline_home": -190.0,
+        "moneyline_away": 155.0,
         "over_under": null,
         "total_over_price": -110.0,
         "total_under_price": -110.0,
@@ -26,12 +27,12 @@
       "allow_baseline": false,
       "simulation_backend": "fast_score",
       "home_context": {
-        "off_rating": 4.5,
-        "def_rating": 3.8
+        "off_rating": 4.4,
+        "def_rating": 3.9
       },
       "away_context": {
-        "off_rating": 4.5,
-        "def_rating": 4.9
+        "off_rating": 4.4,
+        "def_rating": 4.8
       },
       "game_context": {
         "is_playoff": false,
@@ -39,7 +40,7 @@
         "park_factor": 0.97,
         "weather_wind_mph": 8.0
       },
-      "seed": 341588756,
+      "seed": 911848939,
       "evidence": [
         {
           "signal_type": "park_factor_evidence",
@@ -68,20 +69,20 @@
       ]
     },
     "result": {
-      "matchup": "Cincinnati Reds @ New York Mets",
+      "matchup": "Washington Nationals @ Cleveland Guardians",
       "league": "MLB",
-      "analyzed_at": "2026-05-27T13:12:46.735322",
+      "analyzed_at": "2026-05-27T13:12:46.451578",
       "status": "success",
       "skip_reason": null,
       "missing_requirements": [],
       "simulation": {
         "iterations": 10000,
-        "home_win_prob": 70.2,
-        "away_win_prob": 29.8,
+        "home_win_prob": 67.3,
+        "away_win_prob": 32.7,
         "draw_prob": 0.0,
-        "predicted_spread": 1.4,
-        "predicted_total": 9.2,
-        "predicted_home_score": 5.3,
+        "predicted_spread": 1.2,
+        "predicted_total": 9.0,
+        "predicted_home_score": 5.1,
         "predicted_away_score": 3.9,
         "context_source": "provided",
         "baseline_used": false,
@@ -91,21 +92,21 @@
       "edges": [
         {
           "side": "home",
-          "team": "New York Mets",
+          "team": "Cleveland Guardians",
           "market": "moneyline",
           "line": null,
-          "true_prob": 0.702,
-          "calibrated_prob": 0.702,
-          "market_implied": 0.5455,
-          "edge_pct": 15.65,
-          "ev_pct": 28.7,
-          "market_odds": -120.0,
-          "confidence_tier": "A",
-          "recommended_units": 5.0,
+          "true_prob": 0.673,
+          "calibrated_prob": 0.673,
+          "market_implied": 0.6552,
+          "edge_pct": 1.78,
+          "ev_pct": 2.72,
+          "market_odds": -190.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 1.29,
           "spread_coverage_prob": null,
           "calibration_audit": {
-            "raw_prob": 0.7020000000000001,
-            "calibrated_prob": 0.7020000000000001,
+            "raw_prob": 0.6729999999999999,
+            "calibrated_prob": 0.6729999999999999,
             "league": "MLB",
             "plane": "game",
             "market": "home",
@@ -118,21 +119,21 @@
         },
         {
           "side": "away",
-          "team": "Cincinnati Reds",
+          "team": "Washington Nationals",
           "market": "moneyline",
           "line": null,
-          "true_prob": 0.298,
-          "calibrated_prob": 0.298,
-          "market_implied": 0.5,
-          "edge_pct": -20.2,
-          "ev_pct": -40.4,
-          "market_odds": 100.0,
+          "true_prob": 0.327,
+          "calibrated_prob": 0.327,
+          "market_implied": 0.3922,
+          "edge_pct": -6.52,
+          "ev_pct": -16.62,
+          "market_odds": 155.0,
           "confidence_tier": "A",
           "recommended_units": 0.0,
           "spread_coverage_prob": null,
           "calibration_audit": {
-            "raw_prob": 0.298,
-            "calibrated_prob": 0.298,
+            "raw_prob": 0.327,
+            "calibrated_prob": 0.327,
             "league": "MLB",
             "plane": "game",
             "market": "away",
@@ -144,15 +145,7 @@
           }
         }
       ],
-      "best_bet": {
-        "selection": "New York Mets home",
-        "odds": -120.0,
-        "edge_pct": 15.65,
-        "ev_pct": 28.7,
-        "confidence_tier": "A",
-        "recommended_units": 5.0,
-        "kelly_fraction": 0.1722
-      },
+      "best_bet": null,
       "metadata": {
         "engine_version": "2.0-dse",
         "data_sources": [
@@ -175,14 +168,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 5.3286,
-          "sample_std": 2.267205778044763,
-          "p10": 3.0,
+          "sample_mean": 5.1183,
+          "sample_std": 2.288821773314767,
+          "p10": 2.0,
           "p50": 5.0,
           "p90": 8.0,
           "n_iterations": 10000,
-          "seed": 341588756,
-          "context_hash": "b49c215c5c3d6a3a",
+          "seed": 911848939,
+          "context_hash": "7a00450fe9e76d0f",
           "component_version": "fast_score_v1"
         },
         {
@@ -194,14 +187,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 3.8803,
-          "sample_std": 1.9560091794263414,
-          "p10": 2.0,
+          "sample_mean": 3.9055,
+          "sample_std": 1.9924782934826266,
+          "p10": 1.0,
           "p50": 4.0,
-          "p90": 6.0,
+          "p90": 7.0,
           "n_iterations": 10000,
-          "seed": 341588756,
-          "context_hash": "b49c215c5c3d6a3a",
+          "seed": 911848939,
+          "context_hash": "7a00450fe9e76d0f",
           "component_version": "fast_score_v1"
         },
         {
@@ -213,14 +206,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 9.2089,
-          "sample_std": 2.98420186817182,
-          "p10": 6.0,
+          "sample_mean": 9.0238,
+          "sample_std": 3.0487757477388002,
+          "p10": 5.0,
           "p50": 9.0,
           "p90": 13.0,
           "n_iterations": 10000,
-          "seed": 341588756,
-          "context_hash": "b49c215c5c3d6a3a",
+          "seed": 911848939,
+          "context_hash": "7a00450fe9e76d0f",
           "component_version": "fast_score_v1"
         },
         {
@@ -232,14 +225,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 1.4483,
-          "sample_std": 3.004484499876937,
-          "p10": -2.0,
+          "sample_mean": 1.2128,
+          "sample_std": 3.0203172283717663,
+          "p10": -3.0,
           "p50": 1.0,
           "p90": 5.0,
           "n_iterations": 10000,
-          "seed": 341588756,
-          "context_hash": "b49c215c5c3d6a3a",
+          "seed": 911848939,
+          "context_hash": "7a00450fe9e76d0f",
           "component_version": "fast_score_v1"
         }
       ]
@@ -252,8 +245,8 @@
     },
     "calibration_audit": [
       {
-        "raw_prob": 0.7020000000000001,
-        "calibrated_prob": 0.7020000000000001,
+        "raw_prob": 0.6729999999999999,
+        "calibrated_prob": 0.6729999999999999,
         "league": "MLB",
         "plane": "game",
         "market": "home",
@@ -264,8 +257,8 @@
         "path": "static_identity"
       },
       {
-        "raw_prob": 0.298,
-        "calibrated_prob": 0.298,
+        "raw_prob": 0.327,
+        "calibrated_prob": 0.327,
         "league": "MLB",
         "plane": "game",
         "market": "away",
@@ -308,14 +301,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 5.3286,
-        "sample_std": 2.267205778044763,
-        "p10": 3.0,
+        "sample_mean": 5.1183,
+        "sample_std": 2.288821773314767,
+        "p10": 2.0,
         "p50": 5.0,
         "p90": 8.0,
         "n_iterations": 10000,
-        "seed": 341588756,
-        "context_hash": "b49c215c5c3d6a3a",
+        "seed": 911848939,
+        "context_hash": "7a00450fe9e76d0f",
         "component_version": "fast_score_v1"
       },
       {
@@ -327,14 +320,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 3.8803,
-        "sample_std": 1.9560091794263414,
-        "p10": 2.0,
+        "sample_mean": 3.9055,
+        "sample_std": 1.9924782934826266,
+        "p10": 1.0,
         "p50": 4.0,
-        "p90": 6.0,
+        "p90": 7.0,
         "n_iterations": 10000,
-        "seed": 341588756,
-        "context_hash": "b49c215c5c3d6a3a",
+        "seed": 911848939,
+        "context_hash": "7a00450fe9e76d0f",
         "component_version": "fast_score_v1"
       },
       {
@@ -346,14 +339,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 9.2089,
-        "sample_std": 2.98420186817182,
-        "p10": 6.0,
+        "sample_mean": 9.0238,
+        "sample_std": 3.0487757477388002,
+        "p10": 5.0,
         "p50": 9.0,
         "p90": 13.0,
         "n_iterations": 10000,
-        "seed": 341588756,
-        "context_hash": "b49c215c5c3d6a3a",
+        "seed": 911848939,
+        "context_hash": "7a00450fe9e76d0f",
         "component_version": "fast_score_v1"
       },
       {
@@ -365,31 +358,31 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 1.4483,
-        "sample_std": 3.004484499876937,
-        "p10": -2.0,
+        "sample_mean": 1.2128,
+        "sample_std": 3.0203172283717663,
+        "p10": -3.0,
         "p50": 1.0,
         "p90": 5.0,
         "n_iterations": 10000,
-        "seed": 341588756,
-        "context_hash": "b49c215c5c3d6a3a",
+        "seed": 911848939,
+        "context_hash": "7a00450fe9e76d0f",
         "component_version": "fast_score_v1"
       }
     ],
-    "prompt": "MLB game: Cincinnati Reds @ New York Mets",
+    "prompt": "MLB game: Washington Nationals @ Cleveland Guardians",
     "league": "MLB",
-    "matchup": "Cincinnati Reds @ New York Mets",
+    "matchup": "Washington Nationals @ Cleveland Guardians",
     "execution_mode": "sandbox_game",
-    "simulation_seed": 341588756,
+    "simulation_seed": 911848939,
     "aggregate_quality": null,
     "predictions": {
       "iterations": 10000,
-      "home_win_prob": 70.2,
-      "away_win_prob": 29.8,
+      "home_win_prob": 67.3,
+      "away_win_prob": 32.7,
       "draw_prob": 0.0,
-      "predicted_spread": 1.4,
-      "predicted_total": 9.2,
-      "predicted_home_score": 5.3,
+      "predicted_spread": 1.2,
+      "predicted_total": 9.0,
+      "predicted_home_score": 5.1,
       "predicted_away_score": 3.9,
       "context_source": "provided",
       "baseline_used": false,
@@ -399,21 +392,21 @@
     "recommendations": [
       {
         "side": "home",
-        "team": "New York Mets",
+        "team": "Cleveland Guardians",
         "market": "moneyline",
         "line": null,
-        "true_prob": 0.702,
-        "calibrated_prob": 0.702,
-        "market_implied": 0.5455,
-        "edge_pct": 15.65,
-        "ev_pct": 28.7,
-        "market_odds": -120.0,
-        "confidence_tier": "A",
-        "recommended_units": 5.0,
+        "true_prob": 0.673,
+        "calibrated_prob": 0.673,
+        "market_implied": 0.6552,
+        "edge_pct": 1.78,
+        "ev_pct": 2.72,
+        "market_odds": -190.0,
+        "confidence_tier": "Pass",
+        "recommended_units": 1.29,
         "spread_coverage_prob": null,
         "calibration_audit": {
-          "raw_prob": 0.7020000000000001,
-          "calibrated_prob": 0.7020000000000001,
+          "raw_prob": 0.6729999999999999,
+          "calibrated_prob": 0.6729999999999999,
           "league": "MLB",
           "plane": "game",
           "market": "home",
@@ -426,21 +419,21 @@
       },
       {
         "side": "away",
-        "team": "Cincinnati Reds",
+        "team": "Washington Nationals",
         "market": "moneyline",
         "line": null,
-        "true_prob": 0.298,
-        "calibrated_prob": 0.298,
-        "market_implied": 0.5,
-        "edge_pct": -20.2,
-        "ev_pct": -40.4,
-        "market_odds": 100.0,
+        "true_prob": 0.327,
+        "calibrated_prob": 0.327,
+        "market_implied": 0.3922,
+        "edge_pct": -6.52,
+        "ev_pct": -16.62,
+        "market_odds": 155.0,
         "confidence_tier": "A",
         "recommended_units": 0.0,
         "spread_coverage_prob": null,
         "calibration_audit": {
-          "raw_prob": 0.298,
-          "calibrated_prob": 0.298,
+          "raw_prob": 0.327,
+          "calibrated_prob": 0.327,
           "league": "MLB",
           "plane": "game",
           "market": "away",
@@ -456,8 +449,8 @@
       "spread_home": null,
       "spread_home_price": -110.0,
       "spread_away_price": -110.0,
-      "moneyline_home": -120.0,
-      "moneyline_away": 100.0,
+      "moneyline_home": -190.0,
+      "moneyline_away": 155.0,
       "over_under": null,
       "total_over_price": -110.0,
       "total_under_price": -110.0,
@@ -478,7 +471,7 @@
       "calibration_exclusion_reasons": []
     },
     "quality_gate": null,
-    "reasoning_narrative": "Home: Huascar Brazoban (1.73 ERA) vs Away: Andrew Abbott (3.97 ERA). Park factor 0.97 (neutral). Wind 8 mph. Model: New York Mets win prob 70.2%. Best edge: New York Mets (15.65% edge, A tier).",
+    "reasoning_narrative": "Home: Gavin Williams (3.25 ERA) vs Away: Miles Mikolas (6.17 ERA). Park factor 0.97 (neutral). Wind 8 mph. Model: Cleveland Guardians win prob 67.3%. Best edge: Cleveland Guardians (1.78% edge, Pass tier).",
     "reasoning_inputs": {
       "sources": [
         "the-odds-api:betmgm",
@@ -505,9 +498,9 @@
       ],
       "market_context": {
         "book": "betmgm",
-        "moneyline_home": -120.0,
-        "moneyline_away": 100.0,
-        "over_under": 8.0
+        "moneyline_home": -190.0,
+        "moneyline_away": 155.0,
+        "over_under": 7.5
       }
     },
     "reasoning_downgrade_rationale": "Evidence mode=shadow: park_factor and wind signals recorded but not applied to simulation. Pitcher ERA differential captured as context only; not reflected in off/def ratings."
@@ -517,7 +510,7 @@
     "exported_at": "2026-05-28T09:12:00Z",
     "runtime_db": "/sessions/kind-youthful-ptolemy/.omega/runtime/omega_traces.db",
     "outcome_attached": {
-      "home_score": 4,
+      "home_score": 3,
       "away_score": 2,
       "result": "home_win",
       "source": "api:espn"

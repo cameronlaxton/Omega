@@ -26,6 +26,7 @@ from omega.core.calibration.adjustment_policy import (
     AdjustmentPolicyRegistry,
 )
 from omega.core.calibration.probability import apply_calibration, apply_calibration_audited
+from omega.core.config.leagues import get_league_config
 from omega.core.contracts.schemas import (
     AnalysisMetadata,
     BetSlip,
@@ -41,7 +42,6 @@ from omega.core.contracts.schemas import (
     SlateAnalysisRequest,
     SlateAnalysisResponse,
 )
-from omega.core.config.leagues import get_league_config
 from omega.core.simulation.archetypes import get_archetype_name
 from omega.core.simulation.backends import resolve_game_backend
 from omega.core.simulation.engine import (
@@ -49,7 +49,6 @@ from omega.core.simulation.engine import (
     run_player_simulation,
     select_distribution,
 )
-from omega.core.simulation.validation import validate_sim_context
 from omega.core.simulation.evidence_handlers import (
     AdjustmentRecord,
     PlaneAdjustment,
@@ -61,6 +60,7 @@ from omega.core.simulation.evidence_to_modifier import (
     MAPPED_SIGNAL_TYPES,
     signals_to_transition_modifiers,
 )
+from omega.core.simulation.validation import validate_sim_context
 
 UTC = timezone.utc
 
@@ -308,11 +308,19 @@ def analyze(
 
     # Assemble trace_quality last — pure audit metadata, never influences math above.
     result_downgrades = _result_downgrades(result)
+    result_missing_requirements = [
+        str(req) for req in (getattr(result, "missing_requirements", None) or [])
+    ]
     evidence_signals = getattr(typed_req, "evidence", None) or []
     evidence_status = "present" if evidence_signals else "empty"
     context_source = _result_context_source(result)
     baseline_used = _result_baseline_used(result)
     identity_status = _identity_status(kind, typed_req)
+    caller_exclusion_reasons = (
+        [str(reason) for reason in trace_quality.get("calibration_exclusion_reasons", [])]
+        if trace_quality
+        else []
+    )
     calibration_exclusion_reasons: list[str] = []
     if _result_status(result) != "success":
         calibration_exclusion_reasons.append("engine_skipped")
@@ -323,6 +331,8 @@ def analyze(
     if identity_status != "complete":
         calibration_exclusion_reasons.append("legacy_missing_identity")
     calibration_exclusion_reasons.extend(str(d) for d in result_downgrades)
+    calibration_exclusion_reasons.extend(result_missing_requirements)
+    calibration_exclusion_reasons.extend(caller_exclusion_reasons)
     calibration_exclusion_reasons = sorted(set(calibration_exclusion_reasons))
     calibration_eligible = not calibration_exclusion_reasons
 
@@ -1208,6 +1218,9 @@ _DEFAULT_PLAYOFF_FACTOR = 0.97
 _B2B_FATIGUE: dict[str, float] = {"NBA": 0.94, "NHL": 0.95}
 # MLB park factor applies to power/extra-base counting stats only.
 _MLB_PARK_FACTOR_STATS = frozenset({"hr", "total_bases", "rbis"})
+_MLB_PITCHER_DISTRIBUTION_PROPS = frozenset(
+    {"strikeouts_pitched", "strikeouts", "k", "outs_recorded", "pitching_outs"}
+)
 
 
 def _coerce_optional_float(value: Any) -> float | None:
@@ -1215,6 +1228,54 @@ def _coerce_optional_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _coerce_optional_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _expected_season_from_game_date(game_date: str) -> int | None:
+    try:
+        return int(str(game_date)[:4])
+    except (TypeError, ValueError):
+        return None
+
+
+def _pitcher_prop_distribution_requirements(
+    request: PlayerPropRequest,
+    player_context: dict[str, Any],
+) -> list[str]:
+    """Return missing input paths for MLB pitcher K/outs distributions."""
+    if request.league.upper() != "MLB":
+        return []
+    if request.prop_type not in _MLB_PITCHER_DISTRIBUTION_PROPS:
+        return []
+
+    missing: list[str] = []
+    mean_key = f"{request.prop_type}_mean"
+    std_key = f"{request.prop_type}_std"
+    if _coerce_optional_float(player_context.get(mean_key)) is None:
+        missing.append(f"player_context.{mean_key}")
+    if _coerce_optional_float(player_context.get(std_key)) is None:
+        missing.append(f"player_context.{std_key}")
+
+    sample_size = _coerce_optional_int(player_context.get("sample_size"))
+    if sample_size is None or sample_size < 5:
+        missing.append("player_context.sample_size>=5")
+
+    expected_season = _expected_season_from_game_date(request.game_date)
+    sample_season = _coerce_optional_int(
+        player_context.get("sample_season", player_context.get("season"))
+    )
+    if expected_season is None:
+        missing.append("game_date.year")
+    elif sample_season != expected_season:
+        missing.append(f"player_context.sample_season={expected_season}")
+
+    return missing
 
 
 def _apply_game_context(
@@ -1322,6 +1383,23 @@ def analyze_player_prop(
     stat_key = request.prop_type
     mean_key = f"{stat_key}_mean"
     std_key = f"{stat_key}_std"
+
+    pitcher_missing = _pitcher_prop_distribution_requirements(request, player_ctx)
+    if pitcher_missing:
+        return PlayerPropResponse(
+            player_name=request.player_name,
+            league=request.league,
+            prop_type=request.prop_type,
+            line=request.line,
+            status="skipped",
+            skip_reason=(
+                "Missing required MLB pitcher prop distribution inputs: "
+                + ", ".join(pitcher_missing)
+            ),
+            missing_requirements=pitcher_missing,
+            context_source="provided",
+            baseline_used=False,
+        )
 
     if evidence_adjustment is None:
         evidence_adjustment = _player_adjustment_for(request)

@@ -157,7 +157,7 @@
       "status_at_last_audit": "present",
       "last_audited": "2026-05-28",
       "fix_direction": "Fix repair path to shell out to subprocess git checkout then os.sync().",
-      "workaround": "for f in <files>; do git show HEAD:\"$f\" > /tmp/_$(basename $f) && cp /tmp/_$(basename $f) \"$f\"; done"
+      "workaround": "for f in <files>; do git cat-file -p \"HEAD:$f\" > /tmp/_$(basename $f) && cp /tmp/_$(basename $f) \"$f\"; done"
     }
   ]
 }

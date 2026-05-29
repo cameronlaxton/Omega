@@ -33,6 +33,7 @@ def test_direct_only_skips_mcp_import(monkeypatch):
 
     monkeypatch.setattr(cowork_preflight, "check_python", lambda: [])
     monkeypatch.setattr(cowork_preflight, "check_distribution", lambda: [])
+    monkeypatch.setattr(cowork_preflight, "check_omega_import_binding", lambda _repo: [])
     monkeypatch.setattr(cowork_preflight, "repair_source_integrity", lambda _repo: [])
     monkeypatch.setattr(cowork_preflight, "verify_against_git", lambda _repo: [])
 
@@ -47,6 +48,26 @@ def test_direct_only_skips_mcp_import(monkeypatch):
     assert failures == []
     assert "mcp.server.fastmcp" not in imported
     assert "omega.core.contracts.service" in imported
+
+
+def test_omega_import_binding_fails_when_import_resolves_outside_repo(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    wrong = tmp_path / "other" / "omega" / "__init__.py"
+    wrong.parent.mkdir(parents=True)
+    wrong.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        cowork_preflight.importlib,
+        "import_module",
+        lambda _module: SimpleNamespace(__file__=str(wrong)),
+    )
+
+    failures = cowork_preflight.check_omega_import_binding(tmp_path / "repo")
+
+    assert len(failures) == 1
+    assert "Omega import binding mismatch" in failures[0]
+    assert str(wrong.resolve()) in failures[0]
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -296,6 +317,7 @@ def test_run_checks_is_not_silent_on_success(monkeypatch, tmp_path, capsys):
     but we verify run_checks at minimum emits no suppressed errors."""
     monkeypatch.setattr(cowork_preflight, "check_python", lambda: [])
     monkeypatch.setattr(cowork_preflight, "check_distribution", lambda: [])
+    monkeypatch.setattr(cowork_preflight, "check_omega_import_binding", lambda _repo: [])
     monkeypatch.setattr(cowork_preflight, "check_import", lambda _m, _h: [])
     monkeypatch.setattr(cowork_preflight, "repair_source_integrity", lambda _r: [])
     monkeypatch.setattr(cowork_preflight, "verify_against_git", lambda _r: [])
@@ -312,17 +334,68 @@ def test_run_checks_is_not_silent_on_success(monkeypatch, tmp_path, capsys):
 # Git health checks (Deliverable 1)
 # ---------------------------------------------------------------------------
 
-def test_git_health_fails_on_index_lock(tmp_path):
+def test_git_health_relocates_index_lock_and_continues(monkeypatch, tmp_path, capsys):
     git_dir = tmp_path / ".git"
     git_dir.mkdir()
     index_lock = git_dir / "index.lock"
     index_lock.write_text("lock\n", encoding="utf-8")
 
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    def fail_unlink(self):
+        raise AssertionError(f"Path.unlink should not be used for {self}")
+
+    monkeypatch.setattr(cowork_preflight.subprocess, "run", fake_run)
+    monkeypatch.setattr(Path, "unlink", fail_unlink)
+
+    failures = cowork_preflight.check_git_health(tmp_path)
+
+    assert failures == []
+    assert not index_lock.exists()
+    assert (git_dir / "index.lock.bak").read_text(encoding="utf-8") == "lock\n"
+    assert "Moved stale .git/index.lock" in capsys.readouterr().out
+
+
+def test_git_health_fails_when_index_lock_rename_fails(monkeypatch, tmp_path):
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    index_lock = git_dir / "index.lock"
+    index_lock.write_text("lock\n", encoding="utf-8")
+
+    def fake_rename(_src: str, _dst: str) -> None:
+        raise PermissionError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(cowork_preflight.os, "rename", fake_rename)
+
     failures = cowork_preflight.check_git_health(tmp_path)
 
     assert len(failures) == 1
     assert "GitEnvironmentCorrupt" in failures[0]
-    assert "index.lock" in failures[0]
+    assert "FUSE-safe rename" in failures[0]
+    assert index_lock.exists()
+
+
+def test_git_health_uses_timestamped_index_lock_backup_when_bak_exists(monkeypatch, tmp_path):
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    index_lock = git_dir / "index.lock"
+    index_lock.write_text("lock\n", encoding="utf-8")
+    existing_bak = git_dir / "index.lock.bak"
+    existing_bak.write_text("old\n", encoding="utf-8")
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(cowork_preflight.subprocess, "run", fake_run)
+
+    failures = cowork_preflight.check_git_health(tmp_path)
+
+    assert failures == []
+    assert existing_bak.read_text(encoding="utf-8") == "old\n"
+    stamped = sorted(git_dir.glob("index.lock.bak.*"))
+    assert len(stamped) == 1
+    assert stamped[0].read_text(encoding="utf-8") == "lock\n"
 
 
 def test_git_health_fails_when_git_status_errors(monkeypatch, tmp_path):

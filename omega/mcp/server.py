@@ -51,6 +51,55 @@ PROMPT_NAMES = (
     "omega_markov_evidence_guide",
 )
 
+_MCP_EXPLORATORY_DOWNGRADE = "mcp_exploratory_iterations"
+
+
+def _request_with_mcp_defaults(
+    request: dict[str, Any],
+    *,
+    kind: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    payload = dict(request)
+    if payload.get("n_iterations") is not None:
+        return payload, {}
+
+    if kind == "game":
+        backend = str(payload.get("simulation_backend") or "fast_score")
+        n_iterations = 100 if backend == "markov_state" else 300
+        payload["n_iterations"] = n_iterations
+        return payload, {
+            "n_iterations": n_iterations,
+            "reason": "mcp_exploratory_default",
+            "simulation_backend": backend,
+        }
+    if kind == "prop":
+        payload["n_iterations"] = 500
+        return payload, {
+            "n_iterations": 500,
+            "reason": "mcp_exploratory_default",
+        }
+    return payload, {}
+
+
+def _merge_mcp_trace_quality(
+    trace_quality: dict[str, Any] | None,
+    mcp_defaults: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not mcp_defaults:
+        return trace_quality
+
+    merged = dict(trace_quality or {})
+    merged["downgrades"] = sorted(
+        {*merged.get("downgrades", []), _MCP_EXPLORATORY_DOWNGRADE}
+    )
+    merged["calibration_exclusion_reasons"] = sorted(
+        {
+            *merged.get("calibration_exclusion_reasons", []),
+            _MCP_EXPLORATORY_DOWNGRADE,
+        }
+    )
+    return merged
+
 
 def _formal_output_gate_failures() -> list[str]:
     """Return formal-output preflight failures for MCP analysis tools.
@@ -115,6 +164,12 @@ def omega_analyze_game(
         fast_score paths. Only the 8 Markov-eligible types below affect the
         transition matrix when simulation_backend="markov_state".
 
+        EvidenceSignal schema:
+          category  one of: player_form, matchup, situational, team_form
+          plane     one of: player, game
+          window    one of: last_1, last_3, last_5, last_10, season, series, h2h, matchup
+          direction optional; one of: over, under, home, away, neutral
+
         Markov-eligible signal_type values (use exactly these strings):
           pace_up            +6% pace; matchup faster than league baseline
           pace_down          -8% pace; matchup slower than league baseline
@@ -137,12 +192,25 @@ def omega_analyze_game(
     from omega.core.contracts.service import analyze
 
     try:
-        typed = GameAnalysisRequest(**request)
+        request_payload, mcp_defaults = _request_with_mcp_defaults(request, kind="game")
+        effective_trace_quality = _merge_mcp_trace_quality(trace_quality, mcp_defaults)
+        typed = GameAnalysisRequest(**request_payload)
         gate_failures = _formal_output_gate_failures()
         if gate_failures:
             return _formal_output_blocked("omega_analyze_game", gate_failures)
-        trace = analyze(typed, bankroll=bankroll, session_id=session_id, trace_quality=trace_quality)
-        return _ok("omega_analyze_game", trace=trace, result=trace.get("result"))
+        trace = analyze(
+            typed,
+            bankroll=bankroll,
+            session_id=session_id,
+            trace_quality=effective_trace_quality,
+        )
+        return _ok(
+            "omega_analyze_game",
+            trace=trace,
+            result=trace.get("result"),
+            trace_quality=trace.get("trace_quality"),
+            mcp_defaults=mcp_defaults,
+        )
     except ValidationError as exc:
         return _error("omega_analyze_game", "invalid_request", exc.errors())
     except ValueError as exc:
@@ -157,17 +225,40 @@ def omega_analyze_prop(
     session_id: str,
     trace_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run deterministic player-prop analysis through canonical core service."""
+    """Run deterministic player-prop analysis through canonical core service.
+
+    evidence : list[EvidenceSignal]
+        Structured reasoning signals for player prop analysis.
+
+        EvidenceSignal schema:
+          category  one of: player_form, matchup, situational, team_form
+          plane     one of: player, game
+          window    one of: last_1, last_3, last_5, last_10, season, series, h2h, matchup
+          direction optional; one of: over, under, home, away, neutral
+    """
     from omega.core.contracts.schemas import PlayerPropRequest
     from omega.core.contracts.service import analyze
 
     try:
-        typed = PlayerPropRequest(**request)
+        request_payload, mcp_defaults = _request_with_mcp_defaults(request, kind="prop")
+        effective_trace_quality = _merge_mcp_trace_quality(trace_quality, mcp_defaults)
+        typed = PlayerPropRequest(**request_payload)
         gate_failures = _formal_output_gate_failures()
         if gate_failures:
             return _formal_output_blocked("omega_analyze_prop", gate_failures)
-        trace = analyze(typed, bankroll=bankroll, session_id=session_id, trace_quality=trace_quality)
-        return _ok("omega_analyze_prop", trace=trace, result=trace.get("result"))
+        trace = analyze(
+            typed,
+            bankroll=bankroll,
+            session_id=session_id,
+            trace_quality=effective_trace_quality,
+        )
+        return _ok(
+            "omega_analyze_prop",
+            trace=trace,
+            result=trace.get("result"),
+            trace_quality=trace.get("trace_quality"),
+            mcp_defaults=mcp_defaults,
+        )
     except ValidationError as exc:
         return _error("omega_analyze_prop", "invalid_request", exc.errors())
     except ValueError as exc:
@@ -272,8 +363,17 @@ def omega_replay_bundle(bundle: dict[str, Any], strict: bool = False) -> dict[st
             ],
             "downgrades": ["missing_frozen_facts"] if missing_count else [],
         },
+        "trace_quality": {
+            "calibration_eligible": False,
+            "calibration_exclusion_reasons": ["replay_plane_only"],
+        },
     }
-    return _ok("omega_replay_bundle", response=response)
+    return _ok(
+        "omega_replay_bundle",
+        result=response,
+        response=response,
+        trace_quality=response["trace_quality"],
+    )
 
 
 def omega_trace_get(trace_id: str, db_path: str | None = None) -> dict[str, Any]:
@@ -495,7 +595,7 @@ def omega_resolve_odds(
     if kind not in {"game", "prop"}:
         return _error("omega_resolve_odds", "invalid_request", "kind must be 'game' or 'prop'")
     try:
-        from scripts.resolve_odds import resolve_odds
+        from omega.integrations.odds_resolver import resolve_odds
 
         result = resolve_odds(
             kind=kind,
@@ -586,7 +686,9 @@ def omega_markov_evidence_guide() -> str:
     Returns the authoritative vocabulary table derived directly from the
     evidence_to_modifier module — never hand-edited here.
     """
-    from omega.core.simulation.evidence_to_modifier import build_markov_vocabulary_table  # noqa: PLC0415
+    from omega.core.simulation.evidence_to_modifier import (
+        build_markov_vocabulary_table,  # noqa: PLC0415
+    )
 
     header = (
         "=== Omega Markov Evidence Guide ===\n\n"

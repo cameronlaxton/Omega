@@ -48,8 +48,8 @@ from omega.integrations.odds_api import (  # noqa: E402
     OddsApiKeyMissing,
     sport_key_for,
 )
+from omega.integrations.odds_resolver import provider_market_for_prop  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
-from scripts.resolve_odds import provider_market_for_prop  # noqa: E402
 
 logger = logging.getLogger("backfill_closing_lines")
 

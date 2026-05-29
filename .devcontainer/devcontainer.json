@@ -1,0 +1,20 @@
+{
+  "name": "Omega Native Linux",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspaces/Omega",
+  "workspaceMount": "source=omega-linux-workspace,target=/workspaces/Omega,type=volume",
+  "postCreateCommand": "bash /opt/omega-source/.devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      },
+      "extensions": [
+        "ms-python.python"
+      ]
+    }
+  }
+}

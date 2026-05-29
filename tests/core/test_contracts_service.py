@@ -679,6 +679,121 @@ class TestAnalyzePlayerProp:
         assert resp.recommendation == "pass"
         assert "insufficient_real_observations" in (resp.notes or [])
 
+    def test_mlb_pitcher_prop_requires_std_sample_and_season(self):
+        req = PlayerPropRequest(
+            player_name="George Kirby",
+            league="MLB",
+            prop_type="strikeouts_pitched",
+            line=5.5,
+            home_team="Seattle Mariners",
+            away_team="Texas Rangers",
+            game_date="2026-05-29",
+            odds_over=-110,
+            odds_under=-110,
+            n_iterations=1000,
+            seed=42,
+            player_context={"strikeouts_pitched_mean": 6.1, "sample_size": 4},
+            game_context={"is_playoff": False, "rest_days": 5, "park_factor": 1.0},
+        )
+
+        resp = analyze_player_prop(req)
+
+        assert resp.status == "skipped"
+        assert resp.over_prob is None
+        assert resp.edge_over is None
+        assert resp.confidence_tier is None
+        assert resp.recommended_units is None
+        assert resp.missing_requirements == [
+            "player_context.strikeouts_pitched_std",
+            "player_context.sample_size>=5",
+            "player_context.sample_season=2026",
+        ]
+
+    def test_mlb_pitcher_prop_season_mismatch_skips(self):
+        req = PlayerPropRequest(
+            player_name="George Kirby",
+            league="MLB",
+            prop_type="outs_recorded",
+            line=17.5,
+            home_team="Seattle Mariners",
+            away_team="Texas Rangers",
+            game_date="2026-05-29",
+            n_iterations=1000,
+            seed=42,
+            player_context={
+                "outs_recorded_mean": 18.4,
+                "outs_recorded_std": 3.2,
+                "sample_size": 8,
+                "sample_season": 2025,
+            },
+            game_context={"is_playoff": False, "rest_days": 5, "park_factor": 1.0},
+        )
+
+        resp = analyze_player_prop(req)
+
+        assert resp.status == "skipped"
+        assert resp.missing_requirements == ["player_context.sample_season=2026"]
+
+    def test_mlb_pitcher_prop_valid_distribution_succeeds(self):
+        req = PlayerPropRequest(
+            player_name="George Kirby",
+            league="MLB",
+            prop_type="strikeouts_pitched",
+            line=5.5,
+            home_team="Seattle Mariners",
+            away_team="Texas Rangers",
+            game_date="2026-05-29",
+            odds_over=-110,
+            odds_under=-110,
+            n_iterations=500,
+            seed=42,
+            player_context={
+                "strikeouts_pitched_mean": 6.1,
+                "strikeouts_pitched_std": 2.0,
+                "sample_size": 8,
+                "sample_season": 2026,
+            },
+            game_context={"is_playoff": False, "rest_days": 5, "park_factor": 1.0},
+        )
+
+        resp = analyze_player_prop(req)
+
+        assert resp.status == "success"
+        assert resp.over_prob is not None
+        assert resp.projection_std is not None
+
+    def test_mlb_pitcher_prop_missing_distribution_marks_trace_ineligible(self):
+        trace = analyze(
+            {
+                "player_name": "George Kirby",
+                "league": "MLB",
+                "prop_type": "strikeouts_pitched",
+                "line": 5.5,
+                "home_team": "Seattle Mariners",
+                "away_team": "Texas Rangers",
+                "game_date": "2026-05-29",
+                "n_iterations": 500,
+                "seed": 42,
+                "player_context": {"strikeouts_pitched_mean": 6.1, "sample_size": 4},
+                "game_context": {"is_playoff": False, "rest_days": 5, "park_factor": 1.0},
+            },
+            session_id="sess-test",
+            bankroll=1000.0,
+            trace_quality={
+                "downgrades": ["mcp_exploratory_iterations"],
+                "calibration_exclusion_reasons": ["mcp_exploratory_iterations"],
+            },
+        )
+
+        tq = trace["trace_quality"]
+        assert trace["result"]["status"] == "skipped"
+        assert tq["calibration_eligible"] is False
+        assert "engine_skipped" in tq["calibration_exclusion_reasons"]
+        assert "player_context.strikeouts_pitched_std" in tq["calibration_exclusion_reasons"]
+        assert "player_context.sample_size>=5" in tq["calibration_exclusion_reasons"]
+        assert "player_context.sample_season=2026" in tq["calibration_exclusion_reasons"]
+        assert "mcp_exploratory_iterations" in tq["calibration_exclusion_reasons"]
+
 
 # ---------------------------------------------------------------------------
 # _resolve_game_market_odds

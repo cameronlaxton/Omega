@@ -1,14 +1,15 @@
 {
   "trace": {
     "schema_version": 1,
-    "trace_id": "sandbox-70597856-d7b7",
-    "run_id": "sandbox-70597856-d7b7",
-    "timestamp": "2026-05-27T13:13:34.346948+00:00",
+    "trace_id": "sandbox-3e2b53d1-b662",
+    "run_id": "sandbox-3e2b53d1-b662",
+    "timestamp": "2026-05-27T13:12:46.464243+00:00",
+    "ran_at": "2026-05-27T13:12:46.464243+00:00",
     "kind": "game",
     "session_id": "sess-20260527-mlb1",
     "input_snapshot": {
-      "home_team": "Toronto Blue Jays",
-      "away_team": "Miami Marlins",
+      "home_team": "Milwaukee Brewers",
+      "away_team": "St. Louis Cardinals",
       "league": "MLB",
       "odds": {
         "spread_home": null,
@@ -26,26 +27,26 @@
       "allow_baseline": false,
       "simulation_backend": "fast_score",
       "home_context": {
-        "off_rating": 4.5,
-        "def_rating": 4.8
+        "off_rating": 4.4,
+        "def_rating": 4.1
       },
       "away_context": {
-        "off_rating": 4.1,
-        "def_rating": 4.6
+        "off_rating": 4.3,
+        "def_rating": 4.9
       },
       "game_context": {
         "is_playoff": false,
         "rest_days": 1,
-        "park_factor": 1.01,
-        "weather_wind_mph": 0.0
+        "park_factor": 0.97,
+        "weather_wind_mph": 6.0
       },
-      "seed": 2226989287,
+      "seed": 3444178617,
       "evidence": [
         {
           "signal_type": "park_factor_evidence",
           "category": "situational",
           "plane": "game",
-          "value": 1.01,
+          "value": 0.97,
           "source": "park_factor_reference",
           "confidence": 0.85,
           "window": "season",
@@ -56,21 +57,21 @@
       ]
     },
     "result": {
-      "matchup": "Miami Marlins @ Toronto Blue Jays",
+      "matchup": "St. Louis Cardinals @ Milwaukee Brewers",
       "league": "MLB",
-      "analyzed_at": "2026-05-27T13:13:34.348986",
+      "analyzed_at": "2026-05-27T13:12:46.464982",
       "status": "success",
       "skip_reason": null,
       "missing_requirements": [],
       "simulation": {
         "iterations": 10000,
-        "home_win_prob": 57.7,
-        "away_win_prob": 42.3,
+        "home_win_prob": 67.8,
+        "away_win_prob": 32.2,
         "draw_prob": 0.0,
-        "predicted_spread": 0.5,
-        "predicted_total": 9.5,
-        "predicted_home_score": 5.0,
-        "predicted_away_score": 4.5,
+        "predicted_spread": 1.2,
+        "predicted_total": 9.2,
+        "predicted_home_score": 5.2,
+        "predicted_away_score": 4.0,
         "context_source": "provided",
         "baseline_used": false,
         "simulation_backend": "fast_score",
@@ -79,21 +80,21 @@
       "edges": [
         {
           "side": "home",
-          "team": "Toronto Blue Jays",
+          "team": "Milwaukee Brewers",
           "market": "moneyline",
           "line": null,
-          "true_prob": 0.577,
-          "calibrated_prob": 0.577,
+          "true_prob": 0.678,
+          "calibrated_prob": 0.678,
           "market_implied": 0.6078,
-          "edge_pct": -3.08,
-          "ev_pct": -5.07,
+          "edge_pct": 7.02,
+          "ev_pct": 11.54,
           "market_odds": -155.0,
           "confidence_tier": "A",
-          "recommended_units": 0.0,
+          "recommended_units": 5.0,
           "spread_coverage_prob": null,
           "calibration_audit": {
-            "raw_prob": 0.5770000000000001,
-            "calibrated_prob": 0.5770000000000001,
+            "raw_prob": 0.6779999999999999,
+            "calibrated_prob": 0.6779999999999999,
             "league": "MLB",
             "plane": "game",
             "market": "home",
@@ -106,21 +107,21 @@
         },
         {
           "side": "away",
-          "team": "Miami Marlins",
+          "team": "St. Louis Cardinals",
           "market": "moneyline",
           "line": null,
-          "true_prob": 0.423,
-          "calibrated_prob": 0.423,
+          "true_prob": 0.322,
+          "calibrated_prob": 0.322,
           "market_implied": 0.4444,
-          "edge_pct": -2.14,
-          "ev_pct": -4.83,
+          "edge_pct": -12.24,
+          "ev_pct": -27.55,
           "market_odds": 125.0,
-          "confidence_tier": "Pass",
+          "confidence_tier": "A",
           "recommended_units": 0.0,
           "spread_coverage_prob": null,
           "calibration_audit": {
-            "raw_prob": 0.423,
-            "calibrated_prob": 0.423,
+            "raw_prob": 0.322,
+            "calibrated_prob": 0.322,
             "league": "MLB",
             "plane": "game",
             "market": "away",
@@ -132,7 +133,15 @@
           }
         }
       ],
-      "best_bet": null,
+      "best_bet": {
+        "selection": "Milwaukee Brewers home",
+        "odds": -155.0,
+        "edge_pct": 7.02,
+        "ev_pct": 11.54,
+        "confidence_tier": "A",
+        "recommended_units": 5.0,
+        "kelly_fraction": 0.0895
+      },
       "metadata": {
         "engine_version": "2.0-dse",
         "data_sources": [
@@ -155,14 +164,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 4.992,
-          "sample_std": 2.2114556292179515,
+          "sample_mean": 5.2239,
+          "sample_std": 2.3020792319118346,
           "p10": 2.0,
           "p50": 5.0,
           "p90": 8.0,
           "n_iterations": 10000,
-          "seed": 2226989287,
-          "context_hash": "9cdaf0c261407685",
+          "seed": 3444178617,
+          "context_hash": "8f566852ff0d9a9f",
           "component_version": "fast_score_v1"
         },
         {
@@ -174,14 +183,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 4.4768,
-          "sample_std": 2.0841933115717026,
+          "sample_mean": 4.0033,
+          "sample_std": 2.0166033596123865,
           "p10": 2.0,
           "p50": 4.0,
           "p90": 7.0,
           "n_iterations": 10000,
-          "seed": 2226989287,
-          "context_hash": "9cdaf0c261407685",
+          "seed": 3444178617,
+          "context_hash": "8f566852ff0d9a9f",
           "component_version": "fast_score_v1"
         },
         {
@@ -193,14 +202,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 9.4688,
-          "sample_std": 3.025132486354935,
-          "p10": 6.0,
+          "sample_mean": 9.2272,
+          "sample_std": 3.051291556046376,
+          "p10": 5.0,
           "p50": 9.0,
           "p90": 13.0,
           "n_iterations": 10000,
-          "seed": 2226989287,
-          "context_hash": "9cdaf0c261407685",
+          "seed": 3444178617,
+          "context_hash": "8f566852ff0d9a9f",
           "component_version": "fast_score_v1"
         },
         {
@@ -212,14 +221,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 0.5152,
-          "sample_std": 3.0524365611753304,
+          "sample_mean": 1.2206,
+          "sample_std": 3.0695497454837475,
           "p10": -3.0,
           "p50": 1.0,
-          "p90": 4.0,
+          "p90": 5.0,
           "n_iterations": 10000,
-          "seed": 2226989287,
-          "context_hash": "9cdaf0c261407685",
+          "seed": 3444178617,
+          "context_hash": "8f566852ff0d9a9f",
           "component_version": "fast_score_v1"
         }
       ]
@@ -227,13 +236,13 @@
     "context_labels": {
       "is_playoff": false,
       "rest_days": 1,
-      "park_factor": 1.01,
-      "weather_wind_mph": 0.0
+      "park_factor": 0.97,
+      "weather_wind_mph": 6.0
     },
     "calibration_audit": [
       {
-        "raw_prob": 0.5770000000000001,
-        "calibrated_prob": 0.5770000000000001,
+        "raw_prob": 0.6779999999999999,
+        "calibrated_prob": 0.6779999999999999,
         "league": "MLB",
         "plane": "game",
         "market": "home",
@@ -244,8 +253,8 @@
         "path": "static_identity"
       },
       {
-        "raw_prob": 0.423,
-        "calibrated_prob": 0.423,
+        "raw_prob": 0.322,
+        "calibrated_prob": 0.322,
         "league": "MLB",
         "plane": "game",
         "market": "away",
@@ -263,8 +272,8 @@
         "signal_type": "park_factor_evidence",
         "target": "mean",
         "applied": false,
-        "factor": 1.01,
-        "reason": "park_factor_evidence: mean x1.0100 (raw 1.0100, mode=shadow)",
+        "factor": 0.97,
+        "reason": "park_factor_evidence: mean x0.9700 (raw 0.9700, mode=shadow)",
         "policy_version": "adj_v1_seed",
         "evidence_mode": "shadow"
       }
@@ -279,14 +288,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 4.992,
-        "sample_std": 2.2114556292179515,
+        "sample_mean": 5.2239,
+        "sample_std": 2.3020792319118346,
         "p10": 2.0,
         "p50": 5.0,
         "p90": 8.0,
         "n_iterations": 10000,
-        "seed": 2226989287,
-        "context_hash": "9cdaf0c261407685",
+        "seed": 3444178617,
+        "context_hash": "8f566852ff0d9a9f",
         "component_version": "fast_score_v1"
       },
       {
@@ -298,14 +307,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 4.4768,
-        "sample_std": 2.0841933115717026,
+        "sample_mean": 4.0033,
+        "sample_std": 2.0166033596123865,
         "p10": 2.0,
         "p50": 4.0,
         "p90": 7.0,
         "n_iterations": 10000,
-        "seed": 2226989287,
-        "context_hash": "9cdaf0c261407685",
+        "seed": 3444178617,
+        "context_hash": "8f566852ff0d9a9f",
         "component_version": "fast_score_v1"
       },
       {
@@ -317,14 +326,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 9.4688,
-        "sample_std": 3.025132486354935,
-        "p10": 6.0,
+        "sample_mean": 9.2272,
+        "sample_std": 3.051291556046376,
+        "p10": 5.0,
         "p50": 9.0,
         "p90": 13.0,
         "n_iterations": 10000,
-        "seed": 2226989287,
-        "context_hash": "9cdaf0c261407685",
+        "seed": 3444178617,
+        "context_hash": "8f566852ff0d9a9f",
         "component_version": "fast_score_v1"
       },
       {
@@ -336,32 +345,32 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 0.5152,
-        "sample_std": 3.0524365611753304,
+        "sample_mean": 1.2206,
+        "sample_std": 3.0695497454837475,
         "p10": -3.0,
         "p50": 1.0,
-        "p90": 4.0,
+        "p90": 5.0,
         "n_iterations": 10000,
-        "seed": 2226989287,
-        "context_hash": "9cdaf0c261407685",
+        "seed": 3444178617,
+        "context_hash": "8f566852ff0d9a9f",
         "component_version": "fast_score_v1"
       }
     ],
-    "prompt": "MLB game: Miami Marlins @ Toronto Blue Jays",
+    "prompt": "MLB game: St. Louis Cardinals @ Milwaukee Brewers",
     "league": "MLB",
-    "matchup": "Miami Marlins @ Toronto Blue Jays",
+    "matchup": "St. Louis Cardinals @ Milwaukee Brewers",
     "execution_mode": "sandbox_game",
-    "simulation_seed": 2226989287,
+    "simulation_seed": 3444178617,
     "aggregate_quality": null,
     "predictions": {
       "iterations": 10000,
-      "home_win_prob": 57.7,
-      "away_win_prob": 42.3,
+      "home_win_prob": 67.8,
+      "away_win_prob": 32.2,
       "draw_prob": 0.0,
-      "predicted_spread": 0.5,
-      "predicted_total": 9.5,
-      "predicted_home_score": 5.0,
-      "predicted_away_score": 4.5,
+      "predicted_spread": 1.2,
+      "predicted_total": 9.2,
+      "predicted_home_score": 5.2,
+      "predicted_away_score": 4.0,
       "context_source": "provided",
       "baseline_used": false,
       "simulation_backend": "fast_score",
@@ -370,21 +379,21 @@
     "recommendations": [
       {
         "side": "home",
-        "team": "Toronto Blue Jays",
+        "team": "Milwaukee Brewers",
         "market": "moneyline",
         "line": null,
-        "true_prob": 0.577,
-        "calibrated_prob": 0.577,
+        "true_prob": 0.678,
+        "calibrated_prob": 0.678,
         "market_implied": 0.6078,
-        "edge_pct": -3.08,
-        "ev_pct": -5.07,
+        "edge_pct": 7.02,
+        "ev_pct": 11.54,
         "market_odds": -155.0,
         "confidence_tier": "A",
-        "recommended_units": 0.0,
+        "recommended_units": 5.0,
         "spread_coverage_prob": null,
         "calibration_audit": {
-          "raw_prob": 0.5770000000000001,
-          "calibrated_prob": 0.5770000000000001,
+          "raw_prob": 0.6779999999999999,
+          "calibrated_prob": 0.6779999999999999,
           "league": "MLB",
           "plane": "game",
           "market": "home",
@@ -397,21 +406,21 @@
       },
       {
         "side": "away",
-        "team": "Miami Marlins",
+        "team": "St. Louis Cardinals",
         "market": "moneyline",
         "line": null,
-        "true_prob": 0.423,
-        "calibrated_prob": 0.423,
+        "true_prob": 0.322,
+        "calibrated_prob": 0.322,
         "market_implied": 0.4444,
-        "edge_pct": -2.14,
-        "ev_pct": -4.83,
+        "edge_pct": -12.24,
+        "ev_pct": -27.55,
         "market_odds": 125.0,
-        "confidence_tier": "Pass",
+        "confidence_tier": "A",
         "recommended_units": 0.0,
         "spread_coverage_prob": null,
         "calibration_audit": {
-          "raw_prob": 0.423,
-          "calibrated_prob": 0.423,
+          "raw_prob": 0.322,
+          "calibrated_prob": 0.322,
           "league": "MLB",
           "plane": "game",
           "market": "away",
@@ -449,11 +458,12 @@
       "calibration_exclusion_reasons": []
     },
     "quality_gate": null,
-    "reasoning_narrative": "Home: Kevin Gausman (3.38 ERA) vs Eury Perez (4.91 ERA). Park 1.01. Wind 0.0 mph. Model: Toronto Blue Jays 57.7% win. Edge: none.",
+    "reasoning_narrative": "Home: Kyle Harrison (2.80 ERA) vs Away: Dustin May (5.00 ERA). Park factor 0.97 (neutral). Wind 6 mph. Model: Milwaukee Brewers win prob 67.8%. Best edge: Milwaukee Brewers (7.02% edge, A tier).",
     "reasoning_inputs": {
       "sources": [
         "the-odds-api:betmgm",
         "sportsgrid.com",
+        "fanduel-research",
         "web-search"
       ],
       "fields_gathered": [
@@ -463,19 +473,24 @@
         "off_rating",
         "def_rating",
         "park_factor",
-        "weather_wind_mph"
+        "weather_wind_mph",
+        "home_pitcher",
+        "away_pitcher",
+        "pitcher_era"
       ],
       "missing_fields": [
+        "sample_size",
         "team_record",
         "bullpen_era"
       ],
       "market_context": {
         "book": "betmgm",
         "moneyline_home": -155.0,
-        "moneyline_away": 125.0
+        "moneyline_away": 125.0,
+        "over_under": 8.0
       }
     },
-    "reasoning_downgrade_rationale": "Evidence mode=shadow; signals recorded not applied."
+    "reasoning_downgrade_rationale": "Evidence mode=shadow: park_factor and wind signals recorded but not applied to simulation. Pitcher ERA differential captured as context only; not reflected in off/def ratings."
   },
   "bet_record": null,
   "_export_meta": {

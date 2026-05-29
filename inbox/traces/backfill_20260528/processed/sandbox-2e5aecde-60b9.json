@@ -1,21 +1,22 @@
 {
   "trace": {
     "schema_version": 1,
-    "trace_id": "sandbox-9840a0e4-8a5f",
-    "run_id": "sandbox-9840a0e4-8a5f",
-    "timestamp": "2026-05-27T13:13:34.373431+00:00",
+    "trace_id": "sandbox-2e5aecde-60b9",
+    "run_id": "sandbox-2e5aecde-60b9",
+    "timestamp": "2026-05-27T13:12:46.477872+00:00",
+    "ran_at": "2026-05-27T13:12:46.477872+00:00",
     "kind": "game",
     "session_id": "sess-20260527-mlb1",
     "input_snapshot": {
-      "home_team": "Athletics",
-      "away_team": "Seattle Mariners",
+      "home_team": "San Diego Padres",
+      "away_team": "Philadelphia Phillies",
       "league": "MLB",
       "odds": {
         "spread_home": null,
         "spread_home_price": -110.0,
         "spread_away_price": -110.0,
-        "moneyline_home": 105.0,
-        "moneyline_away": -125.0,
+        "moneyline_home": 135.0,
+        "moneyline_away": -160.0,
         "over_under": null,
         "total_over_price": -110.0,
         "total_under_price": -110.0,
@@ -26,63 +27,51 @@
       "allow_baseline": false,
       "simulation_backend": "fast_score",
       "home_context": {
-        "off_rating": 4.1,
-        "def_rating": 4.5
+        "off_rating": 4.3,
+        "def_rating": 3.9
       },
       "away_context": {
-        "off_rating": 4.2,
-        "def_rating": 4.3
+        "off_rating": 5.0,
+        "def_rating": 4.0
       },
       "game_context": {
         "is_playoff": false,
         "rest_days": 1,
-        "park_factor": 0.94,
-        "weather_wind_mph": 18.0
+        "park_factor": 0.9,
+        "weather_wind_mph": 5.0
       },
-      "seed": 2427020356,
+      "seed": 990476741,
       "evidence": [
         {
           "signal_type": "park_factor_evidence",
           "category": "situational",
           "plane": "game",
-          "value": 0.94,
+          "value": 0.9,
           "source": "park_factor_reference",
           "confidence": 0.85,
           "window": "season",
           "direction": null,
           "stat_key": null,
           "note": null
-        },
-        {
-          "signal_type": "weather_wind",
-          "category": "situational",
-          "plane": "game",
-          "value": 18.0,
-          "source": "weather_estimate",
-          "confidence": 0.65,
-          "window": "matchup",
-          "direction": "neutral",
-          "stat_key": null,
-          "note": null
         }
       ]
     },
     "result": {
-      "matchup": "Seattle Mariners @ Athletics",
+      "matchup": "Philadelphia Phillies @ San Diego Padres",
       "league": "MLB",
-      "analyzed_at": "2026-05-27T13:13:34.375711",
+      "analyzed_at": "2026-05-27T13:12:46.478616",
       "status": "success",
       "skip_reason": null,
       "missing_requirements": [],
       "simulation": {
         "iterations": 10000,
-        "home_win_prob": 49.9,
-        "away_win_prob": 50.1,
+        "home_win_prob": 46.2,
+        "away_win_prob": 53.8,
         "draw_prob": 0.0,
-        "predicted_spread": -0.0,
+        "predicted_spread": -0.3,
         "predicted_total": 8.6,
-        "predicted_home_score": 4.3,
-        "predicted_away_score": 4.3,
+        "predicted_home_score": 4.2,
+        "predicted_away_score": 4.5,
         "context_source": "provided",
         "baseline_used": false,
         "simulation_backend": "fast_score",
@@ -91,21 +80,21 @@
       "edges": [
         {
           "side": "home",
-          "team": "Athletics",
+          "team": "San Diego Padres",
           "market": "moneyline",
           "line": null,
-          "true_prob": 0.499,
-          "calibrated_prob": 0.499,
-          "market_implied": 0.4878,
-          "edge_pct": 1.12,
-          "ev_pct": 2.29,
-          "market_odds": 105.0,
-          "confidence_tier": "Pass",
-          "recommended_units": 0.55,
+          "true_prob": 0.462,
+          "calibrated_prob": 0.462,
+          "market_implied": 0.4255,
+          "edge_pct": 3.65,
+          "ev_pct": 8.57,
+          "market_odds": 135.0,
+          "confidence_tier": "A",
+          "recommended_units": 3.17,
           "spread_coverage_prob": null,
           "calibration_audit": {
-            "raw_prob": 0.499,
-            "calibrated_prob": 0.499,
+            "raw_prob": 0.462,
+            "calibrated_prob": 0.462,
             "league": "MLB",
             "plane": "game",
             "market": "home",
@@ -118,21 +107,21 @@
         },
         {
           "side": "away",
-          "team": "Seattle Mariners",
+          "team": "Philadelphia Phillies",
           "market": "moneyline",
           "line": null,
-          "true_prob": 0.501,
-          "calibrated_prob": 0.501,
-          "market_implied": 0.5556,
-          "edge_pct": -5.46,
-          "ev_pct": -9.82,
-          "market_odds": -125.0,
+          "true_prob": 0.538,
+          "calibrated_prob": 0.538,
+          "market_implied": 0.6154,
+          "edge_pct": -7.74,
+          "ev_pct": -12.58,
+          "market_odds": -160.0,
           "confidence_tier": "A",
           "recommended_units": 0.0,
           "spread_coverage_prob": null,
           "calibration_audit": {
-            "raw_prob": 0.501,
-            "calibrated_prob": 0.501,
+            "raw_prob": 0.5379999999999999,
+            "calibrated_prob": 0.5379999999999999,
             "league": "MLB",
             "plane": "game",
             "market": "away",
@@ -144,7 +133,15 @@
           }
         }
       ],
-      "best_bet": null,
+      "best_bet": {
+        "selection": "San Diego Padres home",
+        "odds": 135.0,
+        "edge_pct": 3.65,
+        "ev_pct": 8.57,
+        "confidence_tier": "A",
+        "recommended_units": 3.17,
+        "kelly_fraction": 0.0317
+      },
       "metadata": {
         "engine_version": "2.0-dse",
         "data_sources": [
@@ -167,14 +164,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 4.2825,
-          "sample_std": 2.054043268775029,
+          "sample_mean": 4.1887,
+          "sample_std": 2.0551623561168726,
           "p10": 2.0,
           "p50": 4.0,
           "p90": 7.0,
           "n_iterations": 10000,
-          "seed": 2427020356,
-          "context_hash": "eff896b3bbd23688",
+          "seed": 990476741,
+          "context_hash": "1c3b6f67c4683b07",
           "component_version": "fast_score_v1"
         },
         {
@@ -186,14 +183,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 4.2982,
-          "sample_std": 2.0661744263250417,
+          "sample_mean": 4.458,
+          "sample_std": 2.1329875761474884,
           "p10": 2.0,
           "p50": 4.0,
           "p90": 7.0,
           "n_iterations": 10000,
-          "seed": 2427020356,
-          "context_hash": "eff896b3bbd23688",
+          "seed": 990476741,
+          "context_hash": "1c3b6f67c4683b07",
           "component_version": "fast_score_v1"
         },
         {
@@ -205,14 +202,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 8.5807,
-          "sample_std": 2.939232469540384,
+          "sample_mean": 8.6467,
+          "sample_std": 2.96129686286257,
           "p10": 5.0,
           "p50": 8.0,
           "p90": 12.0,
           "n_iterations": 10000,
-          "seed": 2427020356,
-          "context_hash": "eff896b3bbd23688",
+          "seed": 990476741,
+          "context_hash": "1c3b6f67c4683b07",
           "component_version": "fast_score_v1"
         },
         {
@@ -224,14 +221,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": -0.0157,
-          "sample_std": 2.887430260630001,
+          "sample_mean": -0.2693,
+          "sample_std": 2.9626639212034713,
           "p10": -4.0,
           "p50": 0.0,
-          "p90": 4.0,
+          "p90": 3.0,
           "n_iterations": 10000,
-          "seed": 2427020356,
-          "context_hash": "eff896b3bbd23688",
+          "seed": 990476741,
+          "context_hash": "1c3b6f67c4683b07",
           "component_version": "fast_score_v1"
         }
       ]
@@ -239,13 +236,13 @@
     "context_labels": {
       "is_playoff": false,
       "rest_days": 1,
-      "park_factor": 0.94,
-      "weather_wind_mph": 18.0
+      "park_factor": 0.9,
+      "weather_wind_mph": 5.0
     },
     "calibration_audit": [
       {
-        "raw_prob": 0.499,
-        "calibrated_prob": 0.499,
+        "raw_prob": 0.462,
+        "calibrated_prob": 0.462,
         "league": "MLB",
         "plane": "game",
         "market": "home",
@@ -256,8 +253,8 @@
         "path": "static_identity"
       },
       {
-        "raw_prob": 0.501,
-        "calibrated_prob": 0.501,
+        "raw_prob": 0.5379999999999999,
+        "calibrated_prob": 0.5379999999999999,
         "league": "MLB",
         "plane": "game",
         "market": "away",
@@ -275,17 +272,8 @@
         "signal_type": "park_factor_evidence",
         "target": "mean",
         "applied": false,
-        "factor": 0.94,
-        "reason": "park_factor_evidence: mean x0.9400 (raw 0.9400, mode=shadow)",
-        "policy_version": "adj_v1_seed",
-        "evidence_mode": "shadow"
-      },
-      {
-        "signal_type": "weather_wind",
-        "target": "mean",
-        "applied": false,
-        "factor": 1.072,
-        "reason": "weather_wind: mean x1.0720 (raw 1.0720, mode=shadow)",
+        "factor": 0.9,
+        "reason": "park_factor_evidence: mean x0.9000 (raw 0.9000, mode=shadow)",
         "policy_version": "adj_v1_seed",
         "evidence_mode": "shadow"
       }
@@ -300,14 +288,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 4.2825,
-        "sample_std": 2.054043268775029,
+        "sample_mean": 4.1887,
+        "sample_std": 2.0551623561168726,
         "p10": 2.0,
         "p50": 4.0,
         "p90": 7.0,
         "n_iterations": 10000,
-        "seed": 2427020356,
-        "context_hash": "eff896b3bbd23688",
+        "seed": 990476741,
+        "context_hash": "1c3b6f67c4683b07",
         "component_version": "fast_score_v1"
       },
       {
@@ -319,14 +307,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 4.2982,
-        "sample_std": 2.0661744263250417,
+        "sample_mean": 4.458,
+        "sample_std": 2.1329875761474884,
         "p10": 2.0,
         "p50": 4.0,
         "p90": 7.0,
         "n_iterations": 10000,
-        "seed": 2427020356,
-        "context_hash": "eff896b3bbd23688",
+        "seed": 990476741,
+        "context_hash": "1c3b6f67c4683b07",
         "component_version": "fast_score_v1"
       },
       {
@@ -338,14 +326,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 8.5807,
-        "sample_std": 2.939232469540384,
+        "sample_mean": 8.6467,
+        "sample_std": 2.96129686286257,
         "p10": 5.0,
         "p50": 8.0,
         "p90": 12.0,
         "n_iterations": 10000,
-        "seed": 2427020356,
-        "context_hash": "eff896b3bbd23688",
+        "seed": 990476741,
+        "context_hash": "1c3b6f67c4683b07",
         "component_version": "fast_score_v1"
       },
       {
@@ -357,32 +345,32 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": -0.0157,
-        "sample_std": 2.887430260630001,
+        "sample_mean": -0.2693,
+        "sample_std": 2.9626639212034713,
         "p10": -4.0,
         "p50": 0.0,
-        "p90": 4.0,
+        "p90": 3.0,
         "n_iterations": 10000,
-        "seed": 2427020356,
-        "context_hash": "eff896b3bbd23688",
+        "seed": 990476741,
+        "context_hash": "1c3b6f67c4683b07",
         "component_version": "fast_score_v1"
       }
     ],
-    "prompt": "MLB game: Seattle Mariners @ Athletics",
+    "prompt": "MLB game: Philadelphia Phillies @ San Diego Padres",
     "league": "MLB",
-    "matchup": "Seattle Mariners @ Athletics",
+    "matchup": "Philadelphia Phillies @ San Diego Padres",
     "execution_mode": "sandbox_game",
-    "simulation_seed": 2427020356,
+    "simulation_seed": 990476741,
     "aggregate_quality": null,
     "predictions": {
       "iterations": 10000,
-      "home_win_prob": 49.9,
-      "away_win_prob": 50.1,
+      "home_win_prob": 46.2,
+      "away_win_prob": 53.8,
       "draw_prob": 0.0,
-      "predicted_spread": -0.0,
+      "predicted_spread": -0.3,
       "predicted_total": 8.6,
-      "predicted_home_score": 4.3,
-      "predicted_away_score": 4.3,
+      "predicted_home_score": 4.2,
+      "predicted_away_score": 4.5,
       "context_source": "provided",
       "baseline_used": false,
       "simulation_backend": "fast_score",
@@ -391,21 +379,21 @@
     "recommendations": [
       {
         "side": "home",
-        "team": "Athletics",
+        "team": "San Diego Padres",
         "market": "moneyline",
         "line": null,
-        "true_prob": 0.499,
-        "calibrated_prob": 0.499,
-        "market_implied": 0.4878,
-        "edge_pct": 1.12,
-        "ev_pct": 2.29,
-        "market_odds": 105.0,
-        "confidence_tier": "Pass",
-        "recommended_units": 0.55,
+        "true_prob": 0.462,
+        "calibrated_prob": 0.462,
+        "market_implied": 0.4255,
+        "edge_pct": 3.65,
+        "ev_pct": 8.57,
+        "market_odds": 135.0,
+        "confidence_tier": "A",
+        "recommended_units": 3.17,
         "spread_coverage_prob": null,
         "calibration_audit": {
-          "raw_prob": 0.499,
-          "calibrated_prob": 0.499,
+          "raw_prob": 0.462,
+          "calibrated_prob": 0.462,
           "league": "MLB",
           "plane": "game",
           "market": "home",
@@ -418,21 +406,21 @@
       },
       {
         "side": "away",
-        "team": "Seattle Mariners",
+        "team": "Philadelphia Phillies",
         "market": "moneyline",
         "line": null,
-        "true_prob": 0.501,
-        "calibrated_prob": 0.501,
-        "market_implied": 0.5556,
-        "edge_pct": -5.46,
-        "ev_pct": -9.82,
-        "market_odds": -125.0,
+        "true_prob": 0.538,
+        "calibrated_prob": 0.538,
+        "market_implied": 0.6154,
+        "edge_pct": -7.74,
+        "ev_pct": -12.58,
+        "market_odds": -160.0,
         "confidence_tier": "A",
         "recommended_units": 0.0,
         "spread_coverage_prob": null,
         "calibration_audit": {
-          "raw_prob": 0.501,
-          "calibrated_prob": 0.501,
+          "raw_prob": 0.5379999999999999,
+          "calibrated_prob": 0.5379999999999999,
           "league": "MLB",
           "plane": "game",
           "market": "away",
@@ -448,8 +436,8 @@
       "spread_home": null,
       "spread_home_price": -110.0,
       "spread_away_price": -110.0,
-      "moneyline_home": 105.0,
-      "moneyline_away": -125.0,
+      "moneyline_home": 135.0,
+      "moneyline_away": -160.0,
       "over_under": null,
       "total_over_price": -110.0,
       "total_under_price": -110.0,
@@ -470,11 +458,12 @@
       "calibration_exclusion_reasons": []
     },
     "quality_gate": null,
-    "reasoning_narrative": "Home: Jeffrey Springs (4.11 ERA) vs Logan Gilbert (4.04 ERA). Park 0.94. Wind 18.0 mph. Model: Athletics 49.9% win. Edge: Athletics.",
+    "reasoning_narrative": "Home: Walker Buehler (5.05 ERA) vs Away: Cristopher Sanchez (1.62 ERA). Park factor 0.9 (pitcher-friendly). Wind 5 mph. Model: San Diego Padres win prob 46.2%. Best edge: San Diego Padres (3.65% edge, A tier).",
     "reasoning_inputs": {
       "sources": [
         "the-odds-api:betmgm",
         "sportsgrid.com",
+        "fanduel-research",
         "web-search"
       ],
       "fields_gathered": [
@@ -484,27 +473,32 @@
         "off_rating",
         "def_rating",
         "park_factor",
-        "weather_wind_mph"
+        "weather_wind_mph",
+        "home_pitcher",
+        "away_pitcher",
+        "pitcher_era"
       ],
       "missing_fields": [
+        "sample_size",
         "team_record",
         "bullpen_era"
       ],
       "market_context": {
         "book": "betmgm",
-        "moneyline_home": 105.0,
-        "moneyline_away": -125.0
+        "moneyline_home": 135.0,
+        "moneyline_away": -160.0,
+        "over_under": 7.0
       }
     },
-    "reasoning_downgrade_rationale": "Evidence mode=shadow; signals recorded not applied."
+    "reasoning_downgrade_rationale": "Evidence mode=shadow: park_factor and wind signals recorded but not applied to simulation. Pitcher ERA differential captured as context only; not reflected in off/def ratings."
   },
   "bet_record": null,
   "_export_meta": {
     "exported_at": "2026-05-28T09:12:00Z",
     "runtime_db": "/sessions/kind-youthful-ptolemy/.omega/runtime/omega_traces.db",
     "outcome_attached": {
-      "home_score": 1,
-      "away_score": 9,
+      "home_score": 0,
+      "away_score": 3,
       "result": "away_win",
       "source": "api:espn"
     },

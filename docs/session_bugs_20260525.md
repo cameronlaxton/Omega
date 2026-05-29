@@ -87,7 +87,7 @@ Running `python scripts/cowork_preflight.py --repair-from-git` exited without mo
 **Workaround used this session:**
 ```bash
 for f in scripts/cowork_preflight.py omega/core/contracts/evidence.py omega/core/contracts/service.py scripts/run_champion_challenger.py tests/core/test_engine.py tests/mcp/test_mcp_tools.py; do
-  git show HEAD:"$f" > "/tmp/_fix_$(basename $f)"
+  git cat-file -p "HEAD:$f" > "/tmp/_fix_$(basename $f)"
   cp "/tmp/_fix_$(basename $f)" "$f"
 done
 ```

@@ -1,6 +1,6 @@
 # Known Bug Sentinel — Design Plan
 
-**Status:** Planned (not yet implemented)
+**Status:** Live / Active (implemented — `scripts/bug_sentinel.py`, catalog `omega/qa/bug_catalog.json`, skill `omega-known-bug-sentinel`)
 **Phase:** 6h
 **Owner:** Agent Systems / QA
 

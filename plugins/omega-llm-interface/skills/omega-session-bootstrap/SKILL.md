@@ -57,7 +57,7 @@ If `--repair-from-git` fails to change the file or verification still reports th
 same corruption, fall back to manual repair for each corrupt file:
 
 ```bash
-git show HEAD:"omega/core/contracts/service.py" > /tmp/_service.py \
+git cat-file -p HEAD:omega/core/contracts/service.py > /tmp/_service.py \
   && cp /tmp/_service.py omega/core/contracts/service.py
 ```
 

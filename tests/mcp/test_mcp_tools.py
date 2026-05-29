@@ -53,6 +53,28 @@ def test_calibration_resource_path_is_readable():
     assert "universal_v1.0" in data
 
 
+def test_analyze_tool_docstrings_expose_evidence_signal_literals():
+    for fn in (omega_analyze_game, omega_analyze_prop):
+        doc = fn.__doc__ or ""
+        for literal in (
+            "player_form",
+            "matchup",
+            "situational",
+            "team_form",
+            "last_1",
+            "last_3",
+            "season",
+            "player",
+            "game",
+            "over",
+            "under",
+            "home",
+            "away",
+            "neutral",
+        ):
+            assert literal in doc
+
+
 def test_analyze_game_tool_delegates_to_core_service(monkeypatch):
     monkeypatch.setattr(mcp_server, "_formal_output_gate_failures", lambda: [])
 
@@ -81,6 +103,35 @@ def test_analyze_game_tool_delegates_to_core_service(monkeypatch):
     assert result["trace"]["bankroll"] == 2500.0
     assert result["trace"]["model_version"] == "omega-core-phase6h"
     assert result["result"]["status"] == "success"
+    assert result["mcp_defaults"] == {}
+
+
+def test_analyze_game_tool_injects_exploratory_iterations(monkeypatch):
+    monkeypatch.setattr(mcp_server, "_formal_output_gate_failures", lambda: [])
+
+    result = omega_analyze_game(
+        {
+            "home_team": "Boston Celtics",
+            "away_team": "Indiana Pacers",
+            "league": "NBA",
+            "seed": 42,
+            "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+            "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+            "game_context": {"is_playoff": False, "rest_days": 2},
+            "odds": {"moneyline_home": -160, "moneyline_away": 140},
+        },
+        bankroll=2500.0,
+        session_id="sess-20260518-mcp",
+    )
+
+    assert result["status"] == "success"
+    assert result["mcp_defaults"]["n_iterations"] == 300
+    assert result["trace"]["input_snapshot"]["n_iterations"] == 300
+    assert result["trace_quality"]["calibration_eligible"] is False
+    assert "mcp_exploratory_iterations" in result["trace_quality"]["downgrades"]
+    assert "mcp_exploratory_iterations" in result["trace_quality"][
+        "calibration_exclusion_reasons"
+    ]
 
 
 def test_analyze_game_tool_blocks_when_formal_gate_fails(monkeypatch):
@@ -129,6 +180,36 @@ def test_analyze_prop_tool_returns_validation_errors():
     assert ("game_date",) in missing
 
 
+def test_analyze_prop_tool_injects_exploratory_iterations(monkeypatch):
+    monkeypatch.setattr(mcp_server, "_formal_output_gate_failures", lambda: [])
+
+    result = omega_analyze_prop(
+        {
+            "player_name": "Jayson Tatum",
+            "league": "NBA",
+            "prop_type": "pts",
+            "line": 25.5,
+            "home_team": "Los Angeles Lakers",
+            "away_team": "Boston Celtics",
+            "game_date": "2026-05-17",
+            "odds_over": -110,
+            "odds_under": -110,
+            "player_context": {"pts_mean": 27.0, "pts_std": 5.5},
+            "game_context": {"is_playoff": False, "rest_days": 2},
+        },
+        bankroll=1000.0,
+        session_id="sess-20260518-mcp",
+    )
+
+    assert result["status"] == "success"
+    assert result["mcp_defaults"]["n_iterations"] == 500
+    assert result["trace"]["input_snapshot"]["n_iterations"] == 500
+    assert result["trace_quality"]["calibration_eligible"] is False
+    assert "mcp_exploratory_iterations" in result["trace_quality"][
+        "calibration_exclusion_reasons"
+    ]
+
+
 def test_replay_bundle_tool_marks_replay_mode_without_live_fetch():
     result = omega_replay_bundle(
         {
@@ -142,6 +223,9 @@ def test_replay_bundle_tool_marks_replay_mode_without_live_fetch():
     )
 
     assert result["status"] == "success"
+    assert result["result"] == result["response"]
+    assert result["trace_quality"]["calibration_eligible"] is False
+    assert result["trace_quality"]["calibration_exclusion_reasons"] == ["replay_plane_only"]
     response = result["response"]
     assert response["mode"] == "replay_audit"
     assert response["live_fetch_enabled"] is False
@@ -213,7 +297,7 @@ def test_calibration_preview_is_dry_run_when_insufficient_data(tmp_path):
 
 
 def test_resolve_odds_tool_returns_input_prep_result(monkeypatch):
-    import scripts.resolve_odds as resolver
+    import omega.integrations.odds_resolver as resolver
 
     def fake_resolve_odds(**kwargs):
         assert kwargs["bookmaker"] == "betmgm"

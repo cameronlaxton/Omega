@@ -1,0 +1,186 @@
+{
+  "trace_id": "sandbox-088d5c55-9dda",
+  "session_id": "sess-20260529-mlb1",
+  "model_version": "omega-core-phase6h",
+  "ran_at": "2026-05-29T20:31:48.944370+00:00",
+  "kind": "game",
+  "bankroll": 1000.0,
+  "input_snapshot": {
+    "home_team": "Houston Astros",
+    "away_team": "Milwaukee Brewers",
+    "league": "MLB",
+    "odds": {
+      "spread_home": null,
+      "spread_home_price": -110.0,
+      "spread_away_price": -110.0,
+      "moneyline_home": null,
+      "moneyline_away": null,
+      "over_under": null,
+      "total_over_price": -110.0,
+      "total_under_price": -110.0,
+      "moneyline_draw": null,
+      "markets": null
+    },
+    "n_iterations": 10000,
+    "allow_baseline": false,
+    "simulation_backend": "fast_score",
+    "home_context": {
+      "off_rating": 4.44,
+      "def_rating": 5.16,
+      "starter_era": 2.65,
+      "park_factor": 0.99
+    },
+    "away_context": {
+      "off_rating": 4.89,
+      "def_rating": 3.42,
+      "starter_era": 2.61
+    },
+    "game_context": {
+      "is_playoff": false,
+      "rest_days": 0
+    },
+    "seed": 349854821,
+    "evidence": [
+      {
+        "signal_type": "rest_advantage",
+        "category": "situational",
+        "plane": "game",
+        "value": "MIL 1 rest day; HOU b2b (played May 28)",
+        "source": "mlb.com/schedule",
+        "confidence": 0.7,
+        "window": "last_1",
+        "direction": "away",
+        "stat_key": null,
+        "note": null
+      },
+      {
+        "signal_type": "def_matchup_weak",
+        "category": "matchup",
+        "plane": "game",
+        "value": "HOU RA/G 5.16 (worst AL West); MIL RA/G 3.42 top-5 MLB",
+        "source": "champsorchumps.us",
+        "confidence": 0.65,
+        "window": "season",
+        "direction": "away",
+        "stat_key": null,
+        "note": null
+      }
+    ],
+    "game_date": "2026-05-29"
+  },
+  "trace": {
+    "matchup": "Milwaukee Brewers @ Houston Astros",
+    "league": "MLB",
+    "analyzed_at": "2026-05-29T20:31:48.948351",
+    "status": "success",
+    "simulation": {
+      "iterations": 10000,
+      "home_win_prob": 25.1,
+      "away_win_prob": 74.9,
+      "draw_prob": 0.0,
+      "predicted_spread": -1.7,
+      "predicted_total": 7.9,
+      "predicted_home_score": 3.1,
+      "predicted_away_score": 4.8,
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1"
+    },
+    "edges": [],
+    "best_bet": null,
+    "metadata": {
+      "engine_version": "2.0-dse",
+      "data_sources": [
+        "simulation",
+        "user_provided"
+      ],
+      "archetype": "baseball",
+      "suppressed_markets": []
+    },
+    "reasoning_inputs": {
+      "off_rating_home": 4.44,
+      "def_rating_home": 5.16,
+      "starter_era_home": 2.65,
+      "park_factor": 0.99,
+      "off_rating_away": 4.89,
+      "def_rating_away": 3.42,
+      "starter_era_away": 2.61,
+      "is_playoff": false,
+      "rest_days": 0,
+      "evidence_signals": [
+        "rest_advantage",
+        "def_matchup_weak"
+      ],
+      "sources": [
+        "champsorchumps.us",
+        "dknetwork.draftkings.com",
+        "fantasyteamadvice.com",
+        "world-weather.info",
+        "actionnetwork.com",
+        "winnersandwhiners.com",
+        "espn.com"
+      ],
+      "fields_gathered": [
+        "off_rating_home",
+        "def_rating_home",
+        "starter_era_home",
+        "park_factor",
+        "off_rating_away",
+        "def_rating_away",
+        "starter_era_away",
+        "is_playoff",
+        "rest_days",
+        "home_ml",
+        "away_ml",
+        "total"
+      ],
+      "missing_fields": [],
+      "market_context": {
+        "book": "betmgm",
+        "home_ml": -102,
+        "away_ml": -116,
+        "total": 8.0
+      }
+    },
+    "reasoning_narrative": "2026-05-29 MIL@HOU game analysis. Engine: fast_score. Home win prob: 25.1% / Away: 74.9%. Predicted total: 7.9 runs. Predicted spread: -1.7. Evidence policy: shadow mode (signals recorded, not applied). Session: sess-20260529-mlb1.",
+    "reasoning_downgrade_rationale": "Evidence policy v1 mode=shadow: all EvidenceSignal records computed and stored but NOT applied to sim inputs. This is a known design limitation (BUG-EVIDENCE-SHADOW-001). Simulation ran on base context only.",
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "downgrades": [],
+  "evidence_mode": "shadow",
+  "evidence_application": [
+    {
+      "signal_type": "rest_advantage",
+      "target": "mean",
+      "applied": false,
+      "factor": 1.0,
+      "reason": "rest_advantage: mean x1.0000 (raw 1.0000, mode=shadow)",
+      "policy_version": "adj_v1_seed",
+      "evidence_mode": "shadow"
+    },
+    {
+      "signal_type": "def_matchup_weak",
+      "target": "skip",
+      "applied": false,
+      "factor": 1.0,
+      "reason": "signal does not apply to sport archetype 'baseball'",
+      "policy_version": "adj_v1_seed",
+      "evidence_mode": "shadow"
+    }
+  ],
+  "context_labels": {
+    "is_playoff": false,
+    "rest_days": 0
+  }
+}

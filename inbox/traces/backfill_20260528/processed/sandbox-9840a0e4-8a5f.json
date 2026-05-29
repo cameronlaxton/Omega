@@ -1,21 +1,22 @@
 {
   "trace": {
     "schema_version": 1,
-    "trace_id": "sandbox-800db8cd-aff6",
-    "run_id": "sandbox-800db8cd-aff6",
-    "timestamp": "2026-05-27T13:12:46.699903+00:00",
+    "trace_id": "sandbox-9840a0e4-8a5f",
+    "run_id": "sandbox-9840a0e4-8a5f",
+    "timestamp": "2026-05-27T13:13:34.373431+00:00",
+    "ran_at": "2026-05-27T13:13:34.373431+00:00",
     "kind": "game",
     "session_id": "sess-20260527-mlb1",
     "input_snapshot": {
-      "home_team": "Boston Red Sox",
-      "away_team": "Atlanta Braves",
+      "home_team": "Athletics",
+      "away_team": "Seattle Mariners",
       "league": "MLB",
       "odds": {
         "spread_home": null,
         "spread_home_price": -110.0,
         "spread_away_price": -110.0,
-        "moneyline_home": -105.0,
-        "moneyline_away": -115.0,
+        "moneyline_home": 105.0,
+        "moneyline_away": -125.0,
         "over_under": null,
         "total_over_price": -110.0,
         "total_under_price": -110.0,
@@ -26,26 +27,26 @@
       "allow_baseline": false,
       "simulation_backend": "fast_score",
       "home_context": {
-        "off_rating": 4.8,
+        "off_rating": 4.1,
         "def_rating": 4.5
       },
       "away_context": {
-        "off_rating": 5.1,
-        "def_rating": 3.9
+        "off_rating": 4.2,
+        "def_rating": 4.3
       },
       "game_context": {
         "is_playoff": false,
         "rest_days": 1,
-        "park_factor": 1.03,
-        "weather_wind_mph": 10.0
+        "park_factor": 0.94,
+        "weather_wind_mph": 18.0
       },
-      "seed": 2133662396,
+      "seed": 2427020356,
       "evidence": [
         {
           "signal_type": "park_factor_evidence",
           "category": "situational",
           "plane": "game",
-          "value": 1.03,
+          "value": 0.94,
           "source": "park_factor_reference",
           "confidence": 0.85,
           "window": "season",
@@ -57,32 +58,32 @@
           "signal_type": "weather_wind",
           "category": "situational",
           "plane": "game",
-          "value": 10.0,
+          "value": 18.0,
           "source": "weather_estimate",
           "confidence": 0.65,
           "window": "matchup",
-          "direction": null,
+          "direction": "neutral",
           "stat_key": null,
           "note": null
         }
       ]
     },
     "result": {
-      "matchup": "Atlanta Braves @ Boston Red Sox",
+      "matchup": "Seattle Mariners @ Athletics",
       "league": "MLB",
-      "analyzed_at": "2026-05-27T13:12:46.707961",
+      "analyzed_at": "2026-05-27T13:13:34.375711",
       "status": "success",
       "skip_reason": null,
       "missing_requirements": [],
       "simulation": {
         "iterations": 10000,
-        "home_win_prob": 39.8,
-        "away_win_prob": 60.2,
+        "home_win_prob": 49.9,
+        "away_win_prob": 50.1,
         "draw_prob": 0.0,
-        "predicted_spread": -0.7,
-        "predicted_total": 9.8,
-        "predicted_home_score": 4.5,
-        "predicted_away_score": 5.2,
+        "predicted_spread": -0.0,
+        "predicted_total": 8.6,
+        "predicted_home_score": 4.3,
+        "predicted_away_score": 4.3,
         "context_source": "provided",
         "baseline_used": false,
         "simulation_backend": "fast_score",
@@ -91,21 +92,21 @@
       "edges": [
         {
           "side": "home",
-          "team": "Boston Red Sox",
+          "team": "Athletics",
           "market": "moneyline",
           "line": null,
-          "true_prob": 0.398,
-          "calibrated_prob": 0.398,
-          "market_implied": 0.5122,
-          "edge_pct": -11.42,
-          "ev_pct": -22.3,
-          "market_odds": -105.0,
-          "confidence_tier": "A",
-          "recommended_units": 0.0,
+          "true_prob": 0.499,
+          "calibrated_prob": 0.499,
+          "market_implied": 0.4878,
+          "edge_pct": 1.12,
+          "ev_pct": 2.29,
+          "market_odds": 105.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 0.55,
           "spread_coverage_prob": null,
           "calibration_audit": {
-            "raw_prob": 0.39799999999999996,
-            "calibrated_prob": 0.39799999999999996,
+            "raw_prob": 0.499,
+            "calibrated_prob": 0.499,
             "league": "MLB",
             "plane": "game",
             "market": "home",
@@ -118,21 +119,21 @@
         },
         {
           "side": "away",
-          "team": "Atlanta Braves",
+          "team": "Seattle Mariners",
           "market": "moneyline",
           "line": null,
-          "true_prob": 0.602,
-          "calibrated_prob": 0.602,
-          "market_implied": 0.5349,
-          "edge_pct": 6.71,
-          "ev_pct": 12.55,
-          "market_odds": -115.0,
+          "true_prob": 0.501,
+          "calibrated_prob": 0.501,
+          "market_implied": 0.5556,
+          "edge_pct": -5.46,
+          "ev_pct": -9.82,
+          "market_odds": -125.0,
           "confidence_tier": "A",
-          "recommended_units": 5.0,
+          "recommended_units": 0.0,
           "spread_coverage_prob": null,
           "calibration_audit": {
-            "raw_prob": 0.602,
-            "calibrated_prob": 0.602,
+            "raw_prob": 0.501,
+            "calibrated_prob": 0.501,
             "league": "MLB",
             "plane": "game",
             "market": "away",
@@ -144,15 +145,7 @@
           }
         }
       ],
-      "best_bet": {
-        "selection": "Atlanta Braves away",
-        "odds": -115.0,
-        "edge_pct": 6.71,
-        "ev_pct": 12.55,
-        "confidence_tier": "A",
-        "recommended_units": 5.0,
-        "kelly_fraction": 0.0721
-      },
+      "best_bet": null,
       "metadata": {
         "engine_version": "2.0-dse",
         "data_sources": [
@@ -175,14 +168,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 4.5203,
-          "sample_std": 2.1136196228273336,
+          "sample_mean": 4.2825,
+          "sample_std": 2.054043268775029,
           "p10": 2.0,
           "p50": 4.0,
           "p90": 7.0,
           "n_iterations": 10000,
-          "seed": 2133662396,
-          "context_hash": "5494a5b67fcc311c",
+          "seed": 2427020356,
+          "context_hash": "eff896b3bbd23688",
           "component_version": "fast_score_v1"
         },
         {
@@ -194,14 +187,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 5.2466,
-          "sample_std": 2.280567569707162,
+          "sample_mean": 4.2982,
+          "sample_std": 2.0661744263250417,
           "p10": 2.0,
-          "p50": 5.0,
-          "p90": 8.0,
+          "p50": 4.0,
+          "p90": 7.0,
           "n_iterations": 10000,
-          "seed": 2133662396,
-          "context_hash": "5494a5b67fcc311c",
+          "seed": 2427020356,
+          "context_hash": "eff896b3bbd23688",
           "component_version": "fast_score_v1"
         },
         {
@@ -213,14 +206,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": 9.7669,
-          "sample_std": 3.139134337679765,
-          "p10": 6.0,
-          "p50": 10.0,
-          "p90": 14.0,
+          "sample_mean": 8.5807,
+          "sample_std": 2.939232469540384,
+          "p10": 5.0,
+          "p50": 8.0,
+          "p90": 12.0,
           "n_iterations": 10000,
-          "seed": 2133662396,
-          "context_hash": "5494a5b67fcc311c",
+          "seed": 2427020356,
+          "context_hash": "eff896b3bbd23688",
           "component_version": "fast_score_v1"
         },
         {
@@ -232,14 +225,14 @@
             "source": "monte_carlo_scores"
           },
           "params_schema_version": 1,
-          "sample_mean": -0.7263,
-          "sample_std": 3.0793811569858986,
-          "p10": -5.0,
-          "p50": -1.0,
-          "p90": 3.0,
+          "sample_mean": -0.0157,
+          "sample_std": 2.887430260630001,
+          "p10": -4.0,
+          "p50": 0.0,
+          "p90": 4.0,
           "n_iterations": 10000,
-          "seed": 2133662396,
-          "context_hash": "5494a5b67fcc311c",
+          "seed": 2427020356,
+          "context_hash": "eff896b3bbd23688",
           "component_version": "fast_score_v1"
         }
       ]
@@ -247,13 +240,13 @@
     "context_labels": {
       "is_playoff": false,
       "rest_days": 1,
-      "park_factor": 1.03,
-      "weather_wind_mph": 10.0
+      "park_factor": 0.94,
+      "weather_wind_mph": 18.0
     },
     "calibration_audit": [
       {
-        "raw_prob": 0.39799999999999996,
-        "calibrated_prob": 0.39799999999999996,
+        "raw_prob": 0.499,
+        "calibrated_prob": 0.499,
         "league": "MLB",
         "plane": "game",
         "market": "home",
@@ -264,8 +257,8 @@
         "path": "static_identity"
       },
       {
-        "raw_prob": 0.602,
-        "calibrated_prob": 0.602,
+        "raw_prob": 0.501,
+        "calibrated_prob": 0.501,
         "league": "MLB",
         "plane": "game",
         "market": "away",
@@ -283,8 +276,8 @@
         "signal_type": "park_factor_evidence",
         "target": "mean",
         "applied": false,
-        "factor": 1.03,
-        "reason": "park_factor_evidence: mean x1.0300 (raw 1.0300, mode=shadow)",
+        "factor": 0.94,
+        "reason": "park_factor_evidence: mean x0.9400 (raw 0.9400, mode=shadow)",
         "policy_version": "adj_v1_seed",
         "evidence_mode": "shadow"
       },
@@ -292,8 +285,8 @@
         "signal_type": "weather_wind",
         "target": "mean",
         "applied": false,
-        "factor": 1.04,
-        "reason": "weather_wind: mean x1.0400 (raw 1.0400, mode=shadow)",
+        "factor": 1.072,
+        "reason": "weather_wind: mean x1.0720 (raw 1.0720, mode=shadow)",
         "policy_version": "adj_v1_seed",
         "evidence_mode": "shadow"
       }
@@ -308,14 +301,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 4.5203,
-        "sample_std": 2.1136196228273336,
+        "sample_mean": 4.2825,
+        "sample_std": 2.054043268775029,
         "p10": 2.0,
         "p50": 4.0,
         "p90": 7.0,
         "n_iterations": 10000,
-        "seed": 2133662396,
-        "context_hash": "5494a5b67fcc311c",
+        "seed": 2427020356,
+        "context_hash": "eff896b3bbd23688",
         "component_version": "fast_score_v1"
       },
       {
@@ -327,14 +320,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 5.2466,
-        "sample_std": 2.280567569707162,
+        "sample_mean": 4.2982,
+        "sample_std": 2.0661744263250417,
         "p10": 2.0,
-        "p50": 5.0,
-        "p90": 8.0,
+        "p50": 4.0,
+        "p90": 7.0,
         "n_iterations": 10000,
-        "seed": 2133662396,
-        "context_hash": "5494a5b67fcc311c",
+        "seed": 2427020356,
+        "context_hash": "eff896b3bbd23688",
         "component_version": "fast_score_v1"
       },
       {
@@ -346,14 +339,14 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": 9.7669,
-        "sample_std": 3.139134337679765,
-        "p10": 6.0,
-        "p50": 10.0,
-        "p90": 14.0,
+        "sample_mean": 8.5807,
+        "sample_std": 2.939232469540384,
+        "p10": 5.0,
+        "p50": 8.0,
+        "p90": 12.0,
         "n_iterations": 10000,
-        "seed": 2133662396,
-        "context_hash": "5494a5b67fcc311c",
+        "seed": 2427020356,
+        "context_hash": "eff896b3bbd23688",
         "component_version": "fast_score_v1"
       },
       {
@@ -365,32 +358,32 @@
           "source": "monte_carlo_scores"
         },
         "params_schema_version": 1,
-        "sample_mean": -0.7263,
-        "sample_std": 3.0793811569858986,
-        "p10": -5.0,
-        "p50": -1.0,
-        "p90": 3.0,
+        "sample_mean": -0.0157,
+        "sample_std": 2.887430260630001,
+        "p10": -4.0,
+        "p50": 0.0,
+        "p90": 4.0,
         "n_iterations": 10000,
-        "seed": 2133662396,
-        "context_hash": "5494a5b67fcc311c",
+        "seed": 2427020356,
+        "context_hash": "eff896b3bbd23688",
         "component_version": "fast_score_v1"
       }
     ],
-    "prompt": "MLB game: Atlanta Braves @ Boston Red Sox",
+    "prompt": "MLB game: Seattle Mariners @ Athletics",
     "league": "MLB",
-    "matchup": "Atlanta Braves @ Boston Red Sox",
+    "matchup": "Seattle Mariners @ Athletics",
     "execution_mode": "sandbox_game",
-    "simulation_seed": 2133662396,
+    "simulation_seed": 2427020356,
     "aggregate_quality": null,
     "predictions": {
       "iterations": 10000,
-      "home_win_prob": 39.8,
-      "away_win_prob": 60.2,
+      "home_win_prob": 49.9,
+      "away_win_prob": 50.1,
       "draw_prob": 0.0,
-      "predicted_spread": -0.7,
-      "predicted_total": 9.8,
-      "predicted_home_score": 4.5,
-      "predicted_away_score": 5.2,
+      "predicted_spread": -0.0,
+      "predicted_total": 8.6,
+      "predicted_home_score": 4.3,
+      "predicted_away_score": 4.3,
       "context_source": "provided",
       "baseline_used": false,
       "simulation_backend": "fast_score",
@@ -399,21 +392,21 @@
     "recommendations": [
       {
         "side": "home",
-        "team": "Boston Red Sox",
+        "team": "Athletics",
         "market": "moneyline",
         "line": null,
-        "true_prob": 0.398,
-        "calibrated_prob": 0.398,
-        "market_implied": 0.5122,
-        "edge_pct": -11.42,
-        "ev_pct": -22.3,
-        "market_odds": -105.0,
-        "confidence_tier": "A",
-        "recommended_units": 0.0,
+        "true_prob": 0.499,
+        "calibrated_prob": 0.499,
+        "market_implied": 0.4878,
+        "edge_pct": 1.12,
+        "ev_pct": 2.29,
+        "market_odds": 105.0,
+        "confidence_tier": "Pass",
+        "recommended_units": 0.55,
         "spread_coverage_prob": null,
         "calibration_audit": {
-          "raw_prob": 0.39799999999999996,
-          "calibrated_prob": 0.39799999999999996,
+          "raw_prob": 0.499,
+          "calibrated_prob": 0.499,
           "league": "MLB",
           "plane": "game",
           "market": "home",
@@ -426,21 +419,21 @@
       },
       {
         "side": "away",
-        "team": "Atlanta Braves",
+        "team": "Seattle Mariners",
         "market": "moneyline",
         "line": null,
-        "true_prob": 0.602,
-        "calibrated_prob": 0.602,
-        "market_implied": 0.5349,
-        "edge_pct": 6.71,
-        "ev_pct": 12.55,
-        "market_odds": -115.0,
+        "true_prob": 0.501,
+        "calibrated_prob": 0.501,
+        "market_implied": 0.5556,
+        "edge_pct": -5.46,
+        "ev_pct": -9.82,
+        "market_odds": -125.0,
         "confidence_tier": "A",
-        "recommended_units": 5.0,
+        "recommended_units": 0.0,
         "spread_coverage_prob": null,
         "calibration_audit": {
-          "raw_prob": 0.602,
-          "calibrated_prob": 0.602,
+          "raw_prob": 0.501,
+          "calibrated_prob": 0.501,
           "league": "MLB",
           "plane": "game",
           "market": "away",
@@ -456,8 +449,8 @@
       "spread_home": null,
       "spread_home_price": -110.0,
       "spread_away_price": -110.0,
-      "moneyline_home": -105.0,
-      "moneyline_away": -115.0,
+      "moneyline_home": 105.0,
+      "moneyline_away": -125.0,
       "over_under": null,
       "total_over_price": -110.0,
       "total_under_price": -110.0,
@@ -478,12 +471,11 @@
       "calibration_exclusion_reasons": []
     },
     "quality_gate": null,
-    "reasoning_narrative": "Home: Connelly Early (3.33 ERA) vs Away: Bryce Elder (1.97 ERA). Park factor 1.03 (hitter-friendly). Wind 10 mph. Model: Boston Red Sox win prob 39.8%. Best edge: Atlanta Braves (6.71% edge, A tier).",
+    "reasoning_narrative": "Home: Jeffrey Springs (4.11 ERA) vs Logan Gilbert (4.04 ERA). Park 0.94. Wind 18.0 mph. Model: Athletics 49.9% win. Edge: Athletics.",
     "reasoning_inputs": {
       "sources": [
         "the-odds-api:betmgm",
         "sportsgrid.com",
-        "fanduel-research",
         "web-search"
       ],
       "fields_gathered": [
@@ -493,33 +485,28 @@
         "off_rating",
         "def_rating",
         "park_factor",
-        "weather_wind_mph",
-        "home_pitcher",
-        "away_pitcher",
-        "pitcher_era"
+        "weather_wind_mph"
       ],
       "missing_fields": [
-        "sample_size",
         "team_record",
         "bullpen_era"
       ],
       "market_context": {
         "book": "betmgm",
-        "moneyline_home": -105.0,
-        "moneyline_away": -115.0,
-        "over_under": 8.5
+        "moneyline_home": 105.0,
+        "moneyline_away": -125.0
       }
     },
-    "reasoning_downgrade_rationale": "Evidence mode=shadow: park_factor and wind signals recorded but not applied to simulation. Pitcher ERA differential captured as context only; not reflected in off/def ratings."
+    "reasoning_downgrade_rationale": "Evidence mode=shadow; signals recorded not applied."
   },
   "bet_record": null,
   "_export_meta": {
     "exported_at": "2026-05-28T09:12:00Z",
     "runtime_db": "/sessions/kind-youthful-ptolemy/.omega/runtime/omega_traces.db",
     "outcome_attached": {
-      "home_score": 8,
-      "away_score": 0,
-      "result": "home_win",
+      "home_score": 1,
+      "away_score": 9,
+      "result": "away_win",
       "source": "api:espn"
     },
     "note": "Exported from ephemeral sandbox DB; re-ingest to restore traces. Outcomes already attached - skip fetch_outcomes after re-ingest."

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 import pytest
 
@@ -36,8 +36,8 @@ def test_llm_mcp_interface_documents_replay_as_audit_only():
     assert "qualitative text only" in text
 
 
-def test_plugin_mcp_config_uses_installed_package_not_relative_escape():
-    """No relative-escape cwd; Claude copies plugins to a cache where ../.. is invalid."""
+def test_plugin_mcp_config_pins_active_local_checkout():
+    """Local plugin launch must bind to the active C:\\repos\\Omega checkout."""
     import json
 
     text = (ROOT / "plugins" / "omega-llm-interface" / ".mcp.json").read_text(encoding="utf-8")
@@ -50,6 +50,7 @@ def test_plugin_mcp_config_uses_installed_package_not_relative_escape():
     omega_server = config["mcpServers"]["omega"]
     assert omega_server["command"] == "python"
     assert omega_server["args"] == ["-m", "omega.mcp.server"]
+    assert omega_server["cwd"] == "C:\\repos\\Omega"
 
 
 def test_claude_plugin_manifest_exists_and_is_well_formed():
