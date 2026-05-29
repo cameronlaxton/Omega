@@ -1,0 +1,163 @@
+{
+  "trace": {
+    "trace_id": "sandbox-739ace63-f826",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-29T00:22:32.780782+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260528-nba2",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 29.5,
+      "odds_over": -110.0,
+      "odds_under": -120.0,
+      "player_context": {
+        "pts_mean": 27.0,
+        "pts_std": 5.5,
+        "sample_size": 5,
+        "minutes": 38,
+        "usage_rate": 0.35
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2
+      },
+      "n_iterations": 10000,
+      "seed": 2713382651,
+      "evidence": [
+        {
+          "signal_type": "usage_role_change",
+          "category": "situational",
+          "plane": "player",
+          "value": "elevated",
+          "source": "injury_report",
+          "confidence": 0.85,
+          "window": "series",
+          "direction": "over",
+          "stat_key": "pts",
+          "note": "Williams OUT elevated SGA usage"
+        }
+      ],
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-28"
+    },
+    "result": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 29.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.2586,
+      "under_prob": 0.7414,
+      "projection_mean": 25.9918,
+      "projection_std": 5.3128,
+      "projection_p10": 19.1309,
+      "projection_p50": 26.035,
+      "projection_p90": 32.7928,
+      "distribution_type": "normal",
+      "edge_over": -26.52,
+      "edge_under": 19.59,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.2155,
+      "recommended_units": 5.0,
+      "bet_side_odds": -120.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.2586,
+        "calibrated_prob": 0.2586,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.7414,
+        "calibrated_prob": 0.7414,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_distributions": [
+        {
+          "target": "player_stat",
+          "market": "player_prop",
+          "stat_key": "pts",
+          "distribution_type": "normal",
+          "distribution_params": {
+            "mu": 25.919999999999998,
+            "sigma": 5.279999999999999
+          },
+          "params_schema_version": 1,
+          "sample_mean": 25.991832185628304,
+          "sample_std": 5.312825200546069,
+          "p10": 19.130850136553562,
+          "p50": 26.035038433527667,
+          "p90": 32.79278953964659,
+          "n_iterations": 10000,
+          "seed": 2713382651,
+          "context_hash": "d581e71e",
+          "component_version": "player_prop_fast_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 2
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "usage_role_change",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "usage_role_change: mean x1.0000 (raw 1.0000, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "bet_record": {
+    "bet_id": "7685fa0ba4754b02bc988e1fe11486c9",
+    "trace_id": "sandbox-739ace63-f826",
+    "book": "BetMGM",
+    "market": "player_prop:pts",
+    "selection": "SGA pts UNDER 29.5",
+    "selection_descriptor": "GilgeousAlexander_under_29.5_pts",
+    "line_taken": 29.5,
+    "odds_taken": -120.0,
+    "stake_units": 1.0,
+    "decision_timestamp": "2026-05-29T00:22:26.658932+00:00",
+    "status": "pending"
+  }
+}

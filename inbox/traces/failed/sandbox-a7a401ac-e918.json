@@ -1,0 +1,140 @@
+{
+  "trace": {
+    "trace_id": "sandbox-a7a401ac-e918",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-29T00:22:32.790620+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260528-nba2",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "ast",
+      "line": 8.5,
+      "odds_over": 105.0,
+      "odds_under": -145.0,
+      "player_context": {
+        "ast_mean": 9.8,
+        "ast_std": 2.0,
+        "sample_size": 5,
+        "minutes": 38,
+        "usage_rate": 0.35
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 2
+      },
+      "n_iterations": 10000,
+      "seed": 959423003,
+      "evidence": [],
+      "home_team": "San Antonio Spurs",
+      "away_team": "Oklahoma City Thunder",
+      "game_date": "2026-05-28"
+    },
+    "result": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "ast",
+      "line": 8.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.6831,
+      "under_prob": 0.3169,
+      "projection_mean": 9.4058,
+      "projection_std": 1.9363,
+      "projection_p10": 6.9282,
+      "projection_p50": 9.4205,
+      "projection_p90": 11.8832,
+      "distribution_type": "normal",
+      "edge_over": 19.53,
+      "edge_under": -27.49,
+      "recommendation": "over",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.1906,
+      "recommended_units": 5.0,
+      "bet_side_odds": 105.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.6831,
+        "calibrated_prob": 0.6831,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.3169,
+        "calibrated_prob": 0.3169,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_distributions": [
+        {
+          "target": "player_stat",
+          "market": "player_prop",
+          "stat_key": "ast",
+          "distribution_type": "normal",
+          "distribution_params": {
+            "mu": 9.408,
+            "sigma": 1.92
+          },
+          "params_schema_version": 1,
+          "sample_mean": 9.405788367103074,
+          "sample_std": 1.936322905143873,
+          "p10": 6.928155158221156,
+          "p50": 9.420522443363913,
+          "p90": 11.883239701709932,
+          "n_iterations": 10000,
+          "seed": 959423003,
+          "context_hash": "88981abb",
+          "component_version": "player_prop_fast_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 2
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "empty",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "bet_record": {
+    "bet_id": "acc1f802841c42f081f28baf4affadae",
+    "trace_id": "sandbox-a7a401ac-e918",
+    "book": "BetMGM",
+    "market": "player_prop:ast",
+    "selection": "SGA ast OVER 8.5",
+    "selection_descriptor": "GilgeousAlexander_over_8.5_ast",
+    "line_taken": 8.5,
+    "odds_taken": 105.0,
+    "stake_units": 1.0,
+    "decision_timestamp": "2026-05-29T00:22:26.658932+00:00",
+    "status": "pending"
+  }
+}

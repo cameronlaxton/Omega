@@ -1,0 +1,62 @@
+ValidationError: 8 validation errors for SessionSidecar
+audit_events.3.inputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.3.outputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.4.inputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.4.outputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.5.inputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.5.outputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.6.inputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.6.outputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+
+Traceback (most recent call last):
+  File "/sessions/awesome-affectionate-knuth/mnt/Omega/scripts/ingest_traces.py", line 460, in main
+    trace_id, bet_id = ingest_file(
+  File "/sessions/awesome-affectionate-knuth/mnt/Omega/scripts/ingest_traces.py", line 315, in ingest_file
+    qa_failed = _session_has_failed_quality_gate(
+  File "/sessions/awesome-affectionate-knuth/mnt/Omega/scripts/ingest_traces.py", line 251, in _session_has_failed_quality_gate
+    sidecar = SessionSidecar.from_path(path)
+  File "/sessions/awesome-affectionate-knuth/mnt/Omega/omega/trace/session_sidecar.py", line 103, in from_path
+    return cls.model_validate(json.load(fh))
+  File "/sessions/awesome-affectionate-knuth/.local/lib/python3.10/site-packages/pydantic/main.py", line 732, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+pydantic_core._pydantic_core.ValidationError: 8 validation errors for SessionSidecar
+audit_events.3.inputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.3.outputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.4.inputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.4.outputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.5.inputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.5.outputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.6.inputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type
+audit_events.6.outputs
+  Input should be a valid dictionary [type=dict_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/dict_type

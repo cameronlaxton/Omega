@@ -1,0 +1,167 @@
+{
+  "session_id": "sess-20260528-nba2",
+  "opened_at": "2026-05-29T00:09:43.222418+00:00",
+  "closed_at": "2026-05-29T12:57:19.901641+00:00",
+  "model_version": "omega-core-phase6h",
+  "purpose": "NBA WCF Game 6 SA Spurs vs OKC Thunder \u2014 game + props",
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {
+    "traces_emitted": 7,
+    "bets_recorded": 7,
+    "webfetch_failures": 0
+  },
+  "agent_notes": "WCF Game 6 SA Spurs vs OKC Thunder. 7 bets all capped at 1u (RESEARCH_CANDIDATE, static calibration, 0 graded traces). Game: UNDER 219.5 strong (pred 209.8, edge +20.92%). Props: SGA pts UNDER 29.5 (+21.35%), SGA ast OVER 8.5 (+19.50%), Wemby reb UNDER 13.5 (+12.29%), Hartenstein reb OVER 8.5 (+5.60%), Chet pts UNDER 13.5 (+5.04%), Wemby pts UNDER 28.5 (+3.45%). Key injuries: Williams (OKC) OUT, Fox (SA) limited. Infra: 3 files repaired (Pattern-C); stale git index.lock (FUSE mount, not removable) bypassed via direct analyze() import after gate verified. omega_traces.db mount malformed \u2014 runtime DB used (TraceStore auto-redirect).",
+  "audit_events": [
+    {
+      "ts": "2026-05-29T00:09:43.222418+00:00",
+      "event_type": "preflight",
+      "step": "cowork_preflight",
+      "status": "ok",
+      "notes": "cowork_preflight_ready python=3.10.12; 3 files repaired (Pattern-C: server.py report_calibration.py run_analyze.py); static calibration (RESEARCH_CANDIDATE, 0 graded traces, stake cap 1u); git index rebuilt via git read-tree HEAD",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-29T00:09:43.222418+00:00",
+      "event_type": "data_provenance",
+      "step": "odds_resolution",
+      "status": "ok",
+      "notes": "Game odds and 5 prop lines resolved via the-odds-api:betmgm. Game commence 2026-05-29T00:40Z. SA ML -160 OKC ML +135, spread SA -3.5 -110, total 219.5 -110. Props: Wemby pts 28.5 -115/-115, reb 13.5 +115/-155, ast 3.5 +110/-150; SGA pts 29.5 -110/-120; Chet pts 13.5 -115/-115; Harper pts 9.5 -105/-125.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-29T00:09:43.222418+00:00",
+      "event_type": "data_provenance",
+      "step": "context_gather",
+      "status": "warn",
+      "notes": "Injuries: J.Williams (OKC) questionable/hamstring, assumed OUT (missed 3 straight WCF games); A.Mitchell (OKC) OUT; De Aaron Fox (SA) limited/high ankle (31 min Games 3-4). Stats: Wemby WCF 28.2 pts 11.8 reb 3.6 ast (5 games, Game 5: 20 pts 6 reb). SGA WCF 26.2 pts 9.8 ast (5 games, Game 5: 32 pts). Chet last-5: 12.2 pts 7.0 reb. Harper pts context unavailable from cited source (research-only if needed). off_rating/def_rating from regular-season team ratings adjusted for playoff context and injuries.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [
+        "J.Williams assumed OUT per missed-games pattern",
+        "Fox limited to 31 min / reduced efficiency",
+        "Ratings: OKC off=115 def=111 pace=98; SA off=112 def=109 pace=99 (playoff-adjusted)"
+      ],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-29T00:17:48.354360+00:00",
+      "event_type": "engine_run",
+      "step": "game_analysis",
+      "status": "ok",
+      "notes": "Markov_state game analysis: SA home_win_prob=61.2%, pred_total=209.8 vs line 219.5. UNDER 219.5 edge=+20.92% EV=+39.94%. SA ML -0.34% PASS. SA -3.5 +0.02% PASS.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-f20f7ae5-78fc"
+      ]
+    },
+    {
+      "ts": "2026-05-29T00:17:48.354360+00:00",
+      "event_type": "engine_run",
+      "step": "prop_analysis",
+      "status": "ok",
+      "notes": "8 prop traces run: 6 bets + 2 passes. Wemby pts UNDER 28.5 edge=3.45%. Wemby reb UNDER 13.5 edge=12.29%. SGA pts UNDER 29.5 edge=21.35%. SGA ast OVER 8.5 edge=19.50%. Chet pts UNDER 13.5 edge=5.04%. Hartenstein reb OVER 8.5 edge=5.60%. PASS: Wemby ast 3.5 (no edge), Wemby blk 3.5 (proj at line).",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-a68b265f-41a7",
+        "sandbox-8c40d27f-6036",
+        "sandbox-609c4fc7-3507",
+        "sandbox-f426f1bb-db3d",
+        "sandbox-02e413cb-1948",
+        "sandbox-b123cd33-265a",
+        "sandbox-042c2f8a-0bfa",
+        "sandbox-8a3615ba-9967"
+      ]
+    },
+    {
+      "ts": "2026-05-29T00:17:48.354360+00:00",
+      "event_type": "quality_gate",
+      "step": "engine_output_validation",
+      "status": "warn",
+      "notes": "Null field: game_date not echoed in input_snapshot (engine schema omission \u2014 field accepted but not persisted in trace). All result fields present (best_bet, edges, simulation). Not a blocking downgrade. RESEARCH_CANDIDATE cap applied: all units capped at 1u. is_playoff=True rest_days=2 confirmed on all traces. All sample_size=5.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-f20f7ae5-78fc",
+        "sandbox-a68b265f-41a7",
+        "sandbox-8c40d27f-6036",
+        "sandbox-609c4fc7-3507",
+        "sandbox-f426f1bb-db3d",
+        "sandbox-02e413cb-1948",
+        "sandbox-b123cd33-265a"
+      ]
+    },
+    {
+      "ts": "2026-05-29T00:17:48.354360+00:00",
+      "event_type": "candidate_rejected",
+      "step": "pass_candidates",
+      "status": "skipped",
+      "notes": "PASS: SA ML -160 (edge=-0.34%). SA -3.5 (edge=+0.02% insufficient). OKC ML +135 (edge=-3.75%). Wemby ast 3.5 (engine PASS, no edge). Wemby blk 3.5 (proj=3.50 at line, no edge). Harper pts 9.5 (research-only: no cited WCF sample stats).",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-042c2f8a-0bfa",
+        "sandbox-8a3615ba-9967"
+      ]
+    },
+    {
+      "ts": "2026-05-29T12:53:54.317103+00:00",
+      "event_type": "step",
+      "step": "session_reopened",
+      "status": "ok",
+      "notes": "Reopened to fetch and attach outcomes for 7 pending bet_records. All 7 traces confirmed in runtime DB.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-5f86ba01-246d",
+        "sandbox-a9ec5f92-b5d1",
+        "sandbox-292084a0-df51",
+        "sandbox-739ace63-f826",
+        "sandbox-a7a401ac-e918",
+        "sandbox-d50884ee-4709",
+        "sandbox-b7da2a7b-f558"
+      ]
+    },
+    {
+      "ts": "2026-05-29T12:57:19.901641+00:00",
+      "event_type": "step",
+      "step": "outcomes_attached",
+      "status": "ok",
+      "notes": "5W 2L. SA 118 OKC 91 (final). WINS: UNDER 219.5 (209 total), Wemby pts (28<28.5), Wemby reb (10<13.5), SGA pts (15<29.5), Chet pts (10<13.5). LOSSES: SGA ast (4 ast, 28 min blowout), Hartenstein reb (5 reb, 16 min blowout). Net P&L: +$21.27 on $70 risked. Evidence scoring: usage_role_change acc=0.00 n=2 (signal did not predict over direction; OKC starters benched in blowout). def_matchup_strong acc=0.00 n=1 (SA defense dominant but signal scored against wrong outcome).",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-5f86ba01-246d",
+        "sandbox-a9ec5f92-b5d1",
+        "sandbox-292084a0-df51",
+        "sandbox-739ace63-f826",
+        "sandbox-a7a401ac-e918",
+        "sandbox-d50884ee-4709",
+        "sandbox-b7da2a7b-f558"
+      ]
+    }
+  ]
+}
