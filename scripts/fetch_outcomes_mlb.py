@@ -36,7 +36,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from omega.integrations.espn_mlb import FinalGame, canonical_team, fetch_scoreboard  # noqa: E402
-from omega.trace.store import TraceStore  # noqa: E402
+from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("fetch_outcomes_mlb")
 
@@ -137,6 +137,7 @@ def main() -> int:
         return 1
 
     store = TraceStore(db_path=args.db)
+    log_effective_db(store, logger)
 
     attached = 0
     unmatched: list[str] = []

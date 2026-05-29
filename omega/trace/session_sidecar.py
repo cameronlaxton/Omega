@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
+import uuid
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+logger = logging.getLogger("omega.trace.session_sidecar")
 
 _PROTECTED_QUANT_FIELDS: frozenset[str] = frozenset({
     "edge_pct",
@@ -141,8 +145,52 @@ def _check_protected_fields(event: AuditEvent) -> None:
                     )
 
 
+def _events_jsonl_path(path: Path) -> Path:
+    """Sibling diagnostic event log: ``<session_id>.events.jsonl``."""
+    return path.with_suffix(".events.jsonl")
+
+
+def _mirror_events_jsonl(path: Path, events: list[dict[str, Any]]) -> None:
+    """Append events to the diagnostic JSONL mirror (write-only this phase).
+
+    Append-only and best-effort: a mirror failure must never break the primary
+    sidecar write. The mirror preserves the event stream for recovery even if
+    the JSON summary is later truncated/quarantined. It is NOT a read path —
+    reports continue to read the JSON summary.
+    """
+    if not events:
+        return
+    try:
+        jsonl = _events_jsonl_path(path)
+        jsonl.parent.mkdir(parents=True, exist_ok=True)
+        with jsonl.open("a", encoding="utf-8", newline="\n") as fh:
+            for event in events:
+                fh.write(json.dumps(event) + "\n")
+    except OSError as exc:
+        logger.warning("JSONL mirror append failed for %s: %s", path.name, exc)
+
+
+def write_sidecar(path: Path, sidecar: SessionSidecar) -> None:
+    """Atomically write a full sidecar (temp + fsync + replace)."""
+    from omega.trace._atomic import atomic_write_text
+
+    atomic_write_text(path, json.dumps(sidecar.model_dump(mode="json"), indent=2))
+
+
+def create_sidecar(path: Path, payload: dict[str, Any]) -> SessionSidecar:
+    """Validate ``payload`` and atomically create the sidecar + its JSONL mirror.
+
+    Replaces non-atomic ``path.write_text(json.dumps(...))`` session creation,
+    which was a truncation source.
+    """
+    sidecar = SessionSidecar.model_validate(payload)
+    write_sidecar(path, sidecar)
+    _mirror_events_jsonl(path, [e.model_dump(mode="json") for e in sidecar.audit_events])
+    return sidecar
+
+
 def append_audit_events(path: Path, events: list[dict[str, Any]]) -> None:
-    """Atomically append audit events to a session sidecar."""
+    """Atomically append audit events to a session sidecar (+ JSONL mirror)."""
     from omega.trace._atomic import atomic_write_text
 
     validated = [AuditEvent.model_validate(e) for e in events]
@@ -152,6 +200,98 @@ def append_audit_events(path: Path, events: list[dict[str, Any]]) -> None:
     sidecar = SessionSidecar.from_path(path)
     sidecar.audit_events.extend(validated)
     atomic_write_text(path, json.dumps(sidecar.model_dump(mode="json"), indent=2))
+    _mirror_events_jsonl(path, [e.model_dump(mode="json") for e in validated])
+
+
+def load_sidecar_safe(path: Path) -> SessionSidecar | None:
+    """Read a sidecar, returning None on any parse/validation error.
+
+    Warn-only and side-effect-free — safe for read-only report scripts. It does
+    NOT move or mark the file (quarantine is an explicit operator action via
+    ``validate_session_sidecars.py --quarantine``). A None result means the
+    sidecar's quality-gate history is UNKNOWN, never "clean" (see
+    :func:`quality_gate_status`).
+    """
+    try:
+        return SessionSidecar.from_path(path)
+    except Exception as exc:  # noqa: BLE001 — any malformed/truncated/invalid file
+        logger.warning(
+            "Sidecar %s is unreadable (%s: %s); treating quality-gate history as "
+            "UNKNOWN. Quarantine with `validate_session_sidecars.py --quarantine`.",
+            path.name,
+            type(exc).__name__,
+            exc,
+        )
+        return None
+
+
+def quality_gate_status(sidecar: SessionSidecar | None) -> str:
+    """Tri-state quality-gate verdict: 'pass' | 'fail' | 'unknown'.
+
+    An unreadable sidecar (None) is 'unknown' — never implied-clean. Callers must
+    not let 'unknown' silently pass as 'no failure'.
+    """
+    if sidecar is None:
+        return "unknown"
+    for event in sidecar.audit_events:
+        if event.event_type == "quality_gate" and event.status == "fail":
+            return "fail"
+    return "pass"
+
+
+def quarantine_sidecar(
+    path: Path,
+    reason: str,
+    *,
+    quarantine_dir: Path | None = None,
+) -> Path | None:
+    """Move a malformed sidecar to ``invalid/`` and record the reason. Idempotent.
+
+    The JSONL mirror is intentionally left in place so the event stream survives
+    for recovery. Returns the quarantine destination, or None if the file is
+    already quarantined / does not exist.
+    """
+    if not path.exists():
+        return None
+    quarantine_dir = quarantine_dir or (path.parent / "invalid")
+    # Idempotent: already under an invalid/ dir → no-op.
+    if path.parent.name == "invalid" or path.parent == quarantine_dir:
+        return None
+    quarantine_dir.mkdir(parents=True, exist_ok=True)
+    dst = quarantine_dir / path.name
+    if dst.exists():
+        dst = quarantine_dir / f"{path.stem}.{uuid.uuid4().hex[:8]}{path.suffix}"
+    import shutil
+
+    shutil.move(str(path), str(dst))
+    reason_path = dst.with_suffix(dst.suffix + ".reason.txt")
+    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    reason_path.write_text(f"{ts}\n{reason}\n", encoding="utf-8")
+    logger.warning("Quarantined malformed sidecar %s -> %s", path.name, dst)
+    return dst
+
+
+def rebuild_sidecar_from_jsonl(jsonl_path: Path) -> dict[str, Any]:
+    """Reconstruct the audit-event stream from a JSONL mirror (recovery helper).
+
+    Returns ``{"audit_events": [...], "event_count": n, "source_jsonl": str}``.
+    Diagnostic only — not wired into normal reads.
+    """
+    events: list[dict[str, Any]] = []
+    if jsonl_path.exists():
+        for line in jsonl_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                logger.warning("Skipping malformed JSONL line in %s", jsonl_path.name)
+    return {
+        "audit_events": events,
+        "event_count": len(events),
+        "source_jsonl": str(jsonl_path),
+    }
 
 
 def append_null_data_audit(

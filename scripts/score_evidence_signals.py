@@ -88,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         store = TraceStore(db_path=args.db)
+        log_effective_db(store, logger)
     except Exception as exc:  # noqa: BLE001
         logger.error("Cannot open trace store: %s", exc)
         return 1

@@ -48,7 +48,7 @@ from omega.integrations.espn_boxscore import (  # noqa: E402
     parse_box_score,
     supported_prop_type,
 )
-from omega.trace.store import TraceStore  # noqa: E402
+from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("fetch_outcomes_props")
 
@@ -203,6 +203,29 @@ def main(
     bs_fetch = box_score_fetcher or fetch_box_score
 
     store = TraceStore(db_path=args.db)
+    log_effective_db(store, logger)
+    logger.info(
+        "Outcome window (UTC): %s .. %s. NOTE: --since/--until are UTC dates; a "
+        "game's local date can differ, a common cause of 0 matches.",
+        start,
+        end,
+    )
+    # Read-only pre-scan so "0 processed" is explainable: how many ungraded prop
+    # traces are even in the window, in THIS DB?
+    for _league in leagues:
+        _ws = (start - timedelta(days=1)).isoformat() + "T00:00:00Z"
+        _we = (end + timedelta(days=1)).isoformat() + "T23:59:59Z"
+        _pending = store.query_traces(
+            league=_league, start=_ws, end=_we, has_outcome=False, limit=10000
+        )
+        _nprop = sum(1 for t in _pending if t.get("kind") == "prop")
+        logger.info(
+            "%s: %d ungraded traces in window (%d prop) in DB %s",
+            _league,
+            len(_pending),
+            _nprop,
+            store.db_path,
+        )
 
     attached = 0
     unmatched: list[str] = []

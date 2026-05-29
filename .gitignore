@@ -56,3 +56,14 @@ RUN_TRACE.jsonl
 # Phase 7 ETL raw-response cache (knowable-at-the-time snapshot; not source).
 # Alias tables (data/aliases) and Sackmann CSV clones (data/external) ARE versioned.
 data/cache/
+
+# Local DB / SQLite + FUSE probe artifacts (see OMEGA_COWORK.md §2b "Disk artifacts").
+# Harmless leftovers from ad-hoc DB probing and deleted-but-open handles.
+*.probe.db
+*.probe.db-journal
+*.db-wal-test
+tmp*.probe.db*
+
+# Quarantined malformed session sidecars + diagnostic JSONL event mirror.
+inbox/sessions/invalid/
+inbox/sessions/*.events.jsonl

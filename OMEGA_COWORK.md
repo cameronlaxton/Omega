@@ -85,13 +85,38 @@ the first was restored), fix the new failure before running Pass 3.
 
 ### 2b. Clean Cowork Session Hygiene
 
-- **SQLite on a network/FUSE mount:** `TraceStore` now detects FUSE/SMB/CIFS/NFS
+- **SQLite on a network/FUSE mount:** `TraceStore` detects FUSE/SMB/CIFS/NFS
   DB paths at open time and auto-redirects writes to a per-user local runtime
   path (`%LOCALAPPDATA%\omega\runtime\omega_traces.db` on Windows,
-  `~/.omega/runtime/omega_traces.db` on POSIX). A single WARNING is logged
-  when this happens. No `atexit` sync-back: archival back to the mount is
-  owned by `scripts/sync_to_mount.ps1` (see §2c). The redirect is a safety
-  net; the intended steady state is the local-workspace layout below.
+  `~/.omega/runtime/omega_traces.db` on POSIX). No `atexit` sync-back: archival
+  back to the mount is owned by `scripts/sync_to_mount.ps1` (one-way, see §2c).
+  The redirect is a safety net; the intended steady state is the local-workspace
+  layout below.
+- **Empty-history guard (no silent fresh DB):** because the sync is one-way, a
+  fresh VM's redirected runtime DB would otherwise start EMPTY while the mount
+  still holds history — the exact cause of the "0 traces now, 7 traces later"
+  split. The store now **fails loud** on redirect rather than presenting
+  believable-empty history: if the runtime DB is absent and the source DB is
+  missing, malformed, or non-empty, `TraceStore()` raises with an actionable
+  message. To populate the runtime DB from a valid source, run the explicit
+  `python scripts/db_status.py --seed` (the only command that copies a DB; it
+  never overwrites an existing runtime DB and never merges). To intentionally
+  start empty, set `OMEGA_ALLOW_EMPTY_DB=1` — this stamps `EMPTY_HISTORY_MODE=true`
+  in startup logs/reports so empty history is never mistaken for failed ingest.
+- **Always check the effective DB first:** every lifecycle script now logs
+  `TraceStore DB: path=… source=… trace_count=… EMPTY_HISTORY_MODE=…` at startup,
+  and `python scripts/db_status.py` (read-only) reports the repo/default path,
+  the would-be runtime path, existence, integrity_check, trace counts,
+  divergence, latest session IDs, and a recommended action — even when the
+  redirect guard would refuse to open.
+- **Disk artifacts (FUSE/SQLite):** `.fuse_hidden*` files are harmless remnants
+  of deleted-but-open files on the FUSE mount — ignore them (gitignored). Ad-hoc
+  DB probing leaves `*.probe.db`, `tmp*.probe.db-journal`, `*.db-wal-test`; these
+  are harmless and gitignored. A `*.db-journal`/`*.db-wal` that persists next to
+  the live DB *after a clean exit* can indicate an open/deleted SQLite handle —
+  run `scripts/db_status.py`; if it reports the source `integrity_ok=false`, treat
+  the DB as malformed (the store will fail loud on redirect). Do not build a
+  cleanup job; delete stray probe files manually if they accumulate.
 - **Preflight repair restrictions:** `--repair-from-git` now tiers its repair
   set. Core-tier files (`omega/`, `scripts/`, MCP) are restored from `HEAD`
   even when tracked files under `tests/` have uncommitted edits. The legacy
@@ -253,7 +278,13 @@ tiers, and trace IDs are prohibited for that league/session:
 | No fitted calibration profile | §2 of `reports/latest.md` shows "static fallback" |
 | 0 calibration-eligible traces in window | Coverage table: `with_predictions = 0` |
 | Invalid or missing session sidecar | sidecar fails JSON parse / schema validation |
-| No `bet_record` in window | Coverage table: `with_bet = 0` |
+
+> **Bet logging is NOT an output-mode condition.** Output authorization is a
+> model-evaluation decision (fitted profile + calibration-eligible coverage +
+> valid sidecar). The presence or absence of a `bet_record` does **not** affect
+> output mode, grading, or calibration eligibility — it is wager-tracking
+> metadata only. The `with_bet` coverage count is informational; never treat
+> `with_bet = 0` as a reason to downgrade to `RESEARCH_CANDIDATE`.
 
 `scripts/report_calibration.py` emits an **"Agent Directive — Output Mode"**
 section at the very top of `reports/latest.md`. **Read it before beginning any
@@ -367,6 +398,18 @@ minutes/usage shifts for player props, explicit `injury_impact` or
 entries such as `usage_role_change`. If the impact cannot be quantified from
 pre-decision sources, append a `quality_gate/null_data_audit` event and
 downgrade to research-only rather than emitting a Bet Card.
+
+**Engine output nullability check (immediate post-analyze):**
+After each `analyze()` call returns, validate the response payload for NULL,
+`0.0`, or undefined values. Build a `null_fields` list if any of these are
+missing: `result.model_prob`, `result.edge_pct`, `result.recommended_units`,
+`result.confidence_tier`, `game_context.is_playoff`, `game_context.rest_days`,
+or any `{prop_type}_mean`/`{stat}_std` on player prop requests. Append a
+`quality_gate/null_data_audit` event with `notes="Null fields: " + field_list`
+before exporting the trace. Do not include numeric protected values in the event;
+only field names. If result-level fields are NULL and engine status is not
+"skipped", downgrade to research-only (engine error). If input context fields
+are NULL, downgrade to research-only (incomplete pre-analysis work).
 
 Never use raw percentages as basketball `off_rating` or `def_rating`.
 Basketball team contexts require possession-adjusted ratings on the usual

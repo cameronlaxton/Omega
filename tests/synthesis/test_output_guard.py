@@ -19,7 +19,6 @@ class TestClassifyOutputMode:
             calibration_profile=None,  # static fallback
             trace_count=5,
             sidecar_valid=True,
-            has_bet_record=True,
         )
         assert mode == OutputMode.RESEARCH_CANDIDATE
 
@@ -28,7 +27,6 @@ class TestClassifyOutputMode:
             calibration_profile="v2",
             trace_count=0,
             sidecar_valid=True,
-            has_bet_record=True,
         )
         assert mode == OutputMode.RESEARCH_CANDIDATE
 
@@ -37,16 +35,6 @@ class TestClassifyOutputMode:
             calibration_profile="v2",
             trace_count=3,
             sidecar_valid=False,
-            has_bet_record=True,
-        )
-        assert mode == OutputMode.RESEARCH_CANDIDATE
-
-    def test_no_bet_record_is_research_candidate(self):
-        mode = classify_output_mode(
-            calibration_profile="v2",
-            trace_count=3,
-            sidecar_valid=True,
-            has_bet_record=False,
         )
         assert mode == OutputMode.RESEARCH_CANDIDATE
 
@@ -55,19 +43,19 @@ class TestClassifyOutputMode:
             calibration_profile="v2",
             trace_count=3,
             sidecar_valid=True,
-            has_bet_record=True,
         )
         assert mode == OutputMode.ACTIONABLE
 
-    def test_missing_bet_record_cannot_be_labeled_actionable(self):
-        """Explicit contract: no bet_record → never actionable."""
+    def test_missing_bet_record_does_not_block_actionable(self):
+        """Contract (post-2026-05-29): bet logging is wager-tracking metadata and
+        never affects output authorization. A fitted profile + eligible-trace
+        coverage + a valid sidecar is actionable regardless of any logged bet."""
         mode = classify_output_mode(
             calibration_profile="v2-fitted",
             trace_count=10,
             sidecar_valid=True,
-            has_bet_record=False,
         )
-        assert mode is not OutputMode.ACTIONABLE
+        assert mode is OutputMode.ACTIONABLE
 
 
 class TestCapStakeForResearch:

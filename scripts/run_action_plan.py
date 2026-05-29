@@ -393,6 +393,26 @@ def main() -> int:
         return 0
 
     logger.info("Plan session=%s: %d action(s) validated.", session_id, len(validated))
+
+    # Sub-scripts inherit the default DB path (cwd=_REPO_ROOT). Report which DB
+    # they will actually hit once, up front, so an empty/redirected DB is visible
+    # before any action runs.
+    try:
+        from omega.trace.store import db_status
+
+        st = db_status()
+        logger.info(
+            "Effective DB: %s (source=%s, traces=%s, integrity_ok=%s, EMPTY_HISTORY_MODE=%s). %s",
+            st["effective_path"],
+            st["source"],
+            st["effective_trace_count"],
+            st["effective_integrity_ok"],
+            str(st["empty_history_mode"]).lower(),
+            st["recommended_action"],
+        )
+    except Exception as exc:  # noqa: BLE001 — never let diagnostics break the run
+        logger.warning("db_status summary unavailable: %s", exc)
+
     if args.dry_run:
         for atype, cmd in validated:
             logger.info("DRY-RUN %s: %s", atype, " ".join(cmd))

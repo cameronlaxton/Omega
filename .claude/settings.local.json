@@ -115,7 +115,10 @@
       "Bash(git commit -m 'Add session traces and bug report from 2026-05-25 *)",
       "Bash(Remove-Item -Force \"C:\\\\repos\\\\Omega\\\\.git\\\\index.lock\" -ErrorAction SilentlyContinue)",
       "Bash(rm -f \".git/index.lock\")",
-      "Bash(python scripts/report_calibration.py --league MLB)"
+      "Bash(python scripts/report_calibration.py --league MLB)",
+      "Bash(sqlite3 omega_traces.db \".schema traces\")",
+      "Bash(sqlite3 omega_traces.db \"SELECT COUNT\\(*\\) as total_nba, COUNT\\(CASE WHEN result IS NOT NULL THEN 1 END\\) as has_predictions, COUNT\\(CASE WHEN outcome IS NOT NULL THEN 1 END\\) as has_outcome FROM traces WHERE league = 'NBA';\")",
+      "Bash(python scripts/db_status.py)"
     ]
   }
 }

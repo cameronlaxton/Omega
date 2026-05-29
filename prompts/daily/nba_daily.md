@@ -1,8 +1,7 @@
 # NBA Daily League Session
 
 Use this prompt for the complete NBA betting surface: game moneylines, spreads,
-totals, team totals where supported, and player props. Do not run a separate
-props prompt. Props and game bets share the same league context,
+totals, team totals where supported, and player props. Props and game bets share the same league context,
 injury map, rest map, odds provenance, sidecar, and session audit.
 
 Follow [OMEGA_COWORK.md](../../OMEGA_COWORK.md) and
@@ -220,19 +219,74 @@ not quantified, downgrade or keep research-only.
 
 ---
 
-## Step 8 - NULL / Missing Data Audit
+## Step 7b - Engine Output Nullability Check
+
+**Execute immediately after each `analyze()` call returns, before any other processing.**
+
+Evaluate the engine response payload for fields returning NULL, `0.0`, `"undefined"`,
+empty collections, or otherwise missing values. This is a structural validation step,
+not a data quality judgment.
+
+**Mandatory checks:**
+
+1. **Request-level identity fields** (must be echoed):
+   - `league`, `player_name` (for props), `home_team`, `away_team`, `game_date`
+
+2. **Result object fields** (engine-owned; must exist if `status != "skipped"`):
+   - `model_prob` (or `over_prob`/`under_prob` for player props)
+   - `fair_price` / `no_vig_price`
+   - `edge_pct`
+   - `recommended_units`
+   - `confidence_tier`
+   - `trace_id`
+
+3. **Input context fields** (your responsibility; must be populated before calling `analyze()`):
+   - `game_context.is_playoff` and `game_context.rest_days` (non-null integers)
+   - `{prop_type}_mean` and `{prop_type}_std` (for player props)
+   - `home_context.off_rating`, `def_rating`, `pace` (for game analysis)
+   - `sample_size` ≥ 5 (for player props, if available)
+
+**Capture strategy:**
+
+If any of the above are NULL or missing:
+- Build a **null_fields** list with clean field paths: `["result.recommended_units", "game_context.rest_days"]`
+- Append a `quality_gate` event with `event_type="quality_gate/null_data_audit"`
+  and `notes="Null fields: " + ", ".join(null_fields)`
+- Do **not** include numeric protected values in the event notes; only field names.
+
+**Decision logic:**
+
+- If result-level fields are NULL and `status != "skipped"`: **engine error → downgrade to research-only**.
+- If input context fields are NULL: **your input was incomplete → downgrade to research-only** and log which context field(s) were missing.
+- If `sample_size < 5` for a player prop: **research-only** unless explicitly backfilled from reliable source.
+- If all required fields are present: proceed to trace export.
+
+**Example null_fields audit event:**
+
+```json
+{
+  "ts": "2026-05-28T20:15:00Z",
+  "event_type": "quality_gate/null_data_audit",
+  "step": "engine_output_validation",
+  "status": "warn",
+  "notes": "Null fields: ['game_context.rest_days']. Downgraded to research-only.",
+  "inputs": [],
+  "outputs": [],
+  "trace_ids": ["sandbox-xxxxx"]
+}
+```
+
+---
+
+## Step 8 - Pre-Export Quality Gate
 
 Before exporting any trace or presenting a Bet Card:
-- Confirm `game_context.is_playoff` and `game_context.rest_days` are present.
-- Confirm injury impacts were translated or explicitly audited as missing.
-- Confirm engine output did not return NULL/0.0 for protected fields such as
-  `recommended_units`, `model_prob`, or `edge_pct`.
+- Confirm `game_context.is_playoff` and `game_context.rest_days` were populated and validated (Step 7b).
+- Confirm injury impacts were translated or explicitly audited as missing (Step 7b).
+- Confirm engine output passed nullability check (Step 7b).
 
-If missing data is found, append a `quality_gate/null_data_audit` event listing
-variable names only. Do not put edge, EV, Kelly, units, confidence tier, or
-model probability in sidecar notes.
-
-Critical missing data means research-only; drop the Bet Card.
+If critical missing data was found and logged in Step 7b, the trace is already
+downgraded to research-only. Do not emit Bet Cards for research-only traces.
 
 ---
 
@@ -250,8 +304,11 @@ Append audit events for:
 - `quality_gate`
 - `bug`
 
-If the user confirms a bet, re-export the same trace with `bet_record`
-populated. Reuse the original `trace_id`; do not rerun `analyze()`.
+Calibration does not depend on bets being taken. Every model-issued candidate
+with a `trace_id` is calibration-eligible and will be graded once an outcome is
+available — no `bet_record` required. Only attach a `bet_record` when the user
+explicitly confirms a wager; it is wager-tracking metadata and does not affect
+grading or calibration.
 
 Close the session by setting `closed_at` and a short `agent_notes` summary.
 Do not run ingest or audit rendering inside the live betting session.

@@ -23,6 +23,7 @@ from omega.trace._atomic import atomic_write_text
 from omega.trace.session_sidecar import (
     SessionSidecar,
     bootstrap_payload,
+    load_sidecar_safe,
 )
 from omega.trace.store import TraceStore
 
@@ -38,13 +39,15 @@ def render_session_audit(
 ) -> Path:
     """Render one session's audit markdown. Returns the written path.
 
-    If the sidecar does not exist a minimal one is synthesized in-memory
-    (NOT written back to disk) so the audit still shows the DB cross-section
-    and is logged as ``degraded``.
+    If the sidecar does not exist — or exists but is malformed/unreadable — a
+    minimal one is synthesized in-memory (NOT written back to disk) so the audit
+    still shows the DB cross-section and is logged as ``degraded``. A malformed
+    sidecar never crashes the render.
     """
     sidecar_path = Path(sidecar_dir) / f"{session_id}.json"
-    if sidecar_path.exists():
-        sidecar = SessionSidecar.from_path(sidecar_path)
+    loaded = load_sidecar_safe(sidecar_path) if sidecar_path.exists() else None
+    if loaded is not None:
+        sidecar = loaded
         degraded = False
     else:
         sidecar = SessionSidecar.model_validate(
@@ -60,7 +63,8 @@ def render_session_audit(
         )
         degraded = True
         logger.warning(
-            "audit_renderer: no sidecar at %s; rendering DB-only (degraded)", sidecar_path
+            "audit_renderer: no readable sidecar at %s; rendering DB-only (degraded)",
+            sidecar_path,
         )
 
     store = TraceStore(db_path=str(db_path) if db_path else None, read_only=False)

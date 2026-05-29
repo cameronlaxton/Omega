@@ -13,12 +13,12 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from omega.trace.session_sidecar import SessionSidecar  # noqa: E402
+from omega.trace.session_sidecar import SessionSidecar, quarantine_sidecar  # noqa: E402
 
 logger = logging.getLogger("validate_session_sidecars")
 
 
-def validate_directory(path: Path) -> tuple[int, int]:
+def validate_directory(path: Path, *, quarantine: bool = False) -> tuple[int, int]:
     if not path.exists():
         raise FileNotFoundError(f"Session inbox does not exist: {path}")
 
@@ -30,6 +30,10 @@ def validate_directory(path: Path) -> tuple[int, int]:
         except (OSError, ValueError, ValidationError) as exc:
             invalid += 1
             logger.error("INVALID %s: %s", sidecar.name, exc)
+            if quarantine:
+                # The ONLY place that moves files: idempotent, leaves the JSONL
+                # mirror in place for recovery.
+                quarantine_sidecar(sidecar, f"{type(exc).__name__}: {exc}")
         else:
             valid += 1
             logger.info("OK %s", sidecar.name)
@@ -44,6 +48,11 @@ def main() -> int:
         default=_REPO_ROOT / "inbox" / "sessions",
         help="Directory containing session sidecar JSON files",
     )
+    parser.add_argument(
+        "--quarantine",
+        action="store_true",
+        help="Move invalid sidecars to <inbox>/invalid/ with a .reason.txt (idempotent)",
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -53,7 +62,7 @@ def main() -> int:
     )
 
     try:
-        valid, invalid = validate_directory(args.sessions_inbox)
+        valid, invalid = validate_directory(args.sessions_inbox, quarantine=args.quarantine)
     except FileNotFoundError as exc:
         logger.error("%s", exc)
         return 1

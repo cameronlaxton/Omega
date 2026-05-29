@@ -233,17 +233,77 @@ translation is not quantifiable, downgrade or keep research-only.
 
 ---
 
-## Step 9 - NULL / Missing Data Audit
+## Step 8b - Engine Output Nullability Check
+
+**Execute immediately after each `analyze()` call returns, before any other processing.**
+
+Evaluate the engine response payload for fields returning NULL, `0.0`, `"undefined"`,
+empty collections, or otherwise missing values. This is a structural validation step,
+not a data quality judgment.
+
+**Mandatory checks:**
+
+1. **Request-level identity fields** (must be echoed):
+   - `league`, `player_name` (for props), `home_team`, `away_team`, `game_date`
+
+2. **Result object fields** (engine-owned; must exist if `status != "skipped"`):
+   - `model_prob` (or `over_prob`/`under_prob` for player props)
+   - `fair_price` / `no_vig_price`
+   - `edge_pct`
+   - `recommended_units`
+   - `confidence_tier`
+   - `trace_id`
+
+3. **Input context fields** (your responsibility; must be populated before calling `analyze()`):
+   - `game_context.is_playoff` and `game_context.rest_days` (non-null integers)
+   - `{prop_type}_mean` and `{prop_type}_std` (for player props)
+   - `home_context.off_rating`, `def_rating`, `pace` (for game analysis)
+   - `sample_size` ≥ 5 (for player props, if available)
+   - injury impact quantification (minutes, usage_rate, or explicit `injury_impact` value)
+
+**Capture strategy:**
+
+If any of the above are NULL or missing:
+- Build a **null_fields** list with clean field paths: `["result.recommended_units", "game_context.rest_days"]`
+- Append a `quality_gate` event with `event_type="quality_gate/null_data_audit"`
+  and `notes="Null fields: " + ", ".join(null_fields)`
+- Do **not** include numeric protected values in the event notes; only field names.
+
+**Decision logic:**
+
+- If result-level fields are NULL and `status != "skipped"`: **engine error → downgrade to research-only**.
+- If input context fields are NULL: **your input was incomplete → downgrade to research-only** and log which context field(s) were missing.
+- If `sample_size < 5` for a player prop: **research-only** unless explicitly backfilled from reliable source.
+- If injury impact could not be quantified: **log as missing and downgrade**.
+- If all required fields are present: proceed to trace export.
+
+**Example null_fields audit event:**
+
+```json
+{
+  "ts": "2026-05-28T20:15:00Z",
+  "event_type": "quality_gate/null_data_audit",
+  "step": "engine_output_validation",
+  "status": "warn",
+  "notes": "Null fields: ['game_context.rest_days']. Downgraded to research-only.",
+  "inputs": [],
+  "outputs": [],
+  "trace_ids": ["sandbox-xxxxx"]
+}
+```
+
+---
+
+## Step 9 - Pre-Export Quality Gate
 
 Before exporting any trace or presenting a Bet Card:
-- Confirm `game_context.is_playoff` and `game_context.rest_days` are present.
-- Confirm injury impacts were translated or explicitly audited as missing.
+- Confirm `game_context.is_playoff` and `game_context.rest_days` were populated and validated (Step 8b).
+- Confirm injury impacts were translated or explicitly audited as missing (Step 8b).
 - Confirm WNBA total suppression metadata is honored.
-- Confirm engine output did not return NULL/0.0 for protected fields such as
-  `recommended_units`, `model_prob`, or `edge_pct`.
+- Confirm engine output passed nullability check (Step 8b).
 
-If missing data is found, append `quality_gate/null_data_audit` with variable
-names only. Critical missing data means research-only; drop the Bet Card.
+If critical missing data was found and logged in Step 8b, the trace is already
+downgraded to research-only. Do not emit Bet Cards for research-only traces.
 
 ---
 

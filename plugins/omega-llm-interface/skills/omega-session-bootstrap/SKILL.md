@@ -97,15 +97,25 @@ python scripts/ingest_traces.py --db "$OMEGA_TRACE_DB" --verbose
 Format: `sess-YYYYMMDD-XXXX` (4-char alphanumeric suffix). Mint once, reuse for all traces.
 
 ```python
-from omega.trace.session_sidecar import append_audit_events
+from omega.trace.session_sidecar import create_sidecar, bootstrap_payload, append_audit_events
 from datetime import datetime, timezone
 from pathlib import Path
 
 session_id = "sess-20260528-a1b2"
-opened_at = datetime.now(timezone.utc).isoformat()
+path = Path(f"inbox/sessions/{session_id}.json")
 
-append_audit_events(Path(f"inbox/sessions/{session_id}.json"), [{
-    "ts": opened_at,
+# 1. Atomically CREATE the sidecar (temp + fsync + replace; never a partial/truncated file).
+create_sidecar(path, bootstrap_payload(
+    session_id,
+    model_version="claude-...",
+    purpose="NBA game analysis",
+    bankroll=1000.0,
+    bankroll_confirmed=True,
+))
+
+# 2. Append audit events as the session proceeds (atomic; mirrored to <id>.events.jsonl).
+append_audit_events(path, [{
+    "ts": datetime.now(timezone.utc).isoformat(),
     "event_type": "preflight",
     "step": "cowork_preflight",
     "status": "ok",
@@ -117,7 +127,10 @@ append_audit_events(Path(f"inbox/sessions/{session_id}.json"), [{
 Required sidecar fields (all must be present before session close):
 `session_id`, `opened_at`, `closed_at`, `model_version`, `purpose`, `bankroll`, `bankroll_confirmed`, `exec_stats`, `agent_notes`, `audit_events`
 
-**Never hand-edit the sidecar JSON.** Always use `append_audit_events`.
+**Never hand-edit the sidecar JSON.** Use `create_sidecar` to open it and
+`append_audit_events` to add events (both atomic). A sibling `<session_id>.events.jsonl`
+mirror is written for recovery; if the summary JSON is ever truncated, quarantine it
+with `validate_session_sidecars.py --quarantine` and recover events from the mirror.
 Never put engine-owned values in audit event fields — `ProtectedValueError` will reject the append.
 
 ---

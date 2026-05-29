@@ -211,6 +211,244 @@ def _resolve_db_path(requested: str | None) -> tuple[str, str]:
     return requested, _PATH_SOURCE_REQUESTED
 
 
+def _repo_default_db_path() -> str:
+    """The repo-root default DB path (the source for FUSE redirects)."""
+    return str(Path(__file__).parent.parent.parent / _DEFAULT_DB_PATH)
+
+
+def _integrity_ok(path: str) -> bool:
+    """Run ``PRAGMA integrity_check`` read-only. False on any open error.
+
+    Never instantiates TraceStore — safe to call when the redirect guard would
+    raise (db_status guardrail).
+    """
+    p = Path(path)
+    if not p.exists():
+        return False
+    try:
+        uri = p.resolve().as_uri() + "?mode=ro&immutable=0"
+        conn = sqlite3.connect(uri, uri=True)
+        try:
+            row = conn.execute("PRAGMA integrity_check").fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+    return bool(row) and str(row[0]).lower() == "ok"
+
+
+def _raw_trace_count(path: str) -> int | None:
+    """Trace count via a raw read-only connection. None if unreadable/absent."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        uri = p.resolve().as_uri() + "?mode=ro&immutable=0"
+        conn = sqlite3.connect(uri, uri=True)
+        try:
+            row = conn.execute("SELECT COUNT(*) FROM traces").fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+    return int(row[0]) if row else None
+
+
+def _raw_latest_session_ids(path: str, limit: int = 5) -> list[str]:
+    """Most recent session_ids via a raw read-only connection. [] if unreadable."""
+    p = Path(path)
+    if not p.exists():
+        return []
+    try:
+        uri = p.resolve().as_uri() + "?mode=ro&immutable=0"
+        conn = sqlite3.connect(uri, uri=True)
+        try:
+            rows = conn.execute(
+                "SELECT session_id, MAX(timestamp) AS last_ts FROM traces "
+                "WHERE session_id IS NOT NULL GROUP BY session_id "
+                "ORDER BY last_ts DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return []
+    return [str(r[0]) for r in rows]
+
+
+def _empty_history_mode_enabled() -> bool:
+    return os.environ.get("OMEGA_ALLOW_EMPTY_DB") == "1"
+
+
+def _apply_redirect_guard(runtime_path: str, source_path: str) -> bool:
+    """FUSE-redirect safety guard. Returns True iff EMPTY_HISTORY_MODE is active.
+
+    Honors the revision constraints: never copies/merges here (seeding is the
+    explicit ``db_status --seed`` action); never overwrites an existing runtime
+    DB; fails LOUD rather than presenting believable-empty history.
+    """
+    runtime = Path(runtime_path)
+    if runtime.exists():
+        return False  # use existing runtime DB; never overwrite
+    if _empty_history_mode_enabled():
+        logger.warning(
+            "EMPTY_HISTORY_MODE=true: OMEGA_ALLOW_EMPTY_DB=1 set; creating EMPTY "
+            "runtime DB at %s (trace_count=0). Empty history is intentional, not a "
+            "failed ingest.",
+            runtime,
+        )
+        return True
+    src = Path(source_path)
+    if not src.exists():
+        raise RuntimeError(
+            f"TraceStore: source DB {src} is missing while redirecting off a "
+            "network/FUSE mount. Refusing to create believable-empty history "
+            "(the mount may be detached). Pass --db, set OMEGA_TRACE_DB, run "
+            "`python scripts/db_status.py --seed`, or set OMEGA_ALLOW_EMPTY_DB=1 "
+            "to start empty on purpose."
+        )
+    if not _integrity_ok(str(src)):
+        raise RuntimeError(
+            f"TraceStore: source DB {src} fails integrity_check. Refusing to "
+            "redirect to a fresh empty runtime DB. Repair/replace the source, or "
+            "set OMEGA_ALLOW_EMPTY_DB=1 to start empty on purpose."
+        )
+    n = _raw_trace_count(str(src)) or 0
+    if n > 0:
+        raise RuntimeError(
+            f"TraceStore: runtime DB {runtime} is absent and source {src} holds "
+            f"{n} traces. Refusing to start with empty history. Run "
+            "`python scripts/db_status.py --seed` to populate the runtime DB, or "
+            "set OMEGA_ALLOW_EMPTY_DB=1 to start empty on purpose."
+        )
+    # Source is valid but genuinely empty → a fresh runtime DB is correct.
+    logger.warning(
+        "EMPTY_HISTORY_MODE=true: source DB %s is valid but empty; creating an "
+        "empty runtime DB at %s.",
+        src,
+        runtime,
+    )
+    return True
+
+
+def db_status(requested: str | None = None) -> dict[str, Any]:
+    """Read-only inspection of DB path/state. Never opens a TraceStore.
+
+    Reports the repo/default path, would-be runtime path, existence, integrity,
+    trace counts, divergence, and a recommended action — even when the normal
+    redirect guard would raise (db_status guardrail).
+    """
+    env_override = os.environ.get("OMEGA_TRACE_DB")
+    default_path = _repo_default_db_path()
+    effective_path, source = _resolve_db_path(requested)
+    runtime_path = str(_local_runtime_db_path())
+
+    default_count = _raw_trace_count(default_path)
+    effective_count = _raw_trace_count(effective_path)
+
+    divergence: dict[str, Any] | None = None
+    if (
+        source == _PATH_SOURCE_AUTO_REDIRECT
+        and Path(effective_path).exists()
+        and Path(default_path).exists()
+        and default_count != effective_count
+    ):
+        divergence = {
+            "source_path": default_path,
+            "source_trace_count": default_count,
+            "runtime_path": effective_path,
+            "runtime_trace_count": effective_count,
+            "note": "runtime and source diverge; no auto-merge — sync or seed deliberately",
+        }
+
+    empty_history_mode = _empty_history_mode_enabled()
+    recommended = "ok"
+    if source == _PATH_SOURCE_AUTO_REDIRECT and not Path(effective_path).exists():
+        if not Path(default_path).exists():
+            recommended = "source DB missing — verify the mount is attached before running"
+        elif not _integrity_ok(default_path):
+            recommended = "source DB malformed — repair/replace before running"
+        elif (default_count or 0) > 0 and not empty_history_mode:
+            recommended = "run `python scripts/db_status.py --seed` to populate the runtime DB"
+        elif empty_history_mode:
+            recommended = "EMPTY_HISTORY_MODE active — empty history is intentional"
+    elif divergence is not None:
+        recommended = "review divergence; seed/sync deliberately (no auto-merge)"
+    elif effective_count is None and Path(effective_path).exists():
+        recommended = "effective DB unreadable — check integrity"
+
+    return {
+        "requested": requested,
+        "env_override": env_override,
+        "repo_default_path": default_path,
+        "effective_path": effective_path,
+        "source": source,
+        "would_be_runtime_path": runtime_path,
+        "default_exists": Path(default_path).exists(),
+        "effective_exists": Path(effective_path).exists(),
+        "runtime_exists": Path(runtime_path).exists(),
+        "default_integrity_ok": _integrity_ok(default_path) if Path(default_path).exists() else None,
+        "effective_integrity_ok": _integrity_ok(effective_path)
+        if Path(effective_path).exists()
+        else None,
+        "default_trace_count": default_count,
+        "effective_trace_count": effective_count,
+        "latest_session_ids": _raw_latest_session_ids(
+            effective_path if Path(effective_path).exists() else default_path
+        ),
+        "schema_version": None,
+        "divergence": divergence,
+        "empty_history_mode": empty_history_mode,
+        "recommended_action": recommended,
+    }
+
+
+def seed_runtime_db(source: str, runtime: str) -> dict[str, Any]:
+    """Copy a valid non-empty source DB into an ABSENT runtime path (WAL-safe).
+
+    The ONLY mutating DB helper. Preconditions (all enforced, raise otherwise):
+    runtime must not exist (never overwrite), source must exist, pass
+    integrity_check, and hold at least one trace. No merging.
+    """
+    src, rt = Path(source), Path(runtime)
+    if rt.exists():
+        raise RuntimeError(f"refusing to overwrite existing runtime DB at {rt}")
+    if not src.exists():
+        raise RuntimeError(f"source DB {src} does not exist")
+    if not _integrity_ok(str(src)):
+        raise RuntimeError(f"source DB {src} fails integrity_check; not seeding")
+    n = _raw_trace_count(str(src)) or 0
+    if n == 0:
+        raise RuntimeError(f"source DB {src} is empty; nothing to seed")
+    rt.parent.mkdir(parents=True, exist_ok=True)
+    src_conn = sqlite3.connect(str(src))
+    dst_conn = sqlite3.connect(str(rt))
+    try:
+        with dst_conn:
+            src_conn.backup(dst_conn)
+    finally:
+        src_conn.close()
+        dst_conn.close()
+    logger.warning("Seeded runtime DB %s from %s (%d traces).", rt, src, n)
+    return {"source": str(src), "runtime": str(rt), "trace_count": n}
+
+
+def log_effective_db(store: TraceStore, log: logging.Logger) -> None:
+    """One-line startup log of the effective DB so the agent never queries the
+    wrong (e.g. silently redirected, empty) database unknowingly."""
+    try:
+        count = store.count()
+    except sqlite3.Error:
+        count = -1
+    log.info(
+        "TraceStore DB: path=%s source=%s trace_count=%d EMPTY_HISTORY_MODE=%s",
+        store.db_path,
+        store.db_path_source,
+        count,
+        str(bool(store.empty_history_mode)).lower(),
+    )
+
+
 class TraceStore:
     """SQLite-backed trace persistence."""
 
@@ -227,11 +465,24 @@ class TraceStore:
         self._db_path = effective_path
         self._db_path_source = source
         self._read_only = bool(read_only)
+        self._empty_history_mode = False
         self._conn: sqlite3.Connection | None = None
         self._journal_mode: str | None = None
         self._requested_journal_mode = (journal_mode or "AUTO").upper()
+        # FUSE-redirect safety guard: a redirected write path must never silently
+        # become believable-empty history. Read-only opens skip the guard (they
+        # only inspect, never create). See _apply_redirect_guard.
+        if source == _PATH_SOURCE_AUTO_REDIRECT and not self._read_only:
+            origin = db_path if db_path is not None else _repo_default_db_path()
+            self._empty_history_mode = _apply_redirect_guard(effective_path, origin)
         if not self._read_only:
             self._ensure_schema()
+
+    @property
+    def empty_history_mode(self) -> bool:
+        """True when this store was opened as an intentional empty runtime DB
+        (OMEGA_ALLOW_EMPTY_DB=1 or a valid-but-empty source on FUSE redirect)."""
+        return self._empty_history_mode
 
     @property
     def db_path(self) -> str:

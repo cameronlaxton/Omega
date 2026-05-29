@@ -39,22 +39,24 @@ def classify_output_mode(
     calibration_profile: str | None,
     trace_count: int,
     sidecar_valid: bool,
-    has_bet_record: bool,
 ) -> OutputMode:
     """Determine whether session output qualifies as actionable or research-only.
 
+    Output authorization is a *model-evaluation* decision: it depends on whether
+    the engine has a fitted calibration prior and enough calibration-eligible
+    coverage to trust the numbers — never on whether the user logged a wager.
+
     Any of the following triggers Research Candidate mode:
     - calibration_profile is None (static fallback — no fitted prior)
-    - trace_count == 0 (no usable engine traces in session)
+    - trace_count == 0 (no calibration-eligible engine traces in window)
     - sidecar_valid is False (invalid/corrupt session ledger)
-    - has_bet_record is False (no confirmed bet record attached)
+
+    Bet records are deliberately NOT a factor here. A Bet Card is emitted
+    *before* any wager exists, so gating actionable output on a logged bet was
+    backwards; bet logging is wager-tracking metadata only and has no bearing on
+    calibration, grading, or output authorization.
     """
-    if (
-        calibration_profile is None
-        or trace_count == 0
-        or not sidecar_valid
-        or not has_bet_record
-    ):
+    if calibration_profile is None or trace_count == 0 or not sidecar_valid:
         return OutputMode.RESEARCH_CANDIDATE
     return OutputMode.ACTIONABLE
 

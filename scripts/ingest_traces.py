@@ -40,8 +40,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 from omega.trace.bet_record import BetRecord  # noqa: E402
 from omega.trace.persistable import PersistableTrace  # noqa: E402
-from omega.trace.session_sidecar import SessionSidecar  # noqa: E402
-from omega.trace.store import TraceStore  # noqa: E402
+from omega.trace.session_sidecar import load_sidecar_safe, quality_gate_status  # noqa: E402
+from omega.trace.export_validator import validate_export_block  # noqa: E402
+from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("ingest_traces")
 _QA_FAILED_FORCED_REASON = "qa_failed_forced_ingest"
@@ -239,20 +240,22 @@ def _warn_reasoning_inputs(analyze_out: dict) -> None:
             )
 
 
-def _session_has_failed_quality_gate(
+def _session_quality_gate_status(
     sidecar_dir: Path | None,
     session_id: str | None,
-) -> bool:
+) -> str:
+    """Tri-state: 'pass' | 'fail' | 'unknown'.
+
+    A genuinely absent sidecar is 'pass' (no gate recorded). A present-but-
+    unreadable sidecar is 'unknown' — never silently treated as clean — so one
+    malformed sidecar can neither imply "no failure" nor wedge the whole ingest.
+    """
     if sidecar_dir is None or not session_id:
-        return False
+        return "pass"
     path = sidecar_dir / f"{session_id}.json"
     if not path.exists():
-        return False
-    sidecar = SessionSidecar.from_path(path)
-    return any(
-        event.event_type == "quality_gate" and event.status == "fail"
-        for event in sidecar.audit_events
-    )
+        return "pass"
+    return quality_gate_status(load_sidecar_safe(path))
 
 
 def _append_once(values: list[Any], value: str) -> list[Any]:
@@ -312,18 +315,29 @@ def ingest_file(
     _warn_reasoning_inputs(analyze_out)
 
     session_id = adapted.get("session_id")
-    qa_failed = _session_has_failed_quality_gate(
+    qa_status = _session_quality_gate_status(
         sidecar_dir,
         str(session_id) if session_id else None,
     )
-    if qa_failed and not force_ingest_qa_failed:
+    if qa_status == "fail" and not force_ingest_qa_failed:
         raise ValueError(
             f"Session {session_id} has a failed quality_gate sidecar event. "
             "Ingest is blocked by default; use --force-ingest-qa-failed only "
             "for audit storage."
         )
-    if qa_failed:
+    if qa_status == "fail":
         _force_trace_calibration_ineligible(adapted)
+    elif qa_status == "unknown":
+        # Honesty over convenience: an unreadable sidecar must not pass as clean.
+        # We proceed (one bad sidecar shouldn't wedge ingest) but record the
+        # uncertainty; calibration_eligible is untouched (decoupled from QA gate).
+        logger.warning(
+            "Session %s quality_gate_status=unknown (unreadable sidecar); ingesting "
+            "%s without QA confirmation. Quarantine the sidecar via "
+            "`validate_session_sidecars.py --quarantine`.",
+            session_id,
+            adapted["trace_id"],
+        )
 
     # Pre-persist validation: a bet_record on a prop trace must come with
     # full game identity (BUG-4 defense). Warnings about line/odds drift
@@ -417,6 +431,14 @@ def main() -> int:
         help="Parse and adapt but skip writes; do not move files",
     )
     parser.add_argument(
+        "--explain",
+        action="store_true",
+        help=(
+            "Dry-run + per-file validation report (VALID/REJECT with reasons). "
+            "Use this to fix a wrong export wrapper instead of re-running analyze()."
+        ),
+    )
+    parser.add_argument(
         "--sidecar-dir",
         type=Path,
         default=_REPO_ROOT / "inbox" / "sessions",
@@ -452,22 +474,53 @@ def main() -> int:
         return 0
 
     store = TraceStore(db_path=args.db)
+    log_effective_db(store, logger)
     ok = 0
     failed = 0
 
+    # --explain is a no-write reporting mode: validate each file and print the
+    # exact reason it would be rejected, so a malformed *wrapper* on otherwise
+    # valid analyze() output gets re-wrapped rather than re-analyzed.
+    explain = args.explain
+    dry_run = args.dry_run or explain
+
     for path in files:
+        if explain:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                failed += 1
+                logger.warning("REJECT %s: unreadable JSON: %s", path.name, exc)
+                continue
+            report = validate_export_block(payload, strict=False)
+            if report.ok:
+                ok += 1
+                warns = ",".join(i.code for i in report.warnings)
+                logger.info(
+                    "VALID %s -> %s [%s]%s",
+                    path.name,
+                    report.trace_id,
+                    report.kind,
+                    f" warn={warns}" if warns else "",
+                )
+            else:
+                failed += 1
+                reasons = "; ".join(f"{i.code}: {i.message}" for i in report.errors)
+                logger.warning("REJECT %s: %s", path.name, reasons)
+            continue
+
         try:
             trace_id, bet_id = ingest_file(
                 path,
                 store,
-                dry_run=args.dry_run,
+                dry_run=dry_run,
                 sidecar_dir=args.sidecar_dir,
                 force_ingest_qa_failed=args.force_ingest_qa_failed,
             )
         except Exception as exc:  # noqa: BLE001 — we want to capture every failure
             failed += 1
             logger.warning("FAILED %s: %s", path.name, exc)
-            if not args.dry_run:
+            if not dry_run:
                 moved = _move_to(path, failed_dir)
                 error_path = moved.with_suffix(moved.suffix + ".error.txt")
                 error_path.write_text(
@@ -479,10 +532,13 @@ def main() -> int:
         ok += 1
         suffix = f" bet={bet_id}" if bet_id else ""
         logger.info("OK %s -> %s%s", path.name, trace_id, suffix)
-        if not args.dry_run:
+        if not dry_run:
             _move_to(path, processed_dir)
 
-    logger.info("Done. %d ingested, %d failed.", ok, failed)
+    if explain:
+        logger.info("Explain (no writes): %d valid, %d rejected.", ok, failed)
+    else:
+        logger.info("Done. %d ingested, %d failed.", ok, failed)
     store.close()
     return 0
 

@@ -191,6 +191,7 @@ def main() -> int:
     )
 
     store = TraceStore(db_path=args.db)
+    log_effective_db(store, logger)
     graded = store.get_graded_traces(league=args.league, limit=100_000)
     store.close()
 

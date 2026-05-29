@@ -49,8 +49,8 @@ from omega.strategy.distribution_metrics import (  # noqa: E402
 from omega.strategy.distribution_metrics import crps_from_distribution_row  # noqa: E402
 from omega.synthesis.output_guard import OutputMode, classify_output_mode  # noqa: E402
 from omega.trace.clv import compute_clv  # noqa: E402
-from omega.trace.session_sidecar import SessionSidecar  # noqa: E402
-from omega.trace.store import TraceStore  # noqa: E402
+from omega.trace.session_sidecar import load_sidecar_safe  # noqa: E402
+from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("report_calibration")
 
@@ -70,10 +70,10 @@ def _load_session_sidecars(inbox: Path) -> list[dict[str, Any]]:
         return []
     out: list[dict[str, Any]] = []
     for path in sorted(inbox.glob("*.json")):
-        try:
-            out.append(SessionSidecar.from_path(path).to_report_dict())
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Skipping invalid session sidecar %s: %s", path.name, exc)
+        # Warn-only classify; read-only report never moves/marks files.
+        sidecar = load_sidecar_safe(path)
+        if sidecar is not None:
+            out.append(sidecar.to_report_dict())
     return out
 
 
@@ -455,7 +455,6 @@ def _render(
         # Sidecar validity is a per-session concern; at the aggregate report
         # level we treat it as valid (individual sessions are filtered upstream).
         sidecar_valid=True,
-        has_bet_record=counts["with_bet"] > 0,
     )
     lines.append("## Agent Directive — Output Mode")
     lines.append("")
@@ -470,8 +469,8 @@ def _render(
             reasons.append("No fitted calibration profile — static fallback is active.")
         if counts["with_predictions"] == 0:
             reasons.append("0 calibration-eligible traces in window.")
-        if counts["with_bet"] == 0:
-            reasons.append("No bet_records in window — execution history absent.")
+        # Bet records are wager-tracking metadata only — their absence never
+        # downgrades output mode, grading, or calibration eligibility.
         if reasons:
             lines.append("**Reason(s):**")
             for r in reasons:
@@ -508,8 +507,8 @@ def _render(
     lines.append(f"| &nbsp;&nbsp;of which game-graded | {counts['graded_game']} |")
     lines.append(f"| &nbsp;&nbsp;of which prop-graded | {counts['graded_prop']} |")
     lines.append(f"| **Graded + calibration-eligible (usable pairs)** | **{counts['graded_calibration']}** |")
-    lines.append(f"| With bet_record | {counts['with_bet']} |")
-    lines.append(f"| With closing_line | {counts['with_close']} |")
+    lines.append(f"| With bet_record _(wager tracking only — not used for calibration)_ | {counts['with_bet']} |")
+    lines.append(f"| With closing_line _(CLV only — not required for grading)_ | {counts['with_close']} |")
     lines.append("")
 
     lines.append("## 2. Production calibration profile")
@@ -695,6 +694,7 @@ def main() -> int:
         return 1
 
     store = TraceStore(db_path=args.db)
+    log_effective_db(store, logger)
     registry = CalibrationRegistry()
     sidecars = _load_session_sidecars(args.sessions_inbox)
     cutoff = _window_cutoff(args.window_days)

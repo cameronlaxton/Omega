@@ -668,6 +668,10 @@ class TestDbPathResolution:
         from omega.trace import store as store_mod
 
         monkeypatch.delenv("OMEGA_TRACE_DB", raising=False)
+        # This test exercises path RESOLUTION + no-atexit only. The redirect
+        # empty-history guard is covered separately in test_db_path_policy.py;
+        # opt into intentional empty history so resolution can proceed here.
+        monkeypatch.setenv("OMEGA_ALLOW_EMPTY_DB", "1")
         fake_mount = tmp_path / "fakemount" / "omega_traces.db"
         fake_mount.parent.mkdir(parents=True, exist_ok=True)
 
@@ -695,6 +699,7 @@ class TestDbPathResolution:
         try:
             assert store.db_path == str(redirect_target)
             assert store.db_path_source == "auto_redirect_network_fs"
+            assert store.empty_history_mode is True
             assert any(
                 "network/FUSE mount" in record.message for record in caplog.records
             )
