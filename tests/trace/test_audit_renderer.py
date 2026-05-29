@@ -68,6 +68,12 @@ def _write_sidecar(path: Path, session_id: str) -> None:
         "closed_at": "2026-05-27T22:00:00Z",
         "model_version": "claude-opus-4-7",
         "purpose": "renderer test session",
+        "league": "NBA",
+        "window": "2026-05-27",
+        "effective_db_path": "test_traces.db",
+        "runtime_db_status": "ok",
+        "pipeline_status": {"overall": "needs_outcomes", "ingest": "ok"},
+        "next_required_action": "attach outcomes",
         "bankroll": 1000.0,
         "bankroll_confirmed": True,
         "exec_stats": {"traces_emitted": 2, "bets_recorded": 0},
@@ -117,6 +123,12 @@ def test_renders_session_with_traces(workspace):
     assert written.exists()
     body = written.read_text(encoding="utf-8")
     assert "Session Audit — sess-render-1" in body
+    assert body.startswith("---\ncanonical: false\n")
+    assert "source_db_path:" in body
+    assert "trace_count_at_generation:" in body
+    assert "## Actionability" in body
+    assert "needs_outcomes" in body
+    assert "attach outcomes" in body
     assert "`sandbox-r1`" in body
     assert "`sandbox-r2`" in body
     assert "## Traces (2)" in body

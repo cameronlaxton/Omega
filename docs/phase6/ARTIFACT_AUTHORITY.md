@@ -64,3 +64,13 @@ league-scoped implementation adapters** — the grading shape genuinely differs 
 games. They are adapters, not a parallel domain. Unifying storage/calibration
 under an explicit `market_family` field is deferred until a second league's prop
 + outcome flow proves the abstraction is needed.
+
+Current DB truth remains split by grading shape:
+
+- `outcomes` is the active game-outcome table.
+- `prop_outcomes` is the active player-stat outcome table.
+
+Do not merge these tables, rename the prop calibration plane, or replace
+`trace.kind = "prop"` in this hardening phase. Treat those names as current
+adapter vocabulary until a future migration explicitly introduces
+`market_family`.

@@ -96,6 +96,12 @@ class SessionSidecar(BaseModel):
     closed_at: str | None = None
     model_version: str = Field(min_length=1)
     purpose: str = Field(min_length=1)
+    league: str | None = None
+    window: str | None = None
+    effective_db_path: str | None = None
+    runtime_db_status: str | None = None
+    pipeline_status: dict[str, Any] = Field(default_factory=dict)
+    next_required_action: str | None = None
     bankroll: float = Field(gt=0)
     bankroll_confirmed: bool
     exec_stats: dict[str, Any]

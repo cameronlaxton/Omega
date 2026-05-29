@@ -1,5 +1,10 @@
 # MLB Daily League Session
 
+## Session Guard
+
+Apply the `omega-failure-budget` skill before setup, slate building, odds resolution, analysis, trace export, ingest, or outcome attachment.
+If setup/preflight/DB/trace/outcome checks exceed the failure budget, stop and produce the required failure report. Do not continue into analysis or candidate generation after a hard setup failure.
+
 Use this prompt for the complete MLB betting surface: moneylines, run lines,
 totals, team totals, first-five markets where supported, and player props. Do
 not run a separate props prompt. Game bets and props must share the

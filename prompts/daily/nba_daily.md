@@ -1,5 +1,10 @@
 # NBA Daily League Session
 
+## Session Guard
+
+Apply the `omega-failure-budget` skill before setup, slate building, odds resolution, analysis, trace export, ingest, or outcome attachment.
+If setup/preflight/DB/trace/outcome checks exceed the failure budget, stop and produce the required failure report. Do not continue into analysis or candidate generation after a hard setup failure.
+
 Use this prompt for the complete NBA betting surface: game moneylines, spreads,
 totals, team totals where supported, and player props. Props and game bets share the same league context,
 injury map, rest map, odds provenance, sidecar, and session audit.

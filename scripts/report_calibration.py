@@ -385,6 +385,10 @@ def _section_sessions(
                 "last_ts": s["last_ts"],
                 "model_version": sidecar.get("model_version"),
                 "exec_stats": sidecar.get("exec_stats", {}),
+                "pipeline_status": sidecar.get("pipeline_status", {}),
+                "next_required_action": sidecar.get("next_required_action"),
+                "effective_db_path": sidecar.get("effective_db_path"),
+                "runtime_db_status": sidecar.get("runtime_db_status"),
                 "agent_notes": (sidecar.get("agent_notes") or "")[:200],
             }
         )
@@ -595,14 +599,21 @@ def _render(
     if not sessions:
         lines.append("_No session_id-tagged traces yet._")
     else:
-        lines.append("| session_id | traces | graded | model | closes | webfetch_fail | notes |")
-        lines.append("|---|---|---|---|---|---|---|")
+        lines.append(
+            "| session_id | traces | graded | model | pipeline | next_action | closes | webfetch_fail | notes |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|")
         for s in sessions:
             stats = s["exec_stats"] or {}
+            pipeline = s.get("pipeline_status") or {}
+            pipeline_label = pipeline.get("overall") or pipeline.get("status") or "?"
+            next_action = (s.get("next_required_action") or "?").replace("|", "\\|")
             notes = (s["agent_notes"] or "").replace("|", "\\|").replace("\n", " ")[:80]
             lines.append(
                 f"| `{s['session_id']}` | {s['trace_count']} | {s['graded_count']} | "
                 f"{s.get('model_version') or '?'} | "
+                f"{pipeline_label} | "
+                f"{next_action[:80]} | "
                 f"{stats.get('closing_line_captures', '?')} | "
                 f"{stats.get('webfetch_failures', '?')} | {notes} |"
             )

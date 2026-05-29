@@ -1,5 +1,10 @@
 # WNBA Daily League Session
 
+## Session Guard
+
+Apply the `omega-failure-budget` skill before setup, slate building, odds resolution, analysis, trace export, ingest, or outcome attachment.
+If setup/preflight/DB/trace/outcome checks exceed the failure budget, stop and produce the required failure report. Do not continue into analysis or candidate generation after a hard setup failure.
+
 Use this prompt for the complete WNBA betting surface: moneylines, spreads,
 team totals where supported, and player props. WNBA game totals are currently
 quarantined by the engine and must not be presented as actionable Bet Cards.

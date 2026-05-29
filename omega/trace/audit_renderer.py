@@ -15,6 +15,7 @@ those legacy artifacts are retired.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -110,6 +111,19 @@ def _render_markdown(
     lines.append(f"| model_version | {sidecar.model_version} |")
     lines.append(f"| bankroll | {sidecar.bankroll} (confirmed={sidecar.bankroll_confirmed}) |")
     lines.append(f"| purpose | {sidecar.purpose} |")
+    lines.append("")
+
+    # ---------------- Machine-readable session actionability (sidecar) -----
+    lines.append("## Actionability")
+    lines.append("")
+    lines.append("| Field | Value |")
+    lines.append("|---|---|")
+    lines.append(f"| league | {_cell(sidecar.league)} |")
+    lines.append(f"| window | {_cell(sidecar.window)} |")
+    lines.append(f"| effective_db_path | {_cell(sidecar.effective_db_path)} |")
+    lines.append(f"| runtime_db_status | {_cell(sidecar.runtime_db_status)} |")
+    lines.append(f"| pipeline_status | {_json_cell(sidecar.pipeline_status)} |")
+    lines.append(f"| next_required_action | {_cell(sidecar.next_required_action)} |")
     lines.append("")
 
     # ---------------- Engine exec_stats (sidecar) ----------------
@@ -238,3 +252,15 @@ def _render_markdown(
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _cell(value: Any) -> str:
+    if value in (None, ""):
+        return "—"
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def _json_cell(value: dict[str, Any]) -> str:
+    if not value:
+        return "—"
+    return json.dumps(value, sort_keys=True, separators=(",", ":")).replace("|", "\\|")

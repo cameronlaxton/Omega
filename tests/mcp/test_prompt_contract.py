@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -82,6 +84,46 @@ def test_daily_prompts_are_league_first_not_props_siloed():
         assert re.search(r"do\s+not run a separate\s+props prompt", text)
         assert "quality_gate/null_data_audit" in text
 
-    props_text = (daily_dir / "props_daily.md").read_text(encoding="utf-8").lower()
-    assert "deprecated" in props_text
+    props_path = daily_dir / "props_daily.md"
+    assert props_path.exists()
+    props_text = props_path.read_text(encoding="utf-8").lower()
+    assert "deprecated_redirect" in props_text
+    assert "runtime_allowed: false" in props_text
     assert "use the league prompt instead" in props_text
+    assert "nba_daily.md" in props_text
+    assert "wnba_daily.md" in props_text
+    assert "mlb_daily.md" in props_text
+
+
+def test_active_daily_prompts_reference_failure_budget_skill():
+    daily_dir = ROOT / "prompts" / "daily"
+
+    for name in ("nba_daily.md", "wnba_daily.md", "mlb_daily.md"):
+        path = daily_dir / name
+        text = path.read_text(encoding="utf-8").lower()
+        assert "## session guard" in text
+        assert "omega-failure-budget" in text
+        assert "failure report" in text
+
+
+def test_local_agent_masks_if_present_cover_generated_artifacts():
+    required = {
+        "reports/latest.md",
+        "reports/run_audits/",
+        "reports/*.txt",
+        "inbox/traces/",
+    }
+    found_any = False
+    for name in (".cursorignore", ".clineignore"):
+        path = ROOT / name
+        if not path.exists():
+            continue
+        found_any = True
+        lines = {
+            line.strip()
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        }
+        assert required <= lines
+    if not found_any:
+        pytest.skip("local agent masks are workspace-local and intentionally untracked")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -69,6 +70,39 @@ def test_session_sidecar_rejects_inline_outcomes():
 def test_session_sidecar_audit_events_defaults_to_empty():
     sidecar = SessionSidecar.model_validate(_valid_sidecar())
     assert sidecar.audit_events == []
+    assert sidecar.pipeline_status == {}
+    assert sidecar.next_required_action is None
+
+
+def test_optional_actionability_fields_round_trip():
+    payload = _valid_sidecar()
+    payload.update(
+        {
+            "league": "NBA",
+            "window": "2026-05-29",
+            "effective_db_path": "C:/repos/Omega/omega_traces.db",
+            "runtime_db_status": "ok",
+            "pipeline_status": {"overall": "needs_outcomes", "ingest": "ok"},
+            "next_required_action": "attach outcomes when games are final",
+        }
+    )
+
+    sidecar = SessionSidecar.model_validate(payload)
+
+    assert sidecar.league == "NBA"
+    assert sidecar.pipeline_status["overall"] == "needs_outcomes"
+    assert sidecar.next_required_action == "attach outcomes when games are final"
+
+
+def test_existing_repo_sidecars_remain_valid():
+    sidecar_dir = Path(__file__).resolve().parents[2] / "inbox" / "sessions"
+    if not sidecar_dir.exists():
+        pytest.skip("repo sidecar fixtures not present")
+
+    paths = sorted(sidecar_dir.glob("sess-*.json"))
+    assert paths
+    for path in paths:
+        SessionSidecar.from_path(path)
 
 
 def test_session_sidecar_accepts_valid_audit_events():

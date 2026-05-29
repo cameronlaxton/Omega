@@ -64,6 +64,8 @@ data/cache/
 *.probe.db
 *.probe.db-journal
 *.db-wal-test
+*.db-wal
+*.db-shm
 tmp*.probe.db*
 
 # Quarantined malformed session sidecars + diagnostic JSONL event mirror.
