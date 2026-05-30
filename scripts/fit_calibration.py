@@ -41,7 +41,7 @@ if str(_REPO_ROOT) not in sys.path:
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
 from omega.core.calibration.profiles import CalibrationProfile  # noqa: E402
 from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
-from omega.trace.store import TraceStore  # noqa: E402
+from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("fit_calibration")
 
@@ -83,21 +83,24 @@ def _deterministic_split(
     return train_p, train_o, hold_p, hold_o
 
 
-def _next_version(registry: CalibrationRegistry, league: str, method: str) -> int:
-    """Return the next monotonic version number for (league, method)."""
+def _next_version(registry: CalibrationRegistry, league: str, method: str, market: str) -> int:
+    """Return the next monotonic version number for (league, method, market)."""
     existing = registry.list_profiles(league=league)
-    same_method = [p for p in existing if p.method == method]
-    return (max((p.version for p in same_method), default=0)) + 1
+    same = [p for p in existing if p.method == method and (p.market or "game") == market]
+    return (max((p.version for p in same), default=0)) + 1
 
 
-def _unique_profile_id(method: str, league: str, version: int, dataset_hash: str) -> str:
+def _unique_profile_id(
+    method: str, league: str, version: int, dataset_hash: str, market: str = "game"
+) -> str:
     """Build a profile_id that will not collide with any prior fit.
 
-    Format: <method-prefix>_<league>_v<version>_<short_hash>
-    Example: iso_nba_v3_4f7a9d2b1c3e5f0a
+    Format: <method-prefix>_<league>[_<market>]_v<version>_<short_hash>
+    Example: iso_nba_v3_4f7a9d2b1c3e5f0a, iso_epl_draw_v1_4f7a9d2b1c3e5f0a
     """
     prefix = {"isotonic": "iso", "shrinkage": "shrink"}.get(method, method)
-    return f"{prefix}_{league.lower()}_v{version}_{dataset_hash[:16]}"
+    market_tag = "" if market == "game" else f"{market}_"
+    return f"{prefix}_{league.lower()}_{market_tag}v{version}_{dataset_hash[:16]}"
 
 
 def fit_and_register(
@@ -110,28 +113,41 @@ def fit_and_register(
     hold_p: list[float],
     hold_o: list[int],
     dry_run: bool,
+    market: str = "game",
 ) -> CalibrationProfile:
     """Fit one method, evaluate on holdout, register as CANDIDATE. Returns profile."""
     if method == "isotonic":
-        profile = fitter.fit_isotonic(train_p, train_o, league=league)
+        profile = fitter.fit_isotonic(train_p, train_o, league=league, market=market)
     elif method == "shrinkage":
-        profile = fitter.fit_shrinkage(train_p, train_o, league=league)
+        profile = fitter.fit_shrinkage(train_p, train_o, league=league, market=market)
     else:
         raise ValueError(f"Unknown method: {method!r}")
 
     metrics = fitter.evaluate(profile, hold_p, hold_o)
     profile.metrics = metrics
 
-    version = _next_version(registry, league, method)
+    version = _next_version(registry, league, method, market)
     profile.version = version
     profile.profile_id = _unique_profile_id(
-        method=method, league=league, version=version, dataset_hash=profile.dataset_hash
+        method=method,
+        league=league,
+        version=version,
+        dataset_hash=profile.dataset_hash,
+        market=market,
     )
 
     if not dry_run:
         registry.register(profile)
 
     return profile
+
+
+def _plane_market(plane: str) -> str:
+    """Map a fitting plane to its calibration market.
+
+    'draw' is its own market plane (3-way draw probabilities). 'game' and
+    'prop' both calibrate on the 'game' market (current behaviour)."""
+    return "draw" if plane == "draw" else "game"
 
 
 def _extract_plane_pairs(
@@ -142,6 +158,9 @@ def _extract_plane_pairs(
     if plane == "prop":
         predictions, outcomes = fitter.extract_prop_pairs(graded)
         return predictions, outcomes, "prop probability/outcome"
+    if plane == "draw":
+        predictions, outcomes = fitter.extract_draw_pairs(graded)
+        return predictions, outcomes, "draw_prob/outcome"
     predictions, outcomes = fitter.extract_pairs(graded)
     return predictions, outcomes, "home_win_prob/outcome"
 
@@ -153,9 +172,13 @@ def main() -> int:
     parser.add_argument("--league", required=True, help="League code (e.g. NBA)")
     parser.add_argument(
         "--plane",
-        choices=["game", "prop"],
+        choices=["game", "prop", "draw"],
         default="game",
-        help="Calibration plane to fit: game uses home_win_prob pairs; prop uses graded prop pairs",
+        help=(
+            "Calibration plane to fit: game uses home_win_prob pairs; prop uses "
+            "graded prop pairs; draw uses 3-way draw_prob pairs (soccer, hockey "
+            "regulation) and registers a market='draw' profile."
+        ),
     )
     parser.add_argument(
         "--method",
@@ -239,6 +262,7 @@ def main() -> int:
     )
 
     methods = ["isotonic", "shrinkage"] if args.method == "both" else [args.method]
+    market = _plane_market(args.plane)
     registry = CalibrationRegistry()
     registered = []
 
@@ -254,6 +278,7 @@ def main() -> int:
                 hold_p=hold_p,
                 hold_o=hold_o,
                 dry_run=args.dry_run,
+                market=market,
             )
         except ValueError as exc:
             logger.error("Failed to fit %s: %s", method, exc)

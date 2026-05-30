@@ -497,9 +497,9 @@ class TestApplyCalibration:
 
             original = prob_mod._get_active_profile
 
-            def _patched_get(league, context_slice=None):
+            def _patched_get(league, context_slice=None, market="game"):
                 r = CalibrationRegistry(path=path)
-                return r.get_production(league, context_slice=context_slice)
+                return r.get_production(league, context_slice=context_slice, market=market)
 
             prob_mod._get_active_profile = _patched_get
             try:
@@ -831,3 +831,91 @@ class TestDeriveContextSlice:
 
         result = _derive_context_slice({"is_playoff": True, "rest_days": 0})
         assert result == "playoff"  # playoff wins
+
+
+class TestDrawMarketSelection:
+    """Gap 4: market-aware profile selection for the 3-way draw plane."""
+
+    def _registry_with(self, *profiles):
+        from omega.core.calibration.registry import CalibrationRegistry
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        os.unlink(path)
+        reg = CalibrationRegistry(path=path)
+        for p in profiles:
+            reg.register(p)
+            reg.promote(p.profile_id)
+        return reg, path
+
+    def test_draw_profile_selected_for_draw_market(self):
+        from omega.core.calibration.profiles import ProfileStatus
+
+        game = _make_profile(
+            profile_id="g_epl", league="EPL", market="game",
+            params={"shrink_factor": 0.5}, status=ProfileStatus.CANDIDATE,
+        )
+        draw = _make_profile(
+            profile_id="d_epl", league="EPL", market="draw",
+            params={"shrink_factor": 0.9}, status=ProfileStatus.CANDIDATE,
+        )
+        reg, path = self._registry_with(game, draw)
+        try:
+            assert reg.get_production("EPL", market="draw").profile_id == "d_epl"
+            assert reg.get_production("EPL", market="game").profile_id == "g_epl"
+            # Default market is game.
+            assert reg.get_production("EPL").profile_id == "g_epl"
+        finally:
+            os.unlink(path)
+
+    def test_draw_market_falls_back_to_game_profile(self):
+        from omega.core.calibration.profiles import ProfileStatus
+
+        game = _make_profile(
+            profile_id="g_epl", league="EPL", market="game",
+            params={"shrink_factor": 0.5}, status=ProfileStatus.CANDIDATE,
+        )
+        reg, path = self._registry_with(game)
+        try:
+            # No draw profile registered → draw lookup falls back to game.
+            assert reg.get_production("EPL", market="draw").profile_id == "g_epl"
+        finally:
+            os.unlink(path)
+
+    def test_legacy_profile_without_market_treated_as_game(self):
+        # A profile dict stored before the market field existed defaults to game.
+        from omega.core.calibration.profiles import CalibrationProfile
+
+        p = _make_profile(profile_id="legacy_epl", league="EPL")
+        dumped = p.model_dump()
+        dumped.pop("market", None)
+        assert CalibrationProfile(**dumped).market == "game"
+
+    def test_apply_calibration_draw_uses_draw_profile(self, monkeypatch):
+        import omega.core.calibration.probability as prob_mod
+        from omega.core.calibration.profiles import ProfileStatus
+
+        game = _make_profile(
+            profile_id="g_epl", league="EPL", market="game",
+            params={"shrink_factor": 0.2}, status=ProfileStatus.CANDIDATE,
+        )
+        draw = _make_profile(
+            profile_id="d_epl", league="EPL", market="draw",
+            params={"shrink_factor": 1.0}, status=ProfileStatus.CANDIDATE,
+        )
+        reg, path = self._registry_with(game, draw)
+        try:
+            monkeypatch.setattr(
+                prob_mod,
+                "_get_active_profile",
+                lambda league, context_slice=None, market="game": reg.get_production(
+                    league, context_slice=context_slice, market=market
+                ),
+            )
+            # shrink_factor 1.0 (draw profile) is identity; 0.2 (game) shrinks hard.
+            draw_cal = prob_mod.apply_calibration(0.30, league="EPL", market="draw")
+            game_cal = prob_mod.apply_calibration(0.30, league="EPL", market="game")
+            assert abs(draw_cal - 0.30) < 1e-9
+            assert game_cal != draw_cal
+        finally:
+            os.unlink(path)

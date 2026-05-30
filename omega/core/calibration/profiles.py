@@ -54,6 +54,16 @@ class CalibrationProfile(BaseModel):
             "Registry falls back to base profile when no slice-specific profile exists."
         ),
     )
+    market: str = Field(
+        default="game",
+        description=(
+            "Calibration market plane this profile applies to. "
+            "'game' = moneyline/spread/total win probabilities (default, "
+            "covers legacy profiles). 'draw' = 3-way draw probabilities "
+            "(soccer, hockey regulation). Selection falls back from a "
+            "market-specific profile to the 'game' profile when absent."
+        ),
+    )
     status: ProfileStatus = ProfileStatus.CANDIDATE
 
     # Method parameters — passed as kwargs to calibrate_probability()

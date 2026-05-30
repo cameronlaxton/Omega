@@ -164,6 +164,27 @@ def _bernoulli_sample(p: float, size: int) -> list[int]:
     return [1 if random.random() < p else 0 for _ in range(size)]
 
 
+def _correct_score_distribution(
+    home_scores: list,
+    away_scores: list,
+    max_goals: int = 5,
+) -> dict[str, float]:
+    """Empirical correct-score distribution as {"home-away": pct}.
+
+    Scorelines with either side above ``max_goals`` are bucketed under
+    "other" so the map stays bounded. Percentages sum to ~100.
+    """
+    n = len(home_scores)
+    if n == 0:
+        return {}
+    counts: dict[str, int] = {}
+    for h, a in zip(home_scores, away_scores):
+        hi, ai = int(h), int(a)
+        key = f"{hi}-{ai}" if hi <= max_goals and ai <= max_goals else "other"
+        counts[key] = counts.get(key, 0) + 1
+    return {k: round(v / n * 100, 1) for k, v in sorted(counts.items())}
+
+
 def _percentile(sorted_values: list[float], q: float) -> float:
     """Return a deterministic nearest-rank percentile from sorted samples."""
     if not sorted_values:
@@ -316,6 +337,31 @@ def _build_team_score_result(
         "simulation_backend": backend_name,
         "component_version": component_version,
     }
+
+    # Exotic 3-way derived markets (soccer, hockey regulation). Gated on
+    # supports_draw so non-draw sports never carry these fields. All derived
+    # from the same score arrays — no extra simulation.
+    if supports_draw:
+        both_score = sum(1 for h, a in zip(home_scores, away_scores) if h > 0 and a > 0)
+        # Double chance: two of the three 3-way outcomes.
+        result["double_chance_home_draw_prob"] = round((home_wins + draws) / n_iterations * 100, 1)
+        result["double_chance_home_away_prob"] = round(
+            (home_wins + away_wins) / n_iterations * 100, 1
+        )
+        result["double_chance_away_draw_prob"] = round((away_wins + draws) / n_iterations * 100, 1)
+        # Draw-no-bet: draws void, probabilities conditional on a decisive result.
+        decisive = home_wins + away_wins
+        if decisive > 0:
+            result["dnb_home_prob"] = round(home_wins / decisive * 100, 1)
+            result["dnb_away_prob"] = round(away_wins / decisive * 100, 1)
+        else:
+            result["dnb_home_prob"] = 0.0
+            result["dnb_away_prob"] = 0.0
+        # Both teams to score.
+        result["btts_yes_prob"] = round(both_score / n_iterations * 100, 1)
+        result["btts_no_prob"] = round((n_iterations - both_score) / n_iterations * 100, 1)
+        # Correct-score distribution over common scorelines ("H-A" → pct).
+        result["correct_score_probs"] = _correct_score_distribution(home_scores, away_scores)
 
     if spread_home is not None:
         # spread_home convention: negative = home favored (e.g., -1.5 → home must win by 2+).
@@ -772,10 +818,75 @@ def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
     return home_scores, away_scores
 
 
+# Dixon-Coles low-score correction defaults. ``rho`` is the dependence
+# parameter on the {0-0, 1-0, 0-1, 1-1} cells; negative values shift mass toward
+# 0-0/1-1 (more draws) and away from 1-0/0-1, matching observed soccer scorelines.
+# Correction is opt-in per league via the ``dixon_coles`` config flag so existing
+# independent-Poisson traces remain reproducible on the legacy path.
+_SOCCER_DC_RHO_DEFAULT = -0.13
+_SOCCER_DIXON_COLES_DEFAULT = False
+_SOCCER_DC_MAX_GOALS = 15
+
+
+def _dixon_coles_scores(
+    home_lambda: float,
+    away_lambda: float,
+    rho: float,
+    n_iter: int,
+    max_goals: int = _SOCCER_DC_MAX_GOALS,
+) -> tuple[list[int], list[int]]:
+    """Sample correlated soccer scorelines via a Dixon-Coles adjusted joint pmf.
+
+    Builds the independent-Poisson joint over a truncated ``max_goals`` grid,
+    applies the Dixon-Coles tau correction to the four low-score cells,
+    renormalizes, and inverse-CDF samples with a single vectorized uniform
+    draw. Using one ``np.random.random`` call after the engine's global seed is
+    set keeps reruns with the same seed bit-identical (frozen-artifact
+    invariant).
+    """
+    import math
+
+    ks = range(max_goals + 1)
+    h_pmf = np.array(
+        [math.exp(-home_lambda) * home_lambda**k / math.factorial(k) for k in ks]
+    )
+    a_pmf = np.array(
+        [math.exp(-away_lambda) * away_lambda**k / math.factorial(k) for k in ks]
+    )
+    joint = np.outer(h_pmf, a_pmf)  # joint[i, j] = P(home=i) * P(away=j)
+
+    # Dixon-Coles tau correction (x = home goals, y = away goals).
+    joint[0, 0] *= 1.0 - home_lambda * away_lambda * rho
+    joint[0, 1] *= 1.0 + home_lambda * rho
+    joint[1, 0] *= 1.0 + away_lambda * rho
+    joint[1, 1] *= 1.0 - rho
+    joint = np.clip(joint, 0.0, None)
+
+    total = float(joint.sum())
+    if total <= 0.0:
+        # Degenerate correction (extreme rho) — fall back to independent draws.
+        return (
+            [int(s) for s in _poisson_sample(home_lambda, n_iter)],
+            [int(s) for s in _poisson_sample(away_lambda, n_iter)],
+        )
+
+    cdf = np.cumsum((joint / total).ravel())
+    u = np.random.random(n_iter)
+    idx = np.clip(np.searchsorted(cdf, u, side="right"), 0, cdf.size - 1)
+    width = max_goals + 1
+    home_scores = (idx // width).astype(int).tolist()
+    away_scores = (idx % width).astype(int).tolist()
+    return home_scores, away_scores
+
+
 def _sim_soccer(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
     """Soccer: Poisson goal model with xG integration.
 
     off_rating = goals per game (or xG), def_rating = goals conceded per game (or xGA).
+
+    When the league config sets ``dixon_coles: True``, low-score correlation is
+    modelled via a Dixon-Coles tau correction (see :func:`_dixon_coles_scores`);
+    otherwise home and away goals are sampled independently.
     """
     league_avg_gpg = config.get("avg_total", 2.5) / 2.0  # ~1.25
 
@@ -799,6 +910,11 @@ def _sim_soccer(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
 
     home_lambda = max(0.2, home_lambda)
     away_lambda = max(0.2, away_lambda)
+
+    use_dc = config.get("dixon_coles", _SOCCER_DIXON_COLES_DEFAULT)
+    if use_dc and np is not None:
+        rho = config.get("rho", _SOCCER_DC_RHO_DEFAULT)
+        return _dixon_coles_scores(home_lambda, away_lambda, rho, n_iter)
 
     home_scores = _poisson_sample(home_lambda, n_iter)
     away_scores = _poisson_sample(away_lambda, n_iter)

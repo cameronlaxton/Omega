@@ -89,17 +89,37 @@ class CalibrationRegistry:
         self,
         league: str,
         context_slice: str | None = None,
+        market: str = "game",
     ) -> CalibrationProfile | None:
-        """Return the active production profile for (league, context_slice).
+        """Return the active production profile for (league, context_slice, market).
 
         Lookup order:
-        1. Exact match on (league, context_slice, PRODUCTION).
+        1. Exact match on (league, market, context_slice, PRODUCTION).
         2. If context_slice is not None and no exact match: fall back to the
-           base profile (context_slice=None, PRODUCTION) for the same league.
-        3. Returns None if no production profile exists at all.
+           base profile (context_slice=None) for the same (league, market).
+        3. If market is not 'game' and no match: fall back to the 'game'-market
+           profile for the league (the historical behaviour, where draw probs
+           reuse the game profile).
+        4. Returns None if no production profile exists at all.
+
+        Legacy profiles stored before the ``market`` field existed are treated
+        as ``market == "game"``.
         """
-        data = self._load()
         league_uc = league.upper()
+        resolved = self._resolve_market(league_uc, context_slice, market)
+        if resolved is None and market != "game":
+            resolved = self._resolve_market(league_uc, context_slice, "game")
+        return resolved
+
+    def _resolve_market(
+        self,
+        league_uc: str,
+        context_slice: str | None,
+        market: str,
+    ) -> CalibrationProfile | None:
+        """Resolve the production profile for one explicit market, applying the
+        context_slice -> base fallback within that market."""
+        data = self._load()
         base_profile: CalibrationProfile | None = None
         slice_profile: CalibrationProfile | None = None
 
@@ -107,6 +127,7 @@ class CalibrationRegistry:
             if (
                 p.get("league", "").upper() != league_uc
                 or p.get("status") != ProfileStatus.PRODUCTION.value
+                or (p.get("market") or "game") != market
             ):
                 continue
             p_slice = p.get("context_slice")  # None for base profiles
@@ -146,22 +167,26 @@ class CalibrationRegistry:
 
         league = target["league"]
         target_slice = target.get("context_slice")  # None for base profiles
+        target_market = target.get("market") or "game"
         now = datetime.now(UTC).isoformat()
 
-        # Archive existing production profile for the same (league, context_slice).
-        # A playoff profile never archives the base profile, and vice versa.
+        # Archive existing production profile for the same
+        # (league, context_slice, market). A playoff profile never archives the
+        # base profile, a draw profile never archives the game profile, etc.
         for p in data["profiles"]:
             if (
                 p.get("league", "").upper() == league.upper()
                 and p.get("status") == ProfileStatus.PRODUCTION.value
                 and p.get("context_slice") == target_slice
+                and (p.get("market") or "game") == target_market
             ):
                 p["status"] = ProfileStatus.ARCHIVED.value
                 logger.info(
-                    "Archived incumbent profile %s for league=%s slice=%s",
+                    "Archived incumbent profile %s for league=%s slice=%s market=%s",
                     p["profile_id"],
                     league,
                     target_slice,
+                    target_market,
                 )
 
         # Promote the target

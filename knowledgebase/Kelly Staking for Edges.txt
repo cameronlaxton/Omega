@@ -177,11 +177,11 @@ edge magnitude.
 
 An LLM can apply different fractional Kelly per tier:
 
-Tier A: fraction = 0.5 (half Kelly),
+High confidence: fraction = 0.5 (half Kelly),
 
-Tier B: fraction = 0.25,
+Medium confidence: fraction = 0.25,
 
-Tier C: fraction = 0.1 or 0.0 (pass except exceptional edges).
+Low confidence: fraction = 0.1 or 0.0 (pass except exceptional edges).
 
 Mapping should be configurable per sport and risk appetite.
 

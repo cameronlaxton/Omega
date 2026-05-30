@@ -152,3 +152,109 @@ def test_resolver_uses_cache_avoiding_external_calls(temp_db_path: Path, monkeyp
     assert "source: local_cache" in result["metadata"]
     mock_client.fetch_events.assert_not_called()
     mock_client.fetch_current_event_odds.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Negative-result cache (180s soft TTL)
+# ---------------------------------------------------------------------------
+
+def test_negative_entry_180s_ttl(temp_db_path: Path):
+    cache = OddsCache(db_path=temp_db_path)
+    key = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
+    payload = {"status": "unavailable", "skipped_reasons": ["no exact event match"]}
+
+    cache.set(key, "NBA", payload, entry_type="negative")
+
+    hit = cache.get(key)
+    assert hit is not None
+    assert hit["status"] == "unavailable"
+    assert "source: negative_cache" in hit["metadata"]
+
+    # Just past the 180s negative TTL -> expired (but still inside the 900s
+    # success window, proving the TTL is type-driven, not the old hardcoded 900s).
+    with sqlite3.connect(str(temp_db_path)) as conn:
+        conn.execute(
+            "UPDATE odds_cache SET inserted_at = ? WHERE cache_key = ?",
+            (time.time() - 181, key),
+        )
+        conn.commit()
+
+    assert cache.get(key) is None
+
+
+def test_success_vs_negative_ttl_differential(temp_db_path: Path):
+    cache = OddsCache(db_path=temp_db_path)
+    key_success = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
+    key_negative = cache.compute_cache_key("NBA", "game", "bulls", "knicks", "2026-05-16")
+
+    cache.set(key_success, "NBA", {"status": "success"}, entry_type="success")
+    cache.set(key_negative, "NBA", {"status": "unavailable"}, entry_type="negative")
+
+    # Age both to 300s old: success (TTL 900) still live, negative (TTL 180) expired.
+    with sqlite3.connect(str(temp_db_path)) as conn:
+        conn.execute("UPDATE odds_cache SET inserted_at = ?", (time.time() - 300,))
+        conn.commit()
+
+    assert cache.get(key_success) is not None
+    assert cache.get(key_negative) is None
+
+
+def test_negative_eviction_on_set(temp_db_path: Path):
+    cache = OddsCache(db_path=temp_db_path)
+    key_stale = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
+    key_fresh = cache.compute_cache_key("NBA", "game", "bulls", "knicks", "2026-05-16")
+
+    cache.set(key_stale, "NBA", {"status": "unavailable"}, entry_type="negative")
+
+    # Age the negative record past its 180s TTL (but well under 900s).
+    with sqlite3.connect(str(temp_db_path)) as conn:
+        conn.execute(
+            "UPDATE odds_cache SET inserted_at = ? WHERE cache_key = ?",
+            (time.time() - 200, key_stale),
+        )
+        conn.commit()
+
+    # Any subsequent write runs the type-aware append-hook eviction.
+    cache.set(key_fresh, "NBA", {"status": "success"})
+
+    with sqlite3.connect(str(temp_db_path)) as conn:
+        keys = [row[0] for row in conn.execute("SELECT cache_key FROM odds_cache")]
+    assert key_stale not in keys
+    assert key_fresh in keys
+
+
+def test_resolver_short_circuits_on_cached_negative(temp_db_path: Path, monkeypatch):
+    monkeypatch.setattr(OddsCache, "_resolve_db_path", lambda self: temp_db_path)
+
+    cache = OddsCache(db_path=temp_db_path)
+    negative_payload = {
+        "status": "unavailable",
+        "kind": "game",
+        "league": "NBA",
+        "event_id": None,
+        "home_team": None,
+        "away_team": None,
+        "default_bookmaker": "betmgm",
+        "request_patch": None,
+        "quotes": [],
+        "skipped_reasons": ["no exact event match for Celtics @ Lakers"],
+        "quota": {},
+    }
+    # Seed under the exact key the resolver will recompute for this request.
+    key = cache.compute_cache_key("NBA", "game", "los angeles lakers", "boston celtics", "2026-05-16")
+    cache.set(key, "NBA", negative_payload, entry_type="negative")
+
+    mock_client = MagicMock()
+    result = resolve_odds(
+        kind="game",
+        league="NBA",
+        home_team="Los Angeles Lakers",
+        away_team="Boston Celtics",
+        commence_time_from="2026-05-16T22:00:00Z",
+        client=mock_client,
+    )
+
+    assert result["status"] == "unavailable"
+    assert "source: negative_cache" in result["metadata"]
+    mock_client.fetch_events.assert_not_called()
+    mock_client.fetch_current_event_odds.assert_not_called()

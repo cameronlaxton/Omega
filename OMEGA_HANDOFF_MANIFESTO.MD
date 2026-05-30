@@ -1,5 +1,7 @@
 # OMEGA ARCHITECTURAL HANDOFF: PHASE 6.1 (POST-HARDENING)
 
+> **SUPERSEDED / HISTORICAL:** This document is preserved for historical context. For the current canonical operating contract, please see [PROJECT_STATE.md](PROJECT_STATE.md) and [OMEGA_COWORK.md](OMEGA_COWORK.md).
+
 ## 1. System State & Recently Landed Architecture
 The core infrastructure has been hardened to remove network-mount friction; stabilize MCP bridge connections; and enforce strict data typing. The following features are live and must not be rebuilt:
 

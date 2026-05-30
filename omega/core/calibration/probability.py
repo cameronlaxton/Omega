@@ -181,6 +181,7 @@ def apply_calibration(
     raw_prob: float,
     league: str | None = None,
     context_hints: dict[str, Any] | None = None,
+    market: str = "game",
 ) -> float:
     """Apply the canonical calibration policy. Used by both service and backtest.
 
@@ -196,6 +197,9 @@ def apply_calibration(
         context_hints: Optional dict with context signals used to derive a
             context_slice. Recognised keys: is_playoff (bool),
             rest_days (int; 0=B2B).
+        market: Calibration market plane — "game" (default) or "draw" for
+            3-way draw probabilities. A "draw" lookup falls back to the
+            league's "game" profile when no draw profile is registered.
 
     Returns:
         Calibrated probability as a float.
@@ -205,7 +209,7 @@ def apply_calibration(
     # Profile-driven path (when league is provided)
     if league is not None:
         context_slice = _derive_context_slice(context_hints)
-        profile = _get_active_profile(league, context_slice=context_slice)
+        profile = _get_active_profile(league, context_slice=context_slice, market=market)
         if profile is not None:
             result = calibrate_probability(raw_prob, method=profile.method, **profile.params)
             return result["calibrated"]
@@ -227,6 +231,7 @@ def apply_calibration_audited(
     raw_prob: float,
     league: str | None = None,
     context_hints: dict[str, Any] | None = None,
+    market: str = "game",
 ) -> tuple[float, dict[str, Any]]:
     """Like apply_calibration() but also returns an audit dict.
 
@@ -243,7 +248,7 @@ def apply_calibration_audited(
     context_slice = _derive_context_slice(context_hints) if context_hints else None
 
     if league is not None:
-        profile = _get_active_profile(league, context_slice=context_slice)
+        profile = _get_active_profile(league, context_slice=context_slice, market=market)
         if profile is not None:
             result = calibrate_probability(raw, method=profile.method, **profile.params)
             calibrated = result["calibrated"]
@@ -310,17 +315,18 @@ def _derive_context_slice(context_hints: dict[str, Any] | None) -> str | None:
     return None
 
 
-def _get_active_profile(league: str, context_slice: str | None = None):
-    """Look up the production calibration profile for (league, context_slice).
+def _get_active_profile(league: str, context_slice: str | None = None, market: str = "game"):
+    """Look up the production calibration profile for (league, context_slice, market).
 
     Returns None on any failure (missing file, import error, etc.)
     so that callers always fall back to the static policy gracefully.
-    The registry get_production() already handles the slice->base fallback.
+    The registry get_production() already handles the slice->base and
+    market->game fallbacks.
     """
     try:
         from omega.core.calibration.registry import CalibrationRegistry
 
         registry = CalibrationRegistry()
-        return registry.get_production(league, context_slice=context_slice)
+        return registry.get_production(league, context_slice=context_slice, market=market)
     except Exception:
         return None

@@ -22,7 +22,7 @@ from typing import Any
 
 # Directions that make a player-prop claim vs. a game claim.
 _PROP_DIRECTIONS = frozenset({"over", "under"})
-_GAME_DIRECTIONS = frozenset({"home", "away"})
+_GAME_DIRECTIONS = frozenset({"home", "away", "draw"})
 
 
 @dataclass(frozen=True)
@@ -81,9 +81,11 @@ def realized_prop_direction(prop_outcomes: list[dict[str, Any]] | None) -> str |
 
 
 def realized_game_direction(outcome: dict[str, Any] | None) -> str | None:
-    """Resolve a trace's realized game direction ('home' / 'away').
+    """Resolve a trace's realized game direction ('home' / 'away' / 'draw').
 
-    Returns None for a draw or a missing outcome.
+    Returns None only for a missing/unrecognised outcome. A tie resolves to
+    'draw' so 3-way (soccer, hockey regulation) draw-direction signals can be
+    scored; non-draw sports never store ``result == 'draw'`` for graded games.
     """
     if not outcome:
         return None
@@ -92,6 +94,8 @@ def realized_game_direction(outcome: dict[str, Any] | None) -> str | None:
         return "home"
     if result == "away_win":
         return "away"
+    if result == "draw":
+        return "draw"
     return None
 
 
@@ -115,7 +119,8 @@ def score_trace_signals(
     Returns:
         One ScoredSignal per directional signal whose claim could be resolved.
         Signals with no direction (or 'neutral'), or whose plane's outcome is
-        unavailable / a push / a draw, are skipped.
+        unavailable or a push, are skipped. A 3-way game draw resolves to the
+        'draw' direction and is scored.
     """
     prop_dir = realized_prop_direction(trace.get("_prop_outcomes"))
     game_dir = realized_game_direction(trace.get("_outcome"))
@@ -130,7 +135,7 @@ def score_trace_signals(
         else:
             continue  # neutral / None — no directional claim to score
         if realized is None:
-            continue  # outcome unavailable, push, or draw
+            continue  # outcome unavailable or a push
 
         confidence = row.get("confidence")
         try:

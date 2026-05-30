@@ -108,6 +108,49 @@ class CalibrationFitter:
         return predictions, outcomes
 
     @staticmethod
+    def extract_draw_pairs(
+        graded_traces: list[dict[str, Any]],
+        include_early_snapshots: bool = False,
+    ) -> tuple[list[float], list[int]]:
+        """Extract (predicted_draw_prob, actual_draw) pairs from 3-way game
+        graded traces (soccer, hockey regulation).
+
+        Prediction is the trace's ``draw_prob``; outcome is 1 when the game
+        ended in a draw (``result == "draw"``) and 0 otherwise. Traces without
+        a ``draw_prob`` (non-3-way sports) are skipped silently.
+
+        Args:
+            graded_traces: Output of TraceStore.get_graded_traces().
+
+        Returns:
+            (predictions, outcomes) — parallel lists of floats and 0/1 ints.
+        """
+        predictions: list[float] = []
+        outcomes: list[int] = []
+
+        for trace in graded_traces:
+            if not include_early_snapshots and _is_early_market_trace(trace):
+                continue
+            preds = trace.get("predictions")
+            outcome = trace.get("_outcome")
+            if not preds or not outcome:
+                continue
+
+            draw_prob = preds.get("draw_prob")
+            result = outcome.get("result")
+            if draw_prob is None or result is None:
+                continue
+
+            prob = float(draw_prob) / 100.0 if draw_prob > 1.0 else float(draw_prob)
+            prob = max(0.0, min(1.0, prob))
+
+            actual = 1 if result == "draw" else 0
+            predictions.append(prob)
+            outcomes.append(actual)
+
+        return predictions, outcomes
+
+    @staticmethod
     def extract_prop_pairs(
         graded_traces: list[dict[str, Any]],
         include_early_snapshots: bool = False,
@@ -242,6 +285,7 @@ class CalibrationFitter:
         outcomes: list[int],
         league: str,
         n_bins: int = 10,
+        market: str = "game",
     ) -> CalibrationProfile:
         """Fit an isotonic calibration profile using Pool-Adjacent-Violators.
 
@@ -300,11 +344,13 @@ class CalibrationFitter:
 
         dataset_hash = _compute_hash(predictions, outcomes)
 
+        market_tag = "" if market == "game" else f"{market}_"
         return CalibrationProfile(
-            profile_id=f"iso_{league.lower()}_v1",
+            profile_id=f"iso_{league.lower()}_{market_tag}v1",
             version=1,
             method="isotonic",
             league=league.upper(),
+            market=market,
             params={"calibration_map": {float(k): v for k, v in calibration_map.items()}},
             training_window=_infer_window(predictions),
             sample_size=len(predictions),
@@ -321,6 +367,7 @@ class CalibrationFitter:
         predictions: list[float],
         outcomes: list[int],
         league: str,
+        market: str = "game",
     ) -> CalibrationProfile:
         """Fit a shrinkage calibration profile by minimizing Brier score.
 
@@ -355,11 +402,13 @@ class CalibrationFitter:
 
         dataset_hash = _compute_hash(predictions, outcomes)
 
+        market_tag = "" if market == "game" else f"{market}_"
         return CalibrationProfile(
-            profile_id=f"shrink_{league.lower()}_v1",
+            profile_id=f"shrink_{league.lower()}_{market_tag}v1",
             version=1,
             method="shrinkage",
             league=league.upper(),
+            market=market,
             params={"shrink_factor": best_factor},
             training_window=_infer_window(predictions),
             sample_size=len(predictions),

@@ -229,12 +229,75 @@ def _select_game_input(
             selected.setdefault("moneyline_home", quote["price"])
         elif market == "moneyline" and selection == _norm(away_team):
             selected.setdefault("moneyline_away", quote["price"])
+        elif market == "moneyline" and selection == _norm("Draw"):
+            # 3-way moneyline (soccer, hockey regulation): the provider's h2h
+            # returns Home/Draw/Away; preserve the Draw price for OddsInput.moneyline_draw.
+            selected.setdefault("moneyline_draw", quote["price"])
         elif market == "spread" and selection == _norm(home_team):
             selected.setdefault("spread_home", quote["line"])
             selected.setdefault("spread_home_price", quote["price"])
         elif market == "total" and selection == "over":
             selected.setdefault("over_under", quote["line"])
+        else:
+            _select_exotic_quote(selected, market, selection, quote, home_team, away_team)
     return selected
+
+
+def _select_exotic_quote(
+    selected: dict[str, Any],
+    market: str,
+    selection: str,
+    quote: dict[str, Any],
+    home_team: str,
+    away_team: str,
+) -> None:
+    """Map provider exotic-market quotes (soccer) into OddsInput fields.
+
+    Defensive by design: unrecognised selections are ignored. Provider market
+    keys follow the-odds-api conventions (double_chance, draw_no_bet, btts,
+    correct_score). Selection name matching is normalised and tolerant of the
+    common symbolic ('1X'/'12'/'X2') and team-name combo forms.
+    """
+    price = quote["price"]
+    h, a, draw = _norm(home_team), _norm(away_team), _norm("Draw")
+
+    if market == "double_chance":
+        if selection in ("1x", "x1") or (h in selection and draw in selection):
+            selected.setdefault("dc_home_draw", price)
+        elif selection in ("12", "21") or (h in selection and a in selection):
+            selected.setdefault("dc_home_away", price)
+        elif selection in ("x2", "2x") or (a in selection and draw in selection):
+            selected.setdefault("dc_away_draw", price)
+    elif market == "draw_no_bet":
+        if selection == h:
+            selected.setdefault("dnb_home", price)
+        elif selection == a:
+            selected.setdefault("dnb_away", price)
+    elif market in ("btts", "both_teams_to_score"):
+        if selection == "yes":
+            selected.setdefault("btts_yes", price)
+        elif selection == "no":
+            selected.setdefault("btts_no", price)
+    elif market == "correct_score":
+        scoreline = _normalize_scoreline(quote.get("selection"))
+        if scoreline is not None:
+            selected.setdefault("correct_score", {})
+            selected["correct_score"].setdefault(scoreline, price)
+
+
+def _normalize_scoreline(selection: str | None) -> str | None:
+    """Normalise a correct-score selection like '1 - 0' or '1:0' to '1-0'."""
+    if not selection:
+        return None
+    raw = selection.replace(":", "-").replace(" ", "")
+    parts = raw.split("-")
+    if len(parts) != 2:
+        return None
+    try:
+        h, a = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+    return f"{h}-{a}"
 
 
 def _filter_prop_quotes(
@@ -316,9 +379,11 @@ def resolve_odds(
     game_date = (commence_time_from or "").strip().split("T")[0] if commence_time_from else datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     cached_payload: dict[str, Any] | None = None
+    negative_key: str | None = None
 
     if norm_home and norm_away:
         cache_key = cache.compute_cache_key(league, market, norm_home, norm_away, game_date)
+        negative_key = cache_key
         cached_payload = cache.get(cache_key)
         if not cached_payload:
             cached_payload = cache.find_by_teams(league, market, norm_home, norm_away)
@@ -328,6 +393,14 @@ def resolve_odds(
 
     if cached_payload:
         return cached_payload
+
+    def _fail(payload: dict[str, Any]) -> dict[str, Any]:
+        """Store an unavailable result under the short negative-cache TTL so a
+        repeated identical lookup short-circuits before any API call, then return
+        it unchanged. No key (teams unknown) means we skip caching this miss."""
+        if negative_key is not None:
+            cache.set(negative_key, league, payload, entry_type="negative")
+        return payload
 
     # 2. Cache Miss - Execute external resolution
     client = client or OddsApiClient()
@@ -343,27 +416,27 @@ def resolve_odds(
     )
     skipped.extend(event_skips)
     if not resolved_event_id:
-        return _unavailable(kind, league, bookmaker, skipped, client)
+        return _fail(_unavailable(kind, league, bookmaker, skipped, client))
 
     prop_type_by_market: dict[str, str] = {}
     if kind == "prop":
         if not player_name or not prop_type:
-            return _unavailable(
+            return _fail(_unavailable(
                 kind,
                 league,
                 bookmaker,
                 ["player_name and prop_type are required for prop odds"],
                 client,
-            )
+            ))
         market_key = provider_market_for_prop(league, prop_type)
         if not market_key:
-            return _unavailable(
+            return _fail(_unavailable(
                 kind,
                 league,
                 bookmaker,
                 [f"no provider market mapping for {league.upper()} prop_type={prop_type!r}"],
                 client,
-            )
+            ))
         available, availability_skips = _prop_market_available(
             client,
             league,
@@ -374,7 +447,7 @@ def resolve_odds(
             all_books=all_books,
         )
         if not available:
-            return _unavailable(kind, league, bookmaker, availability_skips, client)
+            return _fail(_unavailable(kind, league, bookmaker, availability_skips, client))
         markets = market_key
         prop_type_by_market[market_key] = prop_type
     else:
@@ -388,7 +461,7 @@ def resolve_odds(
             bookmakers=_bookmakers(bookmaker, line_shopping, all_books),
         )
     except (OddsApiKeyMissing, OddsApiBudgetExceeded) as exc:
-        return _unavailable(kind, league, bookmaker, [str(exc)], client)
+        return _fail(_unavailable(kind, league, bookmaker, [str(exc)], client))
 
     quotes = normalize_event_odds(event, league=league, prop_type_by_market=prop_type_by_market)
     if kind == "prop":
@@ -420,9 +493,9 @@ def resolve_odds(
             if not (line_shopping or all_books)
             else "no exact market match"
         )
-        return _unavailable(
+        return _fail(_unavailable(
             kind, league, bookmaker, skipped, client, quotes=output_quotes, event=event
-        )
+        ))
 
     result_payload = {
         "status": "success",

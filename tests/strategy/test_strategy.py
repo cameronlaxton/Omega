@@ -246,6 +246,90 @@ class TestBacktestEngine:
         assert isinstance(result.results_by_league, dict)
         assert isinstance(result.rejection_reasons, list)
 
+    def test_draw_selection_grades_as_win_on_tie(self):
+        """A draw moneyline bet WINS on a tie and is not a push (Gap 2)."""
+        from omega.strategy.backtest.engine import BacktestEngine
+        from omega.strategy.models import StrategyEntry
+
+        engine = BacktestEngine(n_iterations=100)
+        strategy = StrategyEntry(
+            strategy_id="draw-grade",
+            name="Draw Grade",
+            leagues=["EPL"],
+            edge_threshold=0.01,
+            confidence_tiers=["A", "B", "C"],
+        )
+        tie = {"home_score": 1, "away_score": 1}
+
+        # +200 → implied ~33.3%; model 50% clears the threshold.
+        draw_bet = engine._evaluate_side(
+            side="draw",
+            team="Draw",
+            model_prob=0.50,
+            market_odds=200,
+            strategy=strategy,
+            outcome=tie,
+            closing_odds=200,
+        )
+        assert draw_bet is not None
+        assert draw_bet["won"] is True
+        assert draw_bet["push"] is False
+        assert draw_bet["net_units"] > 0
+
+    def test_home_selection_pushes_on_tie(self):
+        """A home moneyline bet still pushes (no win, no loss) on a tie (Gap 2)."""
+        from omega.strategy.backtest.engine import BacktestEngine
+        from omega.strategy.models import StrategyEntry
+
+        engine = BacktestEngine(n_iterations=100)
+        strategy = StrategyEntry(
+            strategy_id="home-push",
+            name="Home Push",
+            leagues=["EPL"],
+            edge_threshold=0.01,
+            confidence_tiers=["A", "B", "C"],
+        )
+        tie = {"home_score": 1, "away_score": 1}
+
+        home_bet = engine._evaluate_side(
+            side="home",
+            team="Arsenal",
+            model_prob=0.50,
+            market_odds=200,
+            strategy=strategy,
+            outcome=tie,
+            closing_odds=200,
+        )
+        assert home_bet is not None
+        assert home_bet["won"] is False
+        assert home_bet["push"] is True
+        assert home_bet["net_units"] == 0.0
+
+    def test_exotic_grading_truth_table(self):
+        """_grade_selection covers exotic soccer markets (Gap 5)."""
+        from omega.strategy.backtest.engine import _grade_selection
+
+        # Home win 2-1
+        assert _grade_selection("double_chance", "home_draw", 2, 1) == (True, False)
+        assert _grade_selection("double_chance", "home_away", 2, 1) == (True, False)
+        assert _grade_selection("double_chance", "away_draw", 2, 1) == (False, False)
+        # Draw 1-1
+        assert _grade_selection("double_chance", "home_draw", 1, 1) == (True, False)
+        assert _grade_selection("double_chance", "home_away", 1, 1) == (False, False)
+        assert _grade_selection("double_chance", "away_draw", 1, 1) == (True, False)
+        # Draw-no-bet voids (pushes) on a tie.
+        assert _grade_selection("draw_no_bet", "home", 1, 1) == (False, True)
+        assert _grade_selection("draw_no_bet", "home", 2, 1) == (True, False)
+        assert _grade_selection("draw_no_bet", "away", 2, 1) == (False, False)
+        # BTTS
+        assert _grade_selection("both_teams_to_score", "yes", 1, 1) == (True, False)
+        assert _grade_selection("both_teams_to_score", "yes", 1, 0) == (False, False)
+        assert _grade_selection("both_teams_to_score", "no", 2, 0) == (True, False)
+        # Correct score
+        assert _grade_selection("correct_score", "2-1", 2, 1) == (True, False)
+        assert _grade_selection("correct_score", "2-1", 1, 1) == (False, False)
+        assert _grade_selection("correct_score", "bad", 1, 1) == (False, False)
+
     def test_backtest_passes_game_context_to_calibration(self, monkeypatch):
         import omega.strategy.backtest.engine as engine_mod
         from omega.strategy.artifacts import FrozenArtifact

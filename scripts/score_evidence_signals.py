@@ -48,7 +48,7 @@ from omega.strategy.signal_performance import (  # noqa: E402
     accumulate_signal_performance,
     score_trace_signals,
 )
-from omega.trace.store import TraceStore  # noqa: E402
+from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("score_evidence_signals")
 

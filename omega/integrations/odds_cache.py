@@ -10,6 +10,15 @@ import time
 from pathlib import Path
 from typing import Any
 
+# Per-entry-type TTLs (seconds). Success payloads keep the original 15-minute
+# window; negative results (unavailable/empty markets) get a short 3-minute soft
+# window so an automated loop stops re-hitting the Odds API on the same miss
+# without masking a market that goes live shortly after.
+SUCCESS_TTL_SECONDS = 900
+NEGATIVE_TTL_SECONDS = 180
+_TTL_BY_ENTRY_TYPE = {"success": SUCCESS_TTL_SECONDS, "negative": NEGATIVE_TTL_SECONDS}
+
+
 class OddsCache:
     """Manages transactional caching of Odds API payloads with strict TTL eviction."""
 
@@ -42,9 +51,19 @@ class OddsCache:
                     cache_key TEXT PRIMARY KEY,
                     league TEXT,
                     market_data TEXT,
-                    inserted_at REAL
+                    inserted_at REAL,
+                    entry_type TEXT NOT NULL DEFAULT 'success'
                 )
             """)
+            # Idempotent migration for pre-existing cache DBs created before the
+            # entry_type column existed. The cache is disposable, but migrate
+            # cleanly rather than crash on the missing column.
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(odds_cache)")}
+            if "entry_type" not in cols:
+                conn.execute(
+                    "ALTER TABLE odds_cache ADD COLUMN entry_type "
+                    "TEXT NOT NULL DEFAULT 'success'"
+                )
             conn.commit()
 
     @staticmethod
@@ -66,40 +85,67 @@ class OddsCache:
         return hashlib.sha256(raw_str.encode("utf-8")).hexdigest()
 
     def get(self, cache_key: str) -> dict[str, Any] | None:
-        """Retrieve a cached record if it exists and has not expired (15 minutes)."""
+        """Retrieve a cached record if it exists and has not expired.
+
+        TTL is per-entry-type: 900s for ``success`` payloads, 180s for ``negative``
+        (unavailable/empty) markers.
+        """
         current_time = time.time()
         with sqlite3.connect(str(self.db_path)) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT market_data, inserted_at FROM odds_cache WHERE cache_key = ?",
+                "SELECT market_data, inserted_at, entry_type "
+                "FROM odds_cache WHERE cache_key = ?",
                 (cache_key,)
             )
             row = cursor.fetchone()
             if row:
-                market_data_str, inserted_at = row
-                if current_time - inserted_at <= 900:  # 15 minutes TTL
+                market_data_str, inserted_at, entry_type = row
+                ttl = _TTL_BY_ENTRY_TYPE.get(entry_type, SUCCESS_TTL_SECONDS)
+                if current_time - inserted_at <= ttl:
                     try:
                         data = json.loads(market_data_str)
                         if "metadata" not in data:
                             data["metadata"] = []
                         if "source: local_cache" not in data["metadata"]:
                             data["metadata"].append("source: local_cache")
+                        if entry_type == "negative" and "source: negative_cache" not in data["metadata"]:
+                            data["metadata"].append("source: negative_cache")
                         return data
                     except json.JSONDecodeError:
                         return None
         return None
 
-    def set(self, cache_key: str, league: str, market_data: dict[str, Any]) -> None:
-        """Store a fresh payload and run an append-hook to evict expired records."""
+    def set(
+        self,
+        cache_key: str,
+        league: str,
+        market_data: dict[str, Any],
+        *,
+        entry_type: str = "success",
+    ) -> None:
+        """Store a payload and run an append-hook to evict expired records.
+
+        ``entry_type`` selects the TTL applied on read and eviction: ``success``
+        (900s) or ``negative`` (180s).
+        """
+        if entry_type not in _TTL_BY_ENTRY_TYPE:
+            raise ValueError(f"entry_type must be one of {sorted(_TTL_BY_ENTRY_TYPE)}")
         current_time = time.time()
         market_data_str = json.dumps(market_data)
         with sqlite3.connect(str(self.db_path)) as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO odds_cache (cache_key, league, market_data, inserted_at)
-                VALUES (?, ?, ?, ?)
-            """, (cache_key, league.upper(), market_data_str, current_time))
-            # Append-hook eviction
-            conn.execute("DELETE FROM odds_cache WHERE ? - inserted_at > 900", (current_time,))
+                INSERT OR REPLACE INTO odds_cache
+                    (cache_key, league, market_data, inserted_at, entry_type)
+                VALUES (?, ?, ?, ?, ?)
+            """, (cache_key, league.upper(), market_data_str, current_time, entry_type))
+            # Append-hook eviction — type-aware so negatives expire at their own TTL.
+            conn.execute(
+                "DELETE FROM odds_cache WHERE "
+                "(entry_type = 'success'  AND ? - inserted_at > ?) OR "
+                "(entry_type = 'negative' AND ? - inserted_at > ?)",
+                (current_time, SUCCESS_TTL_SECONDS, current_time, NEGATIVE_TTL_SECONDS),
+            )
             conn.commit()
 
     def find_by_teams(self, league: str, market: str, home_team: str, away_team: str) -> dict[str, Any] | None:
@@ -112,8 +158,9 @@ class OddsCache:
         with sqlite3.connect(str(self.db_path)) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT market_data, inserted_at FROM odds_cache WHERE league = ? AND ? - inserted_at <= 900",
-                (norm_league, current_time)
+                "SELECT market_data, inserted_at FROM odds_cache "
+                "WHERE league = ? AND entry_type = 'success' AND ? - inserted_at <= ?",
+                (norm_league, current_time, SUCCESS_TTL_SECONDS)
             )
             rows = cursor.fetchall()
             for market_data_str, _ in rows:
@@ -140,8 +187,9 @@ class OddsCache:
         with sqlite3.connect(str(self.db_path)) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT market_data, inserted_at FROM odds_cache WHERE league = ? AND ? - inserted_at <= 900",
-                (norm_league, current_time)
+                "SELECT market_data, inserted_at FROM odds_cache "
+                "WHERE league = ? AND entry_type = 'success' AND ? - inserted_at <= ?",
+                (norm_league, current_time, SUCCESS_TTL_SECONDS)
             )
             rows = cursor.fetchall()
             for market_data_str, _ in rows:
