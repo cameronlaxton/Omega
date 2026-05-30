@@ -45,7 +45,7 @@ def test_cache_hit_and_ttl_expiration(temp_db_path: Path):
     key = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
     payload = {"status": "success", "event_id": "evt-1", "metadata": []}
 
-    cache.set(key, "NBA", payload)
+    cache.set(key, "NBA", "game", payload)
     
     # Hit Verification
     hit = cache.get(key)
@@ -66,14 +66,14 @@ def test_cache_eviction_on_set(temp_db_path: Path):
     key_expired = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
     key_fresh = cache.compute_cache_key("NBA", "game", "bulls", "knicks", "2026-05-16")
 
-    cache.set(key_expired, "NBA", {"status": "expired"})
-    
+    cache.set(key_expired, "NBA", "game", {"status": "expired"})
+
     # Manually age the record
     with sqlite3.connect(str(temp_db_path)) as conn:
         conn.execute("UPDATE odds_cache SET inserted_at = ? WHERE cache_key = ?", (time.time() - 950, key_expired))
         conn.commit()
 
-    cache.set(key_fresh, "NBA", {"status": "fresh"})
+    cache.set(key_fresh, "NBA", "game", {"status": "fresh"})
 
     with sqlite3.connect(str(temp_db_path)) as conn:
         cursor = conn.cursor()
@@ -100,20 +100,17 @@ def test_find_by_teams_and_event_id(temp_db_path: Path):
     cache = OddsCache(db_path=temp_db_path)
     payload = {"status": "success", "event_id": "evt-1234", "home_team": "Lakers", "away_team": "Celtics", "metadata": []}
     key = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
-    cache.set(key, "NBA", payload)
+    cache.set(key, "NBA", "game", payload)
 
     by_teams = cache.find_by_teams("NBA", "game", "Lakers", "Celtics")
     assert by_teams is not None
     assert by_teams["event_id"] == "evt-1234"
 
-    by_event = cache.find_by_event_id("NBA", "evt-1234")
+    by_event = cache.find_by_event_id("NBA", "game", "evt-1234")
     assert by_event is not None
     assert by_event["home_team"] == "Lakers"
 
-def test_resolver_uses_cache_avoiding_external_calls(temp_db_path: Path, monkeypatch):
-    # Set the cache path to our temp DB to avoid interfering with production caches
-    monkeypatch.setattr(OddsCache, "_resolve_db_path", lambda self: temp_db_path)
-    
+def test_resolver_uses_cache_avoiding_external_calls(temp_db_path: Path):
     cache = OddsCache(db_path=temp_db_path)
     payload = {
         "status": "success",
@@ -125,7 +122,7 @@ def test_resolver_uses_cache_avoiding_external_calls(temp_db_path: Path, monkeyp
         "commence_time": "2026-05-16T23:00:00Z",
         "default_bookmaker": "betmgm",
         "line_shopping": False,
-        "all_books": True,
+        "all_books": False,
         "request_patch": {"odds": {"over_under": 220.5, "markets": []}},
         "quotes": [],
         "skipped_reasons": [],
@@ -133,21 +130,20 @@ def test_resolver_uses_cache_avoiding_external_calls(temp_db_path: Path, monkeyp
         "metadata": ["source: local_cache"]
     }
     key = cache.compute_cache_key("NBA", "game", "Los Angeles Lakers", "Boston Celtics", "2026-05-16")
-    cache.set(key, "NBA", payload)
-    
-    # Mock the client entirely to ensure no methods are called
+    cache.set(key, "NBA", "game", payload)
+
     mock_client = MagicMock()
-    
-    # Execute resolver - it should hit the cache and never call the mock client
+
     result = resolve_odds(
         kind="game",
         league="NBA",
         home_team="Los Angeles Lakers",
         away_team="Boston Celtics",
         commence_time_from="2026-05-16T22:00:00Z",
-        client=mock_client
+        client=mock_client,
+        cache=cache,
     )
-    
+
     assert result["status"] == "success"
     assert "source: local_cache" in result["metadata"]
     mock_client.fetch_events.assert_not_called()
@@ -163,7 +159,7 @@ def test_negative_entry_180s_ttl(temp_db_path: Path):
     key = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
     payload = {"status": "unavailable", "skipped_reasons": ["no exact event match"]}
 
-    cache.set(key, "NBA", payload, entry_type="negative")
+    cache.set(key, "NBA", "game", payload, entry_type="negative")
 
     hit = cache.get(key)
     assert hit is not None
@@ -187,8 +183,8 @@ def test_success_vs_negative_ttl_differential(temp_db_path: Path):
     key_success = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
     key_negative = cache.compute_cache_key("NBA", "game", "bulls", "knicks", "2026-05-16")
 
-    cache.set(key_success, "NBA", {"status": "success"}, entry_type="success")
-    cache.set(key_negative, "NBA", {"status": "unavailable"}, entry_type="negative")
+    cache.set(key_success, "NBA", "game", {"status": "success"}, entry_type="success")
+    cache.set(key_negative, "NBA", "game", {"status": "unavailable"}, entry_type="negative")
 
     # Age both to 300s old: success (TTL 900) still live, negative (TTL 180) expired.
     with sqlite3.connect(str(temp_db_path)) as conn:
@@ -204,7 +200,7 @@ def test_negative_eviction_on_set(temp_db_path: Path):
     key_stale = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
     key_fresh = cache.compute_cache_key("NBA", "game", "bulls", "knicks", "2026-05-16")
 
-    cache.set(key_stale, "NBA", {"status": "unavailable"}, entry_type="negative")
+    cache.set(key_stale, "NBA", "game", {"status": "unavailable"}, entry_type="negative")
 
     # Age the negative record past its 180s TTL (but well under 900s).
     with sqlite3.connect(str(temp_db_path)) as conn:
@@ -215,7 +211,7 @@ def test_negative_eviction_on_set(temp_db_path: Path):
         conn.commit()
 
     # Any subsequent write runs the type-aware append-hook eviction.
-    cache.set(key_fresh, "NBA", {"status": "success"})
+    cache.set(key_fresh, "NBA", "game", {"status": "success"})
 
     with sqlite3.connect(str(temp_db_path)) as conn:
         keys = [row[0] for row in conn.execute("SELECT cache_key FROM odds_cache")]
@@ -242,7 +238,7 @@ def test_resolver_short_circuits_on_cached_negative(temp_db_path: Path, monkeypa
     }
     # Seed under the exact key the resolver will recompute for this request.
     key = cache.compute_cache_key("NBA", "game", "los angeles lakers", "boston celtics", "2026-05-16")
-    cache.set(key, "NBA", negative_payload, entry_type="negative")
+    cache.set(key, "NBA", "game", negative_payload, entry_type="negative")
 
     mock_client = MagicMock()
     result = resolve_odds(

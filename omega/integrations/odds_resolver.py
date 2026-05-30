@@ -365,14 +365,15 @@ def resolve_odds(
     commence_time_to: str | None = None,
     bookmaker: str = DEFAULT_BOOKMAKER,
     line_shopping: bool = False,
-    all_books: bool = True,
+    all_books: bool = False,
     client: OddsApiClient | None = None,
+    cache: OddsCache | None = None,
 ) -> dict[str, Any]:
     """Resolve current odds for game or prop analysis with local SQLite caching."""
     assert_not_replay_mode("Odds resolver fetch")
 
     # 1. Caching Entry Layer
-    cache = OddsCache()
+    cache = cache or OddsCache()
     market = prop_type if kind == "prop" else "game"
     norm_home = (home_team or "").strip().lower()
     norm_away = (away_team or "").strip().lower()
@@ -389,7 +390,7 @@ def resolve_odds(
             cached_payload = cache.find_by_teams(league, market, norm_home, norm_away)
 
     if not cached_payload and event_id:
-        cached_payload = cache.find_by_event_id(league, event_id)
+        cached_payload = cache.find_by_event_id(league, market, event_id)
 
     if cached_payload:
         return cached_payload
@@ -399,7 +400,7 @@ def resolve_odds(
         repeated identical lookup short-circuits before any API call, then return
         it unchanged. No key (teams unknown) means we skip caching this miss."""
         if negative_key is not None:
-            cache.set(negative_key, league, payload, entry_type="negative")
+            cache.set(negative_key, league, market, payload, entry_type="negative")
         return payload
 
     # 2. Cache Miss - Execute external resolution
@@ -527,7 +528,7 @@ def resolve_odds(
         away_team=actual_away,
         game_date=actual_date
     )
-    cache.set(precise_key, league, result_payload)
+    cache.set(precise_key, league, market, result_payload)
 
     return result_payload
 

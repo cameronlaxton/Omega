@@ -38,9 +38,9 @@
       "Bash(python -m pytest tests/integrations/test_replay_mode_guard.py::test_every_integration_module_references_guard)",
       "Bash(python -m pytest tests/integrations/test_replay_mode_guard.py -q)",
       "Bash(git rev-list *)",
-      "Bash(python -m pytest tests/scripts/test_fetch_outcomes_wnba.py tests/scripts/test_fetch_outcomes_props.py tests/integrations/test_espn_boxscore.py tests/integrations/test_replay_mode_guard.py -q)",
       "Bash(python -m pytest tests/integrations/test_odds_cache.py tests/scripts/test_resolve_odds.py -q)",
-      "Bash(python -m pytest tests/integrations/ tests/scripts/test_resolve_odds.py -q)"
+      "Bash(python -m pytest tests/integrations/ tests/scripts/test_resolve_odds.py -q)",
+      "Bash(git pull *)"
     ],
     "deny": [
       "Bash(git reset --hard*)",

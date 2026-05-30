@@ -31,13 +31,11 @@ class OddsCache:
         base_dir = Path.home() / ".omega" / "runtime"
         try:
             base_dir.mkdir(parents=True, exist_ok=True)
-            # Verify writability before committing to the path
             test_file = base_dir / ".write_test"
             test_file.touch(exist_ok=True)
             test_file.unlink(missing_ok=True)
             return base_dir / "omega_odds_cache.db"
         except Exception:
-            # Filesystem Hardening: Fallback to OS temp directory
             temp_dir = Path(tempfile.gettempdir()) / "omega"
             temp_dir.mkdir(parents=True, exist_ok=True)
             return temp_dir / "omega_odds_cache.db"
@@ -50,20 +48,21 @@ class OddsCache:
                 CREATE TABLE IF NOT EXISTS odds_cache (
                     cache_key TEXT PRIMARY KEY,
                     league TEXT,
+                    market TEXT,
                     market_data TEXT,
                     inserted_at REAL,
                     entry_type TEXT NOT NULL DEFAULT 'success'
                 )
             """)
-            # Idempotent migration for pre-existing cache DBs created before the
-            # entry_type column existed. The cache is disposable, but migrate
-            # cleanly rather than crash on the missing column.
+            # Idempotent migration for pre-existing cache DBs missing new columns.
             cols = {row[1] for row in conn.execute("PRAGMA table_info(odds_cache)")}
             if "entry_type" not in cols:
                 conn.execute(
                     "ALTER TABLE odds_cache ADD COLUMN entry_type "
                     "TEXT NOT NULL DEFAULT 'success'"
                 )
+            if "market" not in cols:
+                conn.execute("ALTER TABLE odds_cache ADD COLUMN market TEXT")
             conn.commit()
 
     @staticmethod
@@ -72,7 +71,7 @@ class OddsCache:
         market: str,
         home_team: str,
         away_team: str,
-        game_date: str
+        game_date: str,
     ) -> str:
         """Derive a deterministic SHA-256 cache key from query parameters."""
         norm_league = league.strip().upper()
@@ -80,7 +79,6 @@ class OddsCache:
         norm_home = home_team.strip().lower()
         norm_away = away_team.strip().lower()
         norm_date = game_date.strip().lower()
-
         raw_str = f"{norm_league}{norm_market}{norm_home}{norm_away}{norm_date}"
         return hashlib.sha256(raw_str.encode("utf-8")).hexdigest()
 
@@ -96,7 +94,7 @@ class OddsCache:
             cursor.execute(
                 "SELECT market_data, inserted_at, entry_type "
                 "FROM odds_cache WHERE cache_key = ?",
-                (cache_key,)
+                (cache_key,),
             )
             row = cursor.fetchone()
             if row:
@@ -120,12 +118,14 @@ class OddsCache:
         self,
         cache_key: str,
         league: str,
+        market: str,
         market_data: dict[str, Any],
         *,
         entry_type: str = "success",
     ) -> None:
         """Store a payload and run an append-hook to evict expired records.
 
+        ``market`` scopes the key so game and prop lookups never cross-pollute.
         ``entry_type`` selects the TTL applied on read and eviction: ``success``
         (900s) or ``negative`` (180s).
         """
@@ -134,12 +134,15 @@ class OddsCache:
         current_time = time.time()
         market_data_str = json.dumps(market_data)
         with sqlite3.connect(str(self.db_path)) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO odds_cache
-                    (cache_key, league, market_data, inserted_at, entry_type)
-                VALUES (?, ?, ?, ?, ?)
-            """, (cache_key, league.upper(), market_data_str, current_time, entry_type))
-            # Append-hook eviction — type-aware so negatives expire at their own TTL.
+                    (cache_key, league, market, market_data, inserted_at, entry_type)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (cache_key, league.upper(), market.strip().lower(), market_data_str, current_time, entry_type),
+            )
+            # Type-aware eviction: negatives expire at their own shorter TTL.
             conn.execute(
                 "DELETE FROM odds_cache WHERE "
                 "(entry_type = 'success'  AND ? - inserted_at > ?) OR "
@@ -148,10 +151,13 @@ class OddsCache:
             )
             conn.commit()
 
-    def find_by_teams(self, league: str, market: str, home_team: str, away_team: str) -> dict[str, Any] | None:
-        """Scan the cache for an unexpired record matching the league, teams, and market."""
+    def find_by_teams(
+        self, league: str, market: str, home_team: str, away_team: str
+    ) -> dict[str, Any] | None:
+        """Scan the cache for an unexpired success record matching league, market, and teams."""
         current_time = time.time()
         norm_league = league.strip().upper()
+        norm_market = market.strip().lower()
         norm_home = home_team.strip().lower()
         norm_away = away_team.strip().lower()
 
@@ -159,8 +165,9 @@ class OddsCache:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT market_data, inserted_at FROM odds_cache "
-                "WHERE league = ? AND entry_type = 'success' AND ? - inserted_at <= ?",
-                (norm_league, current_time, SUCCESS_TTL_SECONDS)
+                "WHERE league = ? AND market = ? AND entry_type = 'success' "
+                "AND ? - inserted_at <= ?",
+                (norm_league, norm_market, current_time, SUCCESS_TTL_SECONDS),
             )
             rows = cursor.fetchall()
             for market_data_str, _ in rows:
@@ -178,18 +185,22 @@ class OddsCache:
                     continue
         return None
 
-    def find_by_event_id(self, league: str, event_id: str) -> dict[str, Any] | None:
-        """Scan the cache for an unexpired record matching the league and event_id."""
+    def find_by_event_id(
+        self, league: str, market: str, event_id: str
+    ) -> dict[str, Any] | None:
+        """Scan the cache for an unexpired success record matching league, market, and event_id."""
         current_time = time.time()
         norm_league = league.strip().upper()
+        norm_market = market.strip().lower()
         norm_event_id = event_id.strip()
 
         with sqlite3.connect(str(self.db_path)) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT market_data, inserted_at FROM odds_cache "
-                "WHERE league = ? AND entry_type = 'success' AND ? - inserted_at <= ?",
-                (norm_league, current_time, SUCCESS_TTL_SECONDS)
+                "WHERE league = ? AND market = ? AND entry_type = 'success' "
+                "AND ? - inserted_at <= ?",
+                (norm_league, norm_market, current_time, SUCCESS_TTL_SECONDS),
             )
             rows = cursor.fetchall()
             for market_data_str, _ in rows:
