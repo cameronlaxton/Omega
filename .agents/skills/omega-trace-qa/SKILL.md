@@ -200,4 +200,4 @@ If `OMEGA_TRACE_DB` is unset, omit `--db`.
 - `omega/trace/persistable.py` — `PersistableTrace.from_analyze_output()`
 - `scripts/ingest_traces.py` — ingest validation and failure routing
 - `OMEGA_COWORK.md §6` — trace export contract, evidence signal spec
-- `omega-known-bug-sentinel` skill — active bug status and gate enforcement
+- `scripts/bug_sentinel.py` — active bug status and gate enforcement

@@ -1,0 +1,44 @@
+{
+  "home_team": "Seattle Mariners",
+  "away_team": "Arizona Diamondbacks",
+  "league": "MLB",
+  "odds": {
+    "spread_home": -1.5,
+    "spread_home_price": 160.0,
+    "moneyline_home": -125.0,
+    "moneyline_away": 105.0,
+    "over_under": 7.5,
+    "total_over_price": -110.0,
+    "total_under_price": -110.0
+  },
+  "n_iterations": 10000,
+  "allow_baseline": false,
+  "simulation_backend": "fast_score",
+  "home_context": {
+    "off_rating": 4.26,
+    "def_rating": 3.83,
+    "starter_era": 3.82,
+    "park_factor": 0.92
+  },
+  "away_context": {
+    "off_rating": 4.64,
+    "def_rating": 4.38,
+    "starter_era": 4.65
+  },
+  "game_context": {
+    "is_playoff": false,
+    "rest_days": 1
+  },
+  "evidence": [
+    {
+      "signal_type": "park_factor_evidence",
+      "category": "situational",
+      "plane": "game",
+      "value": 0.92,
+      "source": "baseball-reference.com",
+      "confidence": 0.9,
+      "window": "matchup",
+      "direction": null
+    }
+  ]
+}

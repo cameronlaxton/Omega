@@ -1,0 +1,32 @@
+{
+  "player_name": "Roki Sasaki",
+  "league": "MLB",
+  "prop_type": "strikeouts_pitched",
+  "line": 5.5,
+  "odds_over": -120.0,
+  "odds_under": 100.0,
+  "player_context": {
+    "strikeouts_pitched_mean": 6.3,
+    "strikeouts_pitched_std": 2.1
+  },
+  "game_context": {
+    "is_playoff": false,
+    "rest_days": 5
+  },
+  "n_iterations": 10000,
+  "home_team": "Los Angeles Dodgers",
+  "away_team": "Philadelphia Phillies",
+  "game_date": "2026-05-30",
+  "evidence": [
+    {
+      "signal_type": "recent_form",
+      "category": "player_form",
+      "plane": "player",
+      "value": 6.3,
+      "source": "baseball-reference.com",
+      "confidence": 0.85,
+      "window": "season",
+      "stat_key": "strikeouts_pitched"
+    }
+  ]
+}

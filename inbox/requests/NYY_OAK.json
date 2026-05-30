@@ -1,0 +1,54 @@
+{
+  "home_team": "Athletics",
+  "away_team": "New York Yankees",
+  "league": "MLB",
+  "odds": {
+    "spread_home": 1.5,
+    "spread_home_price": -190.0,
+    "moneyline_home": 130.0,
+    "moneyline_away": -150.0,
+    "over_under": 8.0,
+    "total_over_price": -110.0,
+    "total_under_price": -110.0
+  },
+  "n_iterations": 10000,
+  "allow_baseline": false,
+  "simulation_backend": "fast_score",
+  "home_context": {
+    "off_rating": 4.31,
+    "def_rating": 4.72,
+    "starter_era": 3.19,
+    "park_factor": 0.95
+  },
+  "away_context": {
+    "off_rating": 5.05,
+    "def_rating": 3.39,
+    "starter_era": 3.14
+  },
+  "game_context": {
+    "is_playoff": false,
+    "rest_days": 1
+  },
+  "evidence": [
+    {
+      "signal_type": "motivation_edge",
+      "category": "situational",
+      "plane": "game",
+      "value": 0.5,
+      "source": "agent_reasoning",
+      "confidence": 0.7,
+      "window": "matchup",
+      "direction": "away"
+    },
+    {
+      "signal_type": "park_factor_evidence",
+      "category": "situational",
+      "plane": "game",
+      "value": 0.95,
+      "source": "baseball-reference.com",
+      "confidence": 0.85,
+      "window": "matchup",
+      "direction": null
+    }
+  ]
+}

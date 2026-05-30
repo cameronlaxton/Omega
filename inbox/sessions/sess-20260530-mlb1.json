@@ -1,0 +1,79 @@
+{
+  "session_id": "sess-20260530-mlb1",
+  "opened_at": "2026-05-30T15:12:06Z",
+  "closed_at": "2026-05-30T15:13:42.244350+00:00",
+  "model_version": "gemini-3.5-flash",
+  "purpose": "MLB game and prop analysis",
+  "league": null,
+  "window": null,
+  "effective_db_path": null,
+  "runtime_db_status": null,
+  "pipeline_status": {},
+  "next_required_action": null,
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {
+    "traces_produced": 6,
+    "traces_ingested": 6,
+    "traces_failed": 0,
+    "candidates_excluded": 0,
+    "bets_placed": 0,
+    "engine_runs": 6,
+    "session_duration_notes": "opened_at=2026-05-30T15:12:06Z"
+  },
+  "agent_notes": "MLB slate May 30 2026 calibration sample accumulation. 4 complete-context games analyzed: NYY@OAK, ARI@SEA, PHI@LAD, CHC@STL. 2 strikeouts player props analyzed: Roki Sasaki (strikeouts_pitched, line 5.5), Bryan Woo (strikeouts_pitched, line 4.5). Preflight gate clear. Evidence policy shadow mode active. Output mode is RESEARCH_CANDIDATE (qualitative lean only, no bet wagers placed).",
+  "audit_events": [
+    {
+      "ts": "2026-05-30T15:12:08+00:00",
+      "event_type": "bug",
+      "step": "bug_sentinel",
+      "status": "ok",
+      "notes": "Sentinel ran at 2026-05-30T15:12:08+00:00. No critical/high bugs or regressions.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [
+        "BUG-EVIDENCE-SHADOW-001"
+      ],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-30T15:13:42.244350+00:00",
+      "event_type": "step",
+      "step": "trace_export",
+      "status": "ok",
+      "notes": "6 traces exported and verified",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-1c0510d6-d029",
+        "sandbox-12143741-f77f",
+        "sandbox-d18340bd-5bf5",
+        "sandbox-981d72b8-19ee",
+        "sandbox-fb12096b-1d51",
+        "sandbox-2e5afe5b-0c05"
+      ]
+    },
+    {
+      "ts": "2026-05-30T15:13:42.244350+00:00",
+      "event_type": "step",
+      "step": "session_close",
+      "status": "ok",
+      "notes": "Session closed. 6 traces ingested.",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-1c0510d6-d029",
+        "sandbox-12143741-f77f",
+        "sandbox-d18340bd-5bf5",
+        "sandbox-981d72b8-19ee",
+        "sandbox-fb12096b-1d51",
+        "sandbox-2e5afe5b-0c05"
+      ]
+    }
+  ]
+}

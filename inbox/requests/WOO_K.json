@@ -1,0 +1,32 @@
+{
+  "player_name": "Bryan Woo",
+  "league": "MLB",
+  "prop_type": "strikeouts_pitched",
+  "line": 4.5,
+  "odds_over": -130.0,
+  "odds_under": 110.0,
+  "player_context": {
+    "strikeouts_pitched_mean": 5.2,
+    "strikeouts_pitched_std": 1.8
+  },
+  "game_context": {
+    "is_playoff": false,
+    "rest_days": 5
+  },
+  "n_iterations": 10000,
+  "home_team": "Seattle Mariners",
+  "away_team": "Arizona Diamondbacks",
+  "game_date": "2026-05-30",
+  "evidence": [
+    {
+      "signal_type": "recent_form",
+      "category": "player_form",
+      "plane": "player",
+      "value": 5.2,
+      "source": "baseball-reference.com",
+      "confidence": 0.85,
+      "window": "season",
+      "stat_key": "strikeouts_pitched"
+    }
+  ]
+}

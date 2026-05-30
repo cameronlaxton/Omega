@@ -189,5 +189,5 @@ sync back through `scripts/sync_to_mount.ps1` per `OMEGA_COWORK.md`.
 ## References
 
 - `OMEGA_COWORK.md` — authoritative runtime instructions
-- `omega-known-bug-sentinel` skill — bug status and gate enforcement
+- `scripts/bug_sentinel.py` — bug status and gate enforcement
 - `omega-trace-qa` skill — trace completeness checklist

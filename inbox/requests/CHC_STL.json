@@ -1,0 +1,44 @@
+{
+  "home_team": "St. Louis Cardinals",
+  "away_team": "Chicago Cubs",
+  "league": "MLB",
+  "odds": {
+    "spread_home": 1.5,
+    "spread_home_price": -180.0,
+    "moneyline_home": 110.0,
+    "moneyline_away": -130.0,
+    "over_under": 8.0,
+    "total_over_price": -110.0,
+    "total_under_price": -110.0
+  },
+  "n_iterations": 10000,
+  "allow_baseline": false,
+  "simulation_backend": "fast_score",
+  "home_context": {
+    "off_rating": 4.38,
+    "def_rating": 4.55,
+    "starter_era": 4.44,
+    "park_factor": 0.96
+  },
+  "away_context": {
+    "off_rating": 4.77,
+    "def_rating": 4.47,
+    "starter_era": 2.01
+  },
+  "game_context": {
+    "is_playoff": false,
+    "rest_days": 1
+  },
+  "evidence": [
+    {
+      "signal_type": "def_matchup_weak",
+      "category": "matchup",
+      "plane": "game",
+      "value": 0.8,
+      "source": "agent_reasoning",
+      "confidence": 0.75,
+      "window": "season",
+      "direction": "away"
+    }
+  ]
+}
