@@ -90,6 +90,36 @@ import logging
 
 CURRENT_VERSION = 11
 
+# ---------------------------------------------------------------------------
+# Version lineage (applied in order by TraceStore._ensure_schema)
+# ---------------------------------------------------------------------------
+# Two shapes of version exist in this module. Both are forward-additive and
+# converge a fresh or older DB to CURRENT_VERSION:
+#
+#   * SCHEMA_V{n}  — a string of CREATE TABLE/INDEX IF NOT EXISTS, applied via
+#                    conn.executescript(). Idempotent by construction.
+#   * apply_v{n}_migration(conn) — a Python helper for steps that CANNOT be a
+#                    single idempotent executescript (SQLite has no
+#                    `ALTER TABLE ADD COLUMN IF NOT EXISTS`, and dedup/DELETE +
+#                    UNIQUE-index steps need row-level guards). These probe
+#                    PRAGMA/table state first so re-running is a no-op.
+#
+#   V1  SCHEMA_V1            traces, outcomes, schema_versions
+#   V2  SCHEMA_V2            bet_records (CLV)
+#   V3  SCHEMA_V3            closing_lines (CLV)
+#   V4  apply_v4_migration   traces.session_id column + index   (ALTER)
+#   V5  SCHEMA_V5            market_snapshots
+#   V6  SCHEMA_V6            prop_outcomes
+#   V7  apply_v7_migration   bet_records.session_id + BUG-3 cleanup (ALTER+DELETE)
+#   V8  apply_v8_migration   one-outcome-per-trace dedup + UNIQUE index
+#   V9  SCHEMA_V9            evidence_signals + signal_performance
+#   V10 SCHEMA_V10           simulation_distributions (+ dynamic outcome view)
+#   V11 SCHEMA_V11           early_market_snapshots (segregated from CLV)
+#
+# There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
+# apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
+# DDL/helper and a _record_version() call in store._ensure_schema together.
+
 _logger = logging.getLogger("omega.trace.schema")
 
 SCHEMA_V1 = """

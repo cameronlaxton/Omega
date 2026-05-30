@@ -4,7 +4,7 @@
 
 Omega is currently in Phase 6h. The goal of this phase is to ensure trace persistence, historical replay, and calibration learning are stable and rigorous before any broader multi-sport or advanced risk-management expansion.
 
-Do not relabel the project as Phase 7 yet. Any Phase 7 items (e.g., Soccer, Tennis) should be documented as deferred or future-facing unless they are already implemented and stable.
+Do not relabel the project as Phase 7 yet. Any Phase 7 items (e.g., Tennis) should be documented as deferred or future-facing unless they are already implemented and stable. Soccer game-plane support has been implemented ahead of Phase 7 (see the Soccer section below).
 
 ## Product Doctrine
 
@@ -92,9 +92,25 @@ Do not loosen `context_source="provided"` to mean "the LLM thought about it." It
 6. `PROJECT_STATE.md` is canonical.
 7. CI or local validation checks cover tests, sidecars, export shapes, report metadata, and artifact policy.
 
+## Soccer (in progress — promoted from Phase 7)
+
+Soccer is now wired end-to-end at the game plane:
+- Simulation: `_sim_soccer()` (Dixon-Coles) in `omega/core/simulation/engine.py`.
+- Leagues: MLS, EPL, LA_LIGA, BUNDESLIGA, SERIE_A, LIGUE_1, CHAMPIONS_LEAGUE, LIGA_MX
+  in `omega/core/config/leagues.py`.
+- Outcomes: `omega/integrations/espn_soccer.py` (per-competition ESPN scoreboard) +
+  `scripts/fetch_outcomes_soccer.py`, dispatched by `scripts/fetch_outcomes_all.py`.
+- 3-way result: draws are graded by `TraceStore.attach_outcome` (equal scores → `draw`)
+  and calibrated via `CalibrationFitter.extract_draw_pairs`.
+
+Still open for soccer: player-prop grading (ESPN soccer boxscore not yet parsed, so soccer
+is **not** in `fetch_outcomes_props.py::_SUPPORTED_LEAGUES`), and a first fitted soccer
+calibration profile once eligible graded traces accumulate.
+
 ## Deferred to Phase 7
 
-- Soccer and Tennis multi-league expansion.
+- Tennis multi-league expansion.
+- Soccer player-prop grading (game plane is in progress above).
 - Portfolio/risk guard (simple exposure caps can be documented as temporary operator rules for now).
 
 ## Superseded / Historical Docs

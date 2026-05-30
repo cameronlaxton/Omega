@@ -1,8 +1,9 @@
 """
 scripts/fetch_outcomes_all.py — attach outcomes for all supported leagues.
 
-Dispatches fetch_outcomes_nba.py, fetch_outcomes_mlb.py, and
-fetch_outcomes_props.py in sequence. All runs are idempotent.
+Dispatches fetch_outcomes_nba.py, fetch_outcomes_wnba.py, fetch_outcomes_mlb.py,
+fetch_outcomes_soccer.py, and fetch_outcomes_props.py in sequence. All runs are
+idempotent.
 
 Usage:
     python scripts/fetch_outcomes_all.py
@@ -33,10 +34,11 @@ _SCRIPTS: dict[str, Path] = {
     "nba": _REPO_ROOT / "scripts" / "fetch_outcomes_nba.py",
     "wnba": _REPO_ROOT / "scripts" / "fetch_outcomes_wnba.py",
     "mlb": _REPO_ROOT / "scripts" / "fetch_outcomes_mlb.py",
+    "soccer": _REPO_ROOT / "scripts" / "fetch_outcomes_soccer.py",
     "props": _REPO_ROOT / "scripts" / "fetch_outcomes_props.py",
 }
 
-_DEFAULT_LEAGUES = ("nba", "wnba", "mlb", "props")
+_DEFAULT_LEAGUES = ("nba", "wnba", "mlb", "soccer", "props")
 
 
 def main() -> int:

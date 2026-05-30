@@ -108,7 +108,17 @@ def _match_trace_to_game(
 # ---------------------------------------------------------------------------
 
 
-def main() -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    scoreboard_fetcher=None,
+) -> int:
+    """CLI entry point.
+
+    ``scoreboard_fetcher`` exists for tests to bypass HTTP: pass a callable
+    taking an ISO date string and returning a list of FinalGame. Production
+    leaves it None and the live ESPN MLB fetcher is used.
+    """
     parser = argparse.ArgumentParser(description="Attach ESPN final scores to MLB traces")
     parser.add_argument(
         "--since", default="yesterday", help="Start date (YYYY-MM-DD | today | yesterday)"
@@ -119,7 +129,7 @@ def main() -> int:
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -136,6 +146,8 @@ def main() -> int:
         logger.error("--until (%s) is before --since (%s)", end, start)
         return 1
 
+    sb_fetch = scoreboard_fetcher or fetch_scoreboard
+
     store = TraceStore(db_path=args.db)
     log_effective_db(store, logger)
 
@@ -146,7 +158,7 @@ def main() -> int:
     for d in _iter_dates(start, end):
         logger.info("Fetching ESPN MLB scoreboard for %s", d)
         try:
-            games = fetch_scoreboard(d.isoformat())
+            games = sb_fetch(d.isoformat())
         except Exception as exc:  # noqa: BLE001
             logger.error("ESPN fetch failed for %s: %s", d, exc)
             return 1
