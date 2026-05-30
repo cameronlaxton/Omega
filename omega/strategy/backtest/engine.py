@@ -38,6 +38,59 @@ UTC = timezone.utc
 logger = logging.getLogger("omega.strategy.backtest")
 
 
+def _grade_selection(
+    market_type: str,
+    side: str,
+    home_score: float,
+    away_score: float,
+) -> tuple[bool, bool]:
+    """Grade one bet selection against a final score. Returns (won, push).
+
+    Covers moneyline (incl. 3-way draw) and the exotic soccer markets. A draw
+    moneyline wins on a tie (not a push); straight home/away push on a tie;
+    draw-no-bet voids (pushes) on a tie; double chance / BTTS / correct score
+    never push.
+    """
+    is_tie = home_score == away_score
+
+    if market_type == "draw_no_bet":
+        if is_tie:
+            return False, True  # void / push
+        if side == "home":
+            return home_score > away_score, False
+        return away_score > home_score, False
+
+    if market_type == "double_chance":
+        if side == "home_draw":
+            return home_score >= away_score, False
+        if side == "away_draw":
+            return away_score >= home_score, False
+        if side == "home_away":
+            return not is_tie, False
+        return False, False
+
+    if market_type == "both_teams_to_score":
+        both = home_score > 0 and away_score > 0
+        if side == "yes":
+            return both, False
+        return not both, False
+
+    if market_type == "correct_score":
+        # side is the scoreline "home-away".
+        try:
+            h, a = (int(x) for x in side.split("-"))
+        except (ValueError, AttributeError):
+            return False, False
+        return home_score == h and away_score == a, False
+
+    # Moneyline (2-way and 3-way).
+    if side == "draw":
+        return is_tie, False
+    if side == "home":
+        return home_score > away_score, is_tie
+    return away_score > home_score, is_tie
+
+
 class HistoricalGame(dict):
     """A historical game with context, odds, and known outcome.
 
@@ -296,6 +349,87 @@ class BacktestEngine:
             if bet is not None:
                 bets.append(bet)
 
+        # Draw ML (3-way markets: soccer, hockey regulation). Only evaluated when
+        # a draw price exists and the simulator reports real draw mass.
+        ml_draw = odds.get("moneyline_draw")
+        draw_prob = (sim_result.get("draw_prob") or 0.0) / 100.0
+        if ml_draw is not None and draw_prob > 0:
+            cal_draw = apply_calibration(
+                draw_prob, league=league, context_hints=game_ctx or None, market="draw"
+            )
+            bet = self._evaluate_side(
+                side="draw",
+                team="Draw",
+                model_prob=cal_draw,
+                market_odds=ml_draw,
+                strategy=strategy,
+                outcome=outcome,
+                closing_odds=closing.get("moneyline_draw", ml_draw),
+                market_type="moneyline",
+            )
+            if bet is not None:
+                bets.append(bet)
+
+        # Exotic soccer markets: double chance, draw-no-bet, BTTS, correct score.
+        # Each is evaluated only when both a price (in the artifact odds) and the
+        # corresponding simulated probability are present. Probabilities reuse
+        # the game calibration plane (cold-start) until exotic profiles exist.
+        # (price_key, sim_prob_key, side, team_label, market_type)
+        exotic_specs = [
+            ("dc_home_draw", "double_chance_home_draw_prob", "home_draw", "Home or Draw", "double_chance"),
+            ("dc_home_away", "double_chance_home_away_prob", "home_away", "Home or Away", "double_chance"),
+            ("dc_away_draw", "double_chance_away_draw_prob", "away_draw", "Away or Draw", "double_chance"),
+            ("dnb_home", "dnb_home_prob", "home", home_team, "draw_no_bet"),
+            ("dnb_away", "dnb_away_prob", "away", away_team, "draw_no_bet"),
+            ("btts_yes", "btts_yes_prob", "yes", "BTTS Yes", "both_teams_to_score"),
+            ("btts_no", "btts_no_prob", "no", "BTTS No", "both_teams_to_score"),
+        ]
+        for price_key, prob_key, side, team_label, market_type in exotic_specs:
+            price = odds.get(price_key)
+            sim_prob = sim_result.get(prob_key)
+            if price is None or sim_prob is None:
+                continue
+            prob = sim_prob / 100.0
+            if prob <= 0:
+                continue
+            cal = apply_calibration(prob, league=league, context_hints=game_ctx or None)
+            bet = self._evaluate_side(
+                side=side,
+                team=team_label,
+                model_prob=cal,
+                market_odds=price,
+                strategy=strategy,
+                outcome=outcome,
+                closing_odds=closing.get(price_key, price),
+                market_type=market_type,
+            )
+            if bet is not None:
+                bets.append(bet)
+
+        # Correct score: a map of "home-away" scoreline -> price.
+        cs_prices = odds.get("correct_score") or {}
+        cs_probs = sim_result.get("correct_score_probs") or {}
+        for scoreline, price in cs_prices.items():
+            sim_prob = cs_probs.get(scoreline)
+            if price is None or sim_prob is None:
+                continue
+            prob = sim_prob / 100.0
+            if prob <= 0:
+                continue
+            cal = apply_calibration(prob, league=league, context_hints=game_ctx or None)
+            bet = self._evaluate_side(
+                side=scoreline,
+                team=f"Correct Score {scoreline}",
+                model_prob=cal,
+                market_odds=price,
+                strategy=strategy,
+                outcome=outcome,
+                closing_odds=(closing.get("correct_score") or {}).get(scoreline, price),
+                market_type="correct_score",
+            )
+            if bet is not None:
+                bets.append(bet)
+
         return bets
 
     def _evaluate_side(
@@ -346,12 +480,9 @@ class BacktestEngine:
             # No outcome available
             return None
 
-        if side == "home":
-            won = home_score > away_score
-        else:
-            won = away_score > home_score
-
-        push = home_score == away_score
+        # Selection-aware grading across moneyline (incl. 3-way draw) and the
+        # exotic soccer markets (double chance, draw-no-bet, BTTS, correct score).
+        won, push = _grade_selection(market_type, side, home_score, away_score)
 
         # Net units
         if push:

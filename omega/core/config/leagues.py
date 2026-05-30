@@ -192,6 +192,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "poisson",
         "home_advantage": 0.35,
         "std": 1.3,
+        "dixon_coles": True,
+        "rho": -0.13,
     },
     "EPL": {
         "sport": "soccer",
@@ -203,6 +205,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "poisson",
         "home_advantage": 0.3,
         "std": 1.3,
+        "dixon_coles": True,
+        "rho": -0.13,
     },
     "LA_LIGA": {
         "sport": "soccer",
@@ -214,6 +218,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "poisson",
         "home_advantage": 0.3,
         "std": 1.2,
+        "dixon_coles": True,
+        "rho": -0.13,
     },
     "BUNDESLIGA": {
         "sport": "soccer",
@@ -225,6 +231,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "poisson",
         "home_advantage": 0.25,
         "std": 1.4,
+        "dixon_coles": True,
+        "rho": -0.13,
     },
     "SERIE_A": {
         "sport": "soccer",
@@ -236,6 +244,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "poisson",
         "home_advantage": 0.3,
         "std": 1.3,
+        "dixon_coles": True,
+        "rho": -0.13,
     },
     "LIGUE_1": {
         "sport": "soccer",
@@ -247,6 +257,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "poisson",
         "home_advantage": 0.25,
         "std": 1.2,
+        "dixon_coles": True,
+        "rho": -0.13,
     },
     "CHAMPIONS_LEAGUE": {
         "sport": "soccer",
@@ -258,6 +270,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "poisson",
         "home_advantage": 0.25,
         "std": 1.3,
+        "dixon_coles": True,
+        "rho": -0.13,
     },
     "LIGA_MX": {
         "sport": "soccer",
@@ -269,6 +283,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "poisson",
         "home_advantage": 0.35,
         "std": 1.2,
+        "dixon_coles": True,
+        "rho": -0.13,
     },
     # ── Tennis ─────────────────────────────────────────────────
     "ATP": {

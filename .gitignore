@@ -71,3 +71,8 @@ tmp*.probe.db*
 # Quarantined malformed session sidecars + diagnostic JSONL event mirror.
 inbox/sessions/invalid/
 inbox/sessions/*.events.jsonl
+
+# Runtime reports and processed traces (not source truth)
+reports/*.txt
+reports/run_audits/*.audit.md
+inbox/traces/processed/

@@ -4,6 +4,8 @@ Omega is a reasoning-led sports analytics system: an LLM/operator layer gathers 
 
 The canonical runtime is now local VM / MCP-first. Stateless sandbox bridging has been retired.
 
+Please see [PROJECT_STATE.md](PROJECT_STATE.md) for the canonical product doctrine, phase guidelines, and artifact authority rules.
+
 ## How Omega Runs
 
 Use the local MCP server for agent operation:

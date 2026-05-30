@@ -4,7 +4,7 @@
 **Repo:** `C:\repos\Omega`
 **DB:** `omega_traces.db` (SQLite V10 - `traces`, `simulation_distributions`, `bet_records`, `closing_lines`, `outcomes`, `market_snapshots`, `prop_outcomes`)
 
-This is the runtime instruction set for an Omega agent running with local repo access. The local VM model is the standard model. Use the local MCP server first; use direct repo imports only when MCP is unavailable in the current client.
+This is the runtime instruction set for an Omega agent running with local repo access. For product doctrine, canonical source-of-truth rules, and artifact authority, please refer to [PROJECT_STATE.md](PROJECT_STATE.md). The local VM model is the standard model. Use the local MCP server first; use direct repo imports only when MCP is unavailable in the current client.
 
 ## 1. Ownership Boundary
 

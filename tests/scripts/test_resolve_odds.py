@@ -1,12 +1,25 @@
 from __future__ import annotations
 
+import pytest
+
 from omega.integrations.odds_api import (
     BookOdds,
     EventMarketAvailability,
     EventOdds,
     HistoricalEvent,
 )
+from omega.integrations.odds_cache import OddsCache
 from omega.integrations.odds_resolver import resolve_odds
+
+
+@pytest.fixture(autouse=True)
+def _isolate_odds_cache(tmp_path, monkeypatch):
+    """Point OddsCache at a unique per-test SQLite file. Without this, resolve_odds
+    shares the real ~/.omega/runtime cache across tests, so one test's success
+    payload leaks into later tests' cache lookups and corrupts their assertions."""
+    monkeypatch.setattr(
+        OddsCache, "_resolve_db_path", lambda self: tmp_path / "odds_cache.db"
+    )
 
 
 class FakeOddsClient:
@@ -92,6 +105,118 @@ class FakeOddsClient:
         )
 
 
+class FakeSoccerOddsClient:
+    """3-way (Home/Draw/Away) h2h client for soccer ingestion tests."""
+
+    last_quota_headers = {"x-requests-remaining": "99"}
+
+    def __init__(self):
+        self.event_odds_bookmakers: list[str | None] = []
+
+    def fetch_events(self, league, commence_time_from=None, commence_time_to=None):
+        return [
+            HistoricalEvent(
+                event_id="evt-soc-1",
+                sport_key="soccer_epl",
+                commence_time="2026-05-17T15:00:00Z",
+                home_team="Arsenal",
+                away_team="Chelsea",
+            )
+        ]
+
+    def fetch_event_markets(self, league, event_id, regions="us", bookmakers=None):
+        return [EventMarketAvailability(bookmaker=bookmakers or "betmgm", markets=["h2h"])]
+
+    def fetch_current_event_odds(self, league, event_id, regions="us", markets="", bookmakers=None):
+        self.event_odds_bookmakers.append(bookmakers)
+        books = [
+            BookOdds(
+                bookmaker=bookmakers or "draftkings",
+                market="h2h",
+                selection="Arsenal",
+                price=-120,
+                point=None,
+                last_update="2026-05-17T12:00:00Z",
+                event_id=event_id,
+            ),
+            BookOdds(
+                bookmaker=bookmakers or "draftkings",
+                market="h2h",
+                selection="Draw",
+                price=260,
+                point=None,
+                last_update="2026-05-17T12:00:00Z",
+                event_id=event_id,
+            ),
+            BookOdds(
+                bookmaker=bookmakers or "draftkings",
+                market="h2h",
+                selection="Chelsea",
+                price=320,
+                point=None,
+                last_update="2026-05-17T12:00:00Z",
+                event_id=event_id,
+            ),
+            BookOdds(
+                bookmaker=bookmakers or "draftkings",
+                market="btts",
+                selection="Yes",
+                price=-110,
+                point=None,
+                last_update="2026-05-17T12:00:00Z",
+                event_id=event_id,
+            ),
+            BookOdds(
+                bookmaker=bookmakers or "draftkings",
+                market="draw_no_bet",
+                selection="Arsenal",
+                price=-200,
+                point=None,
+                last_update="2026-05-17T12:00:00Z",
+                event_id=event_id,
+            ),
+            BookOdds(
+                bookmaker=bookmakers or "draftkings",
+                market="correct_score",
+                selection="2 - 1",
+                price=900,
+                point=None,
+                last_update="2026-05-17T12:00:00Z",
+                event_id=event_id,
+            ),
+        ]
+        return EventOdds(
+            event_id=event_id,
+            sport_key="soccer_epl",
+            commence_time="2026-05-17T15:00:00Z",
+            home_team="Arsenal",
+            away_team="Chelsea",
+            books=books,
+        )
+
+
+def test_resolve_soccer_game_captures_draw_price():
+    client = FakeSoccerOddsClient()
+    result = resolve_odds(
+        kind="game",
+        league="EPL",
+        home_team="Arsenal",
+        away_team="Chelsea",
+        all_books=False,
+        client=client,
+    )
+
+    assert result["status"] == "success"
+    odds = result["request_patch"]["odds"]
+    assert odds["moneyline_home"] == -120
+    assert odds["moneyline_away"] == 320
+    assert odds["moneyline_draw"] == 260
+    # Exotic markets (Gap 5)
+    assert odds["btts_yes"] == -110
+    assert odds["dnb_home"] == -200
+    assert odds["correct_score"] == {"2-1": 900}
+
+
 def test_resolve_game_defaults_to_betmgm():
     client = FakeOddsClient()
     result = resolve_odds(
@@ -99,6 +224,7 @@ def test_resolve_game_defaults_to_betmgm():
         league="NBA",
         home_team="Los Angeles Lakers",
         away_team="Boston Celtics",
+        all_books=False,
         client=client,
     )
 
@@ -165,6 +291,7 @@ def test_resolve_prop_does_not_fallback_when_betmgm_market_missing():
         away_team="Boston Celtics",
         player_name="Jayson Tatum",
         prop_type="pts",
+        all_books=False,
         client=FakeOddsClient(market_available=False),
     )
 

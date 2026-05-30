@@ -238,6 +238,78 @@ class TestSimulation:
         assert result["success"] is True
         assert result.get("draw_prob", 0) > 0  # Soccer should have draws
 
+    def test_soccer_dixon_coles_is_seed_reproducible(self):
+        """DC-enabled soccer sim with a fixed seed reruns bit-identically."""
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        engine = OmegaSimulationEngine()
+        kwargs = dict(
+            home_team="Liverpool",
+            away_team="Man City",
+            league="EPL",  # dixon_coles=True in league config
+            n_iterations=500,
+            home_context={"off_rating": 1.8, "def_rating": 0.9},
+            away_context={"off_rating": 2.1, "def_rating": 0.7},
+            seed=12345,
+        )
+        r1 = engine.run_fast_game_simulation(**kwargs)
+        r2 = engine.run_fast_game_simulation(**kwargs)
+        assert r1["success"] and r2["success"]
+        assert r1["draw_prob"] == r2["draw_prob"]
+        assert r1["home_win_prob"] == r2["home_win_prob"]
+        assert r1["predicted_home_score"] == r2["predicted_home_score"]
+
+    def test_soccer_exposes_exotic_market_probs(self):
+        """Soccer sim exposes double-chance / DNB / BTTS / correct-score probs
+        that are internally consistent; non-draw sports expose none (Gap 5)."""
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        engine = OmegaSimulationEngine()
+        r = engine.run_fast_game_simulation(
+            home_team="Arsenal",
+            away_team="Chelsea",
+            league="EPL",
+            n_iterations=4000,
+            home_context={"off_rating": 1.8, "def_rating": 1.0},
+            away_context={"off_rating": 1.4, "def_rating": 1.1},
+            seed=3,
+        )
+        # Double chance 1X = home_win + draw.
+        home_win = r["home_win_prob"]
+        assert abs(r["double_chance_home_draw_prob"] - (home_win + r["draw_prob"])) < 0.2
+        # DNB conditional on a decisive result.
+        assert abs((r["dnb_home_prob"] + r["dnb_away_prob"]) - 100.0) < 0.2
+        # BTTS yes+no ~ 100.
+        assert abs((r["btts_yes_prob"] + r["btts_no_prob"]) - 100.0) < 0.2
+        assert r["correct_score_probs"]  # non-empty map
+
+        # NBA (non-draw) carries no exotic fields.
+        rn = engine.run_fast_game_simulation(
+            home_team="A",
+            away_team="B",
+            league="NBA",
+            n_iterations=300,
+            home_context={"off_rating": 115, "def_rating": 110, "pace": 100},
+            away_context={"off_rating": 112, "def_rating": 112, "pace": 99},
+            seed=3,
+        )
+        assert "btts_yes_prob" not in rn
+        assert "correct_score_probs" not in rn
+
+    def test_dixon_coles_increases_draw_mass(self):
+        """Negative rho shifts mass onto 0-0/1-1, raising the draw rate vs rho=0
+        (independent Poisson)."""
+        import numpy as np
+
+        from omega.core.simulation.engine import _dixon_coles_scores
+
+        def draw_rate(rho):
+            np.random.seed(7)
+            h, a = _dixon_coles_scores(1.3, 1.3, rho, 20000)
+            return sum(1 for x, y in zip(h, a) if x == y) / len(h)
+
+        assert draw_rate(-0.13) > draw_rate(0.0)
+
     def test_ufc_fighting(self):
         from omega.core.simulation.engine import OmegaSimulationEngine
 

@@ -74,6 +74,34 @@ class OddsInput(BaseModel):
         default=None, description="Draw moneyline (American odds) for 3-way markets"
     )
 
+    # Exotic 3-way markets (soccer). All additive and optional — absent price
+    # means no edge is built for that market.
+    dc_home_draw: float | None = Field(
+        default=None, description="Double chance Home-or-Draw (1X) price (American odds)"
+    )
+    dc_home_away: float | None = Field(
+        default=None, description="Double chance Home-or-Away (12) price (American odds)"
+    )
+    dc_away_draw: float | None = Field(
+        default=None, description="Double chance Away-or-Draw (X2) price (American odds)"
+    )
+    dnb_home: float | None = Field(
+        default=None, description="Draw-no-bet Home price (American odds); draw voids"
+    )
+    dnb_away: float | None = Field(
+        default=None, description="Draw-no-bet Away price (American odds); draw voids"
+    )
+    btts_yes: float | None = Field(
+        default=None, description="Both teams to score - Yes price (American odds)"
+    )
+    btts_no: float | None = Field(
+        default=None, description="Both teams to score - No price (American odds)"
+    )
+    correct_score: dict[str, float] | None = Field(
+        default=None,
+        description="Correct-score prices keyed by 'home-away' scoreline, e.g. {'1-0': 650}",
+    )
+
     # Normalized market list (preferred path for all new integrations)
     markets: list[MarketQuote] | None = Field(
         default=None, description="Normalized list of all scraped markets"

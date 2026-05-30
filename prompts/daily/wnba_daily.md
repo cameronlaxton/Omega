@@ -7,7 +7,7 @@ If setup/preflight/DB/trace/outcome checks exceed the failure budget, stop and p
 
 Use this prompt for the complete WNBA betting surface: moneylines, spreads,
 team totals where supported, and player props. WNBA game totals are currently
-quarantined by the engine and must not be presented as actionable Bet Cards.
+quarantined by the engine and must not be presented as formal Bet Cards.
 Do not run a separate props prompt.
 
 Follow [OMEGA_COWORK.md](../../OMEGA_COWORK.md) and

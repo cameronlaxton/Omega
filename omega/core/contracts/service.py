@@ -397,7 +397,14 @@ def _calibrate_audited(
     market: str = "home",
 ) -> tuple[float, CalibrationAudit]:
     """Like _calibrate() but also returns a CalibrationAudit recording the path taken."""
-    calibrated, d = apply_calibration_audited(raw_prob, league=league, context_hints=context_hints)
+    # Map the bet-side label to the calibration market plane. Only the 3-way
+    # draw has its own plane today; every other side calibrates on the "game"
+    # plane (and a "draw" lookup falls back to the game profile when no draw
+    # profile is registered), so this preserves prior numeric behaviour.
+    cal_market = "draw" if market == "draw" else "game"
+    calibrated, d = apply_calibration_audited(
+        raw_prob, league=league, context_hints=context_hints, market=cal_market
+    )
     audit = CalibrationAudit(
         raw_prob=d["raw_prob"],
         calibrated_prob=d["calibrated_prob"],
@@ -1172,6 +1179,76 @@ def analyze_game(
                     market="draw",
                 )
             )
+
+        # Exotic 3-way markets (soccer): double chance, draw-no-bet, BTTS,
+        # correct score. Each builds an edge only when both a price and the
+        # corresponding simulated probability are present. Probabilities reuse
+        # the game calibration plane (cold-start) until exotic profiles exist.
+        # (price_field, sim_prob_key, side, team_label, market_name)
+        _exotic_specs = [
+            ("dc_home_draw", "double_chance_home_draw_prob", "home_draw", "Home or Draw", "double_chance"),
+            ("dc_home_away", "double_chance_home_away_prob", "home_away", "Home or Away", "double_chance"),
+            ("dc_away_draw", "double_chance_away_draw_prob", "away_draw", "Away or Draw", "double_chance"),
+            ("dnb_home", "dnb_home_prob", "home", request.home_team, "draw_no_bet"),
+            ("dnb_away", "dnb_away_prob", "away", request.away_team, "draw_no_bet"),
+            ("btts_yes", "btts_yes_prob", "yes", "Both Teams To Score", "both_teams_to_score"),
+            ("btts_no", "btts_no_prob", "no", "No Both Teams To Score", "both_teams_to_score"),
+        ]
+        for price_field, prob_key, side, team_label, market_name in _exotic_specs:
+            price = getattr(request.odds, price_field, None)
+            sim_prob = sim_result.get(prob_key)
+            if price is None or sim_prob is None:
+                continue
+            prob = sim_prob / 100.0
+            if prob <= 0:
+                continue
+            cal_prob, audit = _calibrate_audited(
+                prob, league=request.league, context_hints=gc, plane="game", market=market_name
+            )
+            edges.append(
+                _build_edge(
+                    side,
+                    team_label,
+                    prob,
+                    cal_prob,
+                    price,
+                    bankroll,
+                    request.n_iterations,
+                    calibration_audit=audit,
+                    market=market_name,
+                )
+            )
+
+        # Correct score: a map of scoreline -> price.
+        cs_probs = sim_result.get("correct_score_probs") or {}
+        if request.odds.correct_score and cs_probs:
+            for scoreline, price in request.odds.correct_score.items():
+                sim_prob = cs_probs.get(scoreline)
+                if price is None or sim_prob is None:
+                    continue
+                prob = sim_prob / 100.0
+                if prob <= 0:
+                    continue
+                cal_prob, audit = _calibrate_audited(
+                    prob,
+                    league=request.league,
+                    context_hints=gc,
+                    plane="game",
+                    market="correct_score",
+                )
+                edges.append(
+                    _build_edge(
+                        scoreline,
+                        f"Correct Score {scoreline}",
+                        prob,
+                        cal_prob,
+                        price,
+                        bankroll,
+                        request.n_iterations,
+                        calibration_audit=audit,
+                        market="correct_score",
+                    )
+                )
 
     best_bet = _pick_best_bet(edges, bankroll) if edges else None
 

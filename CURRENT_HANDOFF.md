@@ -1,5 +1,7 @@
 # Current Handoff - Phase 6h
 
+For product doctrine, canonical source-of-truth rules, and artifact authority, refer to [PROJECT_STATE.md](PROJECT_STATE.md).
+
 Omega now runs through the local MCP server or the canonical core service.
 
 ## Runtime

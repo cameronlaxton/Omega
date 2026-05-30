@@ -39,3 +39,23 @@ def test_extract_plane_pairs_routes_game_and_prop_separately():
     assert prop_preds == [0.57]
     assert prop_outcomes == [1]
     assert prop_label == "prop probability/outcome"
+
+
+def test_extract_plane_pairs_routes_draw():
+    graded = [
+        {"predictions": {"draw_prob": 0.28}, "_outcome": {"result": "draw"}},
+        {"predictions": {"draw_prob": 0.22}, "_outcome": {"result": "home_win"}},
+    ]
+    fitter = CalibrationFitter()
+
+    preds, outcomes, label = fit_calibration._extract_plane_pairs(fitter, graded, "draw")
+
+    assert preds == [0.28, 0.22]
+    assert outcomes == [1, 0]
+    assert label == "draw_prob/outcome"
+
+
+def test_plane_market_mapping():
+    assert fit_calibration._plane_market("draw") == "draw"
+    assert fit_calibration._plane_market("game") == "game"
+    assert fit_calibration._plane_market("prop") == "game"

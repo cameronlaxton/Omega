@@ -175,11 +175,12 @@ This made the pipeline inspectable and created the basis for trace persistence, 
 - Phase 3B: LLM-Enhanced Routing
 - Phase 5: Production Hardening
 
-### Upcoming phases
+### Upcoming and Current Phases
 
 | Phase | Description | Status |
 |---|---|---|
-| Phase 6 | Backtesting & Calibration — trace persistence, historical replay, calibration pipeline | ready |
+| Phase 6h | Calibration and Runtime Hardening (current phase) | Active |
+| Phase 7 | Multi-Sport Expansion (Soccer, Tennis, NFL) | Deferred (except explicitly marked experimental parts) |
 | Phase 4 | Research Sandbox — exploratory mode, model comparison, what-if scenarios | lowest priority |
 
 ## Deferred by design

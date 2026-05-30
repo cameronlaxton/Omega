@@ -60,8 +60,13 @@ class TestRealizedDirection:
     def test_game_away(self):
         assert realized_game_direction({"result": "away_win"}) == "away"
 
-    def test_game_draw_is_none(self):
-        assert realized_game_direction({"result": "draw"}) is None
+    def test_game_draw(self):
+        # 3-way draw now resolves to a scorable 'draw' direction (Gap 2).
+        assert realized_game_direction({"result": "draw"}) == "draw"
+
+    def test_game_missing_is_none(self):
+        assert realized_game_direction(None) is None
+        assert realized_game_direction({}) is None
 
 
 class TestScoreTraceSignals:
@@ -96,6 +101,21 @@ class TestScoreTraceSignals:
         row = _ev_row(direction="home", signal_type="motivation_edge", stat_key=None)
         scored = score_trace_signals(trace, [row])
         assert scored[0].direction_correct is True
+
+    def test_draw_signal_scored_correct(self):
+        # A draw-direction game signal scores against a drawn outcome (Gap 2).
+        trace = {"_outcome": {"result": "draw"}}
+        row = _ev_row(direction="draw", signal_type="parity_edge", stat_key=None, league="EPL")
+        scored = score_trace_signals(trace, [row])
+        assert len(scored) == 1
+        assert scored[0].direction_correct is True
+
+    def test_draw_signal_scored_incorrect(self):
+        trace = {"_outcome": {"result": "home_win"}}
+        row = _ev_row(direction="draw", signal_type="parity_edge", stat_key=None, league="EPL")
+        scored = score_trace_signals(trace, [row])
+        assert len(scored) == 1
+        assert scored[0].direction_correct is False
 
 
 class TestAccumulate:
