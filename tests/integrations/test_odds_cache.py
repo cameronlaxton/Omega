@@ -1,0 +1,154 @@
+"""Tests for the local SQLite pre-decision odds caching layer."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import tempfile
+import time
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+
+from omega.integrations.odds_cache import OddsCache
+from omega.integrations.odds_resolver import resolve_odds
+from omega.integrations.odds_api import EventOdds, BookOdds
+
+@pytest.fixture
+def temp_db_path(tmp_path: Path) -> Path:
+    return tmp_path / "test_odds_cache.db"
+
+def test_cache_schema_initialization(temp_db_path: Path):
+    cache = OddsCache(db_path=temp_db_path)
+    assert temp_db_path.exists()
+
+    with sqlite3.connect(str(temp_db_path)) as conn:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(odds_cache)")
+        columns = {row[1]: row[2] for row in cursor.fetchall()}
+        assert "cache_key" in columns
+        assert "league" in columns
+        assert "market_data" in columns
+        assert "inserted_at" in columns
+
+def test_deterministic_key_computation():
+    key1 = OddsCache.compute_cache_key("NBA", "game", "Los Angeles Lakers", "Boston Celtics", "2026-05-16")
+    key2 = OddsCache.compute_cache_key("nba", "GAME", "los angeles lakers", "boston celtics", "2026-05-16 ")
+    assert key1 == key2
+
+    key3 = OddsCache.compute_cache_key("NBA", "game", "Los Angeles Lakers", "Boston Celtics", "2026-05-17")
+    assert key1 != key3
+
+def test_cache_hit_and_ttl_expiration(temp_db_path: Path):
+    cache = OddsCache(db_path=temp_db_path)
+    key = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
+    payload = {"status": "success", "event_id": "evt-1", "metadata": []}
+
+    cache.set(key, "NBA", payload)
+    
+    # Hit Verification
+    hit = cache.get(key)
+    assert hit is not None
+    assert hit["event_id"] == "evt-1"
+    assert "source: local_cache" in hit["metadata"]
+
+    # Expiry Verification
+    with sqlite3.connect(str(temp_db_path)) as conn:
+        conn.execute("UPDATE odds_cache SET inserted_at = ? WHERE cache_key = ?", (time.time() - 901, key))
+        conn.commit()
+
+    expired = cache.get(key)
+    assert expired is None
+
+def test_cache_eviction_on_set(temp_db_path: Path):
+    cache = OddsCache(db_path=temp_db_path)
+    key_expired = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
+    key_fresh = cache.compute_cache_key("NBA", "game", "bulls", "knicks", "2026-05-16")
+
+    cache.set(key_expired, "NBA", {"status": "expired"})
+    
+    # Manually age the record
+    with sqlite3.connect(str(temp_db_path)) as conn:
+        conn.execute("UPDATE odds_cache SET inserted_at = ? WHERE cache_key = ?", (time.time() - 950, key_expired))
+        conn.commit()
+
+    cache.set(key_fresh, "NBA", {"status": "fresh"})
+
+    with sqlite3.connect(str(temp_db_path)) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT cache_key FROM odds_cache")
+        keys = [row[0] for row in cursor.fetchall()]
+        assert key_expired not in keys
+        assert key_fresh in keys
+
+def test_fallback_db_path_resolution(monkeypatch):
+    # Simulate directory with no write permissions to test hardening
+    original_mkdir = Path.mkdir
+    def mock_mkdir(self, *args, **kwargs):
+        if ".omega" in str(self):
+            raise OSError("Permission denied")
+        return original_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mock_mkdir)
+    
+    cache = OddsCache()
+    assert "omega" in str(cache.db_path)
+    assert tempfile.gettempdir() in str(cache.db_path)
+
+def test_find_by_teams_and_event_id(temp_db_path: Path):
+    cache = OddsCache(db_path=temp_db_path)
+    payload = {"status": "success", "event_id": "evt-1234", "home_team": "Lakers", "away_team": "Celtics", "metadata": []}
+    key = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
+    cache.set(key, "NBA", payload)
+
+    by_teams = cache.find_by_teams("NBA", "game", "Lakers", "Celtics")
+    assert by_teams is not None
+    assert by_teams["event_id"] == "evt-1234"
+
+    by_event = cache.find_by_event_id("NBA", "evt-1234")
+    assert by_event is not None
+    assert by_event["home_team"] == "Lakers"
+
+def test_resolver_uses_cache_avoiding_external_calls(temp_db_path: Path, monkeypatch):
+    # Set the cache path to our temp DB to avoid interfering with production caches
+    monkeypatch.setattr(OddsCache, "_resolve_db_path", lambda self: temp_db_path)
+    
+    cache = OddsCache(db_path=temp_db_path)
+    payload = {
+        "status": "success",
+        "kind": "game",
+        "league": "NBA",
+        "event_id": "evt-12345",
+        "home_team": "Los Angeles Lakers",
+        "away_team": "Boston Celtics",
+        "commence_time": "2026-05-16T23:00:00Z",
+        "default_bookmaker": "betmgm",
+        "line_shopping": False,
+        "all_books": True,
+        "request_patch": {"odds": {"over_under": 220.5, "markets": []}},
+        "quotes": [],
+        "skipped_reasons": [],
+        "quota": {},
+        "metadata": ["source: local_cache"]
+    }
+    key = cache.compute_cache_key("NBA", "game", "Los Angeles Lakers", "Boston Celtics", "2026-05-16")
+    cache.set(key, "NBA", payload)
+    
+    # Mock the client entirely to ensure no methods are called
+    mock_client = MagicMock()
+    
+    # Execute resolver - it should hit the cache and never call the mock client
+    result = resolve_odds(
+        kind="game",
+        league="NBA",
+        home_team="Los Angeles Lakers",
+        away_team="Boston Celtics",
+        commence_time_from="2026-05-16T22:00:00Z",
+        client=mock_client
+    )
+    
+    assert result["status"] == "success"
+    assert "source: local_cache" in result["metadata"]
+    mock_client.fetch_events.assert_not_called()
+    mock_client.fetch_current_event_odds.assert_not_called()

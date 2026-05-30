@@ -13,9 +13,11 @@ import argparse
 import json
 from collections import defaultdict
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from typing import Any
 
 from omega.integrations._guards import assert_not_replay_mode
+from omega.integrations.odds_cache import OddsCache
 from omega.integrations.odds_api import (
     DEFAULT_BOOKMAKER,
     DEFAULT_MARKETS,
@@ -300,11 +302,34 @@ def resolve_odds(
     commence_time_to: str | None = None,
     bookmaker: str = DEFAULT_BOOKMAKER,
     line_shopping: bool = False,
-    all_books: bool = False,
+    all_books: bool = True,
     client: OddsApiClient | None = None,
 ) -> dict[str, Any]:
-    """Resolve current odds for game or prop analysis."""
+    """Resolve current odds for game or prop analysis with local SQLite caching."""
     assert_not_replay_mode("Odds resolver fetch")
+
+    # 1. Caching Entry Layer
+    cache = OddsCache()
+    market = prop_type if kind == "prop" else "game"
+    norm_home = (home_team or "").strip().lower()
+    norm_away = (away_team or "").strip().lower()
+    game_date = (commence_time_from or "").strip().split("T")[0] if commence_time_from else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    cached_payload: dict[str, Any] | None = None
+
+    if norm_home and norm_away:
+        cache_key = cache.compute_cache_key(league, market, norm_home, norm_away, game_date)
+        cached_payload = cache.get(cache_key)
+        if not cached_payload:
+            cached_payload = cache.find_by_teams(league, market, norm_home, norm_away)
+
+    if not cached_payload and event_id:
+        cached_payload = cache.find_by_event_id(league, event_id)
+
+    if cached_payload:
+        return cached_payload
+
+    # 2. Cache Miss - Execute external resolution
     client = client or OddsApiClient()
     skipped: list[str] = []
     resolved_event_id, event_skips = _resolve_event_id(
@@ -399,7 +424,7 @@ def resolve_odds(
             kind, league, bookmaker, skipped, client, quotes=output_quotes, event=event
         )
 
-    return {
+    result_payload = {
         "status": "success",
         "kind": kind,
         "league": league.upper(),
@@ -414,7 +439,24 @@ def resolve_odds(
         "quotes": output_quotes,
         "skipped_reasons": skipped,
         "quota": dict(client.last_quota_headers),
+        "metadata": [],
     }
+
+    # 3. Store freshly fetched result in cache
+    actual_home = event.home_team or home_team or ""
+    actual_away = event.away_team or away_team or ""
+    actual_date = (event.commence_time or "").split("T")[0] if event.commence_time else game_date
+
+    precise_key = cache.compute_cache_key(
+        league=league,
+        market=market,
+        home_team=actual_home,
+        away_team=actual_away,
+        game_date=actual_date
+    )
+    cache.set(precise_key, league, result_payload)
+
+    return result_payload
 
 
 def _unavailable(
