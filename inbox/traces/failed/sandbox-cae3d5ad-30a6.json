@@ -1,0 +1,211 @@
+{
+  "trace": {
+    "schema_version": 1,
+    "trace_id": "sandbox-cae3d5ad-30a6",
+    "run_id": "sandbox-cae3d5ad-30a6",
+    "timestamp": "2026-05-30T03:48:57.271462+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260529-socc",
+    "input_snapshot": {
+      "player_name": "Santiago Gim\u00e9nez",
+      "league": "WORLD_CUP",
+      "prop_type": "goals",
+      "line": 0.5,
+      "odds_over": 150.0,
+      "odds_under": -200.0,
+      "player_context": {
+        "goals_mean": 0.42,
+        "goals_std": 0.2
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 4
+      },
+      "n_iterations": 5000,
+      "seed": 30303,
+      "evidence": [],
+      "home_team": "Mexico",
+      "away_team": "Australia",
+      "game_date": "2026-05-30"
+    },
+    "result": {
+      "player_name": "Santiago Gim\u00e9nez",
+      "league": "WORLD_CUP",
+      "prop_type": "goals",
+      "line": 0.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.344,
+      "under_prob": 0.656,
+      "projection_mean": 0.4272,
+      "projection_std": 0.6578,
+      "projection_p10": 0.0,
+      "projection_p50": 0.0,
+      "projection_p90": 1.0,
+      "distribution_type": "poisson",
+      "edge_over": -5.6,
+      "edge_under": -1.07,
+      "recommendation": "pass",
+      "confidence_tier": null,
+      "kelly_fraction": null,
+      "recommended_units": null,
+      "bet_side_odds": null,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.344,
+        "calibrated_prob": 0.344,
+        "league": "WORLD_CUP",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.656,
+        "calibrated_prob": 0.656,
+        "league": "WORLD_CUP",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_distributions": [
+        {
+          "target": "player_stat",
+          "market": "player_prop",
+          "stat_key": "goals",
+          "distribution_type": "poisson",
+          "distribution_params": {
+            "lambda": 0.42
+          },
+          "params_schema_version": 1,
+          "sample_mean": 0.4272,
+          "sample_std": 0.6577994831253671,
+          "p10": 0.0,
+          "p50": 0.0,
+          "p90": 1.0,
+          "n_iterations": 5000,
+          "seed": 30303,
+          "context_hash": "38e71244",
+          "component_version": "player_prop_fast_v1"
+        }
+      ]
+    },
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 4
+    },
+    "calibration_audit": [
+      {
+        "raw_prob": 0.344,
+        "calibrated_prob": 0.344,
+        "league": "WORLD_CUP",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      {
+        "raw_prob": 0.656,
+        "calibrated_prob": 0.656,
+        "league": "WORLD_CUP",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      }
+    ],
+    "downgrades": [],
+    "evidence_mode": "shadow",
+    "evidence_application": [],
+    "simulation_distributions": [
+      {
+        "target": "player_stat",
+        "market": "player_prop",
+        "stat_key": "goals",
+        "distribution_type": "poisson",
+        "distribution_params": {
+          "lambda": 0.42
+        },
+        "params_schema_version": 1,
+        "sample_mean": 0.4272,
+        "sample_std": 0.6577994831253671,
+        "p10": 0.0,
+        "p50": 0.0,
+        "p90": 1.0,
+        "n_iterations": 5000,
+        "seed": 30303,
+        "context_hash": "38e71244",
+        "component_version": "player_prop_fast_v1"
+      }
+    ],
+    "prompt": "WORLD_CUP prop: Australia @ Mexico",
+    "league": "WORLD_CUP",
+    "matchup": "Australia @ Mexico",
+    "execution_mode": "sandbox_prop",
+    "simulation_seed": 30303,
+    "aggregate_quality": null,
+    "predictions": {
+      "over_prob": 0.344,
+      "under_prob": 0.656
+    },
+    "recommendations": {
+      "recommendation": "pass",
+      "confidence_tier": null,
+      "recommended_units": null,
+      "kelly_fraction": null,
+      "bet_side_odds": null
+    },
+    "odds_snapshot": {
+      "odds_over": 150.0,
+      "odds_under": -200.0
+    },
+    "model_version": "omega-core-phase6h",
+    "bankroll": 1000.0,
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "empty",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    },
+    "quality_gate": null,
+    "reasoning_narrative": null,
+    "reasoning_inputs": null,
+    "reasoning_downgrade_rationale": null
+  },
+  "bet_record": {
+    "bet_id": "2bba051d293a",
+    "trace_id": "sandbox-cae3d5ad-30a6",
+    "book": "BetMGM",
+    "market": "player_prop:goals",
+    "selection": "Santiago Gim\u00e9nez Over 0.5 Goals",
+    "selection_descriptor": "Gimenez_over_0.5_goals",
+    "line_taken": 0.5,
+    "odds_taken": 150.0,
+    "stake_units": 1.0,
+    "decision_timestamp": "2026-05-30T03:48:57.275569+00:00",
+    "status": "pending",
+    "recorded_at": "2026-05-30T03:48:57.275591+00:00"
+  }
+}

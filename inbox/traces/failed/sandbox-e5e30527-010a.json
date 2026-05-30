@@ -1,0 +1,211 @@
+{
+  "trace": {
+    "schema_version": 1,
+    "trace_id": "sandbox-e5e30527-010a",
+    "run_id": "sandbox-e5e30527-010a",
+    "timestamp": "2026-05-30T03:48:57.305786+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260529-socc",
+    "input_snapshot": {
+      "player_name": "Enner Valencia",
+      "league": "WORLD_CUP",
+      "prop_type": "goals",
+      "line": 0.5,
+      "odds_over": 180.0,
+      "odds_under": -240.0,
+      "player_context": {
+        "goals_mean": 0.38,
+        "goals_std": 0.18
+      },
+      "game_context": {
+        "is_playoff": false,
+        "rest_days": 5
+      },
+      "n_iterations": 5000,
+      "seed": 40404,
+      "evidence": [],
+      "home_team": "Ecuador",
+      "away_team": "Saudi Arabia",
+      "game_date": "2026-05-30"
+    },
+    "result": {
+      "player_name": "Enner Valencia",
+      "league": "WORLD_CUP",
+      "prop_type": "goals",
+      "line": 0.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.3154,
+      "under_prob": 0.6846,
+      "projection_mean": 0.3808,
+      "projection_std": 0.6218,
+      "projection_p10": 0.0,
+      "projection_p50": 0.0,
+      "projection_p90": 1.0,
+      "distribution_type": "poisson",
+      "edge_over": -4.17,
+      "edge_under": -2.13,
+      "recommendation": "pass",
+      "confidence_tier": null,
+      "kelly_fraction": null,
+      "recommended_units": null,
+      "bet_side_odds": null,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.3154,
+        "calibrated_prob": 0.3154,
+        "league": "WORLD_CUP",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.6846,
+        "calibrated_prob": 0.6846,
+        "league": "WORLD_CUP",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_distributions": [
+        {
+          "target": "player_stat",
+          "market": "player_prop",
+          "stat_key": "goals",
+          "distribution_type": "poisson",
+          "distribution_params": {
+            "lambda": 0.38
+          },
+          "params_schema_version": 1,
+          "sample_mean": 0.3808,
+          "sample_std": 0.6217647143413656,
+          "p10": 0.0,
+          "p50": 0.0,
+          "p90": 1.0,
+          "n_iterations": 5000,
+          "seed": 40404,
+          "context_hash": "5dd377b0",
+          "component_version": "player_prop_fast_v1"
+        }
+      ]
+    },
+    "context_labels": {
+      "is_playoff": false,
+      "rest_days": 5
+    },
+    "calibration_audit": [
+      {
+        "raw_prob": 0.3154,
+        "calibrated_prob": 0.3154,
+        "league": "WORLD_CUP",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      {
+        "raw_prob": 0.6846,
+        "calibrated_prob": 0.6846,
+        "league": "WORLD_CUP",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": null,
+        "resolved_slice": null,
+        "path": "static_identity"
+      }
+    ],
+    "downgrades": [],
+    "evidence_mode": "shadow",
+    "evidence_application": [],
+    "simulation_distributions": [
+      {
+        "target": "player_stat",
+        "market": "player_prop",
+        "stat_key": "goals",
+        "distribution_type": "poisson",
+        "distribution_params": {
+          "lambda": 0.38
+        },
+        "params_schema_version": 1,
+        "sample_mean": 0.3808,
+        "sample_std": 0.6217647143413656,
+        "p10": 0.0,
+        "p50": 0.0,
+        "p90": 1.0,
+        "n_iterations": 5000,
+        "seed": 40404,
+        "context_hash": "5dd377b0",
+        "component_version": "player_prop_fast_v1"
+      }
+    ],
+    "prompt": "WORLD_CUP prop: Saudi Arabia @ Ecuador",
+    "league": "WORLD_CUP",
+    "matchup": "Saudi Arabia @ Ecuador",
+    "execution_mode": "sandbox_prop",
+    "simulation_seed": 40404,
+    "aggregate_quality": null,
+    "predictions": {
+      "over_prob": 0.3154,
+      "under_prob": 0.6846
+    },
+    "recommendations": {
+      "recommendation": "pass",
+      "confidence_tier": null,
+      "recommended_units": null,
+      "kelly_fraction": null,
+      "bet_side_odds": null
+    },
+    "odds_snapshot": {
+      "odds_over": 180.0,
+      "odds_under": -240.0
+    },
+    "model_version": "omega-core-phase6h",
+    "bankroll": 1000.0,
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "empty",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    },
+    "quality_gate": null,
+    "reasoning_narrative": null,
+    "reasoning_inputs": null,
+    "reasoning_downgrade_rationale": null
+  },
+  "bet_record": {
+    "bet_id": "4c4dd1dfc157",
+    "trace_id": "sandbox-e5e30527-010a",
+    "book": "BetMGM",
+    "market": "player_prop:goals",
+    "selection": "Enner Valencia Over 0.5 Goals",
+    "selection_descriptor": "Valencia_over_0.5_goals",
+    "line_taken": 0.5,
+    "odds_taken": 180.0,
+    "stake_units": 1.0,
+    "decision_timestamp": "2026-05-30T03:48:57.311370+00:00",
+    "status": "pending",
+    "recorded_at": "2026-05-30T03:48:57.311389+00:00"
+  }
+}

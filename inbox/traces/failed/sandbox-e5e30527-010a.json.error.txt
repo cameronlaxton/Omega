@@ -1,0 +1,18 @@
+ValueError: trace export failed pre-persist validation (lenient): ran_at: trace.ran_at/timestamp is missing or empty. Fix the export wrapper and re-drop the file; do NOT re-run analyze().
+
+Traceback (most recent call last):
+  File "C:\repos\Omega\scripts\ingest_traces.py", line 579, in main
+    trace_id, bet_id = ingest_file(
+                       ~~~~~~~~~~~^
+        path,
+        ^^^^^
+    ...<5 lines>...
+        strict=args.strict,
+        ^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\repos\Omega\scripts\ingest_traces.py", line 340, in ingest_file
+    raise ValueError(
+    ...<3 lines>...
+    )
+ValueError: trace export failed pre-persist validation (lenient): ran_at: trace.ran_at/timestamp is missing or empty. Fix the export wrapper and re-drop the file; do NOT re-run analyze().
