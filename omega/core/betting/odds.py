@@ -24,8 +24,9 @@ def american_to_decimal(american_odds: float) -> float:
 def implied_probability(odds: float) -> float:
     """Derive implied probability from American odds.
 
-    Removes the vig/juice conceptually — this is raw implied probability
-    from the line, not a no-vig fair probability.
+    This is the raw, vig-inclusive probability implied by a single line — the
+    bookmaker's margin is still baked in. It is NOT a no-vig fair probability;
+    deriving that requires de-vigging across both sides of a market.
 
     Returns:
         float: Probability between 0 and 1.

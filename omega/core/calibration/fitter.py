@@ -230,15 +230,7 @@ class CalibrationFitter:
             than _MIN_SAMPLES pairs are still returned; callers are responsible
             for the minimum-sample gate before fitting.
         """
-        partitions: dict[str | None, tuple[list[float], list[int]]] = {}
-        for trace in graded_traces:
-            label = context_fn(trace)
-            if label not in partitions:
-                partitions[label] = ([], [])
-            partitions[label][0].append(0.0)  # placeholder; replaced below
-            partitions[label][1].append(0)
-
-        # Re-partition cleanly: group traces first, then extract pairs per group.
+        # Group traces by slice first, then extract (prediction, outcome) pairs per group.
         grouped: dict[str | None, list[dict[str, Any]]] = {}
         for trace in graded_traces:
             label = context_fn(trace)

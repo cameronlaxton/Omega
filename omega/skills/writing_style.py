@@ -1,6 +1,14 @@
-"""MVP writing-style skill: produces a tiny style profile and optional rewrites.
-This module is a heuristic placeholder; replace with an LLM-based or ML-based
-implementation in Phase 1.
+"""EXPERIMENTAL writing-style skill: a tiny style profile and optional rewrites.
+
+Status: experimental, **disabled by default** (see omega/skills/config.json →
+``enabled["writing-style"] == false``). The implementation is intentionally a
+naive heuristic (regex/character counts), not an LLM/ML model.
+
+Scope guard: this skill is narrative-only. It must never touch formal Omega
+outputs — no Bet Card / EdgeDetail field, no probability, EV%, edge%, Kelly,
+units, confidence tier, or trace_id passes through here (see CLAUDE.md hard
+rule). It is an observer over free text, kept behind the disabled flag until a
+real implementation is justified; do not enable it in a formal pipeline.
 """
 
 from . import is_enabled, register

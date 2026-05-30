@@ -14,6 +14,8 @@ def validate_reports_metadata():
     reports_md = [f for f in tracked_files if f.startswith(f'reports{os.sep}') and f.endswith('.md')]
     failed = False
     for md_file in reports_md:
+        if not os.path.exists(md_file):
+            continue
         with open(md_file, 'r', encoding='utf-8') as f:
             content = f.read()
             if 'canonical: false' not in content:
@@ -37,7 +39,12 @@ def validate_terminology():
     for filepath in files_to_scan:
         if any(excl in filepath for excl in exclude_paths):
             continue
-            
+        # A file can be tracked but deleted in the working tree (git status 'D').
+        # Skip it here — its absence is surfaced by git/artifact-policy, not by a
+        # crash in the terminology scan.
+        if not os.path.exists(filepath):
+            continue
+
         with open(filepath, 'r', encoding='utf-8') as f:
             try:
                 content = f.read().lower()
