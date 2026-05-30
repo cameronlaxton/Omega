@@ -48,7 +48,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from omega.integrations import espn_mlb, espn_nba  # noqa: E402
+from omega.integrations import espn_mlb, espn_nba, espn_wnba  # noqa: E402
 from omega.integrations.espn_boxscore import (  # noqa: E402
     fetch_box_score,
     normalize_player_name,
@@ -59,7 +59,7 @@ from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("fetch_outcomes_props")
 
-_SUPPORTED_LEAGUES = ("NBA", "MLB")
+_SUPPORTED_LEAGUES = ("NBA", "WNBA", "MLB")
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +130,9 @@ def _canonical_pair(league: str, home: str, away: str) -> tuple[str, str] | None
     if league == "NBA":
         c_home = espn_nba.canonical_team(home)
         c_away = espn_nba.canonical_team(away)
+    elif league == "WNBA":
+        c_home = espn_wnba.canonical_team(home)
+        c_away = espn_wnba.canonical_team(away)
     elif league == "MLB":
         c_home = espn_mlb.canonical_team(home)
         c_away = espn_mlb.canonical_team(away)
@@ -148,6 +151,8 @@ def _canonical_pair(league: str, home: str, away: str) -> tuple[str, str] | None
 def _scoreboard_for(league: str, d: date):
     if league == "NBA":
         return espn_nba.fetch_scoreboard(d.isoformat())
+    if league == "WNBA":
+        return espn_wnba.fetch_scoreboard(d.isoformat())
     if league == "MLB":
         return espn_mlb.fetch_scoreboard(d.isoformat())
     return []
@@ -171,7 +176,7 @@ def main(
     the live ESPN fetchers are used.
     """
     parser = argparse.ArgumentParser(
-        description="Attach ESPN box-score player stats to NBA/MLB prop traces"
+        description="Attach ESPN box-score player stats to NBA/WNBA/MLB prop traces"
     )
     parser.add_argument(
         "--since", default="yesterday", help="Start date (YYYY-MM-DD | today | yesterday)"

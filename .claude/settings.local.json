@@ -28,7 +28,17 @@
       "Bash(python -m pytest tests/trace/ tests/scripts/test_report_calibration.py tests/scripts/test_fit_calibration.py -q)",
       "Bash(python scripts/backfill_trace_quality.py --dry-run)",
       "Bash(python scripts/backfill_trace_quality.py --league NBA --dry-run)",
-      "Bash(python scripts/backfill_trace_quality.py)"
+      "Bash(python scripts/backfill_trace_quality.py)",
+      "Bash(python -m pytest tests/integrations/test_espn_boxscore.py tests/scripts/test_fetch_outcomes_props.py tests/scripts/test_fetch_outcomes_props_bet_sweep.py -q)",
+      "Bash(python -m pytest tests/integrations/test_replay_mode_guard.py::test_every_integration_module_references_guard -q)",
+      "Bash(python -m pytest tests/scripts/test_fetch_outcomes_wnba.py -q)",
+      "Bash(python scripts/run_action_plan.py inbox/action_plans/templates/daily_outcome_evidence_loop.json --dry-run)",
+      "Bash(python -m pytest tests/scripts/test_run_action_plan.py -q)",
+      "Bash(python -m pytest tests/scripts/test_fetch_outcomes_wnba.py tests/scripts/test_fetch_outcomes_props.py tests/scripts/test_fetch_outcomes_props_bet_sweep.py tests/integrations/ tests/scripts/test_run_action_plan.py -q)",
+      "Bash(python -m pytest tests/integrations/test_replay_mode_guard.py::test_every_integration_module_references_guard)",
+      "Bash(python -m pytest tests/integrations/test_replay_mode_guard.py -q)",
+      "Bash(git rev-list *)",
+      "Bash(python -m pytest tests/scripts/test_fetch_outcomes_wnba.py tests/scripts/test_fetch_outcomes_props.py tests/integrations/test_espn_boxscore.py tests/integrations/test_replay_mode_guard.py -q)"
     ],
     "deny": [
       "Bash(git reset --hard*)",

@@ -62,6 +62,31 @@ python scripts/fetch_outcomes_all.py --since 2026-05-25 --until 2026-05-27  # ba
 python scripts/fetch_outcomes_all.py --dry-run
 ```
 
+### WNBA coverage
+
+WNBA is fully wired for both planes and is included in the default
+`fetch_outcomes_all.py` league set and the daily outcome loop.
+
+- **WNBA games** (moneyline/spread): `scripts/fetch_outcomes_wnba.py`
+  (ESPN WNBA scoreboard). Run alone with:
+
+  ```bash
+  python scripts/fetch_outcomes_all.py --leagues wnba
+  # or directly:
+  python scripts/fetch_outcomes_wnba.py --since yesterday
+  ```
+
+- **WNBA player props**: graded by the `props` step — `fetch_outcomes_props.py`
+  covers NBA/WNBA/MLB. Run WNBA props only with:
+
+  ```bash
+  python scripts/fetch_outcomes_props.py --league WNBA
+  ```
+
+Unmapped-team warnings mean a WNBA team alias is missing from
+`omega/integrations/espn_wnba.py::WNBA_TEAMS` (kept in sync with ESPN's 15-team
+list, including the 2026 expansion Portland Fire and Toronto Tempo).
+
 ---
 
 ## ⚠ Replay mode guard

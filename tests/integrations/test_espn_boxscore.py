@@ -286,5 +286,51 @@ class TestSupportedPropType:
         assert supported_prop_type("NBA", "double_double") is False
         assert supported_prop_type("MLB", "no_hitter") is False
 
+    def test_wnba_supported(self):
+        assert supported_prop_type("WNBA", "pts") is True
+        assert supported_prop_type("WNBA", "reb") is True
+        assert supported_prop_type("WNBA", "pra") is True
+        assert supported_prop_type("WNBA", "3pm") is True
+        assert supported_prop_type("WNBA", "double_double") is False
+
     def test_unsupported_league(self):
         assert supported_prop_type("NFL", "pass_yds") is False
+
+
+def _wnba_fixture() -> dict:
+    """WNBA box score — same ESPN basketball shape as NBA."""
+    return {
+        "boxscore": {
+            "players": [
+                {
+                    "team": {"displayName": "Las Vegas Aces"},
+                    "statistics": [
+                        {
+                            "name": "starters",
+                            "keys": ["MIN", "PTS", "REB", "AST"],
+                            "athletes": [
+                                {
+                                    "athlete": {"displayName": "A'ja Wilson"},
+                                    "stats": ["34", "28", "11", "4"],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+
+
+class TestParseBoxScoreWNBA:
+    def test_pts_reb_ast_extracted(self):
+        stats = parse_box_score(_wnba_fixture(), "WNBA")
+        player = stats["aja wilson"]
+        assert player["pts"] == 28.0
+        assert player["reb"] == 11.0
+        assert player["ast"] == 4.0
+
+    def test_pra_derived_for_wnba(self):
+        stats = parse_box_score(_wnba_fixture(), "WNBA")
+        # 28 + 11 + 4 = 43
+        assert stats["aja wilson"]["pra"] == 43.0

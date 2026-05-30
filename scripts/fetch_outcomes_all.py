@@ -31,11 +31,12 @@ logger = logging.getLogger("fetch_outcomes_all")
 
 _SCRIPTS: dict[str, Path] = {
     "nba": _REPO_ROOT / "scripts" / "fetch_outcomes_nba.py",
+    "wnba": _REPO_ROOT / "scripts" / "fetch_outcomes_wnba.py",
     "mlb": _REPO_ROOT / "scripts" / "fetch_outcomes_mlb.py",
     "props": _REPO_ROOT / "scripts" / "fetch_outcomes_props.py",
 }
 
-_DEFAULT_LEAGUES = ("nba", "mlb", "props")
+_DEFAULT_LEAGUES = ("nba", "wnba", "mlb", "props")
 
 
 def main() -> int:

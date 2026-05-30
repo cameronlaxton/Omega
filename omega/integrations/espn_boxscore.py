@@ -266,7 +266,7 @@ def parse_box_score(
                         # Don't overwrite (e.g. starters category before bench)
                         player_stats.setdefault(prop_type, value)
                         break
-                if league.upper() == "NBA":
+                if league.upper() in ("NBA", "WNBA"):
                     pts = player_stats.get("pts") or player_stats.get("points")
                     reb = player_stats.get("reb") or player_stats.get("rebounds")
                     ast = player_stats.get("ast") or player_stats.get("assists")
@@ -301,6 +301,8 @@ def supported_prop_type(league: str, prop_type: str, category_hint: str = "") ->
     """Return True if this league/prop_type pair is graded by the box-score parser."""
     if league.upper() == "NBA":
         return prop_type.lower() in NBA_STAT_KEYS
+    if league.upper() == "WNBA":
+        return prop_type.lower() in WNBA_STAT_KEYS
     if league.upper() == "MLB":
         pt = prop_type.lower()
         # Pitching stats and batting stats both live under MLB

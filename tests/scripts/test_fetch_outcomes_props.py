@@ -30,6 +30,7 @@ if str(_SCRIPTS) not in sys.path:
 import fetch_outcomes_props  # type: ignore  # noqa: E402
 
 from omega.integrations.espn_nba import FinalGame  # noqa: E402
+from omega.integrations.espn_wnba import FinalGame as WNBAFinalGame  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -267,6 +268,132 @@ class TestFetchOutcomesPropsHappyPath:
         # On rerun, query_traces(has_outcome=False) should no longer surface it
         ungraded = store.query_traces(league="NBA", has_outcome=False)
         assert all(t["trace_id"] != "sandbox-prop-idem" for t in ungraded)
+        store.close()
+
+
+def _wnba_payload(player: str, team: str, pts: float, reb: float, ast: float) -> dict[str, Any]:
+    """WNBA box score — identical ESPN basketball shape as NBA."""
+    return {
+        "boxscore": {
+            "players": [
+                {
+                    "team": {"displayName": team},
+                    "statistics": [
+                        {
+                            "name": "starters",
+                            "keys": ["MIN", "PTS", "REB", "AST"],
+                            "athletes": [
+                                {
+                                    "athlete": {"displayName": player},
+                                    "stats": ["34", str(pts), str(reb), str(ast)],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+
+
+class TestFetchOutcomesPropsWNBA:
+    def test_grades_a_wnba_prop_trace(self):
+        db = _tmp_store_path()
+        store = TraceStore(db_path=db)
+        store.persist(
+            _make_prop_trace(
+                "sandbox-wnba-prop-1",
+                league="WNBA",
+                player_name="A'ja Wilson",
+                prop_type="pts",
+                line=22.5,
+                home_team="Las Vegas Aces",
+                away_team="Dallas Wings",
+                recommendation="over",
+            )
+        )
+        store.close()
+
+        games = [
+            WNBAFinalGame(
+                event_id="WEV-1",
+                date="2026-05-17",
+                home_team="Las Vegas Aces",
+                away_team="Dallas Wings",
+                home_score=0,
+                away_score=0,
+                status="final",
+            )
+        ]
+        sb = _fake_scoreboard_factory({("WNBA", "2026-05-17"): games})
+        bs = _fake_box_score_factory(
+            {"WEV-1": _wnba_payload("A'ja Wilson", "Las Vegas Aces", 28, 11, 4)}
+        )
+
+        rc = fetch_outcomes_props.main(
+            ["--since", "2026-05-17", "--league", "WNBA", "--db", db],
+            scoreboard_fetcher=sb,
+            box_score_fetcher=bs,
+        )
+        assert rc == 0
+
+        store = TraceStore(db_path=db)
+        rows = store.get_prop_outcomes("sandbox-wnba-prop-1")
+        assert len(rows) == 1
+        assert rows[0]["stat_type"] == "pts"
+        assert rows[0]["stat_value"] == 28.0
+        assert rows[0]["side"] == "over"
+        assert rows[0]["result"] == "win"
+        assert rows[0]["source"] == "api:espn_boxscore"
+        store.close()
+
+    def test_grades_a_wnba_pra_prop(self):
+        """PRA is derived for WNBA (not just NBA)."""
+        db = _tmp_store_path()
+        store = TraceStore(db_path=db)
+        store.persist(
+            _make_prop_trace(
+                "sandbox-wnba-pra",
+                league="WNBA",
+                player_name="Breanna Stewart",
+                prop_type="pra",
+                line=35.5,
+                home_team="New York Liberty",
+                away_team="Seattle Storm",
+                recommendation="over",
+            )
+        )
+        store.close()
+
+        games = [
+            WNBAFinalGame(
+                event_id="WEV-2",
+                date="2026-05-17",
+                home_team="New York Liberty",
+                away_team="Seattle Storm",
+                home_score=0,
+                away_score=0,
+                status="final",
+            )
+        ]
+        sb = _fake_scoreboard_factory({("WNBA", "2026-05-17"): games})
+        bs = _fake_box_score_factory(
+            {"WEV-2": _wnba_payload("Breanna Stewart", "New York Liberty", 25, 9, 5)}
+        )
+
+        rc = fetch_outcomes_props.main(
+            ["--since", "2026-05-17", "--league", "WNBA", "--db", db],
+            scoreboard_fetcher=sb,
+            box_score_fetcher=bs,
+        )
+        assert rc == 0
+
+        store = TraceStore(db_path=db)
+        rows = store.get_prop_outcomes("sandbox-wnba-pra")
+        assert len(rows) == 1
+        # 25 + 9 + 5 = 39 PRA, over 35.5 -> win
+        assert rows[0]["stat_value"] == 39.0
+        assert rows[0]["result"] == "win"
         store.close()
 
 

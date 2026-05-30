@@ -30,7 +30,9 @@ WNBA_TEAMS: dict[str, list[str]] = {
     "Minnesota Lynx": ["min", "lynx", "minnesota"],
     "New York Liberty": ["ny", "nyl", "liberty", "new york"],
     "Phoenix Mercury": ["phx", "pho", "mercury", "phoenix"],
+    "Portland Fire": ["por", "fire", "portland"],
     "Seattle Storm": ["sea", "storm", "seattle"],
+    "Toronto Tempo": ["tor", "tempo", "toronto"],
     "Washington Mystics": ["was", "wsh", "mystics", "washington"],
 }
 

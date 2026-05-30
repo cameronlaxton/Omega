@@ -186,7 +186,7 @@ def _validate_report_calibration(args: dict[str, Any]) -> list[str]:
 
 def _validate_fetch_outcomes(args: dict[str, Any]) -> list[str]:
     _reject_unknown_args("fetch_outcomes", args, {"leagues", "since", "until"})
-    _VALID_LEAGUES = {"nba", "mlb", "props"}
+    _VALID_LEAGUES = {"nba", "wnba", "mlb", "props"}
     leagues = args.get("leagues", ["nba", "mlb", "props"])
     if not isinstance(leagues, list) or not all(isinstance(league, str) for league in leagues):
         raise ValueError("fetch_outcomes.args.leagues must be a list of strings")
