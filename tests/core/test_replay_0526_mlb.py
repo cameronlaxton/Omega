@@ -42,13 +42,16 @@ _TRACE_PREFIXES = [
 
 
 def _trace_path(prefix: str) -> Path:
+    # Curated replay fixtures live under fixtures/ (PROJECT_STATE source-of-truth
+    # rule: committed test examples belong in fixtures/, not the gitignored
+    # inbox/traces/processed/ runtime path).
     matches = list(
-        (Path(__file__).resolve().parents[2] / "inbox" / "traces" / "processed").glob(
+        (Path(__file__).resolve().parents[2] / "fixtures" / "replay" / "0526_mlb").glob(
             f"{prefix}-*.json"
         )
     )
     if not matches:
-        raise FileNotFoundError(f"no processed trace matching {prefix}-*.json")
+        raise FileNotFoundError(f"no replay fixture matching {prefix}-*.json")
     return matches[0]
 
 
