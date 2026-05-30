@@ -100,6 +100,20 @@
         "sandbox-497b390d-59e2",
         "sandbox-5bd4cef3-62e2"
       ]
+    },
+    {
+      "ts": "2026-05-29T23:51:30.827117+00:00",
+      "event_type": "engine_run",
+      "step": "engine_run",
+      "status": "ok",
+      "notes": "analyzed Giants @ Rockies (sandbox-daea98e5-e9ce); Giants (3.64 off / 4.61 def) @ Rockies (4.02 off / 5.25 def); Under 10.5 and Rockies moneyline evaluated",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": [
+        "sandbox-daea98e5-e9ce"
+      ]
     }
   ]
 }

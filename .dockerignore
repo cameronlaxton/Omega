@@ -14,3 +14,4 @@ omega_traces.db-*
 inbox/traces/
 inbox/sessions/
 reports/
+powershell.cmd
