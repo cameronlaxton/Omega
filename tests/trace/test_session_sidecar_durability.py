@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 
 from omega.trace.session_sidecar import (
+    SessionSidecar,
+    ProtectedValueError,
     append_audit_events,
     bootstrap_payload,
     create_sidecar,
@@ -16,6 +18,7 @@ from omega.trace.session_sidecar import (
     quality_gate_status,
     quarantine_sidecar,
     rebuild_sidecar_from_jsonl,
+    append_null_data_audit,
 )
 
 
@@ -120,3 +123,52 @@ class TestAtomicCreate:
         reloaded = load_sidecar_safe(path)
         assert reloaded is not None and reloaded.bankroll == 500.0
         assert not path.with_suffix(path.suffix + ".tmp").exists()  # no temp leftover
+
+
+class TestNotedBugFixes:
+    def test_rebuild_sidecar_is_schema_compliant(self, tmp_path):
+        path = tmp_path / "sess-20260530-tst1.json"
+        _open(path)
+        append_audit_events(path, [_event(), _event(status="warn")])
+        
+        jsonl = path.with_suffix(".events.jsonl")
+        recovered = rebuild_sidecar_from_jsonl(jsonl)
+        
+        # Verify it has diagnostic helper keys
+        assert recovered["event_count"] == 2
+        assert recovered["source_jsonl"] == str(jsonl)
+        
+        # Verify it validates cleanly against the SessionSidecar schema!
+        recovered_copy = {k: v for k, v in recovered.items() if k not in ("event_count", "source_jsonl")}
+        sidecar = SessionSidecar.model_validate(recovered_copy)
+        assert sidecar.session_id == "sess-20260530-tst1"
+        assert sidecar.opened_at.endswith("Z")
+        assert len(sidecar.audit_events) == 2
+
+    def test_timezone_format_consistency(self, tmp_path):
+        payload = bootstrap_payload("sess-1", model_version="m", purpose="p", bankroll=100.0)
+        assert payload["opened_at"].endswith("Z")
+        
+        path = tmp_path / "sess-20260530-tst2.json"
+        create_sidecar(path, payload)
+        
+        append_null_data_audit(path, ["test_var"])
+        reloaded = load_sidecar_safe(path)
+        assert reloaded is not None
+        assert reloaded.opened_at.endswith("Z")
+        
+        null_event = next(e for e in reloaded.audit_events if e.step == "null_data_audit")
+        assert null_event.ts.endswith("Z")
+
+    def test_recursive_protected_field_check(self, tmp_path):
+        path = tmp_path / "sess-20260530-tst3.json"
+        _open(path)
+        
+        # Nested protected field inside lists/dicts
+        nested_event = _event()
+        nested_event["inputs"] = {"traces": [{"edge_pct": 0.05}]}
+        
+        import pytest
+        with pytest.raises(ProtectedValueError) as excinfo:
+            append_audit_events(path, [nested_event])
+        assert "contains protected engine field" in str(excinfo.value)

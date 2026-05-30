@@ -135,7 +135,7 @@ def bootstrap_payload(
     bankroll_confirmed: bool = False,
 ) -> dict[str, Any]:
     """Return a minimal dict suitable for SessionSidecar.model_validate."""
-    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return {
         "session_id": session_id,
         "opened_at": now,
@@ -149,16 +149,33 @@ def bootstrap_payload(
     }
 
 
+def _find_protected_key(value: Any) -> str | None:
+    """Recursively search for protected engine field keys in dicts, lists, etc."""
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if k in _PROTECTED_QUANT_FIELDS:
+                return k
+            found = _find_protected_key(v)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _find_protected_key(item)
+            if found:
+                return found
+    return None
+
+
 def _check_protected_fields(event: AuditEvent) -> None:
     for field_name in ("inputs", "outputs"):
         mapping: dict[str, Any] | None = getattr(event, field_name)
         if mapping:
-            for key in mapping:
-                if key in _PROTECTED_QUANT_FIELDS:
-                    raise ProtectedValueError(
-                        f"audit_events '{field_name}' contains protected engine field {key!r}. "
-                        "Engine-owned quant values must stay in omega_traces.db."
-                    )
+            found_key = _find_protected_key(mapping)
+            if found_key:
+                raise ProtectedValueError(
+                    f"audit_events '{field_name}' contains protected engine field {found_key!r}. "
+                    "Engine-owned quant values must stay in omega_traces.db."
+                )
 
 
 def _events_jsonl_path(path: Path) -> Path:
@@ -288,10 +305,10 @@ def quarantine_sidecar(
 
 
 def rebuild_sidecar_from_jsonl(jsonl_path: Path) -> dict[str, Any]:
-    """Reconstruct the audit-event stream from a JSONL mirror (recovery helper).
+    """Reconstruct the audit-event stream and session metadata from a JSONL mirror (recovery helper).
 
-    Returns ``{"audit_events": [...], "event_count": n, "source_jsonl": str}``.
-    Diagnostic only — not wired into normal reads.
+    Returns a full dictionary that matches the SessionSidecar schema for clean recovery,
+    while preserving 'event_count' and 'source_jsonl' for diagnostic compatibility.
     """
     events: list[dict[str, Any]] = []
     if jsonl_path.exists():
@@ -303,7 +320,27 @@ def rebuild_sidecar_from_jsonl(jsonl_path: Path) -> dict[str, Any]:
                 events.append(json.loads(line))
             except json.JSONDecodeError:
                 logger.warning("Skipping malformed JSONL line in %s", jsonl_path.name)
+
+    # Derive session_id from filename (e.g. sess-20260528-zzzz.events.jsonl -> sess-20260528-zzzz)
+    session_id = jsonl_path.name.split(".")[0] if jsonl_path else "unknown_recovered"
+    if not session_id or session_id == "unknown_recovered":
+        session_id = "unknown_recovered"
+
+    # Estimate opened_at from the first event timestamp, fallback to now
+    opened_at = events[0].get("ts") if events else None
+    if not opened_at:
+        opened_at = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
     return {
+        "session_id": session_id,
+        "opened_at": opened_at,
+        "closed_at": None,
+        "model_version": "unknown",
+        "purpose": "recovered_session",
+        "bankroll": 1000.0,
+        "bankroll_confirmed": False,
+        "exec_stats": {},
+        "agent_notes": "Recovered from mirror JSONL file.",
         "audit_events": events,
         "event_count": len(events),
         "source_jsonl": str(jsonl_path),
@@ -322,7 +359,7 @@ def append_null_data_audit(
     ``missing_variables`` must contain variable names or paths only. Protected
     engine-owned numeric values remain in traces/ledger rows, not sidecar prose.
     """
-    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     variables = [str(v) for v in missing_variables if str(v).strip()]
     notes = (
         "NULL detected: " + ", ".join(variables)
