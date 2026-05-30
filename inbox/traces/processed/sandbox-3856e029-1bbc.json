@@ -1,0 +1,172 @@
+{
+  "trace": {
+    "trace_id": "sandbox-3856e029-1bbc",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-30T01:27:40.474315+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260529-nba2",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 5.5,
+      "odds_over": -110.0,
+      "odds_under": -110.0,
+      "player_context": {
+        "reb_mean": 4.8,
+        "reb_std": 1.9,
+        "sample_size": 15
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 1,
+        "opponent_def_rank": 10
+      },
+      "n_iterations": 10000,
+      "seed": 2782728203,
+      "evidence": [
+        {
+          "signal_type": "series_avg",
+          "category": "player_form",
+          "plane": "player",
+          "value": 4.8,
+          "source": "nba.com",
+          "confidence": 0.7,
+          "window": "series",
+          "direction": "under",
+          "stat_key": "reb",
+          "note": "Rebounding has been lower when playing against physical frontcourt in WCF."
+        }
+      ],
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "San Antonio Spurs",
+      "game_date": "2026-05-30"
+    },
+    "result": {
+      "player_name": "Shai Gilgeous-Alexander",
+      "league": "NBA",
+      "prop_type": "reb",
+      "line": 5.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.3301,
+      "under_prob": 0.6699,
+      "projection_mean": 4.6653,
+      "projection_std": 1.8835,
+      "projection_p10": 2.2273,
+      "projection_p50": 4.6628,
+      "projection_p90": 7.092,
+      "distribution_type": "normal",
+      "edge_over": -19.37,
+      "edge_under": 14.61,
+      "recommendation": "under",
+      "confidence_tier": "A",
+      "kelly_fraction": 0.1534,
+      "recommended_units": 5.0,
+      "bet_side_odds": -110.0,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.3301,
+        "calibrated_prob": 0.3301,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.6699,
+        "calibrated_prob": 0.6699,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_distributions": [
+        {
+          "target": "player_stat",
+          "market": "player_prop",
+          "stat_key": "reb",
+          "distribution_type": "normal",
+          "distribution_params": {
+            "mu": 4.656,
+            "sigma": 1.843
+          },
+          "params_schema_version": 1,
+          "sample_mean": 4.665342824505631,
+          "sample_std": 1.8834782941646062,
+          "p10": 2.22731675309826,
+          "p50": 4.662815970484495,
+          "p90": 7.0920479873605835,
+          "n_iterations": 10000,
+          "seed": 2782728203,
+          "context_hash": "8885f026",
+          "component_version": "player_prop_fast_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 1,
+      "opponent_def_rank": 10
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "series_avg",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "series_avg: mean x1.0000 (raw 1.0000, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "sportsbettingdime.com",
+      "covers.com",
+      "nba.com"
+    ],
+    "fields_gathered": [
+      "reb_mean",
+      "reb_std",
+      "sample_size",
+      "is_playoff",
+      "rest_days",
+      "opponent_def_rank"
+    ],
+    "missing_fields": []
+  },
+  "reasoning_downgrade_rationale": "Locked to RESEARCH_CANDIDATE mode due to lack of NBA calibration profile (static fallback active). Policy v1 mode=shadow (expected live). Evidence signals are recorded but not applied to simulation inputs.",
+  "reasoning_narrative": "OKC's guard rebounding will be challenged by the length of San Antonio's frontcourt in a high-intensity Game 7 context.",
+  "trace_quality": {
+    "aggregate_quality": 0.8
+  }
+}

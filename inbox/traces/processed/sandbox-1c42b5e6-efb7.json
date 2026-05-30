@@ -1,0 +1,386 @@
+{
+  "trace": {
+    "trace_id": "sandbox-1c42b5e6-efb7",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-30T01:27:40.426639+00:00",
+    "kind": "game",
+    "session_id": "sess-20260529-nba2",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "San Antonio Spurs",
+      "league": "NBA",
+      "odds": {
+        "spread_home": -3.5,
+        "spread_home_price": -110.0,
+        "spread_away_price": -110.0,
+        "moneyline_home": -160.0,
+        "moneyline_away": 135.0,
+        "over_under": 212.5,
+        "total_over_price": -110.0,
+        "total_under_price": -110.0,
+        "moneyline_draw": null,
+        "markets": null
+      },
+      "n_iterations": 10000,
+      "allow_baseline": false,
+      "simulation_backend": "fast_score",
+      "home_context": {
+        "off_rating": 118.1,
+        "def_rating": 106.8,
+        "pace": 98.6
+      },
+      "away_context": {
+        "off_rating": 113.2,
+        "def_rating": 102.4,
+        "pace": 98.4
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 1
+      },
+      "seed": 3120825532,
+      "evidence": [
+        {
+          "signal_type": "elimination_game",
+          "category": "situational",
+          "plane": "game",
+          "value": true,
+          "source": "agent_reasoning",
+          "confidence": 0.95,
+          "window": "matchup",
+          "direction": "neutral",
+          "stat_key": null,
+          "note": "WCF Game 7 winner-take-all, high defensive intensity expected."
+        }
+      ]
+    },
+    "result": {
+      "matchup": "San Antonio Spurs @ Oklahoma City Thunder",
+      "league": "NBA",
+      "analyzed_at": "2026-05-29T21:27:40.426963",
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "simulation": {
+        "iterations": 10000,
+        "home_win_prob": 56.0,
+        "away_win_prob": 44.0,
+        "draw_prob": 0.0,
+        "predicted_spread": 2.9,
+        "predicted_total": 212.8,
+        "predicted_home_score": 107.8,
+        "predicted_away_score": 105.0,
+        "context_source": "provided",
+        "baseline_used": false,
+        "simulation_backend": "fast_score",
+        "component_version": "fast_score_v1"
+      },
+      "edges": [
+        {
+          "side": "home",
+          "team": "Oklahoma City Thunder",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.56,
+          "calibrated_prob": 0.56,
+          "market_implied": 0.6154,
+          "edge_pct": -5.54,
+          "ev_pct": -9.0,
+          "market_odds": -160.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.56,
+            "calibrated_prob": 0.56,
+            "league": "NBA",
+            "plane": "game",
+            "market": "home",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "San Antonio Spurs",
+          "market": "moneyline",
+          "line": null,
+          "true_prob": 0.44,
+          "calibrated_prob": 0.44,
+          "market_implied": 0.4255,
+          "edge_pct": 1.45,
+          "ev_pct": 3.4,
+          "market_odds": 135.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 0.63,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.44,
+            "calibrated_prob": 0.44,
+            "league": "NBA",
+            "plane": "game",
+            "market": "away",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "home",
+          "team": "Oklahoma City Thunder",
+          "market": "spread",
+          "line": -3.5,
+          "true_prob": 0.48,
+          "calibrated_prob": 0.48,
+          "market_implied": 0.5238,
+          "edge_pct": -4.38,
+          "ev_pct": -8.36,
+          "market_odds": -110.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": 0.48,
+          "calibration_audit": {
+            "raw_prob": 0.48,
+            "calibrated_prob": 0.48,
+            "league": "NBA",
+            "plane": "game",
+            "market": "cover",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "away",
+          "team": "San Antonio Spurs",
+          "market": "spread",
+          "line": 3.5,
+          "true_prob": 0.52,
+          "calibrated_prob": 0.52,
+          "market_implied": 0.5238,
+          "edge_pct": -0.38,
+          "ev_pct": -0.73,
+          "market_odds": -110.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": 0.52,
+          "calibration_audit": {
+            "raw_prob": 0.52,
+            "calibrated_prob": 0.52,
+            "league": "NBA",
+            "plane": "game",
+            "market": "cover",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "over",
+          "team": "Over 212.5",
+          "market": "total",
+          "line": 212.5,
+          "true_prob": 0.512,
+          "calibrated_prob": 0.512,
+          "market_implied": 0.5238,
+          "edge_pct": -1.18,
+          "ev_pct": -2.25,
+          "market_odds": -110.0,
+          "confidence_tier": "Pass",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.512,
+            "calibrated_prob": 0.512,
+            "league": "NBA",
+            "plane": "game",
+            "market": "over",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        },
+        {
+          "side": "under",
+          "team": "Under 212.5",
+          "market": "total",
+          "line": 212.5,
+          "true_prob": 0.488,
+          "calibrated_prob": 0.488,
+          "market_implied": 0.5238,
+          "edge_pct": -3.58,
+          "ev_pct": -6.84,
+          "market_odds": -110.0,
+          "confidence_tier": "A",
+          "recommended_units": 0.0,
+          "spread_coverage_prob": null,
+          "calibration_audit": {
+            "raw_prob": 0.488,
+            "calibrated_prob": 0.488,
+            "league": "NBA",
+            "plane": "game",
+            "market": "under",
+            "method_resolved": null,
+            "profile_id": null,
+            "context_slice": "playoff",
+            "resolved_slice": null,
+            "path": "static_identity"
+          }
+        }
+      ],
+      "best_bet": null,
+      "metadata": {
+        "engine_version": "2.0-dse",
+        "data_sources": [
+          "simulation",
+          "user_provided"
+        ],
+        "archetype": "basketball",
+        "suppressed_markets": []
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_backend": "fast_score",
+      "component_version": "fast_score_v1",
+      "simulation_distributions": [
+        {
+          "target": "home_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 107.82820197659612,
+          "sample_std": 11.927302625325492,
+          "p10": 92.62696746276734,
+          "p50": 107.67978916843111,
+          "p90": 123.11830906025212,
+          "n_iterations": 10000,
+          "seed": 3120825532,
+          "context_hash": "671a68268b63d12e",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "away_score",
+          "market": "game_score",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 104.96653176279813,
+          "sample_std": 12.100688033085975,
+          "p10": 89.43042624956016,
+          "p50": 105.04238799664824,
+          "p90": 120.53843556447933,
+          "n_iterations": 10000,
+          "seed": 3120825532,
+          "context_hash": "671a68268b63d12e",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "total",
+          "market": "game_total",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 212.79473373939422,
+          "sample_std": 17.139135616156615,
+          "p10": 190.7431971371547,
+          "p50": 213.0108967547484,
+          "p90": 234.2235892222642,
+          "n_iterations": 10000,
+          "seed": 3120825532,
+          "context_hash": "671a68268b63d12e",
+          "component_version": "fast_score_v1"
+        },
+        {
+          "target": "spread",
+          "market": "game_spread",
+          "stat_key": null,
+          "distribution_type": "empirical",
+          "distribution_params": {
+            "source": "monte_carlo_scores"
+          },
+          "params_schema_version": 1,
+          "sample_mean": 2.861670213797985,
+          "sample_std": 16.841152808264784,
+          "p10": -18.548388617037986,
+          "p50": 2.6150337185462007,
+          "p90": 24.783288596672875,
+          "n_iterations": 10000,
+          "seed": 3120825532,
+          "context_hash": "671a68268b63d12e",
+          "component_version": "fast_score_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 1
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "elimination_game",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.02,
+        "reason": "elimination_game: mean x1.0200 (raw 1.0200, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "sportsbettingdime.com",
+      "covers.com",
+      "nba.com"
+    ],
+    "fields_gathered": [
+      "off_rating",
+      "def_rating",
+      "pace",
+      "is_playoff",
+      "rest_days"
+    ],
+    "missing_fields": []
+  },
+  "reasoning_downgrade_rationale": "Locked to RESEARCH_CANDIDATE mode due to lack of NBA calibration profile (static fallback active). Policy v1 mode=shadow (expected live). Evidence signals are recorded but not applied to simulation inputs.",
+  "reasoning_narrative": "WCF Game 7 winner-take-all at Paycom Center. Highly efficient Thunder offense (118.1 OffRtg) hosts elite Spurs defense (102.4 DefRtg). Fast-paced matchup (98.6 vs 98.4 pace) is compressed by high-stakes defensive pressure.",
+  "trace_quality": {
+    "aggregate_quality": 0.8
+  }
+}

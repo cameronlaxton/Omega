@@ -1,0 +1,193 @@
+{
+  "trace": {
+    "trace_id": "sandbox-2654e6bb-352a",
+    "model_version": "omega-core-phase6h",
+    "ran_at": "2026-05-30T01:27:40.450101+00:00",
+    "kind": "prop",
+    "session_id": "sess-20260529-nba2",
+    "bankroll": 1000.0,
+    "input_snapshot": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 27.5,
+      "odds_over": -115.0,
+      "odds_under": -105.0,
+      "player_context": {
+        "pts_mean": 28.5,
+        "pts_std": 7.0,
+        "sample_size": 15
+      },
+      "game_context": {
+        "is_playoff": true,
+        "rest_days": 1,
+        "opponent_def_rank": 7
+      },
+      "n_iterations": 10000,
+      "seed": 4121411686,
+      "evidence": [
+        {
+          "signal_type": "series_avg",
+          "category": "player_form",
+          "plane": "player",
+          "value": 28.5,
+          "source": "nba.com",
+          "confidence": 0.9,
+          "window": "series",
+          "direction": "over",
+          "stat_key": "pts",
+          "note": "Averaging 28.5 PPG in this playoff series, coming off 28 pts in Game 6."
+        },
+        {
+          "signal_type": "elimination_game",
+          "category": "situational",
+          "plane": "player",
+          "value": true,
+          "source": "agent_reasoning",
+          "confidence": 0.95,
+          "window": "matchup",
+          "direction": "over",
+          "stat_key": "pts",
+          "note": "Game 7 winner-take-all context leads to expected high usage for franchise player."
+        }
+      ],
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "San Antonio Spurs",
+      "game_date": "2026-05-30"
+    },
+    "result": {
+      "player_name": "Victor Wembanyama",
+      "league": "NBA",
+      "prop_type": "pts",
+      "line": 27.5,
+      "status": "success",
+      "skip_reason": null,
+      "missing_requirements": [],
+      "over_prob": 0.4911,
+      "under_prob": 0.5089,
+      "projection_mean": 27.407,
+      "projection_std": 6.7117,
+      "projection_p10": 18.7691,
+      "projection_p50": 27.3591,
+      "projection_p90": 36.0698,
+      "distribution_type": "normal",
+      "edge_over": -4.38,
+      "edge_under": -0.33,
+      "recommendation": "pass",
+      "confidence_tier": null,
+      "kelly_fraction": null,
+      "recommended_units": null,
+      "bet_side_odds": null,
+      "notes": [],
+      "imputed_fraction": 0.0,
+      "over_calibration_audit": {
+        "raw_prob": 0.4911,
+        "calibrated_prob": 0.4911,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "over",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "under_calibration_audit": {
+        "raw_prob": 0.5089,
+        "calibrated_prob": 0.5089,
+        "league": "NBA",
+        "plane": "prop",
+        "market": "under",
+        "method_resolved": null,
+        "profile_id": null,
+        "context_slice": "playoff",
+        "resolved_slice": null,
+        "path": "static_identity"
+      },
+      "context_source": "provided",
+      "baseline_used": false,
+      "simulation_distributions": [
+        {
+          "target": "player_stat",
+          "market": "player_prop",
+          "stat_key": "pts",
+          "distribution_type": "normal",
+          "distribution_params": {
+            "mu": 27.36,
+            "sigma": 6.72
+          },
+          "params_schema_version": 1,
+          "sample_mean": 27.406951714934724,
+          "sample_std": 6.711675605734894,
+          "p10": 18.769123042642065,
+          "p50": 27.35914940441177,
+          "p90": 36.069785962489036,
+          "n_iterations": 10000,
+          "seed": 4121411686,
+          "context_hash": "315adb87",
+          "component_version": "player_prop_fast_v1"
+        }
+      ]
+    },
+    "downgrades": [],
+    "context_labels": {
+      "is_playoff": true,
+      "rest_days": 1,
+      "opponent_def_rank": 7
+    },
+    "evidence_mode": "shadow",
+    "evidence_application": [
+      {
+        "signal_type": "series_avg",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.0,
+        "reason": "series_avg: mean x1.0000 (raw 1.0000, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      },
+      {
+        "signal_type": "elimination_game",
+        "target": "mean",
+        "applied": false,
+        "factor": 1.02,
+        "reason": "elimination_game: mean x1.0200 (raw 1.0200, mode=shadow)",
+        "policy_version": "adj_v1_seed",
+        "evidence_mode": "shadow"
+      }
+    ],
+    "trace_quality": {
+      "aggregate_quality": null,
+      "downgrades": [],
+      "passed": true,
+      "evidence_status": "present",
+      "identity_status": "complete",
+      "context_source": "provided",
+      "baseline_used": false,
+      "calibration_eligible": true,
+      "calibration_exclusion_reasons": []
+    }
+  },
+  "bet_record": null,
+  "reasoning_inputs": {
+    "sources": [
+      "sportsbettingdime.com",
+      "covers.com",
+      "nba.com"
+    ],
+    "fields_gathered": [
+      "pts_mean",
+      "pts_std",
+      "sample_size",
+      "is_playoff",
+      "rest_days",
+      "opponent_def_rank"
+    ],
+    "missing_fields": []
+  },
+  "reasoning_downgrade_rationale": "Locked to RESEARCH_CANDIDATE mode due to lack of NBA calibration profile (static fallback active). Policy v1 mode=shadow (expected live). Evidence signals are recorded but not applied to simulation inputs.",
+  "reasoning_narrative": "Victor Wembanyama is the focal point of the Spurs' offense in this elimination matchup. Coming off a dominant 28 points in Game 6, his series average of 28.5 PPG suggests strong over value on a 27.5 line.",
+  "trace_quality": {
+    "aggregate_quality": 0.8
+  }
+}
