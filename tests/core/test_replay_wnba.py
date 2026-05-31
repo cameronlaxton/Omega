@@ -60,6 +60,8 @@ def test_wnba_replay_is_deterministic(game):
     second = analyze_game(_request(*game))
     assert first.status == "success" == second.status
     s1, s2 = first.simulation, second.simulation
+    assert s1 is not None
+    assert s2 is not None
     assert s1.home_win_prob == s2.home_win_prob
     assert s1.away_win_prob == s2.away_win_prob
     assert s1.predicted_total == s2.predicted_total
@@ -72,6 +74,7 @@ def test_wnba_replay_is_deterministic(game):
 def test_provided_context_reports_provided_not_baseline():
     """Full context must not be flagged as a league-default baseline run."""
     backend = resolve_game_backend("markov_state_wnba")
+    assert backend is not None
     req = GameSimulationInput(
         home_team="Las Vegas Aces",
         away_team="New York Liberty",
@@ -89,6 +92,7 @@ def test_provided_context_reports_provided_not_baseline():
 def test_missing_context_falls_back_to_wnba_baselines():
     """No context -> WNBA baselines fill in and the run is flagged league_default."""
     backend = resolve_game_backend("markov_state_wnba")
+    assert backend is not None
     req = GameSimulationInput(
         home_team="Seattle Storm",
         away_team="Phoenix Mercury",
