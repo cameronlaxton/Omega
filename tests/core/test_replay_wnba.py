@@ -1,9 +1,9 @@
 """Milestone 1 — WNBA backend replay determinism + selection.
 
-No production WNBA traces exist yet, so this mirrors the determinism intent of
-tests/core/test_replay_0526_mlb.py with synthetic-but-realistic WNBA inputs:
-re-running analyze_game() with the same seed must be bit-identical, and the WNBA
-league must dispatch to the markov_state_wnba backend via its league default.
+No production WNBA traces exist yet, so this uses synthetic-but-realistic WNBA
+inputs: re-running analyze_game() with the same seed must be bit-identical, and
+the WNBA league must dispatch to the markov_state_wnba backend via its league
+default.
 
 References:
   omega/core/simulation/markov_wnba.py
