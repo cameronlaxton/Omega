@@ -47,12 +47,6 @@ def test_mcp_manifest_lists_expected_surface():
     assert "omega_runtime_prompt" in PROMPT_NAMES
 
 
-def test_calibration_resource_path_is_readable():
-    data = _read_repo_file("config/calibration/universal_latest.json")
-
-    assert "universal_v1.0" in data
-
-
 def test_analyze_tool_docstrings_expose_evidence_signal_literals():
     for fn in (omega_analyze_game, omega_analyze_prop):
         doc = fn.__doc__ or ""

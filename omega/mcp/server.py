@@ -40,7 +40,6 @@ TOOL_NAMES = (
 RESOURCE_URIS = (
     "omega://docs/llm-mcp-interface",
     "omega://schemas/contracts",
-    "omega://calibration/universal-latest",
 )
 
 PROMPT_NAMES = (
@@ -655,12 +654,6 @@ def build_server():
         name="omega_contracts_schemas",
         description="Source of truth for Omega deterministic contract schemas.",
     )(lambda: _read_repo_file("omega/core/contracts/schemas.py"))
-    mcp.resource(
-        "omega://calibration/universal-latest",
-        name="omega_calibration_universal_latest",
-        description="Currently active universal calibration profile.",
-    )(lambda: _read_repo_file("config/calibration/universal_latest.json"))
-
     mcp.prompt()(omega_runtime_prompt)
     mcp.prompt()(omega_missing_input_repair)
     mcp.prompt()(omega_trace_audit)

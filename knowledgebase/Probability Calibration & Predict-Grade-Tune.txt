@@ -201,7 +201,7 @@ learn calibration maps or adjust shrinkage/cap parameters,
 
 recommend updates per league/market.
 
-Apply these updates to calibration config (e.g., league_calibrations.yaml) so future predictions use better-calibrated probabilities.
+Register fitted profiles through CalibrationRegistry so future predictions use versioned, promoted calibration profiles.
 
 Right now, your codebase has (2) and (3) infrastructure but isn’t doing the writes in (2).
 
