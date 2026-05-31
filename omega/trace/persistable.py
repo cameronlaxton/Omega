@@ -7,6 +7,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from omega.trace.eligibility import (
+    evidence_learning_eligibility,
+    probability_calibration_eligibility,
+)
+
 
 class PersistableTrace(BaseModel):
     """Versioned trace shape accepted by the SQLite trace ledger.
@@ -111,19 +116,17 @@ class PersistableTrace(BaseModel):
 
         Not an enforcement gate — callers decide whether to act on the result.
         Falls back to quality_gate when trace_quality is empty (pre-rename traces).
+        Delegates to omega.trace.eligibility (the single source of truth).
         """
         tq = self.trace_quality or self.quality_gate or {}
         identity_status = tq.get("identity_status")
-        context_source = tq.get("context_source")
-        calibration_eligible = bool(tq.get("calibration_eligible"))
+        prob = probability_calibration_eligibility(
+            predictions=self.predictions, trace_quality=tq
+        )
+        evidence = evidence_learning_eligibility(trace_quality=tq)
         return {
-            "probability_calibration": (
-                self.predictions is not None
-                and calibration_eligible
-                and context_source == "provided"
-                and identity_status == "complete"
-            ),
-            "evidence_scoring": tq.get("evidence_status") == "present",
+            "probability_calibration": prob.eligible,
+            "evidence_scoring": evidence.eligible,
             "context_slice_fitting": identity_status not in ("missing", "backfilled"),
         }
 

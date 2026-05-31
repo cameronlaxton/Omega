@@ -149,7 +149,14 @@ def _write_file(inbox: Path, name: str, payload: dict[str, Any]) -> Path:
     return p
 
 
-def _write_sidecar(sidecar_dir: Path, session_id: str, *, qa_failed: bool) -> Path:
+def _write_sidecar(
+    sidecar_dir: Path,
+    session_id: str,
+    *,
+    qa_failed: bool,
+    qa_failed_trace_ids: list[str] | None = None,
+    gate_ts: str = "2026-05-28T18:30:00Z",
+) -> Path:
     sidecar_dir.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
         "session_id": session_id,
@@ -166,17 +173,27 @@ def _write_sidecar(sidecar_dir: Path, session_id: str, *, qa_failed: bool) -> Pa
     if qa_failed:
         payload["audit_events"].append(
             {
-                "ts": "2026-05-28T18:30:00Z",
+                "ts": gate_ts,
                 "event_type": "quality_gate",
                 "step": "qa_failed_quarantine_0528",
                 "status": "fail",
                 "notes": "QA-failed quarantine",
-                "trace_ids": [],
+                "trace_ids": qa_failed_trace_ids or [],
             }
         )
     path = sidecar_dir / f"{session_id}.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
+
+
+_ELIGIBLE_TQ = {
+    "calibration_eligible": True,
+    "context_source": "provided",
+    "identity_status": "complete",
+    "evidence_status": "present",
+    "downgrades": [],
+    "calibration_exclusion_reasons": [],
+}
 
 
 # ---------------------------------------------------------------------------
@@ -435,59 +452,129 @@ class TestDryRun:
 # ---------------------------------------------------------------------------
 
 
-class TestQaFailedQuarantine:
-    def test_qa_failed_session_blocks_ingest_by_default(self, workspace, tmp_path):
-        inbox, db_path = workspace
-        session_id = "sess-qa-failed"
-        sidecar_dir = tmp_path / "sessions"
-        _write_sidecar(sidecar_dir, session_id, qa_failed=True)
+class TestTraceScopedQaIngest:
+    """Trace-scoped QA: valid artifacts are always persisted; QA fails persist
+    audit-only (calibration-ineligible) and never block unrelated traces."""
 
-        payload = _make_export_block("sandbox-qa-block", with_bet=False)
+    def _eligible_payload(self, trace_id: str, session_id: str) -> dict[str, Any]:
+        payload = _make_export_block(trace_id, with_bet=False)
         payload["trace"]["session_id"] = session_id
-        path = _write_file(inbox, "qa_block.json", payload)
+        payload["trace"]["trace_quality"] = dict(_ELIGIBLE_TQ)
+        return payload
 
-        store = TraceStore(db_path=str(db_path))
-        with pytest.raises(ValueError, match="failed quality_gate"):
-            ingest_traces.ingest_file(path, store, sidecar_dir=sidecar_dir)
-        assert store.get_trace("sandbox-qa-block") is None
-        store.close()
-
-    def test_force_qa_failed_ingest_marks_trace_calibration_ineligible(
+    def test_unrelated_failed_quality_gate_does_not_block_later_valid_trace(
         self, workspace, tmp_path
     ):
         inbox, db_path = workspace
-        session_id = "sess-qa-failed"
+        session_id = "sess-mixed"
         sidecar_dir = tmp_path / "sessions"
-        _write_sidecar(sidecar_dir, session_id, qa_failed=True)
+        # Gate failed for some OTHER trace, not the one we ingest.
+        _write_sidecar(
+            sidecar_dir, session_id, qa_failed=True, qa_failed_trace_ids=["some-other-trace"]
+        )
 
-        payload = _make_export_block("sandbox-qa-force", with_bet=False)
-        payload["trace"]["session_id"] = session_id
-        payload["trace"]["trace_quality"] = {
-            "calibration_eligible": True,
-            "context_source": "provided",
-            "identity_status": "complete",
-            "evidence_status": "present",
-            "downgrades": [],
-            "calibration_exclusion_reasons": [],
-        }
-        path = _write_file(inbox, "qa_force.json", payload)
+        payload = self._eligible_payload("sandbox-valid", session_id)
+        path = _write_file(inbox, "valid.json", payload)
 
         store = TraceStore(db_path=str(db_path))
-        trace_id, _ = ingest_traces.ingest_file(
-            path,
-            store,
-            sidecar_dir=sidecar_dir,
-            force_ingest_qa_failed=True,
+        trace_id, _ = ingest_traces.ingest_file(path, store, sidecar_dir=sidecar_dir)
+        trace = store.get_trace(trace_id)
+        assert trace is not None
+        assert trace["trace_quality"]["calibration_eligible"] is True
+        # Still calibration-eligible: unrelated failure did not condemn it.
+        ids = {t["trace_id"] for t in store.query_traces(calibration_eligible_only=True)}
+        assert trace_id in ids
+        verdict = store.get_qa_verdict(trace_id)
+        assert verdict["verdict"] == "pass"
+        assert verdict["scope"] == "unrelated_session_failure"
+        store.close()
+
+    def test_trace_specific_qa_failed_trace_persists_as_audit_only(self, workspace, tmp_path):
+        inbox, db_path = workspace
+        session_id = "sess-qa"
+        sidecar_dir = tmp_path / "sessions"
+        _write_sidecar(
+            sidecar_dir, session_id, qa_failed=True, qa_failed_trace_ids=["sandbox-qa-trace"]
         )
+
+        payload = self._eligible_payload("sandbox-qa-trace", session_id)
+        path = _write_file(inbox, "qa.json", payload)
+
+        store = TraceStore(db_path=str(db_path))
+        trace_id, _ = ingest_traces.ingest_file(path, store, sidecar_dir=sidecar_dir)
+        # Ledger-preserved (audit-visible)...
         trace = store.get_trace(trace_id)
         assert trace is not None
         tq = trace["trace_quality"]
         assert tq["calibration_eligible"] is False
-        assert "qa_failed_forced_ingest" in tq["calibration_exclusion_reasons"]
-        assert "qa_failed_forced_ingest" in trace["downgrades"]
+        assert "qa_failed" in tq["calibration_exclusion_reasons"]
+        # ...with a recorded trace-scoped verdict.
+        verdict = store.get_qa_verdict(trace_id)
+        assert verdict["verdict"] == "fail"
+        assert verdict["scope"] == "trace_id"
+        store.close()
+
+    def test_qa_failed_trace_is_not_calibration_eligible(self, workspace, tmp_path):
+        inbox, db_path = workspace
+        session_id = "sess-qa2"
+        sidecar_dir = tmp_path / "sessions"
+        _write_sidecar(
+            sidecar_dir, session_id, qa_failed=True, qa_failed_trace_ids=["sandbox-qa2"]
+        )
+
+        payload = self._eligible_payload("sandbox-qa2", session_id)
+        path = _write_file(inbox, "qa2.json", payload)
+
+        store = TraceStore(db_path=str(db_path))
+        trace_id, _ = ingest_traces.ingest_file(path, store, sidecar_dir=sidecar_dir)
         assert store.query_traces(calibration_eligible_only=True) == []
         store.attach_prop_outcome(trace_id, "Jayson Tatum", "pts", 31.0, 27.5, "over")
         assert store.get_graded_traces() == []
+        store.close()
+
+    def test_force_ingest_qa_failed_does_not_mark_calibration_eligible(
+        self, workspace, tmp_path
+    ):
+        inbox, db_path = workspace
+        session_id = "sess-qa3"
+        sidecar_dir = tmp_path / "sessions"
+        _write_sidecar(
+            sidecar_dir, session_id, qa_failed=True, qa_failed_trace_ids=["sandbox-qa3"]
+        )
+
+        payload = self._eligible_payload("sandbox-qa3", session_id)
+        path = _write_file(inbox, "qa3.json", payload)
+
+        store = TraceStore(db_path=str(db_path))
+        # The deprecated force flag must not confer eligibility.
+        trace_id, _ = ingest_traces.ingest_file(
+            path, store, sidecar_dir=sidecar_dir, force_ingest_qa_failed=True
+        )
+        trace = store.get_trace(trace_id)
+        assert trace is not None
+        assert trace["trace_quality"]["calibration_eligible"] is False
+        assert store.query_traces(calibration_eligible_only=True) == []
+        store.close()
+
+    def test_session_fallback_does_not_block_ledger_ingest(self, workspace, tmp_path):
+        inbox, db_path = workspace
+        session_id = "sess-fallback"
+        sidecar_dir = tmp_path / "sessions"
+        # Unstructured failed gate (no trace_ids): conservative session fallback.
+        _write_sidecar(sidecar_dir, session_id, qa_failed=True)
+
+        payload = self._eligible_payload("sandbox-fallback", session_id)
+        path = _write_file(inbox, "fallback.json", payload)
+
+        store = TraceStore(db_path=str(db_path))
+        # Does NOT raise; the trace is preserved in the ledger.
+        trace_id, _ = ingest_traces.ingest_file(path, store, sidecar_dir=sidecar_dir)
+        trace = store.get_trace(trace_id)
+        assert trace is not None
+        assert trace["trace_quality"]["calibration_eligible"] is False
+        verdict = store.get_qa_verdict(trace_id)
+        assert verdict["verdict"] == "fail"
+        assert verdict["scope"] == "session_fallback"
         store.close()
 
 

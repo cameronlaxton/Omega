@@ -16,6 +16,7 @@ from omega.trace.session_sidecar import (
     create_sidecar,
     load_sidecar_safe,
     quality_gate_status,
+    quality_gate_verdict_for_trace,
     quarantine_sidecar,
     rebuild_sidecar_from_jsonl,
     append_null_data_audit,
@@ -76,6 +77,99 @@ class TestQualityGateStatus:
         assert quality_gate_status(load_sidecar_safe(path)) == "pass"
         append_audit_events(path, [_event(status="fail", event_type="quality_gate")])
         assert quality_gate_status(load_sidecar_safe(path)) == "fail"
+
+
+def _sidecar_with(events: list[dict]) -> SessionSidecar:
+    """Build an in-memory sidecar carrying the given audit events."""
+    payload = bootstrap_payload(
+        "sess-20260528-verd",
+        model_version="m",
+        purpose="p",
+        bankroll=100.0,
+    )
+    payload["audit_events"] = events
+    return SessionSidecar.model_validate(payload)
+
+
+def _gate(status: str, *, ts: str, step: str = "qa", trace_ids: list[str] | None = None) -> dict:
+    return {
+        "ts": ts,
+        "event_type": "quality_gate",
+        "step": step,
+        "status": status,
+        "trace_ids": trace_ids or [],
+    }
+
+
+class TestTraceScopedQualityGateVerdict:
+    def test_no_sidecar_returns_unknown_no_sidecar(self):
+        verdict = quality_gate_verdict_for_trace(None, "trace-x", "2026-05-28T12:00:00Z")
+        assert verdict.verdict == "unknown"
+        assert verdict.scope == "no_sidecar"
+
+    def test_failed_gate_for_trace_a_does_not_fail_trace_b(self):
+        sidecar = _sidecar_with(
+            [_gate("fail", ts="2026-05-28T12:00:00Z", trace_ids=["trace-A"])]
+        )
+        a = quality_gate_verdict_for_trace(sidecar, "trace-A", "2026-05-28T12:00:00Z")
+        b = quality_gate_verdict_for_trace(sidecar, "trace-B", "2026-05-28T12:00:00Z")
+        assert a.verdict == "fail" and a.scope == "trace_id"
+        assert a.matched_trace_id == "trace-A"
+        # The unrelated trace is not condemned by trace-A's failure.
+        assert b.verdict == "pass" and b.scope == "unrelated_session_failure"
+
+    def test_passed_gate_for_trace_marks_pass_by_trace_id(self):
+        sidecar = _sidecar_with(
+            [_gate("ok", ts="2026-05-28T12:00:00Z", step="repaired", trace_ids=["trace-A"])]
+        )
+        verdict = quality_gate_verdict_for_trace(sidecar, "trace-A", "2026-05-28T12:00:00Z")
+        assert verdict.verdict == "pass" and verdict.scope == "trace_id"
+
+    def test_timestamp_scoped_gate_only_applies_to_matching_trace_window(self):
+        # One unscoped failed gate. A trace running next to it is tied by time;
+        # a trace running hours later is not time-matched and only falls to the
+        # conservative session fallback — proving the window matcher is scoped.
+        sidecar = _sidecar_with([_gate("fail", ts="2026-05-28T12:00:30Z")])
+        near = quality_gate_verdict_for_trace(sidecar, "trace-near", "2026-05-28T12:00:00Z")
+        far = quality_gate_verdict_for_trace(sidecar, "trace-far", "2026-05-28T20:00:00Z")
+        assert near.verdict == "fail" and near.scope == "timestamp_window"
+        assert far.verdict == "fail" and far.scope == "session_fallback"
+
+    def test_session_fallback_is_marked_as_fallback_not_trace_specific(self):
+        # Unstructured failed gate (no trace_ids), trace has no usable ran_at:
+        # conservative fallback fail, explicitly flagged as session-scoped.
+        sidecar = _sidecar_with([_gate("fail", ts="2026-05-28T12:00:00Z")])
+        verdict = quality_gate_verdict_for_trace(sidecar, "trace-x", None)
+        assert verdict.verdict == "fail"
+        assert verdict.scope == "session_fallback"
+        assert verdict.matched_trace_id is None
+
+    def test_later_recovery_event_prevents_pre_trace_fatal_from_poisoning_later_trace(self):
+        preflight_fail = {
+            "ts": "2026-05-28T10:00:00Z",
+            "event_type": "preflight",
+            "step": "boot",
+            "status": "fail",
+            "trace_ids": [],
+        }
+        recovery = {
+            "ts": "2026-05-28T11:00:00Z",
+            "event_type": "preflight",
+            "step": "boot_retry",
+            "status": "ok",
+            "trace_ids": [],
+        }
+        ran_at = "2026-05-28T12:00:00Z"
+
+        poisoned = quality_gate_verdict_for_trace(
+            _sidecar_with([preflight_fail]), "trace-x", ran_at
+        )
+        assert poisoned.verdict == "fail" and poisoned.scope == "pre_trace_fatal"
+
+        recovered = quality_gate_verdict_for_trace(
+            _sidecar_with([preflight_fail, recovery]), "trace-x", ran_at
+        )
+        assert recovered.verdict == "pass"
 
 
 class TestJsonlMirror:

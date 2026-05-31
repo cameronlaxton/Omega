@@ -77,6 +77,16 @@ Schema version 11 (additive):
   to traces — captures can land before a trace is persisted, matching the
   market_snapshots pattern. (Phase 7 red-team finding 4.)
 
+Schema version 12 (additive):
+- trace_qa_verdicts: one row per trace recording the trace-scoped quality-gate
+  verdict computed at ingest (see omega/trace/session_sidecar.py
+  quality_gate_verdict_for_trace). It is an audit/query aid only — the canonical
+  calibration-eligibility flag stays trace_quality.calibration_eligible inside
+  the full_trace JSON blob. A "fail" verdict is reconciled into that flag at
+  ingest; this table records HOW the verdict was reached (trace_id match,
+  timestamp window, pre-trace fatal, or conservative session fallback) so an
+  operator can tell a trace-specific failure from a session-wide fallback.
+
 Design rules:
 - Full trace stored as JSON blob to decouple trace evolution from SQLite schema
 - Denormalized columns exist for querying only — the blob is source of truth
@@ -88,7 +98,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 11
+CURRENT_VERSION = 12
 
 # ---------------------------------------------------------------------------
 # Version lineage (applied in order by TraceStore._ensure_schema)
@@ -115,6 +125,7 @@ CURRENT_VERSION = 11
 #   V9  SCHEMA_V9            evidence_signals + signal_performance
 #   V10 SCHEMA_V10           simulation_distributions (+ dynamic outcome view)
 #   V11 SCHEMA_V11           early_market_snapshots (segregated from CLV)
+#   V12 SCHEMA_V12           trace_qa_verdicts (trace-scoped QA audit)
 #
 # There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
 # apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
@@ -486,4 +497,31 @@ CREATE INDEX IF NOT EXISTS idx_early_market_snapshots_trace_id
     ON early_market_snapshots(trace_id);
 CREATE INDEX IF NOT EXISTS idx_early_market_snapshots_league
     ON early_market_snapshots(league, captured_at);
+"""
+
+
+# V12 is purely additive (one new table) so it can be applied via executescript.
+# trace_qa_verdicts is an audit/query aid: the canonical calibration-eligibility
+# flag remains trace_quality.calibration_eligible in the full_trace JSON blob.
+# A row records the trace-scoped verdict (and the scope that produced it) so an
+# operator can distinguish a trace-specific QA failure from a conservative
+# session-wide fallback without parsing the blob.
+SCHEMA_V12 = """
+CREATE TABLE IF NOT EXISTS trace_qa_verdicts (
+    trace_id          TEXT PRIMARY KEY REFERENCES traces(trace_id),
+    session_id        TEXT,
+    verdict           TEXT NOT NULL,
+    scope             TEXT NOT NULL,
+    gate_name         TEXT,
+    reason            TEXT,
+    event_id          TEXT,
+    matched_trace_id  TEXT,
+    ran_at            TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_trace_qa_verdicts_session
+    ON trace_qa_verdicts(session_id);
+CREATE INDEX IF NOT EXISTS idx_trace_qa_verdicts_verdict
+    ON trace_qa_verdicts(verdict, scope);
 """

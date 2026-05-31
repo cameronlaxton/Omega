@@ -61,6 +61,9 @@ from omega.core.simulation.evidence_to_modifier import (
     signals_to_transition_modifiers,
 )
 from omega.core.simulation.validation import validate_sim_context
+from omega.trace.eligibility import (
+    calibration_exclusion_reasons as compute_calibration_exclusion_reasons,
+)
 
 UTC = timezone.utc
 
@@ -322,19 +325,18 @@ def analyze(
         if trace_quality
         else []
     )
-    calibration_exclusion_reasons: list[str] = []
-    if _result_status(result) != "success":
-        calibration_exclusion_reasons.append("engine_skipped")
-    if context_source != "provided":
-        calibration_exclusion_reasons.append(
-            "baseline_default_context" if baseline_used else "legacy_missing_context_source"
-        )
-    if identity_status != "complete":
-        calibration_exclusion_reasons.append("legacy_missing_identity")
-    calibration_exclusion_reasons.extend(result_downgrades)
-    calibration_exclusion_reasons.extend(result_missing_requirements)
-    calibration_exclusion_reasons.extend(caller_exclusion_reasons)
-    calibration_exclusion_reasons = sorted(set(calibration_exclusion_reasons))
+    # Single source of truth: omega.trace.eligibility owns the exclusion-reason
+    # predicate. No QA verdict exists at analyze time (no sidecar yet); ingest
+    # reconciles a failed trace-scoped verdict into this same flag later.
+    calibration_exclusion_reasons = compute_calibration_exclusion_reasons(
+        result_status=_result_status(result),
+        context_source=context_source,
+        baseline_used=baseline_used,
+        identity_status=identity_status,
+        result_downgrades=result_downgrades,
+        result_missing_requirements=result_missing_requirements,
+        caller_exclusion_reasons=caller_exclusion_reasons,
+    )
     calibration_eligible = not calibration_exclusion_reasons
 
     engine_trace_quality: dict[str, Any] = {

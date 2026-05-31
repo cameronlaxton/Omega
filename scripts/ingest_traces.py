@@ -50,13 +50,16 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from omega.trace.bet_record import BetRecord  # noqa: E402
+from omega.trace.eligibility import REASON_QA_FAILED  # noqa: E402
 from omega.trace.persistable import PersistableTrace  # noqa: E402
-from omega.trace.session_sidecar import load_sidecar_safe, quality_gate_status  # noqa: E402
+from omega.trace.session_sidecar import (  # noqa: E402
+    load_sidecar_safe,
+    quality_gate_verdict_for_trace,
+)
 from omega.trace.export_validator import validate_export_block  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("ingest_traces")
-_QA_FAILED_FORCED_REASON = "qa_failed_forced_ingest"
 
 
 # ---------------------------------------------------------------------------
@@ -251,47 +254,43 @@ def _warn_reasoning_inputs(analyze_out: dict) -> None:
             )
 
 
-def _session_quality_gate_status(
-    sidecar_dir: Path | None,
-    session_id: str | None,
-) -> str:
-    """Tri-state: 'pass' | 'fail' | 'unknown'.
+def _load_session_sidecar(sidecar_dir: Path | None, session_id: str | None):
+    """Return the parsed session sidecar, or None if absent/unreadable.
 
-    A genuinely absent sidecar is 'pass' (no gate recorded). A present-but-
-    unreadable sidecar is 'unknown' — never silently treated as clean — so one
-    malformed sidecar can neither imply "no failure" nor wedge the whole ingest.
+    None is deliberately ambiguous between "no sidecar" and "unreadable"; both
+    mean the QA history is UNKNOWN. The caller warns only when a file existed
+    but failed to parse, so configuring no sidecar dir stays quiet.
     """
     if sidecar_dir is None or not session_id:
-        return "pass"
+        return None
     path = sidecar_dir / f"{session_id}.json"
     if not path.exists():
-        return "pass"
-    return quality_gate_status(load_sidecar_safe(path))
+        return None
+    return load_sidecar_safe(path)
 
 
 def _append_once(values: list[Any], value: str) -> list[Any]:
     return values if value in values else [*values, value]
 
 
-def _force_trace_calibration_ineligible(adapted: dict[str, Any]) -> None:
-    """Persist forced QA-failed ingest traces as permanently fitter-invisible."""
+def _mark_calibration_ineligible(adapted: dict[str, Any], reason: str) -> None:
+    """Mark an audit-only trace permanently fitter-invisible.
+
+    Reconciles a failed trace-scoped QA verdict into the canonical
+    trace_quality.calibration_eligible flag (the single source of truth read by
+    the calibration query path). The trace is still persisted to the ledger.
+    """
     trace_quality = dict(adapted.get("trace_quality") or {})
     reasons = list(trace_quality.get("calibration_exclusion_reasons") or [])
     downgrades = list(trace_quality.get("downgrades") or adapted.get("downgrades") or [])
 
     trace_quality["calibration_eligible"] = False
     trace_quality["passed"] = False
-    trace_quality["calibration_exclusion_reasons"] = _append_once(
-        reasons,
-        _QA_FAILED_FORCED_REASON,
-    )
-    trace_quality["downgrades"] = _append_once(downgrades, _QA_FAILED_FORCED_REASON)
+    trace_quality["calibration_exclusion_reasons"] = _append_once(reasons, reason)
+    trace_quality["downgrades"] = _append_once(downgrades, reason)
 
     adapted["trace_quality"] = trace_quality
-    adapted["downgrades"] = _append_once(
-        list(adapted.get("downgrades") or []),
-        _QA_FAILED_FORCED_REASON,
-    )
+    adapted["downgrades"] = _append_once(list(adapted.get("downgrades") or []), reason)
 
 
 def ingest_file(
@@ -305,6 +304,16 @@ def ingest_file(
     strict: bool = False,
 ) -> tuple[str, str | None]:
     """Ingest one file. Returns (trace_id, bet_id or None). Raises on error.
+
+    QA handling is trace-scoped (see omega/trace/session_sidecar.py
+    quality_gate_verdict_for_trace). A valid trace artifact is ALWAYS persisted
+    to the ledger; only a malformed/invalid artifact is rejected to failed/. A
+    failed trace-scoped QA verdict persists the trace as audit-only
+    (calibration-ineligible) and records a trace_qa_verdicts row — it never
+    blocks ingest, and an unrelated session failure never condemns this trace.
+    ``force_ingest_qa_failed`` is retained for backward compatibility but is now
+    a no-op: audit-only persistence is the default, and no flag can confer
+    calibration eligibility on a QA-failed trace.
 
     The pre-persist export gate (`validate`/`strict`) runs the canonical export
     validator (`omega/trace/export_validator.py`) *before* any write. The default
@@ -355,28 +364,32 @@ def ingest_file(
     _warn_reasoning_inputs(analyze_out)
 
     session_id = adapted.get("session_id")
-    qa_status = _session_quality_gate_status(
-        sidecar_dir,
-        str(session_id) if session_id else None,
-    )
-    if qa_status == "fail" and not force_ingest_qa_failed:
-        raise ValueError(
-            f"Session {session_id} has a failed quality_gate sidecar event. "
-            "Ingest is blocked by default; use --force-ingest-qa-failed only "
-            "for audit storage."
-        )
-    if qa_status == "fail":
-        _force_trace_calibration_ineligible(adapted)
-    elif qa_status == "unknown":
-        # Honesty over convenience: an unreadable sidecar must not pass as clean.
-        # We proceed (one bad sidecar shouldn't wedge ingest) but record the
-        # uncertainty; calibration_eligible is untouched (decoupled from QA gate).
+    sid = str(session_id) if session_id else None
+    sidecar_path = (sidecar_dir / f"{sid}.json") if (sidecar_dir is not None and sid) else None
+    sidecar = _load_session_sidecar(sidecar_dir, sid)
+    if sidecar is None and sidecar_path is not None and sidecar_path.exists():
+        # File present but failed to parse: QA history is UNKNOWN, not clean.
         logger.warning(
-            "Session %s quality_gate_status=unknown (unreadable sidecar); ingesting "
-            "%s without QA confirmation. Quarantine the sidecar via "
-            "`validate_session_sidecars.py --quarantine`.",
+            "Session %s sidecar unreadable; ingesting %s without QA confirmation. "
+            "Quarantine the sidecar via `validate_session_sidecars.py --quarantine`.",
             session_id,
             adapted["trace_id"],
+        )
+
+    # Trace-scoped QA verdict. A failed verdict marks the trace audit-only
+    # (calibration-ineligible) but never blocks ledger ingest; an unrelated
+    # session failure leaves this trace eligible.
+    qa_verdict = quality_gate_verdict_for_trace(
+        sidecar, adapted["trace_id"], adapted.get("timestamp")
+    )
+    if qa_verdict.verdict == "fail":
+        _mark_calibration_ineligible(adapted, REASON_QA_FAILED)
+        logger.info(
+            "trace %s QA verdict=fail scope=%s; persisting audit-only "
+            "(calibration-ineligible): %s",
+            adapted["trace_id"],
+            qa_verdict.scope,
+            qa_verdict.reason,
         )
 
     # Pre-persist validation: a bet_record on a prop trace must come with
@@ -413,6 +426,17 @@ def ingest_file(
         return (adapted["trace_id"], None)
 
     trace_id = store.persist(adapted)
+
+    # Record the trace-scoped QA verdict as an audit row (the canonical
+    # eligibility flag already lives in trace_quality). Skip the trivial
+    # no_sidecar case to avoid noise for sessions without a sidecar.
+    if qa_verdict.scope != "no_sidecar":
+        store.write_qa_verdict(
+            trace_id,
+            qa_verdict,
+            session_id=sid,
+            ran_at=adapted.get("timestamp"),
+        )
 
     bet_id: str | None = None
     if isinstance(bet_block, dict):
@@ -485,11 +509,15 @@ def main() -> int:
         help="Directory containing <session_id>.json sidecars for QA gates",
     )
     parser.add_argument(
+        "--allow-audit-only-qa-failed",
         "--force-ingest-qa-failed",
+        dest="force_ingest_qa_failed",
         action="store_true",
         help=(
-            "Allow ingest of QA-failed sessions for audit storage. Persisted "
-            "traces are forced calibration-ineligible."
+            "DEPRECATED / no-op. QA-failed traces are now persisted audit-only "
+            "by default (trace-scoped) and remain calibration-ineligible "
+            "regardless of this flag; no flag can confer calibration eligibility. "
+            "Kept for backward compatibility."
         ),
     )
     parser.add_argument(

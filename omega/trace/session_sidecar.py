@@ -16,8 +16,9 @@ import datetime
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -270,6 +271,230 @@ def quality_gate_status(sidecar: SessionSidecar | None) -> str:
         if event.event_type == "quality_gate" and event.status == "fail":
             return "fail"
     return "pass"
+
+
+# ---------------------------------------------------------------------------
+# Trace-scoped quality-gate verdict (Phase: trace-scoped QA ingest)
+# ---------------------------------------------------------------------------
+#
+# quality_gate_status() above is session-wide: one failed gate condemns every
+# trace in the session. That over-blocks valid traces that ran in a session
+# where some *other* trace failed QA. quality_gate_verdict_for_trace() scopes
+# the verdict to a single trace using the signals actually available on a
+# sidecar — the per-event ``trace_ids`` list, event timestamps vs. the trace's
+# ``ran_at``, and pre-trace setup failures — and falls back conservatively only
+# when no scoping is possible. The old function is intentionally kept for
+# callers that still want the blunt session verdict.
+
+QaVerdict = Literal["pass", "fail", "unknown"]
+QaScope = Literal[
+    "trace_id",
+    "timestamp_window",
+    "pre_trace_fatal",
+    "session_fallback",
+    "unrelated_session_failure",
+    "no_sidecar",
+]
+
+_VALID_QA_VERDICTS: frozenset[str] = frozenset({"pass", "fail", "unknown"})
+_VALID_QA_SCOPES: frozenset[str] = frozenset({
+    "trace_id",
+    "timestamp_window",
+    "pre_trace_fatal",
+    "session_fallback",
+    "unrelated_session_failure",
+    "no_sidecar",
+})
+
+# Secondary, deliberately tight tolerance for the timestamp_window matcher. A
+# trace has no recorded execution duration, and QA gates normally fire shortly
+# after the analysis they grade, so we only tie an *unscoped* failed gate to a
+# trace when their timestamps are within this many seconds. trace_id matching
+# always takes precedence; this matcher exists only to catch unstructured gates
+# emitted right next to the trace.
+_QA_TIMESTAMP_TOLERANCE_SECONDS = 300.0
+
+
+@dataclass(frozen=True)
+class TraceQaVerdict:
+    """Trace-scoped quality-gate verdict.
+
+    ``verdict`` is the tri-state result; ``scope`` records *how* the verdict was
+    derived so callers (and the ``trace_qa_verdicts`` ledger table) can audit
+    whether a fail was trace-specific or a conservative session-wide fallback.
+    A ``fail`` never blocks ledger ingest — it only marks the trace
+    calibration-ineligible.
+    """
+
+    verdict: QaVerdict
+    scope: QaScope
+    reason: str | None = None
+    gate_name: str | None = None
+    event_id: str | None = None
+    matched_trace_id: str | None = None
+
+
+def _parse_event_ts(value: Any) -> datetime.datetime | None:
+    """Parse an ISO-8601 timestamp (tolerating a trailing ``Z``) to aware UTC."""
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value if value.tzinfo else value.replace(tzinfo=datetime.timezone.utc)
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=datetime.timezone.utc)
+
+
+def quality_gate_verdict_for_trace(
+    sidecar: SessionSidecar | None,
+    trace_id: str | None,
+    ran_at: Any = None,
+    *,
+    window_tolerance_seconds: float = _QA_TIMESTAMP_TOLERANCE_SECONDS,
+) -> TraceQaVerdict:
+    """Scope a session's quality-gate history to a single trace.
+
+    Matching priority (first match wins):
+
+    1. No sidecar                              -> unknown / no_sidecar
+    2. Failed gate names this trace_id         -> fail / trace_id
+    3. Passed/repaired gate names this trace   -> pass / trace_id
+    4. Unscoped failed gate within ran_at +/- tolerance -> fail / timestamp_window
+    5. Pre-trace fatal preflight, no recovery before ran_at -> fail / pre_trace_fatal
+    6. Failed gates only reference *other* traces -> pass / unrelated_session_failure
+    7. Unstructured failed gate, no scoping possible -> fail / session_fallback
+
+    ``session_fallback`` is the conservative catch-all for legacy/unstructured
+    sidecars: it marks the trace calibration-ineligible but, like every fail
+    here, never blocks ledger ingest.
+    """
+    if sidecar is None:
+        return TraceQaVerdict(
+            verdict="unknown",
+            scope="no_sidecar",
+            reason="no session sidecar available; QA history unknown",
+        )
+
+    tid = str(trace_id) if trace_id else None
+    gate_events = [e for e in sidecar.audit_events if e.event_type == "quality_gate"]
+    failed_gates = [e for e in gate_events if e.status == "fail"]
+
+    # 2. Failed gate explicitly references this trace_id.
+    if tid:
+        for event in failed_gates:
+            if tid in (event.trace_ids or []):
+                return TraceQaVerdict(
+                    verdict="fail",
+                    scope="trace_id",
+                    reason=f"quality_gate '{event.step}' failed and names this trace",
+                    gate_name=event.step,
+                    matched_trace_id=tid,
+                )
+        # 3. Passed/repaired gate explicitly references this trace_id.
+        for event in gate_events:
+            if event.status in ("ok", "skipped") and tid in (event.trace_ids or []):
+                return TraceQaVerdict(
+                    verdict="pass",
+                    scope="trace_id",
+                    reason=f"quality_gate '{event.step}' passed for this trace",
+                    gate_name=event.step,
+                    matched_trace_id=tid,
+                )
+
+    # Partition the remaining failed gates by whether they name *other* traces.
+    # A gate with an empty trace_ids list is "unstructured": it tells us a
+    # failure happened but not which traces it taints.
+    unscoped_fails = [e for e in failed_gates if not (e.trace_ids or [])]
+    scoped_other_fails = [
+        e for e in failed_gates if (e.trace_ids or []) and tid not in (e.trace_ids or [])
+    ]
+
+    ran_dt = _parse_event_ts(ran_at)
+
+    # 4. Unscoped failed gate within a tight window of the trace's ran_at. Only
+    #    unscoped gates are time-matched: a gate that names other traces is
+    #    evidence it is scoped elsewhere, not to this trace.
+    if ran_dt is not None:
+        for event in unscoped_fails:
+            ev_dt = _parse_event_ts(event.ts)
+            if ev_dt is None:
+                continue
+            if abs((ev_dt - ran_dt).total_seconds()) <= window_tolerance_seconds:
+                return TraceQaVerdict(
+                    verdict="fail",
+                    scope="timestamp_window",
+                    reason=(
+                        f"unscoped quality_gate '{event.step}' failed within "
+                        f"{window_tolerance_seconds:.0f}s of this trace's ran_at"
+                    ),
+                    gate_name=event.step,
+                )
+
+    # 5. Pre-trace fatal setup/preflight failure with no later recovery before
+    #    ran_at. A clean preflight/quality_gate after the fatal but before the
+    #    trace ran means the session recovered and the trace is not poisoned.
+    if ran_dt is not None:
+        pre_fatals = [
+            e
+            for e in sidecar.audit_events
+            if e.event_type == "preflight"
+            and e.status == "fail"
+            and (dt := _parse_event_ts(e.ts)) is not None
+            and dt < ran_dt
+        ]
+        if pre_fatals:
+            last_fatal_dt = max(_parse_event_ts(e.ts) for e in pre_fatals)
+            recovered = any(
+                e.event_type in ("preflight", "quality_gate")
+                and e.status == "ok"
+                and (dt := _parse_event_ts(e.ts)) is not None
+                and last_fatal_dt < dt <= ran_dt
+                for e in sidecar.audit_events
+            )
+            if not recovered:
+                return TraceQaVerdict(
+                    verdict="fail",
+                    scope="pre_trace_fatal",
+                    reason="fatal preflight failure before this trace with no recovery",
+                    gate_name="preflight",
+                )
+
+    # 7 (before 6): an unstructured failed gate taints the whole session because
+    #    we cannot prove it is unrelated. This is the conservative fallback and
+    #    takes precedence over an unrelated scoped failure when both exist.
+    if unscoped_fails:
+        event = unscoped_fails[0]
+        return TraceQaVerdict(
+            verdict="fail",
+            scope="session_fallback",
+            reason=(
+                f"unstructured quality_gate '{event.step}' failed with no trace/time "
+                "scoping; conservatively marking calibration-ineligible"
+            ),
+            gate_name=event.step,
+        )
+
+    # 6. Every failed gate references only other traces -> this trace is clean.
+    if scoped_other_fails:
+        return TraceQaVerdict(
+            verdict="pass",
+            scope="unrelated_session_failure",
+            reason="failed quality_gate(s) reference only other traces",
+        )
+
+    # No failed gates at all.
+    return TraceQaVerdict(
+        verdict="pass",
+        scope="unrelated_session_failure",
+        reason="no failed quality_gate events in session",
+    )
 
 
 def quarantine_sidecar(

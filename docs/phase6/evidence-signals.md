@@ -101,8 +101,88 @@ promotion (and optional `--go-live` flip).
 ```
 analyze() with evidence            # capture + shadow-apply, persist V9 rows
 scripts/fetch_outcomes_*.py        # attach outcomes
+scripts/backfill_evidence_signals.py --dry-run   # find pre-V9 traces missing rows
+scripts/backfill_evidence_signals.py --apply      # re-explode their own snapshots
 scripts/score_evidence_signals.py  # populate signal_performance
 scripts/report_calibration.py      # §6B surfaces signal performance to the agent
 scripts/fit_adjustment_policy.py   # CANDIDATE policy from measured accuracy
 scripts/promote_adjustment_policy.py --confirm-backtest --go-live   # gated live flip
+```
+
+## Eligibility, QA verdicts, and evidence backfill
+
+These are addenda to the loop above and govern *which* traces calibration and
+evidence learning may use, and how missing `evidence_signals` rows are repaired.
+
+### Two separate eligibilities (single source of truth: `omega/trace/eligibility.py`)
+
+- **Evidence is NOT required for probability calibration.** A trace with
+  `evidence_status="empty"` is still probability-calibration eligible when its
+  predictions, engine result, provided context, complete identity, and QA
+  verdict are otherwise valid. Empty evidence is recorded for audit but is never
+  a calibration exclusion reason.
+- **Evidence IS required for evidence-signal learning.** Empty evidence blocks
+  *only* the retrospective evidence-scoring path — never probability
+  calibration. A trace can therefore be probability-gradeable while
+  evidence-learning-ineligible.
+
+`omega/trace/eligibility.py` is the one place these predicates live;
+`service.py` (write side), `PersistableTrace.calibration_eligibility()`, and the
+`TraceStore.query_traces` filter all defer to it. The canonical persisted gate is
+`trace_quality.calibration_eligible` in the full_trace blob.
+
+Status vocabularies — probability calibration: `eligible`, `pending_outcome`,
+`ineligible_qa_failed`, `ineligible_missing_prediction`,
+`ineligible_missing_outcome`, `ineligible_invalid_trace`,
+`ineligible_trace_quality`. Evidence learning: `eligible_original`,
+`eligible_recovered_predecision`, `ineligible_empty_evidence`,
+`ineligible_unrecoverable`, `ineligible_qa_failed`, `ineligible_invalid_evidence`.
+
+### Trace-scoped QA verdicts (schema V12: `trace_qa_verdicts`)
+
+Quality-gate failures are scoped to a single trace
+(`session_sidecar.quality_gate_verdict_for_trace`) using the per-event
+`trace_ids` list, event timestamps vs. the trace's `ran_at`, and pre-trace setup
+failures. A failed gate tied to one trace **no longer condemns the whole
+session**. Verdict scopes: `trace_id`, `timestamp_window`, `pre_trace_fatal`,
+`session_fallback` (conservative catch-all for legacy/unstructured sidecars),
+`unrelated_session_failure`, `no_sidecar`.
+
+- A valid trace artifact is **always** persisted to the ledger; only a
+  malformed/invalid artifact is rejected.
+- A QA-failed trace is **ledger-preserved but calibration-ineligible**
+  (`trace_quality.calibration_eligible=False`, reason `qa_failed`), and the
+  verdict is recorded in `trace_qa_verdicts`. It stays ineligible unless later
+  explicitly revalidated; **no `--allow-audit-only-qa-failed` / deprecated
+  `--force-ingest-qa-failed` flag can confer calibration eligibility.**
+
+### Evidence backfill is RE-DERIVATION, not recovery
+
+`scripts/backfill_evidence_signals.py` re-explodes `evidence_signals` rows from a
+trace's own frozen **`input_snapshot.evidence`** — the only legitimate
+pre-decision source. Evidence is never lost; pre-V9 traces simply carry it in
+the blob with no table rows. Re-exploded rows are provenance `original` (same
+source, materialized late) — there is no separate recovery source.
+
+- Defaults to **dry-run**; `--apply` is required to write.
+- Outcomes, box scores, closing lines, engine predictions, EV/edge/Kelly, and
+  settlement results are **never** read — they cannot manufacture evidence.
+- A trace whose snapshot evidence is genuinely empty is marked **unrecoverable**;
+  no fake signals are invented.
+
+### Scorer coverage summary
+
+`scripts/score_evidence_signals.py` reports coverage by status instead of
+silently skipping. Empty-evidence traces are reported as an evidence-learning
+gap — never as a probability-calibration failure — and producing rows for the
+available evidence is success, not breakage:
+
+```
+Evidence scoring summary
+------------------------
+Graded traces:                 N
+Evidence-eligible (present):   N
+Skipped: empty evidence:       N
+Skipped: QA failed:            N
+Signal-performance rows:       N
 ```

@@ -20,7 +20,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from omega.trace.bet_record import BetRecord
 from omega.trace.market_snapshot import (
@@ -38,10 +38,14 @@ from omega.trace.schema import (
     SCHEMA_V9,
     SCHEMA_V10,
     SCHEMA_V11,
+    SCHEMA_V12,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
 )
+
+if TYPE_CHECKING:
+    from omega.trace.session_sidecar import TraceQaVerdict
 
 UTC = timezone.utc
 
@@ -603,6 +607,13 @@ class TraceStore:
             "Phase 7: early_market_snapshots table (segregated from closing_lines)",
         )
 
+        # V12: trace_qa_verdicts (trace-scoped QA audit; eligibility stays in JSON)
+        self.conn.executescript(SCHEMA_V12)
+        self._record_version(
+            12,
+            "Trace-scoped QA: trace_qa_verdicts audit table",
+        )
+
     def _record_version(self, version: int, description: str) -> None:
         """Idempotently stamp a schema version into schema_versions."""
         existing = self.conn.execute(
@@ -841,6 +852,60 @@ class TraceStore:
             (trace_id,),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    # ------------------------------------------------------------------
+    # Trace-scoped QA verdicts (audit aid; eligibility stays in JSON)
+    # ------------------------------------------------------------------
+
+    def write_qa_verdict(
+        self,
+        trace_id: str,
+        verdict: TraceQaVerdict,
+        *,
+        session_id: str | None = None,
+        ran_at: str | None = None,
+    ) -> None:
+        """Upsert the trace-scoped QA verdict audit row (idempotent on trace_id).
+
+        This is an audit/query aid only: the canonical calibration-eligibility
+        flag lives in trace_quality.calibration_eligible inside the full_trace
+        blob and is reconciled separately. The trace row must already exist (FK).
+        """
+        self.conn.execute(
+            """INSERT INTO trace_qa_verdicts
+                   (trace_id, session_id, verdict, scope, gate_name, reason,
+                    event_id, matched_trace_id, ran_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(trace_id) DO UPDATE SET
+                   session_id=excluded.session_id,
+                   verdict=excluded.verdict,
+                   scope=excluded.scope,
+                   gate_name=excluded.gate_name,
+                   reason=excluded.reason,
+                   event_id=excluded.event_id,
+                   matched_trace_id=excluded.matched_trace_id,
+                   ran_at=excluded.ran_at""",
+            (
+                trace_id,
+                session_id,
+                verdict.verdict,
+                verdict.scope,
+                verdict.gate_name,
+                verdict.reason,
+                verdict.event_id,
+                verdict.matched_trace_id,
+                ran_at,
+            ),
+        )
+        self.conn.commit()
+
+    def get_qa_verdict(self, trace_id: str) -> dict[str, Any] | None:
+        """Return the trace-scoped QA verdict audit row, or None."""
+        row = self.conn.execute(
+            "SELECT * FROM trace_qa_verdicts WHERE trace_id = ?",
+            (trace_id,),
+        ).fetchone()
+        return dict(row) if row else None
 
     # ------------------------------------------------------------------
     # Signal performance (Phase 6i — retrospective evidence scoring)
@@ -1493,17 +1558,16 @@ class TraceStore:
             clauses.append(f"NOT {any_outcome_sql}")
 
         if calibration_eligible_only:
-            # Default-deny: legacy rows without explicit provenance are excluded.
+            # Single source of truth: omega.trace.eligibility computes the
+            # canonical calibration_eligible flag (service.py writes it; ingest
+            # reconciles QA fails into it). That flag already subsumes
+            # result.status=success, context_source='provided', and
+            # identity_status='complete', so we gate on the flag plus the one
+            # independent structural prerequisite (a probability to fit).
+            # Default-deny: legacy rows without the flag set are excluded.
             clauses.append("t.predictions IS NOT NULL")
-            clauses.append("json_extract(t.full_trace, '$.result.status') = 'success'")
             clauses.append(
                 "json_extract(t.full_trace, '$.trace_quality.calibration_eligible') = 1"
-            )
-            clauses.append(
-                "json_extract(t.full_trace, '$.trace_quality.context_source') = 'provided'"
-            )
-            clauses.append(
-                "json_extract(t.full_trace, '$.trace_quality.identity_status') = 'complete'"
             )
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""

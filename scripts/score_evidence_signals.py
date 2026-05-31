@@ -34,6 +34,7 @@ import argparse
 import hashlib
 import logging
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -61,6 +62,49 @@ def _dataset_hash(scored: list[ScoredSignal]) -> str:
         for s in scored
     )
     return hashlib.sha256(str(payload).encode("utf-8")).hexdigest()
+
+
+@dataclass
+class ScoreSummary:
+    """Evidence-coverage breakdown for one scoring run.
+
+    Distinguishes *why* a graded trace did not contribute signals so empty
+    evidence is reported as an evidence-learning gap — NOT a probability-
+    calibration failure.
+    """
+
+    graded_traces: int = 0
+    evidence_present: int = 0
+    skipped_empty: int = 0
+    skipped_qa_failed: int = 0
+    rows_produced: int = 0
+
+
+def collect_scores(
+    store: TraceStore, graded: list[dict]
+) -> tuple[list[ScoredSignal], ScoreSummary]:
+    """Score every graded trace's evidence, recording skip reasons by status.
+
+    Skips QA-failed traces (evidence learning is blocked for them) and traces
+    with no evidence rows (an evidence-learning gap, not a calibration problem).
+    """
+    summary = ScoreSummary(graded_traces=len(graded))
+    all_scored: list[ScoredSignal] = []
+    for trace in graded:
+        trace_id = trace.get("trace_id")
+        if not trace_id:
+            continue
+        qa_row = store.get_qa_verdict(str(trace_id))
+        if qa_row and qa_row.get("verdict") == "fail":
+            summary.skipped_qa_failed += 1
+            continue
+        evidence_rows = store.get_evidence_signals(str(trace_id))
+        if not evidence_rows:
+            summary.skipped_empty += 1
+            continue
+        summary.evidence_present += 1
+        all_scored.extend(score_trace_signals(trace, evidence_rows))
+    return all_scored, summary
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -105,30 +149,33 @@ def main(argv: list[str] | None = None) -> int:
     )
     logger.info("Loaded %d graded traces.", len(graded))
 
-    all_scored: list[ScoredSignal] = []
-    traces_with_evidence = 0
-    for trace in graded:
-        trace_id = trace.get("trace_id")
-        if not trace_id:
-            continue
-        evidence_rows = store.get_evidence_signals(str(trace_id))
-        if not evidence_rows:
-            continue
-        traces_with_evidence += 1
-        all_scored.extend(score_trace_signals(trace, evidence_rows))
+    all_scored, summary = collect_scores(store, graded)
+    rows = accumulate_signal_performance(all_scored) if all_scored else []
+    summary.rows_produced = len(rows)
 
-    logger.info(
-        "%d graded traces carried evidence; %d directional signals were scoreable.",
-        traces_with_evidence,
-        len(all_scored),
-    )
+    # Always print the coverage summary. Empty evidence is an evidence-learning
+    # gap (these traces may still be probability-calibration eligible); it is
+    # NOT a probability-calibration failure.
+    logger.info("Evidence scoring summary")
+    logger.info("------------------------")
+    logger.info("Graded traces:                 %d", summary.graded_traces)
+    logger.info("Evidence-eligible (present):   %d", summary.evidence_present)
+    logger.info("Skipped: empty evidence:       %d", summary.skipped_empty)
+    logger.info("Skipped: QA failed:            %d", summary.skipped_qa_failed)
+    logger.info("Signal-performance rows:       %d", summary.rows_produced)
 
     if not all_scored:
-        logger.info("No scoreable evidence signals — nothing to write.")
+        # Not a failure: traces without evidence simply cannot feed signal
+        # scoring. Available evidence (if any) was still scored above.
+        logger.info(
+            "No scoreable evidence signals among %d graded traces "
+            "(%d skipped: empty evidence). Nothing to write.",
+            summary.graded_traces,
+            summary.skipped_empty,
+        )
         store.close()
         return 0
 
-    rows = accumulate_signal_performance(all_scored)
     dataset_hash = _dataset_hash(all_scored)
 
     if args.dry_run:

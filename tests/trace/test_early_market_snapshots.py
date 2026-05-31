@@ -17,6 +17,7 @@ import json
 import pytest
 
 from omega.trace.market_snapshot import EarlyMarketSnapshot
+from omega.trace.schema import CURRENT_VERSION
 from omega.trace.store import TraceStore
 
 
@@ -50,8 +51,8 @@ def _early(trace_id: str, side: str, captured_at: str) -> EarlyMarketSnapshot:
     )
 
 
-def test_schema_is_v11(store):
-    assert store.schema_version() == 11
+def test_schema_is_current(store):
+    assert store.schema_version() == CURRENT_VERSION
 
 
 def test_early_capture_does_not_write_closing_lines(store):
