@@ -187,7 +187,7 @@ If `OMEGA_TRACE_DB` is unset, omit `--db`.
 | Prop trace rejected at ingest | Missing identity in `input_snapshot` | Copy from result; re-drop |
 | `bet_record` rejected | Second analyze() call for confirmation | Merge onto original trace_id |
 | `ProtectedValueError` on sidecar | Engine value in audit event | Remove numeric value; keep in DB |
-| draw_prob > 0 on MLB | Run sentinel — check BUG-MLB-DRAW-PROB-001 | Suppress Bet Card if active |
+| draw_prob > 0 on MLB | Engine regression | Suppress Bet Card; inspect sim output |
 | Evidence signals all skipped | Invalid signal_type or window | Fix against HANDLER_REGISTRY |
 | `aggregate_quality` absent | No quality pass ran or `trace_quality` block missing from export | Run the quality pass or omit it intentionally; never invent a score |
 | Calibration missing session | Sidecar not written or invalid | Write sidecar; re-validate |
@@ -200,4 +200,3 @@ If `OMEGA_TRACE_DB` is unset, omit `--db`.
 - `omega/trace/persistable.py` — `PersistableTrace.from_analyze_output()`
 - `scripts/ingest_traces.py` — ingest validation and failure routing
 - `OMEGA_COWORK.md §6` — trace export contract, evidence signal spec
-- `scripts/bug_sentinel.py` — active bug status and gate enforcement

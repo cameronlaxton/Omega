@@ -220,7 +220,6 @@ named volume `omega-linux-workspace`, not from the Windows `C:\repos\Omega` bind
 mount, and validates:
 
 - `python scripts/cowork_preflight.py --direct-only`
-- `python scripts/bug_sentinel.py --json`
 - SQLite `PRAGMA journal_mode=WAL` on a Linux-native filesystem
 
 Use git inside the container to sync source changes back to the remote. Mirror

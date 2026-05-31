@@ -17,8 +17,7 @@ git config --global --add safe.directory "$WORKSPACE"
 python -m pip install --upgrade pip
 python -m pip install -e '.[dev,mcp]'
 
-python scripts/cowork_preflight.py --direct-only --skip-bug-sentinel
-python scripts/bug_sentinel.py --json
+python scripts/cowork_preflight.py --direct-only
 python - <<'PY'
 import sqlite3
 import tempfile

@@ -1,0 +1,18 @@
+{
+  "session_id": "sess-20260531-socc",
+  "opened_at": "2026-05-31T14:03:11Z",
+  "closed_at": null,
+  "model_version": "claude-opus-4-6-thinking",
+  "purpose": "Soccer trace repair, ingest, and outcome grading across CHAMPIONS_LEAGUE and WORLD_CUP",
+  "league": null,
+  "window": null,
+  "effective_db_path": null,
+  "runtime_db_status": null,
+  "pipeline_status": {},
+  "next_required_action": null,
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {},
+  "agent_notes": "",
+  "audit_events": []
+}

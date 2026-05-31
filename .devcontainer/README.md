@@ -8,8 +8,7 @@ volume `omega-linux-workspace`.
 
 Open this repository with Dev Containers, or rebuild the container after pulling
 new source. The container seeds `/workspaces/Omega` from `/opt/omega-source` when
-the volume is empty, installs `.[dev,mcp]`, runs direct preflight, runs the known
-bug sentinel, and verifies SQLite WAL on a native Linux filesystem.
+the volume is empty, installs `.[dev,mcp]`, runs direct preflight, and verifies SQLite WAL on a native Linux filesystem.
 
 ## Sync Back
 

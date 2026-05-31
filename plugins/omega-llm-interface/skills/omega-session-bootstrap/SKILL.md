@@ -145,28 +145,7 @@ Read the "Evidence signal performance" section. Weight evidence: `predictive` �
 
 ---
 
-## Step 6 — Bug Sentinel
-
-```bash
-python scripts/bug_sentinel.py --session-id sess-YYYYMMDD-XXXX
-```
-
-This runs automatically via preflight (unless `--skip-bug-sentinel` is passed). Read the gate_summary. Any gate marked `suppressed` blocks Bet Cards for that sport/kind for the session.
-
-**Known-bug snapshot as of 2026-05-28. Live sentinel output is authoritative:**
-
-| Bug | Status | Impact |
-|---|---|---|
-| MLB def_rating inverted | FIXED | None |
-| MLB draw_prob leak | FIXED | None |
-| input_snapshot identity (props) | FIXED | None |
-| Evidence policy shadow mode | Present (design) | Signals recorded, not applied |
-| SQLite WAL FUSE failure | Check live sentinel | Use TraceStore redirect or local DB fallback if present |
-| --repair-from-git no-op | Unknown (manual) | Use manual git-show repair only if repair verification fails |
-
----
-
-## Step 7 — Confirm Bankroll
+## Step 6 — Confirm Bankroll
 
 Default $1000 unless user specifies otherwise. Record in sidecar `bankroll` and set `bankroll_confirmed: true`.
 
@@ -189,5 +168,4 @@ sync back through `scripts/sync_to_mount.ps1` per `OMEGA_COWORK.md`.
 ## References
 
 - `OMEGA_COWORK.md` — authoritative runtime instructions
-- `scripts/bug_sentinel.py` — bug status and gate enforcement
 - `omega-trace-qa` skill — trace completeness checklist

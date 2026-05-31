@@ -55,11 +55,14 @@ from omega.integrations.espn_boxscore import (  # noqa: E402
     parse_box_score,
     supported_prop_type,
 )
+from omega.integrations.espn_soccer import SOCCER_LEAGUE_SLUGS, canonical_team as _soccer_canonical  # noqa: E402
+from omega.integrations.espn_soccer import fetch_scoreboard as _soccer_scoreboard  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("fetch_outcomes_props")
 
-_SUPPORTED_LEAGUES = ("NBA", "WNBA", "MLB")
+_SOCCER_LEAGUES = tuple(SOCCER_LEAGUE_SLUGS.keys())
+_SUPPORTED_LEAGUES = ("NBA", "WNBA", "MLB") + _SOCCER_LEAGUES
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +139,9 @@ def _canonical_pair(league: str, home: str, away: str) -> tuple[str, str] | None
     elif league == "MLB":
         c_home = espn_mlb.canonical_team(home)
         c_away = espn_mlb.canonical_team(away)
+    elif league in SOCCER_LEAGUE_SLUGS:
+        c_home = _soccer_canonical(home)
+        c_away = _soccer_canonical(away)
     else:
         return None
     if not (c_home and c_away):
@@ -155,6 +161,8 @@ def _scoreboard_for(league: str, d: date):
         return espn_wnba.fetch_scoreboard(d.isoformat())
     if league == "MLB":
         return espn_mlb.fetch_scoreboard(d.isoformat())
+    if league in SOCCER_LEAGUE_SLUGS:
+        return _soccer_scoreboard(d.isoformat(), league)
     return []
 
 
@@ -176,7 +184,7 @@ def main(
     the live ESPN fetchers are used.
     """
     parser = argparse.ArgumentParser(
-        description="Attach ESPN box-score player stats to NBA/WNBA/MLB prop traces"
+        description="Attach ESPN box-score player stats to NBA/WNBA/MLB/soccer prop traces"
     )
     parser.add_argument(
         "--since", default="yesterday", help="Start date (YYYY-MM-DD | today | yesterday)"

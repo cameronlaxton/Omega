@@ -7,7 +7,8 @@ Covers:
 - parse_box_score for NBA (pts/reb/ast)
 - parse_box_score for MLB batting (H, R, RBI, HR)
 - parse_box_score for MLB pitching (K, IP→outs conversion)
-- supported_prop_type recognizes the canonical set
+- parse_box_score for soccer (goals/assists/shots/shots_on_target)
+- supported_prop_type recognizes the canonical set for all leagues
 """
 
 from __future__ import annotations
@@ -295,6 +296,7 @@ class TestSupportedPropType:
 
     def test_unsupported_league(self):
         assert supported_prop_type("NFL", "pass_yds") is False
+        assert supported_prop_type("NHL", "goals") is False
 
 
 def _wnba_fixture() -> dict:
@@ -334,3 +336,105 @@ class TestParseBoxScoreWNBA:
         stats = parse_box_score(_wnba_fixture(), "WNBA")
         # 28 + 11 + 4 = 43
         assert stats["aja wilson"]["pra"] == 43.0
+
+
+def _soccer_fixture() -> dict:
+    """ESPN soccer summary payload using the real ``rosters`` format (named-stat objects)."""
+
+    def _stats(*pairs):
+        return [{"name": k, "value": v} for k, v in pairs]
+
+    return {
+        "rosters": [
+            {
+                "team": {"displayName": "Real Madrid"},
+                "roster": [
+                    {
+                        "athlete": {"displayName": "Kylian Mbappé"},
+                        "stats": _stats(
+                            ("totalGoals", 2.0),
+                            ("goalAssists", 1.0),
+                            ("totalShots", 5.0),
+                            ("shotsOnTarget", 3.0),
+                            ("yellowCards", 0.0),
+                            ("redCards", 0.0),
+                        ),
+                    },
+                    {
+                        "athlete": {"displayName": "Vinícius Júnior"},
+                        "stats": _stats(
+                            ("totalGoals", 0.0),
+                            ("goalAssists", 1.0),
+                            ("totalShots", 3.0),
+                            ("shotsOnTarget", 1.0),
+                            ("yellowCards", 1.0),
+                            ("redCards", 0.0),
+                        ),
+                    },
+                ],
+            },
+            {
+                "team": {"displayName": "Bayern Munich"},
+                "roster": [
+                    {
+                        "athlete": {"displayName": "Harry Kane"},
+                        "stats": _stats(
+                            ("totalGoals", 1.0),
+                            ("goalAssists", 0.0),
+                            ("totalShots", 4.0),
+                            ("shotsOnTarget", 2.0),
+                            ("yellowCards", 0.0),
+                            ("redCards", 0.0),
+                        ),
+                    },
+                ],
+            },
+        ]
+    }
+
+
+class TestParseBoxScoreSoccer:
+    def test_goals_assists_shots(self):
+        stats = parse_box_score(_soccer_fixture(), "CHAMPIONS_LEAGUE")
+        mbappe = stats["kylian mbappe"]
+        assert mbappe["goals"] == 2.0
+        assert mbappe["assists"] == 1.0
+        assert mbappe["shots"] == 5.0
+        assert mbappe["shots_on_target"] == 3.0
+        assert mbappe["yellow_cards"] == 0.0
+
+    def test_second_player_parsed(self):
+        stats = parse_box_score(_soccer_fixture(), "CHAMPIONS_LEAGUE")
+        vini = stats["vinicius junior"]
+        assert vini["goals"] == 0.0
+        assert vini["assists"] == 1.0
+        assert vini["yellow_cards"] == 1.0
+
+    def test_away_team_parsed(self):
+        stats = parse_box_score(_soccer_fixture(), "CHAMPIONS_LEAGUE")
+        kane = stats["harry kane"]
+        assert kane["goals"] == 1.0
+        assert kane["shots_on_target"] == 2.0
+
+    def test_world_cup_league_code_also_works(self):
+        stats = parse_box_score(_soccer_fixture(), "WORLD_CUP")
+        assert stats["kylian mbappe"]["goals"] == 2.0
+
+    def test_accented_name_normalized(self):
+        stats = parse_box_score(_soccer_fixture(), "CHAMPIONS_LEAGUE")
+        assert "kylian mbappe" in stats
+        assert "vinicius junior" in stats
+
+
+class TestSupportedPropTypeSoccer:
+    def test_soccer_prop_types_supported(self):
+        for league in ("CHAMPIONS_LEAGUE", "WORLD_CUP", "EPL", "MLS"):
+            assert supported_prop_type(league, "goals") is True
+            assert supported_prop_type(league, "assists") is True
+            assert supported_prop_type(league, "shots") is True
+            assert supported_prop_type(league, "shots_on_target") is True
+            assert supported_prop_type(league, "yellow_cards") is True
+
+    def test_soccer_unsupported_prop_type(self):
+        assert supported_prop_type("CHAMPIONS_LEAGUE", "pass_completions") is False
+        assert supported_prop_type("WORLD_CUP", "offsides") is False

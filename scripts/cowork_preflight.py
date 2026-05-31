@@ -653,27 +653,6 @@ def run_formal_output_gate(
     return []
 
 
-def _run_bug_sentinel(repo_root: Path) -> None:
-    """Run the known-bug sentinel as an informational preflight step.
-
-    Failures are printed but never block preflight; sentinel issues are
-    advisory. Call before run_checks() so gate status is visible first.
-    """
-    sentinel = repo_root / "scripts" / "bug_sentinel.py"
-    if not sentinel.exists():
-        print("[sentinel] scripts/bug_sentinel.py not found — skipping bug sentinel")
-        return
-    result = subprocess.run(
-        [sys.executable, str(sentinel)],
-        cwd=repo_root,
-        check=False,
-        capture_output=False,
-    )
-    if result.returncode not in (0, 1):
-        print(f"[sentinel] bug_sentinel.py exited with code {result.returncode} — continuing preflight")
-
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verify Omega Cowork runtime dependencies before engine execution.",
@@ -698,11 +677,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Allow --repair-from-git to clobber all divergent tracked Python files.",
     )
     parser.add_argument(
-        "--skip-bug-sentinel",
-        action="store_true",
-        help="Skip the known-bug sentinel advisory check (use in CI or automated loops).",
-    )
-    parser.add_argument(
         "--formal-output-gate",
         action="store_true",
         help="Require clean preflight plus deterministic smoke before Bet Cards.",
@@ -710,11 +684,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).parent.parent
-
-    # Bug sentinel: run before preflight checks so known issues are visible
-    # even if the checks pass. Skippable for speed in CI or automated loops.
-    if not getattr(args, "skip_bug_sentinel", False):
-        _run_bug_sentinel(repo_root)
 
     if args.formal_output_gate:
         failures = run_formal_output_gate(

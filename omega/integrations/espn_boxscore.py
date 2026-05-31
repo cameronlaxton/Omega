@@ -6,8 +6,10 @@ against the actual game line. We separate the HTTP fetch from the JSON parse
 so tests can hit `parse_box_score()` with a fixture instead of the network.
 
 ESPN summary endpoints:
-  NBA: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=<event_id>
-  MLB: https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=<event_id>
+  NBA:  https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=<event_id>
+  MLB:  https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=<event_id>
+  Soccer: https://site.api.espn.com/apis/site/v2/sports/soccer/<slug>/summary?event=<event_id>
+  (where <slug> comes from SOCCER_LEAGUE_SLUGS — e.g. "uefa.champions", "fifa.world")
 
 The boxscore JSON shape (paraphrased):
     {
@@ -50,6 +52,7 @@ from collections.abc import Callable
 from typing import Any
 
 from omega.integrations._guards import assert_not_replay_mode
+from omega.integrations.espn_soccer import SOCCER_LEAGUE_SLUGS
 
 logger = logging.getLogger("omega.integrations.espn_boxscore")
 
@@ -59,6 +62,7 @@ _SUMMARY_URLS = {
     "WNBA": "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/summary",
     "MLB": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary",
 }
+_SOCCER_SUMMARY_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer"
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +119,28 @@ MLB_PITCHING_KEYS: dict[str, tuple[str, ...]] = {
     "walks_allowed": ("BB", "walks"),
 }
 
+# ESPN soccer summary keys (omega prop_type vocabulary, used by supported_prop_type).
+SOCCER_STAT_KEYS: dict[str, tuple[str, ...]] = {
+    "goals": ("totalGoals",),
+    "assists": ("goalAssists",),
+    "shots": ("totalShots",),
+    "shots_on_target": ("shotsOnTarget",),
+    "yellow_cards": ("yellowCards",),
+    "red_cards": ("redCards",),
+}
+
+# ESPN soccer uses rosters[].roster[].stats (a list of {name, value} objects)
+# rather than boxscore.players[].statistics[].keys/athletes. This maps omega
+# prop_type → the ESPN roster stat `name` field.
+SOCCER_ROSTER_STAT_MAP: dict[str, str] = {
+    "goals": "totalGoals",
+    "assists": "goalAssists",
+    "shots": "totalShots",
+    "shots_on_target": "shotsOnTarget",
+    "yellow_cards": "yellowCards",
+    "red_cards": "redCards",
+}
+
 
 # ---------------------------------------------------------------------------
 # Player name normalization
@@ -153,11 +179,12 @@ def _stat_key_map_for(
     keys: list[str] | None = None,
 ) -> dict[str, tuple[str, ...]]:
     """Pick the appropriate stat-type map by league and category."""
-    if league.upper() == "NBA":
+    league_upper = league.upper()
+    if league_upper == "NBA":
         return NBA_STAT_KEYS
-    if league.upper() == "WNBA":
+    if league_upper == "WNBA":
         return WNBA_STAT_KEYS
-    if league.upper() == "MLB":
+    if league_upper == "MLB":
         cat = (category_name or "").lower()
         key_set = {str(key) for key in (keys or [])}
         pitching_keys = {
@@ -172,7 +199,23 @@ def _stat_key_map_for(
         if "pitch" in cat or key_set.intersection(pitching_keys):
             return MLB_PITCHING_KEYS
         return MLB_BATTING_KEYS
+    if league_upper in SOCCER_LEAGUE_SLUGS:
+        return SOCCER_STAT_KEYS
     return {}
+
+
+def _summary_url(league: str, event_id: str) -> str:
+    """Build the ESPN summary URL for the given league and event."""
+    league_upper = league.upper()
+    if league_upper in _SUMMARY_URLS:
+        return f"{_SUMMARY_URLS[league_upper]}?{urllib.parse.urlencode({'event': event_id})}"
+    slug = SOCCER_LEAGUE_SLUGS.get(league_upper)
+    if slug:
+        return (
+            f"{_SOCCER_SUMMARY_BASE}/{slug}/summary"
+            f"?{urllib.parse.urlencode({'event': event_id})}"
+        )
+    raise ValueError(f"No ESPN summary endpoint configured for league={league!r}")
 
 
 def _parse_ip_to_outs(value: str) -> float | None:
@@ -215,6 +258,39 @@ def _made_from_made_attempted(value: Any) -> float | None:
         return None
 
 
+def _parse_soccer_roster(payload: dict[str, Any]) -> dict[str, dict[str, float]]:
+    """Parse an ESPN soccer summary payload's ``rosters`` section.
+
+    Soccer summary uses ``rosters[].roster[].stats`` (a list of ``{name, value}``
+    objects) instead of the ``boxscore.players`` parallel-array format used by
+    basketball and baseball. Returns ``{player_norm → {prop_type → value}}``.
+    """
+    out: dict[str, dict[str, float]] = {}
+    for team_blob in payload.get("rosters") or []:
+        for entry in team_blob.get("roster") or []:
+            athlete = entry.get("athlete") or {}
+            display = athlete.get("displayName") or athlete.get("shortName") or ""
+            player_norm = normalize_player_name(display)
+            if not player_norm:
+                continue
+            raw_stats: dict[str, float] = {}
+            for stat in entry.get("stats") or []:
+                name = stat.get("name")
+                value = stat.get("value")
+                if name and value is not None:
+                    try:
+                        raw_stats[name] = float(value)
+                    except (TypeError, ValueError):
+                        pass
+            if not raw_stats:
+                continue
+            player_stats = out.setdefault(player_norm, {})
+            for prop_type, espn_stat_name in SOCCER_ROSTER_STAT_MAP.items():
+                if espn_stat_name in raw_stats:
+                    player_stats.setdefault(prop_type, raw_stats[espn_stat_name])
+    return out
+
+
 def parse_box_score(
     payload: dict[str, Any],
     league: str,
@@ -223,9 +299,12 @@ def parse_box_score(
 
     Player names are normalized via :func:`normalize_player_name`. Stat types
     use the omega prop_type vocabulary (NBA_STAT_KEYS / MLB_BATTING_KEYS /
-    MLB_PITCHING_KEYS). Unknown categories are skipped, unmapped stat types
-    are skipped (logged at DEBUG).
+    MLB_PITCHING_KEYS / SOCCER_ROSTER_STAT_MAP). For soccer leagues the
+    ``rosters`` section is used; all other sports use ``boxscore.players``.
     """
+    if league.upper() in SOCCER_LEAGUE_SLUGS:
+        return _parse_soccer_roster(payload)
+
     out: dict[str, dict[str, float]] = {}
     boxscore = payload.get("boxscore") or {}
     for team_blob in boxscore.get("players") or []:
@@ -288,10 +367,7 @@ def fetch_box_score(
     """Fetch the raw ESPN summary JSON for an event. Use :func:`parse_box_score`
     on the result to extract player stats."""
     assert_not_replay_mode("ESPN box score fetch")
-    url_base = _SUMMARY_URLS.get(league.upper())
-    if not url_base:
-        raise ValueError(f"No ESPN summary endpoint configured for league={league!r}")
-    url = f"{url_base}?{urllib.parse.urlencode({'event': event_id})}"
+    url = _summary_url(league, event_id)
     logger.debug("fetching ESPN box score: %s", url)
     with url_opener(url, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
         return json.loads(resp.read().decode("utf-8"))
@@ -299,12 +375,14 @@ def fetch_box_score(
 
 def supported_prop_type(league: str, prop_type: str, category_hint: str = "") -> bool:
     """Return True if this league/prop_type pair is graded by the box-score parser."""
-    if league.upper() == "NBA":
+    league_upper = league.upper()
+    if league_upper == "NBA":
         return prop_type.lower() in NBA_STAT_KEYS
-    if league.upper() == "WNBA":
+    if league_upper == "WNBA":
         return prop_type.lower() in WNBA_STAT_KEYS
-    if league.upper() == "MLB":
+    if league_upper == "MLB":
         pt = prop_type.lower()
-        # Pitching stats and batting stats both live under MLB
         return pt in MLB_BATTING_KEYS or pt in MLB_PITCHING_KEYS
+    if league_upper in SOCCER_LEAGUE_SLUGS:
+        return prop_type.lower() in SOCCER_STAT_KEYS
     return False

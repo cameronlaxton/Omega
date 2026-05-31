@@ -48,6 +48,7 @@ SOCCER_LEAGUE_SLUGS: dict[str, str] = {
     "LIGUE_1": "fra.1",
     "CHAMPIONS_LEAGUE": "uefa.champions",
     "LIGA_MX": "mex.1",
+    "WORLD_CUP": "fifa.world",
 }
 
 # Curated alias -> canonical club name. Not exhaustive: unknown clubs fall back
@@ -106,6 +107,24 @@ SOCCER_TEAM_ALIASES: dict[str, str] = {
     "america": "Club America",
     "club américa": "Club America",
     "chivas": "Guadalajara",
+    # International / World Cup (national teams)
+    "mexico": "Mexico",
+    "el tri": "Mexico",
+    "australia": "Australia",
+    "socceroos": "Australia",
+    "ecuador": "Ecuador",
+    "saudi arabia": "Saudi Arabia",
+    "saudi": "Saudi Arabia",
+    "argentina": "Argentina",
+    "brazil": "Brazil",
+    "brasil": "Brazil",
+    "france": "France",
+    "germany": "Germany",
+    "england": "England",
+    "spain": "Spain",
+    "usa": "United States",
+    "united states": "United States",
+    "usmnt": "United States",
 }
 
 
