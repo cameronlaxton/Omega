@@ -42,6 +42,7 @@ def _request(home, away, h_off, h_def, a_off, a_def, pace, seed=2026):
         seed=seed,
         home_context={"off_rating": h_off, "def_rating": h_def, "pace": pace},
         away_context={"off_rating": a_off, "def_rating": a_def, "pace": pace},
+        game_context={"is_playoff": False, "rest_days": 2},
     )
 
 
