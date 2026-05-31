@@ -119,7 +119,7 @@ def fit_and_register(
     if method == "isotonic":
         profile = fitter.fit_isotonic(train_p, train_o, league=league, market=market)
     elif method == "shrinkage":
-        profile = fitter.fit_shrinkage(train_p, train_o, league=league, market=market)
+        profile = fitter.fit_shrinkage(train_p, train_o, league=league, market=market, eligible_sample_size=len(train_p))
     else:
         raise ValueError(f"Unknown method: {method!r}")
 

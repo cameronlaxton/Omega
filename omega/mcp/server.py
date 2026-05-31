@@ -526,7 +526,7 @@ def omega_calibration_fit_preview(
         candidate = (
             fitter.fit_isotonic(predictions, outcomes, league=fit_league)
             if req.method == "isotonic"
-            else fitter.fit_shrinkage(predictions, outcomes, league=fit_league)
+            else fitter.fit_shrinkage(predictions, outcomes, league=fit_league, eligible_sample_size=len(predictions))
         )
         metrics = fitter.evaluate(candidate, predictions, outcomes)
         candidate.metrics = metrics

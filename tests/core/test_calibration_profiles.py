@@ -375,7 +375,7 @@ class TestCalibrationFitter:
         traces = _make_graded_traces(n=100, bias=0.1)
         fitter = CalibrationFitter()
         preds, outs = fitter.extract_pairs(traces)
-        profile = fitter.fit_shrinkage(preds, outs, "NBA")
+        profile = fitter.fit_shrinkage(preds, outs, "NBA", eligible_sample_size=len(preds))
 
         assert profile.method == "shrinkage"
         assert 0.3 <= profile.params["shrink_factor"] <= 1.0

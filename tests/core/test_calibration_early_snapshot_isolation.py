@@ -61,8 +61,8 @@ def test_fit_does_not_drift_with_early_traces():
     p_clean, o_clean = CalibrationFitter.extract_pairs(clean)
     p_mixed, o_mixed = CalibrationFitter.extract_pairs(mixed)
 
-    prof_clean = fitter.fit_shrinkage(p_clean, o_clean, "WNBA")
-    prof_mixed = fitter.fit_shrinkage(p_mixed, o_mixed, "WNBA")
+    prof_clean = fitter.fit_shrinkage(p_clean, o_clean, "WNBA", eligible_sample_size=len(p_clean))
+    prof_mixed = fitter.fit_shrinkage(p_mixed, o_mixed, "WNBA", eligible_sample_size=len(p_mixed))
 
     # Same production profile despite 60 phantom early traces in the input.
     assert prof_mixed.params == prof_clean.params

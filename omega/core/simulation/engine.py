@@ -120,9 +120,23 @@ def select_distribution(
     return "normal"
 
 
-def _poisson_sample(lam: float, size: int) -> list[float]:
+def _poisson_sample(lam: float, size: int, rng: np.random.Generator | random.Random | None = None) -> list[float]:
     """Generate Poisson samples."""
     lam = max(0.01, lam)
+    if rng is not None:
+        if isinstance(rng, np.random.Generator):
+            return rng.poisson(lam=lam, size=size).tolist()
+        else:
+            samples = []
+            for _ in range(size):
+                L = pow(2.718281828459045, -lam)
+                k, p = 0, 1.0
+                while p > L:
+                    k += 1
+                    p *= rng.random()
+                samples.append(k - 1)
+            return samples
+
     if np is not None:
         return np.random.poisson(lam=lam, size=size).tolist()
     samples = []
@@ -136,9 +150,15 @@ def _poisson_sample(lam: float, size: int) -> list[float]:
     return samples
 
 
-def _normal_sample(mu: float, sigma: float, size: int) -> list[float]:
+def _normal_sample(mu: float, sigma: float, size: int, rng: np.random.Generator | random.Random | None = None) -> list[float]:
     """Generate Normal samples."""
     sigma = max(0.1, sigma)
+    if rng is not None:
+        if isinstance(rng, np.random.Generator):
+            return rng.normal(mu, sigma, size).tolist()
+        else:
+            return [rng.gauss(mu, sigma) for _ in range(size)]
+
     if np is not None:
         return np.random.normal(mu, sigma, size).tolist()
     return [random.gauss(mu, sigma) for _ in range(size)]
@@ -156,9 +176,15 @@ def _expected_against_allowed_rate(
     return team_off * (opponent_allowed / league_avg_allowed) * pace_factor
 
 
-def _bernoulli_sample(p: float, size: int) -> list[int]:
+def _bernoulli_sample(p: float, size: int, rng: np.random.Generator | random.Random | None = None) -> list[int]:
     """Generate Bernoulli samples (0 or 1)."""
     p = max(0.001, min(0.999, p))
+    if rng is not None:
+        if isinstance(rng, np.random.Generator):
+            return rng.binomial(1, p, size).tolist()
+        else:
+            return [1 if rng.random() < p else 0 for _ in range(size)]
+
     if np is not None:
         return np.random.binomial(1, p, size).tolist()
     return [1 if random.random() < p else 0 for _ in range(size)]
@@ -461,12 +487,8 @@ def run_game_simulation(
 ) -> dict:
     """
     Simulates a game between two teams, returning win probabilities and score distributions.
+    Vectorized using NumPy when available, otherwise falls back to isolated Random.
     """
-    if seed is not None:
-        random.seed(seed)
-        if np is not None:
-            np.random.seed(seed)
-
     teams = list(projection.get("off_rating", {}).keys())
     if len(teams) != 2:
         raise ValueError("Projection requires exactly two teams.")
@@ -485,22 +507,44 @@ def run_game_simulation(
         "b_scores": [],
     }
 
-    for _ in range(n_iter):
+    if np is not None:
+        rng = np.random.default_rng(seed)
         if dist == "poisson":
-            score_a = _poisson_sample(off_a * variance_scalar, 1)[0]
-            score_b = _poisson_sample(off_b * variance_scalar, 1)[0]
+            a_scores = rng.poisson(lam=max(0.01, off_a * variance_scalar), size=n_iter)
+            b_scores = rng.poisson(lam=max(0.01, off_b * variance_scalar), size=n_iter)
         else:
-            sigma = max(1.5, 5 * variance_scalar)
-            score_a = _normal_sample(off_a, sigma, 1)[0]
-            score_b = _normal_sample(off_b, sigma, 1)[0]
+            sigma = max(1.5, 5.0 * variance_scalar)
+            a_scores = rng.normal(off_a, sigma, n_iter)
+            b_scores = rng.normal(off_b, sigma, n_iter)
+        
+        # Clip to non-negative scores
+        a_scores = np.maximum(0.0, a_scores)
+        b_scores = np.maximum(0.0, b_scores)
+        
+        results["a_scores"] = a_scores.tolist()
+        results["b_scores"] = b_scores.tolist()
+        results["team_a_wins"] = int(np.sum(a_scores > b_scores))
+        results["team_b_wins"] = int(np.sum(b_scores > a_scores))
+    else:
+        rng = random.Random(seed)
+        for _ in range(n_iter):
+            if dist == "poisson":
+                score_a = _poisson_sample(off_a * variance_scalar, 1, rng=rng)[0]
+                score_b = _poisson_sample(off_b * variance_scalar, 1, rng=rng)[0]
+            else:
+                sigma = max(1.5, 5.0 * variance_scalar)
+                score_a = _normal_sample(off_a, sigma, 1, rng=rng)[0]
+                score_b = _normal_sample(off_b, sigma, 1, rng=rng)[0]
 
-        results["a_scores"].append(score_a)
-        results["b_scores"].append(score_b)
+            score_a = max(0.0, score_a)
+            score_b = max(0.0, score_b)
+            results["a_scores"].append(score_a)
+            results["b_scores"].append(score_b)
 
-        if score_a > score_b:
-            results["team_a_wins"] += 1
-        elif score_b > score_a:
-            results["team_b_wins"] += 1
+            if score_a > score_b:
+                results["team_a_wins"] += 1
+            elif score_b > score_a:
+                results["team_b_wins"] += 1
 
     results["true_prob_a"] = results["team_a_wins"] / n_iter
     results["true_prob_b"] = results["team_b_wins"] / n_iter
@@ -557,10 +601,10 @@ def run_player_simulation(
     seed: int | None = None,
 ) -> dict:
     """Simulates a single player stat vs a market line."""
-    if seed is not None:
-        random.seed(seed)
-        if np is not None:
-            np.random.seed(seed)
+    if np is not None:
+        rng = np.random.default_rng(seed)
+    else:
+        rng = random.Random(seed)
 
     league = player_proj.get("league", "NBA").upper()
     stat_key = player_proj.get("stat_key", "pts")
@@ -568,14 +612,36 @@ def run_player_simulation(
     variance = player_proj.get("variance", 1.0)
     market_line = player_proj.get("market_line", mean)
     distribution_override = player_proj.get("distribution")
+    dud_prob = player_proj.get("dud_prob", 0.0)
 
     dist = select_distribution(stat_key, league, mean=mean, override=distribution_override)
     sigma = max(0.1, variance**0.5)
 
-    if dist == "poisson":
-        samples = _poisson_sample(mean, n_iter)
+    if np is not None and isinstance(rng, np.random.Generator):
+        if dud_prob > 0.0:
+            dud_mask = rng.binomial(1, dud_prob, size=n_iter)
+            if dist == "poisson":
+                base_stats = rng.poisson(max(0.01, mean), size=n_iter)
+            else:
+                base_stats = rng.normal(mean, sigma, size=n_iter)
+            samples = np.where(dud_mask == 1, 0.0, base_stats).tolist()
+        else:
+            if dist == "poisson":
+                samples = rng.poisson(max(0.01, mean), size=n_iter).tolist()
+            else:
+                samples = rng.normal(mean, sigma, size=n_iter).tolist()
     else:
-        samples = _normal_sample(mean, sigma, n_iter)
+        if dist == "poisson":
+            samples = _poisson_sample(mean, n_iter, rng=rng)
+        else:
+            samples = _normal_sample(mean, sigma, n_iter, rng=rng)
+        
+        if dud_prob > 0.0:
+            def _rand():
+                if rng is not None:
+                    return rng.random()
+                return random.random()
+            samples = [0.0 if (_rand() < dud_prob) else x for x in samples]
 
     over_hits = sum(1 for x in samples if x > market_line)
     under_hits = sum(1 for x in samples if x < market_line)
@@ -659,7 +725,7 @@ def _archetype_league_defaults(league: str) -> dict:
 
 
 def _sim_basketball(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None
 ) -> tuple:
     """Basketball: ORtg/DRtg/pace possession model (Normal distribution)."""
     home_off = home_ctx.get("off_rating", 110.0)
@@ -690,15 +756,15 @@ def _sim_basketball(
     home_expected += hca / 2.0
     away_expected -= hca / 2.0
 
-    home_scores = _normal_sample(home_expected, std, n_iter)
-    away_scores = _normal_sample(away_expected, std, n_iter)
+    home_scores = _normal_sample(home_expected, std, n_iter, rng=rng)
+    away_scores = _normal_sample(away_expected, std, n_iter, rng=rng)
     home_scores = [max(0, s) for s in home_scores]
     away_scores = [max(0, s) for s in away_scores]
     return home_scores, away_scores
 
 
 def _sim_american_football(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None
 ) -> tuple:
     """American Football: (PPG + opp PAPG) / 2 with Normal distribution."""
     home_off = home_ctx.get("off_rating", config.get("avg_total", 45.0) / 2)
@@ -715,14 +781,14 @@ def _sim_american_football(
     away_expected -= hca / 2.0
 
     std = config.get("std", 10.0)
-    home_scores = _normal_sample(home_expected, std, n_iter)
-    away_scores = _normal_sample(away_expected, std, n_iter)
+    home_scores = _normal_sample(home_expected, std, n_iter, rng=rng)
+    away_scores = _normal_sample(away_expected, std, n_iter, rng=rng)
     home_scores = [max(0, s) for s in home_scores]
     away_scores = [max(0, s) for s in away_scores]
     return home_scores, away_scores
 
 
-def _sim_baseball(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
+def _sim_baseball(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
     """Baseball: Poisson run environment model.
 
     off_rating = runs scored per game, def_rating = runs allowed per game.
@@ -762,12 +828,12 @@ def _sim_baseball(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, conf
     home_lambda = max(0.5, home_lambda)
     away_lambda = max(0.5, away_lambda)
 
-    home_scores = _poisson_sample(home_lambda, n_iter)
-    away_scores = _poisson_sample(away_lambda, n_iter)
+    home_scores = _poisson_sample(home_lambda, n_iter, rng=rng)
+    away_scores = _poisson_sample(away_lambda, n_iter, rng=rng)
     return home_scores, away_scores
 
 
-def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
+def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
     """Hockey: Poisson goal model with goalie/shot-rate adjustments.
 
     off_rating = goals per game, def_rating = goals allowed per game.
@@ -813,8 +879,8 @@ def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
     home_lambda = max(0.3, home_lambda)
     away_lambda = max(0.3, away_lambda)
 
-    home_scores = _poisson_sample(home_lambda, n_iter)
-    away_scores = _poisson_sample(away_lambda, n_iter)
+    home_scores = _poisson_sample(home_lambda, n_iter, rng=rng)
+    away_scores = _poisson_sample(away_lambda, n_iter, rng=rng)
     return home_scores, away_scores
 
 
@@ -834,6 +900,7 @@ def _dixon_coles_scores(
     rho: float,
     n_iter: int,
     max_goals: int = _SOCCER_DC_MAX_GOALS,
+    rng: np.random.Generator | random.Random | None = None,
 ) -> tuple[list[int], list[int]]:
     """Sample correlated soccer scorelines via a Dixon-Coles adjusted joint pmf.
 
@@ -866,12 +933,15 @@ def _dixon_coles_scores(
     if total <= 0.0:
         # Degenerate correction (extreme rho) — fall back to independent draws.
         return (
-            [int(s) for s in _poisson_sample(home_lambda, n_iter)],
-            [int(s) for s in _poisson_sample(away_lambda, n_iter)],
+            [int(s) for s in _poisson_sample(home_lambda, n_iter, rng=rng)],
+            [int(s) for s in _poisson_sample(away_lambda, n_iter, rng=rng)],
         )
 
     cdf = np.cumsum((joint / total).ravel())
-    u = np.random.random(n_iter)
+    if rng is not None and isinstance(rng, np.random.Generator):
+        u = rng.random(n_iter)
+    else:
+        u = np.random.random(n_iter)
     idx = np.clip(np.searchsorted(cdf, u, side="right"), 0, cdf.size - 1)
     width = max_goals + 1
     home_scores = (idx // width).astype(int).tolist()
@@ -879,7 +949,14 @@ def _dixon_coles_scores(
     return home_scores, away_scores
 
 
-def _sim_soccer(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
+def _sim_soccer(
+    home_ctx: dict,
+    away_ctx: dict,
+    league: str,
+    n_iter: int,
+    config: dict,
+    rng: np.random.Generator | random.Random | None = None,
+) -> tuple:
     """Soccer: Poisson goal model with xG integration.
 
     off_rating = goals per game (or xG), def_rating = goals conceded per game (or xGA).
@@ -914,14 +991,14 @@ def _sim_soccer(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
     use_dc = config.get("dixon_coles", _SOCCER_DIXON_COLES_DEFAULT)
     if use_dc and np is not None:
         rho = config.get("rho", _SOCCER_DC_RHO_DEFAULT)
-        return _dixon_coles_scores(home_lambda, away_lambda, rho, n_iter)
+        return _dixon_coles_scores(home_lambda, away_lambda, rho, n_iter, rng=rng)
 
-    home_scores = _poisson_sample(home_lambda, n_iter)
-    away_scores = _poisson_sample(away_lambda, n_iter)
+    home_scores = _poisson_sample(home_lambda, n_iter, rng=rng)
+    away_scores = _poisson_sample(away_lambda, n_iter, rng=rng)
     return home_scores, away_scores
 
 
-def _sim_tennis(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
+def _sim_tennis(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
     """Tennis: Point-level serve/return probability → simulate sets.
 
     home = Player A (listed first / higher seed), away = Player B.
@@ -953,7 +1030,7 @@ def _sim_tennis(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
         total_games = 0
         while a_sets < sets_to_win and b_sets < sets_to_win:
             # Simulate a set
-            a_games, b_games = _simulate_tennis_set(p_a_serve, p_b_serve)
+            a_games, b_games = _simulate_tennis_set(p_a_serve, p_b_serve, rng=rng)
             total_games += a_games + b_games
             if a_games > b_games:
                 a_sets += 1
@@ -974,11 +1051,16 @@ def _sim_tennis(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
     )
 
 
-def _simulate_tennis_set(p_a_serve: float, p_b_serve: float) -> tuple:
+def _simulate_tennis_set(p_a_serve: float, p_b_serve: float, rng: np.random.Generator | random.Random | None = None) -> tuple:
     """Simulate a single tennis set. Returns (a_games, b_games)."""
     a_games, b_games = 0, 0
     # Alternate serve: A serves first
     server_is_a = True
+
+    def _rand():
+        if rng is not None:
+            return rng.random()
+        return random.random()
 
     while True:
         # Check for set win (6-x with 2+ lead, or tiebreak at 6-6)
@@ -988,7 +1070,7 @@ def _simulate_tennis_set(p_a_serve: float, p_b_serve: float) -> tuple:
             return a_games, b_games
         if a_games == 6 and b_games == 6:
             # Tiebreak
-            if random.random() < (p_a_serve + (1 - p_b_serve)) / 2.0:
+            if _rand() < (p_a_serve + (1 - p_b_serve)) / 2.0:
                 return 7, 6
             else:
                 return 6, 7
@@ -998,7 +1080,7 @@ def _simulate_tennis_set(p_a_serve: float, p_b_serve: float) -> tuple:
         p_serve = p_a_serve if server_is_a else p_b_serve
         game_win_prob = _tennis_game_win_prob(p_serve)
 
-        if random.random() < game_win_prob:
+        if _rand() < game_win_prob:
             # Server wins the game
             if server_is_a:
                 a_games += 1
@@ -1036,7 +1118,7 @@ def _tennis_game_win_prob(p: float) -> float:
     return p_win_0 + p_win_1 + p_win_2 + p_reach_deuce * p_deuce_win
 
 
-def _sim_golf(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
+def _sim_golf(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
     """Golf: Strokes-gained field probability model.
 
     For head-to-head matchup betting, we simulate 4-round tournament scores
@@ -1060,11 +1142,18 @@ def _sim_golf(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: 
 
     a_totals = []
     b_totals = []
-    for _ in range(n_iter):
-        a_score = sum(_normal_sample(a_per_round, round_std, 1)[0] for _ in range(n_rounds))
-        b_score = sum(_normal_sample(b_per_round, round_std, 1)[0] for _ in range(n_rounds))
-        a_totals.append(a_score)
-        b_totals.append(b_score)
+
+    if np is not None and isinstance(rng, np.random.Generator):
+        a_draws = rng.normal(a_per_round, round_std, size=(n_iter, n_rounds))
+        b_draws = rng.normal(b_per_round, round_std, size=(n_iter, n_rounds))
+        a_totals = np.sum(a_draws, axis=1).tolist()
+        b_totals = np.sum(b_draws, axis=1).tolist()
+    else:
+        for _ in range(n_iter):
+            a_score = sum(_normal_sample(a_per_round, round_std, 1, rng=rng)[0] for _ in range(n_rounds))
+            b_score = sum(_normal_sample(b_per_round, round_std, 1, rng=rng)[0] for _ in range(n_rounds))
+            a_totals.append(a_score)
+            b_totals.append(b_score)
 
     # In golf, lower is better. Invert for the standard result builder:
     # "home_win" = golfer A wins = golfer A has lower total
@@ -1074,7 +1163,7 @@ def _sim_golf(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: 
     return ([-s for s in a_totals], [-s for s in b_totals])
 
 
-def _sim_fighting(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
+def _sim_fighting(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
     """Fighting: Win probability with method-of-victory modeling.
 
     off_rating = win percentage (0-1), finish_rate = rate of finishes.
@@ -1107,12 +1196,17 @@ def _sim_fighting(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, conf
     b_scores = []
     method_counts = {"ko_tko": 0, "submission": 0, "decision": 0, "draw": 0}
 
+    def _rand():
+        if rng is not None:
+            return rng.random()
+        return random.random()
+
     for _ in range(n_iter):
-        if random.random() < p_a:
+        if _rand() < p_a:
             a_scores.append(1.0)
             b_scores.append(0.0)
             # Method of victory for fighter A
-            r = random.random()
+            r = _rand()
             if r < a_ko:
                 method_counts["ko_tko"] += 1
             elif r < a_ko + a_sub:
@@ -1122,7 +1216,7 @@ def _sim_fighting(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, conf
         else:
             a_scores.append(0.0)
             b_scores.append(1.0)
-            r = random.random()
+            r = _rand()
             if r < b_ko:
                 method_counts["ko_tko"] += 1
             elif r < b_ko + b_sub:
@@ -1135,7 +1229,7 @@ def _sim_fighting(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, conf
     draw_rate = 0.025 if is_boxing else 0.005
     # Retroactively convert some decisions to draws
     for i in range(len(a_scores)):
-        if random.random() < draw_rate:
+        if _rand() < draw_rate:
             a_scores[i] = 0.5
             b_scores[i] = 0.5
             method_counts["draw"] += 1
@@ -1144,7 +1238,7 @@ def _sim_fighting(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, conf
     return a_scores, b_scores
 
 
-def _sim_esports(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict) -> tuple:
+def _sim_esports(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
     """Esports: Map win probability with best-of-N simulation.
 
     map_win_rate: team's overall map win rate (0-1).
@@ -1172,10 +1266,15 @@ def _sim_esports(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, confi
     a_total_maps = []
     b_total_maps = []
 
+    def _rand():
+        if rng is not None:
+            return rng.random()
+        return random.random()
+
     for _ in range(n_iter):
         a_maps, b_maps = 0, 0
         while a_maps < maps_to_win and b_maps < maps_to_win:
-            if random.random() < p_a_map:
+            if _rand() < p_a_map:
                 a_maps += 1
             else:
                 b_maps += 1
@@ -1214,10 +1313,10 @@ class FastScoreSimulationBackend:
     component_version = "fast_score_v1"
 
     def run(self, request: GameSimulationInput) -> dict[str, Any]:
-        if request.seed is not None:
-            random.seed(request.seed)
-            if np is not None:
-                np.random.seed(request.seed)
+        if np is not None:
+            rng = np.random.default_rng(request.seed)
+        else:
+            rng = random.Random(request.seed)
 
         league = request.league.upper()
         archetype = get_archetype(league)
@@ -1300,6 +1399,7 @@ class FastScoreSimulationBackend:
             league,
             request.n_iterations,
             config,
+            rng=rng,
         )
 
         return _build_team_score_result(
@@ -1342,8 +1442,6 @@ def run_markov_game_simulation(
     """
     if request.seed is not None:
         random.seed(request.seed)
-        if np is not None:
-            np.random.seed(request.seed)
 
     league = request.league.upper()
     archetype = get_archetype(league)
@@ -1868,6 +1966,8 @@ class PropDistributionRouterBackend:
             "variance": variance,
             "market_line": request.line,
         }
+        if request.prior_payload and "dud_prob" in request.prior_payload:
+            player_proj["dud_prob"] = request.prior_payload["dud_prob"]
         return run_player_simulation(
             player_proj, n_iter=request.n_iter, seed=request.seed
         )

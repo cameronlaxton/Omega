@@ -9,30 +9,40 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
 logger = logging.getLogger("omega.core.calibration.probability")
 
 
 def shrinkage_calibration(raw_prob: float, shrink_factor: float = 0.7) -> float:
     """
-    Calibrates probability by shrinking toward 0.5.
+    Calibrates probability by shrinking toward 0.5 (conceptually a calibration_slope).
 
-    Formula: p_calibrated = 0.5 + shrink_factor * (p_raw - 0.5)
+    Formula: p_calibrated = 0.5 + calibration_slope * (p_raw - 0.5)
 
-    This reduces extreme probabilities while preserving relative ordering.
+    This reduces extreme probabilities while preserving relative ordering, and also
+    supports sharpening (factor > 1.0) under sample size gates.
 
     Args:
         raw_prob: Raw model probability (0.0 to 1.0)
-        shrink_factor: Shrinkage factor (0.0 to 1.0)
+        shrink_factor: Calibration slope (conceptually calibration_slope, 0.3 to 2.0)
                       - 1.0 = no shrinkage (returns raw_prob)
-                      - 0.0 = maximum shrinkage (always returns 0.5)
-                      - 0.7 = moderate shrinkage (default)
+                      - < 1.0 = softening (reduces extreme probabilities)
+                      - > 1.0 = sharpening (amplifies probabilities)
 
     Returns:
-        Calibrated probability (0.0 to 1.0)
+        Calibrated probability clamped strictly to [1e-4, 1 - 1e-4]
     """
     raw_prob = max(0.0, min(1.0, raw_prob))
     calibrated = 0.5 + shrink_factor * (raw_prob - 0.5)
-    return max(0.0, min(1.0, calibrated))
+    
+    if np is not None:
+        return float(np.clip(calibrated, 1e-4, 1.0 - 1e-4))
+    else:
+        return max(1e-4, min(1.0 - 1e-4, calibrated))
 
 
 def cap_calibration(raw_prob: float, cap_max: float = 0.85, cap_min: float = 0.15) -> float:

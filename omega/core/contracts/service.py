@@ -1457,10 +1457,43 @@ def analyze_player_prop(
     when omitted it is derived from ``request.evidence`` so direct callers and
     the ``analyze()`` wrapper get identical, deterministic behavior.
     """
-    player_ctx = request.player_context or {}
+    player_ctx = dict(request.player_context or {})
     stat_key = request.prop_type
     mean_key = f"{stat_key}_mean"
     std_key = f"{stat_key}_std"
+
+    recent_perf = player_ctx.get("recent_performances")
+    recent_mins = player_ctx.get("recent_minutes")
+    if recent_perf and isinstance(recent_perf, list) and len(recent_perf) > 0:
+        dud_count = 0
+        non_zero_sum = 0.0
+        non_zero_count = 0
+        for i, val in enumerate(recent_perf):
+            try:
+                val_f = float(val)
+                is_dud = (val_f <= 0.0)
+                if recent_mins and isinstance(recent_mins, list) and i < len(recent_mins):
+                    try:
+                        mins_f = float(recent_mins[i])
+                        if mins_f < 5.0:
+                            is_dud = True
+                    except (TypeError, ValueError):
+                        pass
+                
+                if is_dud:
+                    dud_count += 1
+                else:
+                    non_zero_sum += val_f
+                    non_zero_count += 1
+            except (TypeError, ValueError):
+                continue
+        
+        total_valid = dud_count + non_zero_count
+        if total_valid > 0:
+            dud_prob = dud_count / total_valid
+            true_mean = non_zero_sum / non_zero_count if non_zero_count > 0 else 0.0
+            player_ctx[mean_key] = true_mean
+            player_ctx["dud_prob"] = dud_prob
 
     pitcher_missing = _pitcher_prop_distribution_requirements(request, player_ctx)
     if pitcher_missing:
@@ -1529,6 +1562,7 @@ def analyze_player_prop(
         "variance": std_f**2,
         "market_line": request.line,
         "distribution": distribution_override,
+        "dud_prob": float(player_ctx.get("dud_prob", 0.0)),
     }
 
     try:
