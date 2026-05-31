@@ -26,24 +26,22 @@ Structured evidence:
 - Weight your evidence by the "Evidence signal performance" section (§6B) of the latest calibration report: trust signal types/sources marked `predictive`, discount `noise`, treat `insufficient_n` as unproven. A positive `cal_gap` means past confidence on that signal was too high.
 
 Markov backend evidence vocabulary:
-- When using simulation_backend="markov_state", only the following 8 signal_type values adjust the possession-level transition matrix. All other types are audited but have no Markov effect. Use exactly these strings:
-    pace_up             — matchup faster than league baseline (+6% pace)
-    pace_down           — matchup slower than league baseline (-8% pace)
-    rest_advantage      — rest-days advantage for one side (+4% scoring rate; set direction)
-    b2b_fatigue         — back-to-back fatigue for one side (-6% scoring rate; set direction)
-    def_matchup_weak    — opponent is a weak defender of this stat (+5% offense; set direction)
-    def_matchup_strong  — opponent is a strong defender of this stat (-5% offense; set direction)
-    usage_role_change   — key player role is restricted or expanded (-7% team rate; set direction)
-    blowout_risk        — high probability of non-competitive game (-2% momentum variance)
+- When using simulation_backend="markov_state", only 8 signal_type values adjust the possession-level transition matrix; all other types are audited but have no Markov effect. The canonical list (exact string keys, effects, and the ±15% cumulative cap) is `prompts/reference/markov_evidence_vocab.md`. Use the exact keys from that file.
 - Call omega_markov_evidence_guide for the full table with modifier keys and cumulative cap rules.
 - Evidence routing note: handler-based evidence follows `AdjustmentPolicy.mode`
   (`shadow` records only; `live` applies). Markov evidence uses backend-specific
   transition modifiers instead of handler `off_rating` scaling; do not emit the
   same logical signal on both game and player planes.
 
+Output mode vs engine execution (canonical: `prompts/reference/output_modes.md`):
+- `RESEARCH_CANDIDATE` is an output-authorization mode, not an execution mode. Read the `output_mode` field from the `reports/latest.md` frontmatter.
+- Two distinct scenarios — do not conflate them:
+  - Engine UNAVAILABLE (no Python/MCP path, preflight failed): the engine does not run; output is qualitative-only; no trace, no fabricated trace_id.
+  - Engine AVAILABLE but `RESEARCH_CANDIDATE` / quality < 0.7 / no fitted profile: the engine STILL runs, a `sandbox-` trace_id is STILL minted, and the trace STILL persists to omega_traces.db. Only the user-facing betting numbers are withheld. Never skip `analyze()` just because output is research-only — that starves the calibration loop.
+
 Downgrade discipline:
 - No Bet Card if any critical input is missing.
-- Downgrade to research/narrative when aggregate input quality is below `0.7`.
+- Downgrade to research/narrative when aggregate input quality is below `0.7` (engine still runs if available).
 - Use ultra-low-data text when fewer than 3 real facts are available and quality is below `0.3`.
 - If the engine returns `status: "skipped"` or `status: "error"`, repair missing pre-decision inputs and rerun, or produce qualitative research only.
 

@@ -1,3 +1,8 @@
+> **ARCHIVED — historical, non-authoritative.** Retained for history only. Do not treat as active
+> operating instructions. The "Execution Modes" list below (esp. `RESEARCH = no engine`) is
+> **obsolete and wrong** — see [`prompts/reference/output_modes.md`](../../prompts/reference/output_modes.md)
+> for the current rule. Authoritative entrypoint: [`AGENTS.md`](../../AGENTS.md).
+
 # OMEGA_HANDBOOK
 
 Omega is a reasoning-led sports analytics system on top of a deterministic quantitative engine. The LLM owns intent, evidence judgment, downgrade/refusal decisions, and explanation. The Python engine owns simulation, calibration, edge, EV, Kelly, staking, confidence tiers, trace IDs, backtesting, and grading.

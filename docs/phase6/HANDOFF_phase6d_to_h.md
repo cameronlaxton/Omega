@@ -40,7 +40,7 @@ needs to do. Read this first; the original plan lives at
   `canonical_team()` uses exact match first, then substring fallback gated to
   aliases ≥4 chars to prevent false matches.
 - `omega/integrations/odds_api.py` — the-odds-api client with monthly-budget
-  bookkeeping (`omega_odds_api_budget.json` at cwd, default cap 450/500).
+  bookkeeping (`omega_odds_api_budget.json` at cwd, default cap 20000).
   Reads `OMEGA_ODDS_API_KEY` env var. Raises `OddsApiKeyMissing` /
   `OddsApiBudgetExceeded`.
 - `omega/trace/clv.py` — `compute_clv()` returning `CLVResult` dataclass.

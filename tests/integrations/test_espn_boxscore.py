@@ -157,6 +157,37 @@ class TestParseBoxScoreNBA:
         assert stats["cade cunningham"]["threes"] == 3.0
         assert stats["cade cunningham"]["pra"] == 46.0
 
+    def test_pra_zero_derived_correctly(self):
+        """PTS=0, REB=3, AST=2 -> pra == 5.0 present; PTS=0, REB=0, AST=0 -> pra == 0.0 present."""
+        fixture = {
+            "boxscore": {
+                "players": [
+                    {
+                        "team": {"displayName": "Detroit Pistons"},
+                        "statistics": [
+                            {
+                                "name": None,
+                                "keys": ["points", "rebounds", "assists"],
+                                "athletes": [
+                                    {
+                                        "athlete": {"displayName": "Zero Pts"},
+                                        "stats": ["0", "3", "2"],
+                                    },
+                                    {
+                                        "athlete": {"displayName": "Triple Zero"},
+                                        "stats": ["0", "0", "0"],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        stats = parse_box_score(fixture, "NBA")
+        assert stats["zero pts"]["pra"] == 5.0
+        assert stats["triple zero"]["pra"] == 0.0
+
 
 def _mlb_fixture() -> dict:
     return {

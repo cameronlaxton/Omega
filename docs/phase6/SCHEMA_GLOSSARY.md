@@ -7,7 +7,8 @@ documentation for agents and operators, not a migration plan.
 |---|---|---|---|---|
 | trace | `PersistableTrace` and `TraceStore` | `traces.full_trace` plus query columns | reports and audits | leave unchanged |
 | candidate | model-issued trace with predictions | `traces.predictions`, trace JSON | calibration/report queries | document only |
-| prediction | deterministic engine output | trace JSON and `traces.predictions` | calibration pairs | leave unchanged |
+| prediction | deterministic engine output (`GamePredictions` model) | trace JSON and `traces.predictions` | calibration pairs | retyped to `GamePredictions` Pydantic model |
+| recommendations | list/dict of `Recommendation` models | `traces.recommendations`, trace JSON | calibration/report queries | retyped to `list[Recommendation]` (game) or singular prop `Recommendation` dict (prop) |
 | market | request/odds/bet contract | `MarketQuote`, `bet_records.market`, trace JSON | CLV/reporting | document field ownership |
 | market_family | current proxy is `trace.kind` | trace JSON | prompt/report vocabulary | defer explicit field |
 | league | request schema and trace metadata | `traces.league`, trace JSON | reports/outcome adapters | leave unchanged |

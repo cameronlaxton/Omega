@@ -186,7 +186,7 @@ def _stat_key_map_for(
         return WNBA_STAT_KEYS
     if league_upper == "MLB":
         cat = (category_name or "").lower()
-        key_set = {str(key) for key in (keys or [])}
+        key_set = {key for key in (keys or [])}
         pitching_keys = {
             "IP",
             "K",
@@ -221,7 +221,7 @@ def _summary_url(league: str, event_id: str) -> str:
 def _parse_ip_to_outs(value: str) -> float | None:
     """Convert MLB innings-pitched string like '6.2' (6 innings, 2 outs) to outs."""
     try:
-        whole_str, _, frac_str = str(value).partition(".")
+        whole_str, _, frac_str = value.partition(".")
         whole = int(whole_str) if whole_str else 0
         frac = int(frac_str) if frac_str else 0
         return float(whole * 3 + frac)
@@ -346,11 +346,14 @@ def parse_box_score(
                         player_stats.setdefault(prop_type, value)
                         break
                 if league.upper() in ("NBA", "WNBA"):
-                    pts = player_stats.get("pts") or player_stats.get("points")
-                    reb = player_stats.get("reb") or player_stats.get("rebounds")
-                    ast = player_stats.get("ast") or player_stats.get("assists")
+                    pts = player_stats.get("pts")
+                    pts = player_stats.get("points") if pts is None else pts
+                    reb = player_stats.get("reb")
+                    reb = player_stats.get("rebounds") if reb is None else reb
+                    ast = player_stats.get("ast")
+                    ast = player_stats.get("assists") if ast is None else ast
                     if pts is not None and reb is not None and ast is not None:
-                        player_stats.setdefault("pra", float(pts) + float(reb) + float(ast))
+                        player_stats.setdefault("pra", pts + reb + ast)
     return out
 
 

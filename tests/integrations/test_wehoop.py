@@ -120,10 +120,13 @@ def test_artifact_replays_deterministically_through_wnba_backend():
         seed=artifact.simulation_seed,
         home_context=artifact.home_context,
         away_context=artifact.away_context,
+        game_context={"is_playoff": False, "rest_days": 2},
     )
     r1 = analyze_game(req)
     r2 = analyze_game(req)
     assert r1.status == "success"
+    assert r1.simulation is not None
+    assert r2.simulation is not None
     assert r1.simulation.simulation_backend == "markov_state_wnba"
     assert r1.simulation.predicted_total == r2.simulation.predicted_total
     assert r1.simulation.home_win_prob == r2.simulation.home_win_prob

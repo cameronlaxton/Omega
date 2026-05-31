@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 UTC = timezone.utc
 
@@ -329,12 +329,8 @@ class ExecutionTrace(BaseModel):
 
     # --- Backtest-ready fields ---
     # Final predictions (what the system recommended)
-    predictions: dict[str, Any] | None = (
-        None  # {home_win_prob, away_win_prob, predicted_spread, predicted_total}
-    )
-    recommendations: list[dict[str, Any]] = Field(
-        default_factory=list
-    )  # [{side, edge_pct, confidence_tier, units}]
+    predictions: GamePredictions | None = None
+    recommendations: list[Recommendation] = Field(default_factory=list)
     odds_snapshot: dict[str, Any] | None = (
         None  # {moneyline_home, moneyline_away, spread_home, over_under}
     )
@@ -352,3 +348,43 @@ class ExecutionTrace(BaseModel):
 
     # Errors
     error: str | None = None
+
+
+class GamePredictions(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    home_win_prob: float | None = None
+    away_win_prob: float | None = None
+    predicted_spread: float | None = None
+    predicted_total: float | None = None
+    over_prob: float | None = None
+    under_prob: float | None = None
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
+
+
+class Recommendation(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    side: str | None = None
+    edge_pct: float | None = None
+    confidence_tier: str | None = None
+    units: float | None = None
+    recommendation: str | None = None
+    recommended_units: float | None = None
+    kelly_fraction: float | None = None
+    bet_side_odds: float | None = None
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
