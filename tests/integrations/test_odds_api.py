@@ -187,6 +187,12 @@ def test_fetch_historical_odds_builds_paid_endpoint_and_cost(tmp_path: Path):
     assert client.remaining_budget() == 80
 
 
+def test_default_monthly_budget_matches_paid_plan(tmp_path: Path):
+    client = OddsApiClient(api_key="test-key", budget_file=str(tmp_path / "budget.json"))
+
+    assert client.remaining_budget() == 20000
+
+
 def test_fetch_current_event_odds_builds_event_endpoint_with_betmgm(tmp_path: Path):
     captured: dict = {}
     client = OddsApiClient(

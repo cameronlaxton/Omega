@@ -43,7 +43,7 @@ logger = logging.getLogger("omega.integrations.odds_api")
 
 _BASE_URL = "https://api.the-odds-api.com/v4"
 _REQUEST_TIMEOUT_SECONDS = 15
-_DEFAULT_MONTHLY_BUDGET = int(os.environ.get("OMEGA_ODDS_API_MONTHLY_BUDGET", "450"))
+_DEFAULT_MONTHLY_BUDGET = int(os.environ.get("OMEGA_ODDS_API_MONTHLY_BUDGET", "20000"))
 _DEFAULT_BUDGET_FILE = "omega_odds_api_budget.json"
 DEFAULT_BOOKMAKER = "betmgm"
 DEFAULT_MARKETS = "h2h,spreads,totals"

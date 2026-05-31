@@ -72,6 +72,8 @@ class OddsCache:
         home_team: str,
         away_team: str,
         game_date: str,
+        player_name: str | None = None,
+        player_id: str | None = None,
     ) -> str:
         """Derive a deterministic SHA-256 cache key from query parameters."""
         norm_league = league.strip().upper()
@@ -79,7 +81,15 @@ class OddsCache:
         norm_home = home_team.strip().lower()
         norm_away = away_team.strip().lower()
         norm_date = game_date.strip().lower()
-        raw_str = f"{norm_league}{norm_market}{norm_home}{norm_away}{norm_date}"
+        
+        player_part = ""
+        if player_id:
+            player_part = f":id:{player_id.strip().lower()}"
+        elif player_name:
+            from omega.integrations.espn_boxscore import normalize_player_name
+            player_part = f":name:{normalize_player_name(player_name)}"
+            
+        raw_str = f"{norm_league}{norm_market}{norm_home}{norm_away}{norm_date}{player_part}"
         return hashlib.sha256(raw_str.encode("utf-8")).hexdigest()
 
     def get(self, cache_key: str) -> dict[str, Any] | None:
@@ -152,14 +162,24 @@ class OddsCache:
             conn.commit()
 
     def find_by_teams(
-        self, league: str, market: str, home_team: str, away_team: str
+        self,
+        league: str,
+        market: str,
+        home_team: str,
+        away_team: str,
+        player_name: str | None = None,
+        player_id: str | None = None,
     ) -> dict[str, Any] | None:
-        """Scan the cache for an unexpired success record matching league, market, and teams."""
+        """Scan the cache for an unexpired success record matching league, market, teams, and player."""
         current_time = time.time()
         norm_league = league.strip().upper()
         norm_market = market.strip().lower()
         norm_home = home_team.strip().lower()
         norm_away = away_team.strip().lower()
+
+        from omega.integrations.espn_boxscore import normalize_player_name
+        target_name_norm = normalize_player_name(player_name) if player_name else None
+        target_id_norm = player_id.strip().lower() if player_id else None
 
         with sqlite3.connect(str(self.db_path)) as conn:
             cursor = conn.cursor()
@@ -176,6 +196,21 @@ class OddsCache:
                     cached_home = (data.get("home_team") or "").strip().lower()
                     cached_away = (data.get("away_team") or "").strip().lower()
                     if cached_home == norm_home and cached_away == norm_away:
+                        if player_name or player_id:
+                            quotes = data.get("quotes") or []
+                            has_match = False
+                            for q in quotes:
+                                q_player_name = q.get("player")
+                                q_player_id = q.get("player_id")
+                                if target_id_norm and q_player_id and str(q_player_id).strip().lower() == target_id_norm:
+                                    has_match = True
+                                    break
+                                if target_name_norm and q_player_name and normalize_player_name(q_player_name) == target_name_norm:
+                                    has_match = True
+                                    break
+                            if not has_match:
+                                continue
+
                         if "metadata" not in data:
                             data["metadata"] = []
                         if "source: local_cache" not in data["metadata"]:
@@ -186,13 +221,22 @@ class OddsCache:
         return None
 
     def find_by_event_id(
-        self, league: str, market: str, event_id: str
+        self,
+        league: str,
+        market: str,
+        event_id: str,
+        player_name: str | None = None,
+        player_id: str | None = None,
     ) -> dict[str, Any] | None:
-        """Scan the cache for an unexpired success record matching league, market, and event_id."""
+        """Scan the cache for an unexpired success record matching league, market, event_id, and player."""
         current_time = time.time()
         norm_league = league.strip().upper()
         norm_market = market.strip().lower()
         norm_event_id = event_id.strip()
+
+        from omega.integrations.espn_boxscore import normalize_player_name
+        target_name_norm = normalize_player_name(player_name) if player_name else None
+        target_id_norm = player_id.strip().lower() if player_id else None
 
         with sqlite3.connect(str(self.db_path)) as conn:
             cursor = conn.cursor()
@@ -207,6 +251,21 @@ class OddsCache:
                 try:
                     data = json.loads(market_data_str)
                     if str(data.get("event_id", "")).strip() == norm_event_id:
+                        if player_name or player_id:
+                            quotes = data.get("quotes") or []
+                            has_match = False
+                            for q in quotes:
+                                q_player_name = q.get("player")
+                                q_player_id = q.get("player_id")
+                                if target_id_norm and q_player_id and str(q_player_id).strip().lower() == target_id_norm:
+                                    has_match = True
+                                    break
+                                if target_name_norm and q_player_name and normalize_player_name(q_player_name) == target_name_norm:
+                                    has_match = True
+                                    break
+                            if not has_match:
+                                continue
+
                         if "metadata" not in data:
                             data["metadata"] = []
                         if "source: local_cache" not in data["metadata"]:

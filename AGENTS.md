@@ -1,4 +1,27 @@
-# Omega — Project Guidelines
+# Omega — Project Guidelines (cross-agent entrypoint)
+
+**This is the authoritative cross-agent instruction file.** Every agent working in this repo
+(Claude, ChatGPT, Codex, API agents, etc.) reads `AGENTS.md` first. The root `CLAUDE.md` is a shim
+that points here and carries no independent rules.
+
+### Canonical references (read before acting)
+
+- **[`prompts/reference/output_modes.md`](prompts/reference/output_modes.md)** — output-mode
+  semantics (`RESEARCH_CANDIDATE` vs `ACTIONABLE`), downgrade discipline, and the engine-execution
+  rule. **Single source of truth; do not restate it elsewhere.**
+- [`prompts/reference/engine_output_validation.md`](prompts/reference/engine_output_validation.md) —
+  post-`analyze()` nullability / null-data-audit procedure.
+- [`prompts/reference/markov_evidence_vocab.md`](prompts/reference/markov_evidence_vocab.md) —
+  approved Markov `signal_type` vocabulary and the ±15% cap.
+- [`OMEGA_DATA_SOURCES.md`](OMEGA_DATA_SOURCES.md) — data sourcing, fallbacks, freshness rules.
+
+### Output mode ⊥ engine execution (summary — full rule in output_modes.md)
+
+`RESEARCH_CANDIDATE` is an output-authorization mode, not an execution mode. If the engine is
+available, `analyze()` still runs, a `sandbox-` trace_id is still minted, and the trace still
+persists to `omega_traces.db` — only the user-facing betting numbers are withheld/downgraded.
+**Never skip the engine just because output is research-only**; doing so starves the calibration
+loop. See [`prompts/reference/output_modes.md`](prompts/reference/output_modes.md).
 
 ## Omega operating model
 
@@ -28,11 +51,11 @@ Do not move deterministic responsibilities into LLM logic. This restriction appl
 - confidence tiers (A / B / C / Pass)
 - trace_ids (always begin with `sandbox-` and are minted by the engine)
 
-**Hard rule (supersedes all prior fallback wording in OMEGA_RUN_RECIPE.md and OMEGA_HANDBOOK.md):** The LLM is forbidden from generating any of the above values via text. They must come from Python execution through the local MCP server or `omega.core.contracts.service.analyze`. There is no "estimated", "rough", "ballpark", `[LLM-ESTIMATED]`, or "estimated lean" mode for these fields. If the engine is unavailable, the response is qualitative-only: matchup narrative, news, recent form, listed sportsbook lines from a cited source — never a Bet Card with placeholder numbers.
+**Hard rule:** The LLM is forbidden from generating any of the above values via text. They must come from Python execution through the local MCP server or `omega.core.contracts.service.analyze`. There is no "estimated", "rough", "ballpark", `[LLM-ESTIMATED]`, or "estimated lean" mode for these fields. If the engine is unavailable, the response is qualitative-only: matchup narrative, news, recent form, listed sportsbook lines from a cited source — never a Bet Card with placeholder numbers. The full output-mode contract (including the engine-runs-in-RESEARCH_CANDIDATE rule) lives in [`prompts/reference/output_modes.md`](prompts/reference/output_modes.md).
 
 The LLM may still perform a best-effort exploratory market scan with public web data, but any candidate it surfaces is labeled as a **research-only lean** or **missing-data watchlist** item with NO edge%, EV%, Kelly, units, confidence tier, or trace_id. The previous "estimated lean" label is retired.
 
-The master runtime instruction for any LLM acting as the Omega agent (any LLM front-end: Claude.ai, ChatGPT, Codex, API agent) is [`prompts/system_prompt.txt`](prompts/system_prompt.txt). That file is authoritative for agent behavior; OMEGA_HANDBOOK.md and OMEGA_RUN_RECIPE.md are reference documents only.
+The master runtime instruction for any LLM acting as the Omega agent (any LLM front-end: Claude.ai, ChatGPT, Codex, API agent) is [`prompts/system_prompt.txt`](prompts/system_prompt.txt). That file is authoritative for agent behavior. (The legacy `OMEGA_HANDBOOK.md` and `OMEGA_RUN_RECIPE.md` have been retired to `archive/historical/` — non-authoritative.)
 
 **Deployment-specific instructions:** Use **one** instruction set based on deployment:
 - **Any LLM agent / API (no local access)** → [`prompts/system_prompt.txt`](prompts/system_prompt.txt)

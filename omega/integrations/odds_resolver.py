@@ -335,7 +335,7 @@ def _select_prop_input(
         if q_line is None:
             continue
         q_line_f = float(q_line)
-        if line is not None and q_line_f != float(line):
+        if line is not None and q_line_f != line:
             continue
         grouped[q_line_f][quote["selection"].casefold()] = quote["price"]
 
@@ -358,6 +358,7 @@ def resolve_odds(
     home_team: str | None = None,
     away_team: str | None = None,
     player_name: str | None = None,
+    player_id: str | None = None,
     prop_type: str | None = None,
     line: float | None = None,
     event_id: str | None = None,
@@ -374,7 +375,7 @@ def resolve_odds(
 
     # 1. Caching Entry Layer
     cache = cache or OddsCache()
-    market = prop_type if kind == "prop" else "game"
+    market = (prop_type or "") if kind == "prop" else "game"
     norm_home = (home_team or "").strip().lower()
     norm_away = (away_team or "").strip().lower()
     game_date = (commence_time_from or "").strip().split("T")[0] if commence_time_from else datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -383,14 +384,23 @@ def resolve_odds(
     negative_key: str | None = None
 
     if norm_home and norm_away:
-        cache_key = cache.compute_cache_key(league, market, norm_home, norm_away, game_date)
+        cache_key = cache.compute_cache_key(
+            league, market, norm_home, norm_away, game_date,
+            player_name=player_name, player_id=player_id
+        )
         negative_key = cache_key
         cached_payload = cache.get(cache_key)
         if not cached_payload:
-            cached_payload = cache.find_by_teams(league, market, norm_home, norm_away)
+            cached_payload = cache.find_by_teams(
+                league, market, norm_home, norm_away,
+                player_name=player_name, player_id=player_id
+            )
 
     if not cached_payload and event_id:
-        cached_payload = cache.find_by_event_id(league, market, event_id)
+        cached_payload = cache.find_by_event_id(
+            league, market, event_id,
+            player_name=player_name, player_id=player_id
+        )
 
     if cached_payload:
         return cached_payload
@@ -526,7 +536,9 @@ def resolve_odds(
         market=market,
         home_team=actual_home,
         away_team=actual_away,
-        game_date=actual_date
+        game_date=actual_date,
+        player_name=player_name,
+        player_id=player_id
     )
     cache.set(precise_key, league, market, result_payload)
 

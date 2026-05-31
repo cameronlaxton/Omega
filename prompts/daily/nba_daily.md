@@ -24,6 +24,11 @@ Run:
 python scripts/report_calibration.py --league NBA --window-days 30
 ```
 
+**Mandatory:** read [`prompts/reference/output_modes.md`](../reference/output_modes.md) before
+producing any output, and read the machine-readable `output_mode` field from the
+`reports/latest.md` **frontmatter** (`research_candidate` or `actionable`). `RESEARCH_CANDIDATE`
+restricts only what you show the user — it never skips the engine.
+
 Read `reports/latest.md` before analysis:
 - Section 3: game-plane Brier/ECE; flag ECE > 0.05.
 - Section 3B: prop-plane pair count; metrics may be suppressed if n < 10.
@@ -145,24 +150,18 @@ game_context={
 Express material evidence as `EvidenceSignal` objects. Do not hide predictive
 metrics in prose.
 
-Markov-approved game-plane signal types:
-
-| signal_type | effect | direction |
-|---|---|---|
-| `pace_up` | faster game environment | optional |
-| `pace_down` | slower game environment | optional |
-| `rest_advantage` | rested team scoring boost | `home` or `away` |
-| `b2b_fatigue` | fatigued team scoring penalty | `home` or `away` |
-| `def_matchup_weak` | offense vs weak defender | `home` or `away` |
-| `def_matchup_strong` | offense vs strong defender | `home` or `away` |
-| `usage_role_change` | key player restricted/elevated | `home` or `away` |
-| `blowout_risk` | variance/routing downgrade signal | optional |
-
-All other signal types are audit-only unless the engine maps them.
+Markov-approved game-plane signal types and the ±15% cap are listed in the canonical
+[`prompts/reference/markov_evidence_vocab.md`](../reference/markov_evidence_vocab.md). Use the exact
+`signal_type` keys from that file. All other signal types are audit-only unless the engine maps
+them.
 
 ---
 
 ## Step 6 - Run Game Engine
+
+**Always run the engine when it is available, regardless of the Step 0 output mode.**
+`RESEARCH_CANDIDATE` only restricts what you present to the user; it never means "skip
+`analyze()`". Running the engine and persisting traces is how calibration data accumulates.
 
 NBA default backend: `simulation_backend="markov_state"`. Use `fast_score`
 only if Markov skips and the downgrade is recorded.
@@ -230,58 +229,11 @@ not quantified, downgrade or keep research-only.
 
 **Execute immediately after each `analyze()` call returns, before any other processing.**
 
-Evaluate the engine response payload for fields returning NULL, `0.0`, `"undefined"`,
-empty collections, or otherwise missing values. This is a structural validation step,
-not a data quality judgment.
-
-**Mandatory checks:**
-
-1. **Request-level identity fields** (must be echoed):
-   - `league`, `player_name` (for props), `home_team`, `away_team`, `game_date`
-
-2. **Result object fields** (engine-owned; must exist if `status != "skipped"`):
-   - `model_prob` (or `over_prob`/`under_prob` for player props)
-   - `fair_price` / `no_vig_price`
-   - `edge_pct`
-   - `recommended_units`
-   - `confidence_tier`
-   - `trace_id`
-
-3. **Input context fields** (your responsibility; must be populated before calling `analyze()`):
-   - `game_context.is_playoff` and `game_context.rest_days` (non-null integers)
-   - `{prop_type}_mean` and `{prop_type}_std` (for player props)
-   - `home_context.off_rating`, `def_rating`, `pace` (for game analysis)
-   - `sample_size` ≥ 5 (for player props, if available)
-
-**Capture strategy:**
-
-If any of the above are NULL or missing:
-- Build a **null_fields** list with clean field paths: `["result.recommended_units", "game_context.rest_days"]`
-- Append a `quality_gate` event with `event_type="quality_gate/null_data_audit"`
-  and `notes="Null fields: " + ", ".join(null_fields)`
-- Do **not** include numeric protected values in the event notes; only field names.
-
-**Decision logic:**
-
-- If result-level fields are NULL and `status != "skipped"`: **engine error → downgrade to research-only**.
-- If input context fields are NULL: **your input was incomplete → downgrade to research-only** and log which context field(s) were missing.
-- If `sample_size < 5` for a player prop: **research-only** unless explicitly backfilled from reliable source.
-- If all required fields are present: proceed to trace export.
-
-**Example null_fields audit event:**
-
-```json
-{
-  "ts": "2026-05-28T20:15:00Z",
-  "event_type": "quality_gate/null_data_audit",
-  "step": "engine_output_validation",
-  "status": "warn",
-  "notes": "Null fields: ['game_context.rest_days']. Downgraded to research-only.",
-  "inputs": [],
-  "outputs": [],
-  "trace_ids": ["sandbox-xxxxx"]
-}
-```
+Follow the canonical procedure in
+[`prompts/reference/engine_output_validation.md`](../reference/engine_output_validation.md).
+For NBA, the sport-specific input-context fields to verify are `home_context.off_rating`,
+`def_rating`, and `pace`. Downgrades here are user-facing only — the engine already ran and the
+trace still persists (see [`output_modes.md`](../reference/output_modes.md)).
 
 ---
 

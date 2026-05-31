@@ -1,3 +1,8 @@
+> **ARCHIVED — historical, non-authoritative.** Retained for history only. Do not treat as active
+> operating instructions (the "Python 3.12+" floor is stale; the current floor is 3.10+). For the
+> live run path see [`AGENTS.md`](../../AGENTS.md), [`OMEGA_COWORK.md`](../../OMEGA_COWORK.md), and
+> the `omega-session-bootstrap` skill.
+
 # Omega Run Recipe - Phase 6h
 
 Omega now runs local VM / MCP-first. The retired lite bridge and standalone sandbox artifact are not part of the runtime.

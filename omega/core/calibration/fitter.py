@@ -360,37 +360,88 @@ class CalibrationFitter:
         outcomes: list[int],
         league: str,
         market: str = "game",
+        eligible_sample_size: int | None = None,
     ) -> CalibrationProfile:
-        """Fit a shrinkage calibration profile by minimizing Brier score.
+        """Fit a shrinkage/sharpening calibration profile by minimizing Brier score.
 
-        Grid searches shrink_factor in [0.3, 0.4, ..., 1.0].
+        Grid searches calibration slope/factor in [0.3, 0.4, ..., 2.0].
+        Values < 1.0 represent shrinkage (softening overconfident predictions).
+        Values > 1.0 represent sharpening (strengthening underconfident predictions).
 
-        Args:
-            predictions: Model probabilities (0-1).
-            outcomes: Binary outcomes (0 or 1).
-            league: League code.
+        Sharpening (factor > 1.0) is only permitted when:
+        1. eligible_sample_size is at least 50.
+        2. out-of-sample validation shows a strictly better Brier score than the factor = 1.0 baseline.
 
-        Returns:
-            CalibrationProfile with method="shrinkage".
+        All calibrated probabilities are strictly clamped to [1e-6, 1 - 1e-6].
         """
+        n_samples = len(predictions) if eligible_sample_size is None else eligible_sample_size
         if len(predictions) < _MIN_SAMPLES:
             raise ValueError(
                 f"Need at least {_MIN_SAMPLES} samples for fitting, got {len(predictions)}"
             )
 
+        MIN_SHARPENING_SAMPLES = 50
+        CLV_EPS = 1e-6
+
+        # Determine if sharpening is structurally allowed by sample size
+        sharpening_allowed = n_samples >= MIN_SHARPENING_SAMPLES
+
+        # Perform a deterministic 70/30 train/validation split to guard sharpening
+        split_idx = int(0.7 * len(predictions))
+        train_preds = predictions[:split_idx]
+        train_outs = outcomes[:split_idx]
+        val_preds = predictions[split_idx:]
+        val_outs = outcomes[split_idx:]
+
+        # Baseline factor=1.0 Brier score on validation set
+        def _get_val_brier(f: float) -> float:
+            tot = 0.0
+            for pred, out in zip(val_preds, val_outs):
+                cal = 0.5 + f * (pred - 0.5)
+                cal = max(CLV_EPS, min(1.0 - CLV_EPS, cal))
+                tot += (cal - out) ** 2
+            return tot / len(val_preds) if val_preds else 0.0
+
+        baseline_val_brier = _get_val_brier(1.0)
+
         best_factor = 1.0
         best_brier = float("inf")
 
-        for factor_int in range(3, 11):  # 0.3 to 1.0 in steps of 0.1
+        # Grid search in steps of 0.1 from 0.3 up to 2.0 (factor_int in range(3, 21))
+        # Grid search is performed on the training set (or full set if sharpening is not allowed)
+        fit_preds = train_preds if sharpening_allowed else predictions
+        fit_outs = train_outs if sharpening_allowed else outcomes
+
+        for factor_int in range(3, 21):  # 0.3 to 2.0 in steps of 0.1
             factor = factor_int / 10.0
+            
+            # If factor > 1.0 and sharpening is not allowed, skip
+            if factor > 1.0 and not sharpening_allowed:
+                continue
+                
             brier = 0.0
-            for pred, out in zip(predictions, outcomes):
+            for pred, out in zip(fit_preds, fit_outs):
                 cal = 0.5 + factor * (pred - 0.5)
+                cal = max(CLV_EPS, min(1.0 - CLV_EPS, cal))
                 brier += (cal - out) ** 2
-            brier /= len(predictions)
+            brier /= len(fit_preds)
+            
             if brier < best_brier:
                 best_brier = brier
                 best_factor = factor
+
+        # Gated validation check for sharpening:
+        # If best_factor is > 1.0, we must verify it shows validation improvement over 1.0.
+        if best_factor > 1.0:
+            cand_val_brier = _get_val_brier(best_factor)
+            # Must strictly improve Brier score (lower is better)
+            if cand_val_brier >= baseline_val_brier:
+                logger.info(
+                    "Sharpening factor %f did not improve validation Brier score "
+                    "(%f >= %f); capping at 1.0.",
+                    best_factor, cand_val_brier, baseline_val_brier
+                )
+                best_factor = 1.0
 
         dataset_hash = _compute_hash(predictions, outcomes)
 

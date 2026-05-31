@@ -298,60 +298,16 @@ The deleted lite quality gate is not an automated fallback path. The agent must 
 
 ## 3a. Research Candidate Protocol
 
-When any of the following conditions hold, **all formal Omega output is locked to
-`RESEARCH_CANDIDATE` mode** — Bet Cards, edge%, EV%, Kelly, units, confidence
-tiers, and trace IDs are prohibited for that league/session:
+All output authorization rules, downgrade discipline, and permitted/forbidden behaviors in `RESEARCH_CANDIDATE` mode are defined in the canonical reference **[`prompts/reference/output_modes.md`](prompts/reference/output_modes.md)**. All agents must read and follow that file.
 
-| Condition | Where to see it |
-|---|---|
-| No fitted calibration profile | §2 of `reports/latest.md` shows "static fallback" |
-| 0 calibration-eligible traces in window | Coverage table: `with_predictions = 0` |
-| Invalid or missing session sidecar | sidecar fails JSON parse / schema validation |
+Concretely, `RESEARCH_CANDIDATE` is an **output-authorization** mode, not an execution mode. If the engine is available:
+- **`analyze()` still runs** and persisted traces accumulate to build calibration history.
+- **User-facing betting numbers are withheld/downgraded** (no Bet Card, edge%, EV%, Kelly, units, confidence tier, or trace_id is shown in the reply).
+- Database trace generation is **never** withheld.
 
-> **Bet logging is NOT an output-mode condition.** Output authorization is a
-> model-evaluation decision (fitted profile + calibration-eligible coverage +
-> valid sidecar). The presence or absence of a `bet_record` does **not** affect
-> output mode, grading, or calibration eligibility — it is wager-tracking
-> metadata only. The `with_bet` coverage count is informational; never treat
-> `with_bet = 0` as a reason to downgrade to `RESEARCH_CANDIDATE`.
+To find the current output mode, check the `output_mode` field in the frontmatter of `reports/latest.md` (which is written automatically each time `report_calibration.py` runs).
 
-`scripts/report_calibration.py` emits an **"Agent Directive — Output Mode"**
-section at the very top of `reports/latest.md`. **Read it before beginning any
-analysis.** The classification is derived automatically from live DB counts and
-the calibration registry — it is not an editorial judgment.
-
-### In RESEARCH_CANDIDATE mode
-
-**Permitted:**
-- Qualitative matchup narrative, news synthesis, recent form discussion
-- Listed sportsbook lines from a cited public source
-- Research-only lean labels (no edge%, EV%, Kelly, confidence tier, or trace_id)
-- Stakes up to **1u maximum**
-
-**Forbidden language** (blocked phrases — do not emit in any output):
-- "best bet" / "Best Bet"
-- "Tier A" / "Tier B"
-- "engine-confirmed"
-- "actionable bet" / "Actionable Bet"
-
-If a Bet Card would otherwise be warranted, replace it with a
-`### Research Candidate` block containing qualitative narrative only,
-clearly labeled as uncalibrated.
-
-### Current calibration status (as of 2026-05-28)
-
-| League | Mode | Reason | Pairs needed for fit |
-|---|---|---|---|
-| NBA | `RESEARCH_CANDIDATE` | Static fallback; 0 calibration-eligible traces | ~30 graded+eligible |
-| MLB | `RESEARCH_CANDIDATE` | Static fallback; ~11 graded+eligible pairs accumulated | ~19 more |
-
-These statuses update automatically each time `report_calibration.py` runs.
-Regenerate before each session:
-
-```bash
-python scripts/report_calibration.py --league NBA
-python scripts/report_calibration.py --league MLB
-```
+The DB trace persists with its `sandbox-` trace_id for calibration — see [`output_modes.md`](prompts/reference/output_modes.md). Do not skip trace export just because the user-facing output was downgraded.
 
 ## 4. Current Odds Resolution
 
@@ -366,6 +322,13 @@ BetMGM (`betmgm`) is the default sportsbook. Use line-shopping or all-books mode
 For the full `prop_type` → stat key mapping (including MLB pitching keys and free vs. paid tier notes), see [`prompts/reference/prop_stat_keys.md`](prompts/reference/prop_stat_keys.md).
 
 Never print, paste, trace, report, or expose `OMEGA_ODDS_API_KEY`.
+
+### Odds API Budget Management
+
+The `OddsApiBudgetExceeded` error is triggered when local consumption reaches the configured cap. Note that this cap is a **local safeguard** and is distinct from the provider's API quota:
+- **Cap location:** Configured via `OMEGA_ODDS_API_MONTHLY_BUDGET` environment variable (defaults to 450, or can be set to e.g. 20000 in `.env`).
+- **Counter location:** Consumed budget is tracked inside `omega_odds_api_budget.json` (as a dictionary of `{"YYYY-MM": count}`).
+- **Correct fix for quota warnings:** Raise the cap in `.env` (e.g. `OMEGA_ODDS_API_MONTHLY_BUDGET=20000`) and reset the consumption counter by editing `omega_odds_api_budget.json` to `{}` (or `{"2026-05": 0}`). Do NOT set the budget JSON itself to 20000; that is a counter of *used* budget, not the cap, and doing so will immediately lock you out.
 
 ## 5. Session IDs
 
@@ -478,25 +441,9 @@ At session start, read the "Evidence signal performance" section (§6B) of the c
 
 #### Markov backend — approved signal vocabulary
 
-When calling `omega_analyze_game` with `simulation_backend="markov_state"`, **only these 8 signal_type values affect the possession-level transition matrix.** All other signal types are audited and scored but have no Markov effect (silently ignored by the modifier engine). Use the exact string keys below:
+When using `simulation_backend="markov_state"`, only **8 `signal_type` values** adjust the possession-level transition matrix. All other signal types are audited but have no Markov effect.
 
-| signal_type | effect | direction required? |
-|---|---|---|
-| `pace_up` | +6% game pace | no |
-| `pace_down` | -8% game pace | no |
-| `rest_advantage` | +4% scoring rate for rested team | yes (`home`/`away`) |
-| `b2b_fatigue` | -6% scoring rate for fatigued team | yes (`home`/`away`) |
-| `def_matchup_weak` | +5% offense vs. weak defender | yes (`home`/`away`) |
-| `def_matchup_strong` | -5% offense vs. strong defender | yes (`home`/`away`) |
-| `usage_role_change` | -7% team rate when key player restricted/elevated | yes (`home`/`away`) |
-| `blowout_risk` | -2% momentum acceleration; suppresses variance | no |
-
-Rules:
-- Cumulative cap: no single modifier attribute shifts by more than ±15%, regardless of stacked signals.
-- Do NOT pre-adjust `home_context`/`away_context` ratings by hand to bake in these effects — the engine applies them from the signal.
-- Do NOT emit the same logical signal on both `plane="game"` and `plane="player"` in one request. The service suppresses player-plane duplicates when a matching game-plane signal is present.
-- Call `omega_markov_evidence_guide` (MCP prompt) for the full modifier table with scalar values.
-- **Evidence routing note:** Markov transition modifiers are the Markov evidence path. Handler-based shadow/live mode applies to fast-score game and player-prop adjustments.
+The canonical list (exact string keys, transition effects, directions, and the ±15% cumulative cap) is defined in **[`prompts/reference/markov_evidence_vocab.md`](prompts/reference/markov_evidence_vocab.md)**. Use the exact keys and rules from that file rather than restating them.
 
 Example with evidence:
 

@@ -191,3 +191,31 @@ Breakeven probability at 2.55x: 39%
 - **Vig/Juice**: The book's margin built into the odds
 - **CLV (Closing Line Value)**: Whether the line moved in your favor after bet placement — a marker of sharp betting
 - **Kelly criterion**: Optimal stake sizing formula: f = (bp - q) / b, where b = decimal_odds - 1, p = win_prob, q = 1 - p
+
+## Standing preference & skip rules (salvaged from the retired OMEGA_STRATEGY.md)
+
+This is the user's **standing strategy preference**: when building parlay recommendations without
+other guidance, follow the anchor-parlay shape above. It is **NBA-specific** — for other leagues,
+ask the user before assuming this shape. Pre-game props only (no live in-play parlays).
+
+Target combined parlay odds in the **+100 to +150** range (~2.0x–2.5x payout); unit-based sizing
+(the user manages bankroll outside Omega).
+
+**Skip rules — refuse to build a recommended parlay when any apply:**
+
+- No anchor candidate qualifies (lookback hit rate < 70%).
+- The Omega quality gate dropped the Bet Card for the matchup — respect the gate; do not
+  reanimate edges.
+- The parlay's joint probability is below 35% (this is a high-hit-rate strategy, not lottery
+  tickets).
+- Combined odds are shorter than +80 — payoff doesn't justify variance.
+- Lines look unusually sharp (book holds < 4%) — the market may know something, or the line is
+  mid-move.
+
+Surface the skip reason **explicitly**. Do not silently downgrade a requested 3-leg parlay to a
+2-leg one — tell the user why.
+
+> Engine-owned values (edge%, EV%, Kelly, units, confidence tier, trace_id) in any parlay Bet Card
+> must come from a real Omega run, per
+> [`prompts/reference/output_modes.md`](../prompts/reference/output_modes.md). This playbook governs
+> *selection and skip discipline*, not the production of those numbers.

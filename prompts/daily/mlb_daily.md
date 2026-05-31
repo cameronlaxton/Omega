@@ -23,6 +23,11 @@ Run:
 python scripts/report_calibration.py --league MLB --window-days 30
 ```
 
+**Mandatory:** read [`prompts/reference/output_modes.md`](../reference/output_modes.md) before
+producing any output, and read the machine-readable `output_mode` field from the
+`reports/latest.md` **frontmatter** (`research_candidate` or `actionable`). `RESEARCH_CANDIDATE`
+restricts only what you show the user — it never skips the engine.
+
 Read `reports/latest.md`:
 - Section 3: game-plane calibration.
 - Section 3B: prop-plane sample count.
@@ -174,6 +179,10 @@ EvidenceSignal(
 
 ## Step 6 - Run Game Engine
 
+**Always run the engine when it is available, regardless of the Step 0 output mode.**
+`RESEARCH_CANDIDATE` only restricts what you present to the user; it never means "skip
+`analyze()`". Running the engine and persisting traces is how calibration data accumulates.
+
 MLB uses `simulation_backend="fast_score"`.
 
 ```python
@@ -254,60 +263,11 @@ research-only.
 
 **Execute immediately after each `analyze()` call returns, before any other processing.**
 
-Evaluate the engine response payload for fields returning NULL, `0.0`, `"undefined"`,
-empty collections, or otherwise missing values. This is a structural validation step,
-not a data quality judgment.
-
-**Mandatory checks:**
-
-1. **Request-level identity fields** (must be echoed):
-   - `league`, `player_name` (for props), `home_team`, `away_team`, `game_date`
-
-2. **Result object fields** (engine-owned; must exist if `status != "skipped"`):
-   - `model_prob` (or `over_prob`/`under_prob` for player props)
-   - `fair_price` / `no_vig_price`
-   - `edge_pct`
-   - `recommended_units`
-   - `confidence_tier`
-   - `trace_id`
-
-3. **Input context fields** (your responsibility; must be populated before calling `analyze()`):
-   - `game_context.is_playoff` and `game_context.rest_days` (non-null integers)
-   - `{prop_type}_mean` and `{prop_type}_std` (for player props)
-   - `home_context.off_rating`, `def_rating`, `starter_era` (for game analysis)
-   - `park_factor`, `weather_wind_mph` (when relevant to game/prop outcome)
-   - `sample_size` ≥ 5 (for player props, if available)
-
-**Capture strategy:**
-
-If any of the above are NULL or missing:
-- Build a **null_fields** list with clean field paths: `["result.recommended_units", "game_context.rest_days"]`
-- Append a `quality_gate` event with `event_type="quality_gate/null_data_audit"`
-  and `notes="Null fields: " + ", ".join(null_fields)`
-- Do **not** include numeric protected values in the event notes; only field names.
-
-**Decision logic:**
-
-- If result-level fields are NULL and `status != "skipped"`: **engine error → downgrade to research-only**.
-- If input context fields are NULL: **your input was incomplete → downgrade to research-only** and log which context field(s) were missing.
-- If `sample_size < 5` for a player prop: **research-only** unless explicitly backfilled from reliable source.
-- If `park_factor` or `weather_wind_mph` are unavailable for a game analysis where they're expected: **log as missing and downgrade if material**.
-- If all required fields are present: proceed to trace export.
-
-**Example null_fields audit event:**
-
-```json
-{
-  "ts": "2026-05-28T20:15:00Z",
-  "event_type": "quality_gate/null_data_audit",
-  "step": "engine_output_validation",
-  "status": "warn",
-  "notes": "Null fields: ['game_context.rest_days']. Downgraded to research-only.",
-  "inputs": [],
-  "outputs": [],
-  "trace_ids": ["sandbox-xxxxx"]
-}
-```
+Follow the canonical procedure in
+[`prompts/reference/engine_output_validation.md`](../reference/engine_output_validation.md).
+For MLB, the sport-specific input-context fields to verify are `starter_era`, `park_factor`, and
+`weather_wind_mph` (where material). Downgrades here are user-facing only — the engine already ran
+and the trace still persists (see [`output_modes.md`](../reference/output_modes.md)).
 
 ---
 

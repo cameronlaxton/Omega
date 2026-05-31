@@ -116,7 +116,8 @@ def _stable_input_hash(request: Any) -> str | None:
         payload = _sanitize_for_trace_hash(request)
         encoded = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:8]
-    except Exception:
+    except (TypeError, ValueError) as exc:
+        logger.debug("Failed to derive stable input hash: %s", exc)
         return None
 
 
@@ -330,7 +331,7 @@ def analyze(
         )
     if identity_status != "complete":
         calibration_exclusion_reasons.append("legacy_missing_identity")
-    calibration_exclusion_reasons.extend(str(d) for d in result_downgrades)
+    calibration_exclusion_reasons.extend(result_downgrades)
     calibration_exclusion_reasons.extend(result_missing_requirements)
     calibration_exclusion_reasons.extend(caller_exclusion_reasons)
     calibration_exclusion_reasons = sorted(set(calibration_exclusion_reasons))
@@ -1316,7 +1317,7 @@ def _coerce_optional_int(value: Any) -> int | None:
 
 def _expected_season_from_game_date(game_date: str) -> int | None:
     try:
-        return int(str(game_date)[:4])
+        return int(game_date[:4])
     except (TypeError, ValueError):
         return None
 

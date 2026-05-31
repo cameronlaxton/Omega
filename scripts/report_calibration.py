@@ -431,6 +431,33 @@ def _section_pending_candidates(registry: CalibrationRegistry, league: str) -> l
     return out
 
 
+def _resolve_output_mode(
+    production_profile_id: str | None,
+    with_predictions: int,
+    *,
+    sidecar_valid: bool = True,
+) -> tuple[OutputMode, list[str]]:
+    """Classify output mode once and collect human-readable reasons.
+
+    Single source so the report frontmatter flag and the prose directive block
+    can never disagree.
+    """
+    mode = classify_output_mode(
+        calibration_profile=production_profile_id,
+        trace_count=with_predictions,
+        sidecar_valid=sidecar_valid,
+    )
+    reasons: list[str] = []
+    if mode is OutputMode.RESEARCH_CANDIDATE:
+        if production_profile_id is None:
+            reasons.append("No fitted calibration profile — static fallback is active.")
+        if with_predictions == 0:
+            reasons.append("0 calibration-eligible traces in window.")
+        if not sidecar_valid:
+            reasons.append("Session sidecar invalid or corrupt.")
+    return mode, reasons
+
+
 def _render(
     league: str,
     window_days: int,
@@ -443,6 +470,8 @@ def _render(
     production_profile_id: str | None,
     candidates: list[dict[str, Any]],
     signal_perf: list[dict[str, Any]],
+    output_mode: OutputMode,
+    output_mode_reasons: list[str],
 ) -> str:
     now = datetime.now(UTC).isoformat(timespec="seconds")
     lines: list[str] = []
@@ -454,13 +483,9 @@ def _render(
     # ── Agent Directive ──────────────────────────────────────────────────────
     # Derived from Coverage + Calibration state.  The consuming LLM reads this
     # before acting; it governs what formal output is permitted this session.
-    output_mode = classify_output_mode(
-        calibration_profile=production_profile_id,
-        trace_count=counts["with_predictions"],
-        # Sidecar validity is a per-session concern; at the aggregate report
-        # level we treat it as valid (individual sessions are filtered upstream).
-        sidecar_valid=True,
-    )
+    # `output_mode`/`output_mode_reasons` are computed once in main() and also
+    # written to the report frontmatter, so the machine-readable flag and this
+    # prose block can never disagree.
     lines.append("## Agent Directive — Output Mode")
     lines.append("")
     if output_mode is OutputMode.RESEARCH_CANDIDATE:
@@ -469,18 +494,17 @@ def _render(
             "confidence tiers) is **not authorized** for this league in this window."
         )
         lines.append("")
-        reasons: list[str] = []
-        if production_profile_id is None:
-            reasons.append("No fitted calibration profile — static fallback is active.")
-        if counts["with_predictions"] == 0:
-            reasons.append("0 calibration-eligible traces in window.")
         # Bet records are wager-tracking metadata only — their absence never
         # downgrades output mode, grading, or calibration eligibility.
-        if reasons:
+        if output_mode_reasons:
             lines.append("**Reason(s):**")
-            for r in reasons:
+            for r in output_mode_reasons:
                 lines.append(f"- {r}")
         lines.append("")
+        lines.append(
+            "The engine still runs and the trace still persists — only user-facing "
+            "betting numbers are withheld. See `prompts/reference/output_modes.md`."
+        )
         lines.append(
             "**Permitted:** qualitative matchup narrative, news synthesis, "
             "recent form, listed sportsbook lines from a cited source."
@@ -722,12 +746,25 @@ def main() -> int:
     candidates = _section_pending_candidates(registry, args.league)
     signal_perf = _section_signal_performance(store, args.league)
 
+    # Classify output mode ONCE, here, and feed it to both the machine-readable
+    # frontmatter and the prose directive block so they cannot disagree. Sidecar
+    # validity is a per-session concern; at the aggregate report level we treat it
+    # as valid (individual sessions are filtered upstream).
+    production_profile_id = prod.profile_id if prod else None
+    output_mode, output_mode_reasons = _resolve_output_mode(
+        production_profile_id, counts["with_predictions"], sidecar_valid=True
+    )
+
     # Build the derived-artifact front-matter BEFORE closing the store: it reads
     # the effective DB path / source / trace count off the live store so the
     # report names the DB it was generated from (docs/phase6/ARTIFACT_AUTHORITY.md).
     header = header_for_store(
         store,
         ["omega_traces.db", "inbox/sessions/*.json (sidecars)", "calibration registry"],
+        extra_fields={
+            "output_mode": output_mode.value,
+            "output_mode_reasons": output_mode_reasons,
+        },
     )
     store.close()
 
@@ -740,9 +777,11 @@ def main() -> int:
         distribution_crps=distribution_crps,
         clv=clv,
         sessions=sessions,
-        production_profile_id=prod.profile_id if prod else None,
+        production_profile_id=production_profile_id,
         candidates=candidates,
         signal_perf=signal_perf,
+        output_mode=output_mode,
+        output_mode_reasons=output_mode_reasons,
     )
 
     out_path.write_text(rendered, encoding="utf-8")

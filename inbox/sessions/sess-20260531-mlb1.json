@@ -1,0 +1,83 @@
+{
+  "session_id": "sess-20260531-mlb1",
+  "opened_at": "2026-05-31T14:57:24Z",
+  "closed_at": "2026-05-31T15:01:57.307519+00:00",
+  "model_version": "codex-gpt-5",
+  "purpose": "MLB daily league research-candidate slate for 2026-05-31",
+  "league": null,
+  "window": null,
+  "effective_db_path": null,
+  "runtime_db_status": null,
+  "pipeline_status": {},
+  "next_required_action": null,
+  "bankroll": 1000.0,
+  "bankroll_confirmed": true,
+  "exec_stats": {
+    "traces_emitted": 0,
+    "bets_recorded": 0,
+    "webfetch_failures": 0
+  },
+  "agent_notes": "MLB daily slate gathered for 2026-05-31. Formal output withheld by calibration directive. Game-market research candidates only; prop suggestions excluded after resolver cache-risk and local API cap.",
+  "audit_events": [
+    {
+      "ts": "2026-05-31T14:57:24.207644+00:00",
+      "event_type": "preflight",
+      "step": "cowork_preflight_and_failure_budget",
+      "status": "ok",
+      "notes": "formal gate ready; DB healthy; sidecars validated; MLB output mode is research-candidate due to static fallback calibration",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-31T14:57:24.207669+00:00",
+      "event_type": "command",
+      "step": "run_line_invariant",
+      "status": "ok",
+      "notes": "run-line invariant test passed",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-31T15:01:57.271395+00:00",
+      "event_type": "data_provenance",
+      "step": "slate_and_game_odds",
+      "status": "ok",
+      "notes": "ESPN schedule, MLB Stats API probables/records, and typed Omega BetMGM game odds resolver used for 15-game MLB slate",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-31T15:01:57.271405+00:00",
+      "event_type": "bug",
+      "step": "prop_odds_resolution",
+      "status": "warn",
+      "notes": "Pitcher K prop cache reuse risk found; clean no-cache prop pass stopped by local Odds API monthly cap; props excluded from suggestions",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    },
+    {
+      "ts": "2026-05-31T15:01:57.271407+00:00",
+      "event_type": "downgrade",
+      "step": "output_mode",
+      "status": "ok",
+      "notes": "MLB calibration report authorizes research-candidate output only; no formal numeric Omega output emitted",
+      "inputs": null,
+      "outputs": null,
+      "assumptions": [],
+      "bugs": [],
+      "trace_ids": []
+    }
+  ]
+}

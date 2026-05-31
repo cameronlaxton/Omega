@@ -1,17 +1,20 @@
 ---
 canonical: false
-generated_at: '2026-05-30T20:02:49.970843+00:00'
+generated_at: '2026-05-31T17:23:20.923747+00:00'
 source_db_path: 'C:\\repos\\Omega\\omega_traces.db'
 db_path_source: 'default'
-trace_count_at_generation: 226
+trace_count_at_generation: 233
+output_mode: 'research_candidate'
+output_mode_reasons:
+  - 'No fitted calibration profile — static fallback is active.'
 source_artifacts:
   - omega_traces.db
   - inbox/sessions/*.json (sidecars)
   - calibration registry
 ---
-# Omega Calibration Report — WNBA
+# Omega Calibration Report — MLB
 
-Generated: `2026-05-30T20:02:49+00:00` | Window: last 30 days
+Generated: `2026-05-31T17:23:20+00:00` | Window: last 30 days
 
 ## Agent Directive — Output Mode
 
@@ -20,6 +23,7 @@ Generated: `2026-05-30T20:02:49+00:00` | Window: last 30 days
 **Reason(s):**
 - No fitted calibration profile — static fallback is active.
 
+The engine still runs and the trace still persists — only user-facing betting numbers are withheld. See `prompts/reference/output_modes.md`.
 **Permitted:** qualitative matchup narrative, news synthesis, recent form, listed sportsbook lines from a cited source.
 **Forbidden language:** “best bet”, “Tier A”, “Tier B”, “engine-confirmed”, “actionable bet”. Stake cap: ≤ 1u.
 
@@ -27,14 +31,14 @@ Generated: `2026-05-30T20:02:49+00:00` | Window: last 30 days
 
 | Metric | Count |
 |---|---|
-| Traces (all) | 7 |
-| Traces with model predictions (calibration-eligible) | 7 |
-| Graded (any outcome) | 0 |
-| &nbsp;&nbsp;of which game-graded | 0 |
-| &nbsp;&nbsp;of which prop-graded | 0 |
-| **Graded + calibration-eligible (usable pairs)** | **0** |
-| With bet_record _(wager tracking only — not used for calibration)_ | 0 |
-| With closing_line _(CLV only — not required for grading)_ | 0 |
+| Traces (all) | 70 |
+| Traces with model predictions (calibration-eligible) | 34 |
+| Graded (any outcome) | 62 |
+| &nbsp;&nbsp;of which game-graded | 36 |
+| &nbsp;&nbsp;of which prop-graded | 26 |
+| **Graded + calibration-eligible (usable pairs)** | **33** |
+| With bet_record _(wager tracking only — not used for calibration)_ | 16 |
+| With closing_line _(CLV only — not required for grading)_ | 2 |
 
 ## 2. Production calibration profile
 
@@ -42,7 +46,12 @@ Generated: `2026-05-30T20:02:49+00:00` | Window: last 30 days
 
 ## 3. Realized metrics — game plane (graded game traces in window)
 
-_Fewer than 10 game-graded traces in window — metrics suppressed (noise dominates)._
+- n: 26
+- Brier: 0.2776
+- ECE (10-bin): 0.3563
+- Log loss: 0.7713
+
+> **FLAG — ECE > 0.05 on game plane.** Investigate which probability quintile is miscalibrated.
 
 ## 3B. Realized metrics — prop plane (graded prop traces in window)
 
@@ -50,17 +59,34 @@ _Fewer than 10 prop (prediction, outcome) pairs in window — metrics suppressed
 
 ## 3C. Distribution CRPS â€” prop projection curves
 
-_No V10 distribution rows with realized prop outcomes in window â€” CRPS suppressed._
+- metric_version: `distribution_metrics_v1`
+- n: 7
+- Mean CRPS: 1.0724
+
+| stat_key | n | mean_crps |
+|---|---:|---:|
+| strikeouts_pitched | 7 | 1.0724 |
 
 ## 4. CLV (bets with attached closing lines)
 
-_No CLV-resolvable bets in window._
+- n: 2
+- Mean CLV: +0.00 cents
+- Beat-close rate: 0.0%
 
 ## 5. Sessions (most recent)
 
 | session_id | traces | graded | model | pipeline | next_action | closes | webfetch_fail | notes |
 |---|---|---|---|---|---|---|---|---|
-| `sess-20260530-wnb1` | 7 | 0 | gemini-3.5-flash | ? | ? | ? | ? | WNBA regular season slate - 3 games + 3 player props analyzed. Matchups: Storm @ |
+| `sess-20260530-mlb2` | 18 | 18 | gemini-3.5-flash | ? | ? | ? | ? | MLB slate May 30 2026 games starting after 4PM EST. 2 complete-context games ana |
+| `sess-20260529-mlb1` | 6 | 6 | claude-sonnet-4-6 | ? | ? | ? | ? | Calibration accumulation session 2026-05-29 evening MLB slate. 5 complete-contex |
+| `sess-20260527-mlb1` | 13 | 13 | claude-sonnet-4-6 | ? | ? | ? | 2 | Session opened for MLB early-slate prop research May 27 2026. Preflight failed:  |
+| `sess-20260526-auto` | 12 | 11 | claude-sonnet-4-6 | ? | ? | ? | 0 | Automated run. 7 game analyses (CIN@NYM, ATL@BOS, MIN@CWS, PHI@SD, HOU@TEX, TAM@ |
+| `sess-20260519-mlb1` | 1 | 0 | ? | ? | ? | ? | ? |  |
+| `sess-20260518-mlb1` | 5 | 4 | claude-sonnet-4-6 | ? | ? | ? | 0 | [migrated from pre-schema sidecar] \| archived_keys: date="2026-05-18"; traces=[ |
+| `sess-20260517-k9m2` | 5 | 3 | ? | ? | ? | ? | ? |  |
+| `sess-20260516-mlb1` | 1 | 1 | ? | ? | ? | ? | ? |  |
+| `sess-20260515-mlb1` | 6 | 3 | ? | ? | ? | ? | ? |  |
+| `sess-20260514-mlb1` | 3 | 3 | ? | ? | ? | ? | ? |  |
 
 ## 6. Pending CANDIDATE profiles
 
@@ -68,7 +94,22 @@ _No pending candidates._
 
 ## 6B. Evidence signal performance (retrospective)
 
-_No scored evidence signals yet — run `scripts/score_evidence_signals.py` after outcomes attach._
+| signal_type | source | window | n | dir_acc | mean_conf | cal_gap | brier | verdict |
+|---|---|---|---|---|---|---|---|---|
+| starter_era | mlb.com | season | 3 | 0.67 | 0.87 | +0.20 | 0.272 | insufficient_n |
+| def_matchup_strong | champsorchumps.us | season | 2 | 1.00 | 0.68 | -0.32 | 0.106 | insufficient_n |
+| rest_advantage | mlb.com/schedule | last_1 | 2 | 1.00 | 0.65 | -0.35 | 0.125 | insufficient_n |
+| def_matchup_strong | draftkings.com | season | 1 | 0.00 | 0.75 | +0.75 | 0.562 | insufficient_n |
+| def_matchup_weak | champsorchumps.us | season | 1 | 1.00 | 0.65 | -0.35 | 0.122 | insufficient_n |
+| def_matchup_weak | draftkings.com | last_3 | 1 | 0.00 | 0.65 | +0.65 | 0.423 | insufficient_n |
+| def_matchup_weak | draftkings.com | season | 1 | 0.00 | 0.70 | +0.70 | 0.490 | insufficient_n |
+| def_matchup_weak | si.com | last_3 | 1 | 1.00 | 0.70 | -0.30 | 0.090 | insufficient_n |
+| motivation_edge | agent_reasoning | matchup | 1 | 0.00 | 0.60 | +0.60 | 0.360 | insufficient_n |
+| rest_advantage | rotowire.com | last_1 | 1 | 0.00 | 0.65 | +0.65 | 0.423 | insufficient_n |
+| starter_era | baseball-reference.com | season | 1 | 1.00 | 0.87 | -0.13 | 0.017 | insufficient_n |
+| win_streak | espn.com | last_10 | 1 | 0.00 | 0.70 | +0.70 | 0.490 | insufficient_n |
+
+> Weight evidence by empirical accuracy: trust `predictive` signal types/sources, discount `noise`, treat `insufficient_n` as unproven. A positive `cal_gap` means the agent was overconfident in that signal.
 
 ## 7. Suggested actions
 

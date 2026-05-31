@@ -70,12 +70,14 @@ The resolver prepares market inputs and provenance only. It does not compute pro
 
 ## Operating Documents
 
+- [AGENTS.md](AGENTS.md): **cross-agent entrypoint — start here.** (`CLAUDE.md` is a shim to it.)
+- [prompts/reference/output_modes.md](prompts/reference/output_modes.md): canonical output-mode + engine-execution rules.
 - [OMEGA_COWORK.md](OMEGA_COWORK.md): local VM / Cowork runtime instruction.
 - [docs/LLM_MCP_INTERFACE.md](docs/LLM_MCP_INTERFACE.md): MCP tool contract and replay boundary.
 - [OMEGA_DATA_SOURCES.md](OMEGA_DATA_SOURCES.md): data sourcing and freshness rules.
-- [OMEGA_RUN_RECIPE.md](OMEGA_RUN_RECIPE.md): local run recipe.
-- [OMEGA_HANDBOOK.md](OMEGA_HANDBOOK.md): response and downgrade policy reference.
-- [OMEGA_STRATEGY.md](OMEGA_STRATEGY.md): anchor parlay playbook.
+- [docs/anchor_parlay_strategy.md](docs/anchor_parlay_strategy.md): anchor parlay playbook + skip rules.
+
+Retired to `archive/historical/` (non-authoritative): `OMEGA_HANDBOOK.md`, `OMEGA_RUN_RECIPE.md`. `OMEGA_STRATEGY.md` was folded into the anchor parlay playbook above.
 
 ## Testing
 

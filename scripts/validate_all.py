@@ -93,6 +93,11 @@ def main(argv: list[str] | None = None) -> int:
         _run("artifact-policy", [sys.executable, str(_SCRIPTS / "validate_artifact_policy.py")])
     )
 
+    # 4. Documentation lint (reference files exist, links resolve, no duplicate definitions).
+    results.append(
+        _run("doc-lint", [sys.executable, str(_SCRIPTS / "validate_docs.py")])
+    )
+
     # 3. Session sidecars — skip if the inbox has no sidecars yet.
     if _has_json(args.sessions_inbox):
         results.append(
