@@ -1,7 +1,7 @@
 """
 omega-fit-calibration â€” fit calibration profile candidates from graded traces.
 
-Loads graded traces from omega_traces.db, splits deterministically into train/holdout,
+Loads graded traces from var/omega_traces.db, splits deterministically into train/holdout,
 fits the requested method(s) on the train split, evaluates each on the holdout, and
 registers the resulting CalibrationProfile(s) as CANDIDATE in the registry.
 

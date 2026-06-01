@@ -41,7 +41,7 @@ Context slice design: `game_context.is_playoff` and `game_context.rest_days` fee
 
 ## 3. Current DB State (Evidence)
 
-Queried from `omega_traces.db` on 2026-05-22.
+Queried from `var/omega_traces.db` on 2026-05-22.
 
 ### 3a. Trace distribution by execution mode and result status
 
@@ -63,10 +63,10 @@ Total traces: 133 | Calibration-usable: ~60 | Actually producing calibration pai
 ### 3b. Calibration fitter output (actual run)
 
 ```
-python scripts/fit_calibration.py --league NBA --dry-run
+omega-fit-calibration --league NBA --dry-run
 → ERROR: only 2 graded home_win_prob/outcome pairs, minimum 100 required
 
-python scripts/fit_calibration.py --league NBA --plane prop --dry-run
+omega-fit-calibration --league NBA --plane prop --dry-run
 → ERROR: only 38 graded prop probability/outcome pairs, minimum 100 required
 ```
 
@@ -74,7 +74,7 @@ No profile has ever been fitted. `omega/core/calibration/profiles.json` does not
 
 ### 3c. Calibration metrics (static fallback performance)
 
-From `reports/latest.md` generated 2026-05-22:
+From `var/reports/latest.md` generated 2026-05-22:
 
 | Plane | n | Brier | ECE (10-bin) | Log Loss |
 |---|---|---|---|---|
@@ -115,7 +115,7 @@ Zero closing lines captured. `closing_lines` table is empty. CLV measurement is 
 **Files involved:**
 - `omega/core/simulation/engine.py` — `run_fast_game_simulation()` skip path
 - `omega/core/contracts/schemas.py` — `GameAnalysisRequest.home_context` / `away_context`
-- `scripts/resolve_odds.py` — returns lines, not team context
+- `omega-resolve-odds` — returns lines, not team context
 
 ---
 
@@ -123,12 +123,12 @@ Zero closing lines captured. `closing_lines` table is empty. CLV measurement is 
 
 **What happens:** 13 prop traces and 21 parlay traces in the DB have `skip_reason: "manual:no_engine_run"`. These were written by the agent constructing trace JSON by hand (old workflow) rather than calling `analyze()`. They get ingested and outcomes get attached, so they appear as "graded" in coverage stats but carry no model probability — the fitter skips them entirely.
 
-**Why this happens:** The pre-6h workflow had the agent compose trace dicts manually and drop them to `inbox/traces/`. The 6h `analyze()` contract deprecates this but old sessions still used it. Additionally, when the agent records a parlay bet (which the engine doesn't model natively), it writes a manual trace with execution_mode `sandbox_parlay`.
+**Why this happens:** The pre-6h workflow had the agent compose trace dicts manually and drop them to `var/inbox/traces/`. The 6h `analyze()` contract deprecates this but old sessions still used it. Additionally, when the agent records a parlay bet (which the engine doesn't model natively), it writes a manual trace with execution_mode `sandbox_parlay`.
 
 **Effect:** Inflates "graded" count (57 shows as healthy; real usable pairs: 38). Misleads calibration health reports.
 
 **Files involved:**
-- `scripts/ingest_traces.py` — accepts manual traces without rejecting `manual:no_engine_run`
+- `omega-ingest-traces` — accepts manual traces without rejecting `manual:no_engine_run`
 - `omega/trace/store.py` — `get_graded_traces()` returns these without filtering
 
 ---
@@ -158,7 +158,7 @@ Zero closing lines captured. `closing_lines` table is empty. CLV measurement is 
 **Why the rate is low:** Each session analyzes 5-15 props. Outcomes attach the following session. Many props are parlays (no individual trace). At current rate, without fixing the other failures, volume alone will not produce a fittable dataset even by end of Phase 6.
 
 **Files involved:**
-- `scripts/fit_calibration.py` — `_DEFAULT_MIN_SAMPLES = 100`
+- `omega-fit-calibration` — `_DEFAULT_MIN_SAMPLES = 100`
 
 ---
 
@@ -169,7 +169,7 @@ Zero closing lines captured. `closing_lines` table is empty. CLV measurement is 
 **Why:** No scheduled task. No session startup hook. The script requires `OMEGA_ODDS_API_KEY` (paid API) and must run before game time. The window is typically 15 minutes before tipoff.
 
 **Files involved:**
-- `scripts/fetch_closing_lines.py`
+- `omega-fetch-closing-lines`
 - `mcp__scheduled-tasks__create_scheduled_task` — could automate pre-game capture
 
 ---
@@ -249,7 +249,7 @@ def get_graded_traces(self, league: str | None = None, limit: int = 500) -> list
     # This ensures old-format traces with predictions but no result.status still pass
 ```
 
-`scripts/report_calibration.py` — update coverage section to distinguish:
+`omega-report-calibration` — update coverage section to distinguish:
 - `traces_total` (all traces)
 - `traces_with_predictions` (calibration-eligible)
 - `graded_with_predictions` (actually usable pairs)
@@ -300,11 +300,11 @@ Option A is lower risk and unblocks calibration immediately. Option B can be lay
 
 **What to do:**
 
-`scripts/ingest_traces.py` — add a validation rule: if `downgrades` contains `"manual:no_engine_run"` and `predictions` is null, log a warning and skip ingestion to the `traces` table. Route to `inbox/traces/failed/` with `.error.txt` sidecar explaining that manual traces without predictions cannot feed calibration.
+`omega-ingest-traces` — add a validation rule: if `downgrades` contains `"manual:no_engine_run"` and `predictions` is null, log a warning and skip ingestion to the `traces` table. Route to `var/inbox/traces/failed/` with `.error.txt` sidecar explaining that manual traces without predictions cannot feed calibration.
 
 Exception: parlay traces are explicitly unsupported by the engine — they should still be ingested for bet record purposes but flagged as `calibration_ineligible: true` in a new column.
 
-**Verification:** Drop a manually-constructed trace into `inbox/traces/` and confirm it is rejected with a `.error.txt` sidecar.
+**Verification:** Drop a manually-constructed trace into `var/inbox/traces/` and confirm it is rejected with a `.error.txt` sidecar.
 
 ---
 
@@ -331,13 +331,13 @@ After outcome attaches, a retrospective script scores each source: did the direc
 At session start, `report_calibration.py` (or a new `report_sources.py`) emits a source performance summary. The agent instruction is updated to weight high-performing sources (e.g., ESPN box-score recency) more heavily than low-performing ones (e.g., agent imputation for unknown players).
 
 **Phase C — Replay plane activation**
-Run `omega/reasoning/` replay on 5-10% of historical sessions using frozen evidence bundles. Score routing quality, downgrade discipline, and evidence selection. Surface patterns (e.g., "agent consistently over-trusted injury reports for B2B games") as structured feedback.
+Run reasoning replay on 5-10% of historical sessions using frozen evidence bundles. Score routing quality, downgrade discipline, and evidence selection. Surface patterns (e.g., "agent consistently over-trusted injury reports for B2B games") as structured feedback.
 
 **New files needed:**
 - `omega/trace/evidence.py` — EvidenceSource schema
-- `scripts/score_evidence_sources.py` — retrospective scoring
+- `omega-score-evidence-sources` — retrospective scoring
 - `omega/strategy/source_performance.py` — accumulates source accuracy
-- `scripts/report_sources.py` — feeds source summary into session context
+- `omega-report-sources` — feeds source summary into session context
 
 ---
 
@@ -375,7 +375,7 @@ After implementing all priorities, run this sequence:
 
 ```bash
 # 1. Preflight
-python scripts/cowork_preflight.py
+omega-cowork-preflight
 
 # 2. Smoke test — confirm context_labels non-empty
 python -c "
@@ -397,16 +397,16 @@ print('PASS context_labels:', result['context_labels'])
 "
 
 # 3. Outcome fetch
-python scripts/fetch_outcomes_all.py --verbose
+omega-fetch-outcomes-all --verbose
 
 # 4. Calibration fit attempt (will fail until 100 pairs, but should show correct count)
-python scripts/fit_calibration.py --league NBA --plane prop --dry-run
+omega-fit-calibration --league NBA --plane prop --dry-run
 
 # 5. Calibration report
-python scripts/report_calibration.py --league NBA --window-days 30
+omega-report-calibration --league NBA --window-days 30
 
 # 6. Sidecar validation
-python scripts/validate_session_sidecars.py
+omega-validate-session-sidecars
 ```
 
 ---
@@ -418,15 +418,15 @@ python scripts/validate_session_sidecars.py
 | `omega/core/contracts/schemas.py` | Add `game_context` warning validator | P1 |
 | `prompts/system_prompt.txt` | Explicit `game_context` keys in pre-analysis checklist | P1 |
 | `omega/trace/store.py` | Filter null-prediction traces from `get_graded_traces()` | P2 |
-| `scripts/report_calibration.py` | Add `traces_with_predictions` to coverage section | P2 |
+| `omega-report-calibration` | Add `traces_with_predictions` to coverage section | P2 |
 | `omega/core/simulation/engine.py` | Fallback to archetype defaults when `home_context` absent | P3 |
-| `scripts/fetch_closing_lines.py` | No code change — schedule via scheduled tasks | P4 |
-| `scripts/ingest_traces.py` | Reject `manual:no_engine_run` traces without predictions | P5 |
-| `scripts/fetch_outcomes_nba.py` | Fix dry-run unmatched accumulator | BUG-DRY-1 |
-| `scripts/fetch_outcomes_props.py` | Deduplicate warnings; fix unsupported prop type classification | BUG-PROP-1/2 |
+| `omega-fetch-closing-lines` | No code change — schedule via scheduled tasks | P4 |
+| `omega-ingest-traces` | Reject `manual:no_engine_run` traces without predictions | P5 |
+| `omega-fetch-outcomes-nba` | Fix dry-run unmatched accumulator | BUG-DRY-1 |
+| `omega-fetch-outcomes-props` | Deduplicate warnings; fix unsupported prop type classification | BUG-PROP-1/2 |
 | DB migration | `ALTER TABLE bet_records ADD COLUMN session_id TEXT` | BUG-SS-2 |
 | `omega/trace/evidence.py` (new) | EvidenceSource schema | P6-A |
-| `scripts/score_evidence_sources.py` (new) | Retrospective source scoring | P6-A |
+| `omega-score-evidence-sources` (new) | Retrospective source scoring | P6-A |
 
 ---
 

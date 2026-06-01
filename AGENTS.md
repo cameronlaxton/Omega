@@ -19,7 +19,7 @@ that points here and carries no independent rules.
 
 `RESEARCH_CANDIDATE` is an output-authorization mode, not an execution mode. If the engine is
 available, `analyze()` still runs, a `sandbox-` trace_id is still minted, and the trace still
-persists to `omega_traces.db` — only the user-facing betting numbers are withheld/downgraded.
+persists to `var/omega_traces.db` — only the user-facing betting numbers are withheld/downgraded.
 **Never skip the engine just because output is research-only**; doing so starves the calibration
 loop. See [`prompts/reference/output_modes.md`](prompts/reference/output_modes.md).
 

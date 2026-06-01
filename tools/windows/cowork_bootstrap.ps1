@@ -1,4 +1,4 @@
-# scripts/cowork_bootstrap.ps1
+# tools/windows/cowork_bootstrap.ps1
 #
 # Cowork local-workspace bootstrap. Runs on the Windows host BEFORE the Cowork
 # CLI / sandbox is launched. Moves Omega execution off the network/FUSE mount
@@ -15,7 +15,7 @@
 #   .\scripts\cowork_bootstrap.ps1 -DryRun            # no side effects
 #
 # After this script runs, launch the Cowork CLI from the printed workspace
-# path. Sync archival back to the mount with scripts/sync_to_mount.ps1 at
+# path. Sync archival back to the mount with tools/windows/sync_to_mount.ps1 at
 # session close.
 
 [CmdletBinding()]

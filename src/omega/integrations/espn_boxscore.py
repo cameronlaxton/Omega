@@ -1,7 +1,7 @@
 """
 omega.integrations.espn_boxscore — ESPN public summary/box-score for player stats.
 
-Used by scripts/fetch_outcomes_props.py to resolve a prop trace's player stat
+Used by omega-fetch-outcomes-props to resolve a prop trace's player stat
 against the actual game line. We separate the HTTP fetch from the JSON parse
 so tests can hit `parse_box_score()` with a fixture instead of the network.
 

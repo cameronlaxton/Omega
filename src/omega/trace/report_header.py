@@ -1,7 +1,7 @@
 """Derived-artifact front-matter header for generated Omega reports.
 
-Every generated markdown report (`reports/latest.md`,
-`reports/run_audits/<sid>.audit.md`, …) is *derived* from the ledger and
+Every generated markdown report (`var/reports/latest.md`,
+`var/reports/run_audits/<sid>.audit.md`, …) is *derived* from the ledger and
 sidecars — never a source of truth. This module emits a uniform YAML front-matter
 block at the top of those files so a human or script can immediately see the file
 is derived, which DB it was generated from, and how many traces existed at

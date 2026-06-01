@@ -1,4 +1,4 @@
-"""Tests for `scripts/ingest_traces.py --explain` (no-write validation report)."""
+"""Tests for `omega-ingest-traces --explain` (no-write validation report)."""
 
 from __future__ import annotations
 

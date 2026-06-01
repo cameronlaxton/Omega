@@ -1,6 +1,6 @@
 """
 Tests for the BUG-4 and BUG-5 validation/warning hooks in
-scripts/ingest_traces.py.
+omega-ingest-traces.
 
 - BUG-4: a bet_record on a prop trace requires home/away/game_date; the
   ingest must reject and the file gets routed to failed/.

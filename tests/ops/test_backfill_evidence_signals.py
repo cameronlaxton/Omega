@@ -1,5 +1,5 @@
 """
-Tests for scripts/backfill_evidence_signals.py â€” provenance-safe re-explosion
+Tests for omega-backfill-evidence-signals â€” provenance-safe re-explosion
 of evidence_signals from frozen pre-decision trace snapshots.
 
 The backfill must: default to dry-run, re-derive rows only from

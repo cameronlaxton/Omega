@@ -1,5 +1,5 @@
 """
-Tests for the bet_records sweep in scripts/fetch_outcomes_props.py.
+Tests for the bet_records sweep in omega-fetch-outcomes-props.
 
 BUG-2 defense: when the agent minted a separate bet-confirmation trace,
 the bet's trace_id and the analysis trace's id ended up disjoint, so

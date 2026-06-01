@@ -1,4 +1,4 @@
-"""Tests for `scripts/fetch_outcomes_props.py --dry-run` explainability.
+"""Tests for `omega-fetch-outcomes-props --dry-run` explainability.
 
 Pins the "0 processed" diagnostics: effective DB path, UTC window, and the
 per-league ungraded-trace count â€” so a window/DB mismatch is visible rather

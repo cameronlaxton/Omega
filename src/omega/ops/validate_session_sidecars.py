@@ -1,4 +1,4 @@
-"""Validate `inbox/sessions/*.json` files against the session sidecar contract."""
+"""Validate `var/inbox/sessions/*.json` files against the session sidecar contract."""
 
 from __future__ import annotations
 

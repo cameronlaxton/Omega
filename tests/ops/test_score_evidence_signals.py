@@ -1,5 +1,5 @@
 """
-Tests for scripts/score_evidence_signals.py coverage reporting.
+Tests for omega-score-evidence-signals coverage reporting.
 
 The scorer must report empty-evidence traces by status (an evidence-learning
 gap), keep scoring traces that DO carry evidence, and never treat

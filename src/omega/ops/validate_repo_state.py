@@ -32,7 +32,7 @@ def validate_terminology():
     # Exclude historical/archived paths and reports
     exclude_paths = [
         'archive\\', 'archive/', 'docs\\history', 'docs/history', 'docs\\phase7', 'docs/phase7',
-        'plugins\\', 'plugins/', 'reports\\', 'reports/', 'inbox\\', 'inbox/',
+        'plugins\\', 'plugins/', 'reports\\', 'var/reports/', 'inbox\\', 'var/inbox/',
         'docs\\session_', 'docs/session_', 'docs\\qa', 'docs/qa', 'docs\\phase6\\HANDOFF'
     ]
 

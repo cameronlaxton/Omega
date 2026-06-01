@@ -86,7 +86,7 @@ def test_action_plan_templates_dry_run_and_do_not_go_live():
     template_dir = _REPO_ROOT / "inbox" / "action_plans" / "templates"
     templates = sorted(template_dir.glob("*.json"))
     if not templates:
-        pytest.skip("inbox/action_plans/templates is runtime state and may be absent")
+        pytest.skip("var/inbox/action_plans/templates is runtime state and may be absent")
 
     for template in templates:
         payload = json.loads(template.read_text(encoding="utf-8"))

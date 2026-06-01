@@ -22,7 +22,7 @@ from omega.trace.session_sidecar import append_null_data_audit
 from pathlib import Path
 
 append_null_data_audit(
-    Path(f"inbox/sessions/{session_id}.json"),
+    Path(f"var/inbox/sessions/{session_id}.json"),
     missing_variables=["sample_size", "starter_era"],  # variable names only
     critical=False,       # True blocks analysis entirely
     trace_ids=["sandbox-xxxx"],
@@ -59,7 +59,7 @@ if missing:
 
 ## 3. Required Export Block Fields
 
-Every `inbox/traces/<trace_id>.json` must include:
+Every `var/inbox/traces/<trace_id>.json` must include:
 
 ```json
 {
@@ -115,7 +115,7 @@ Empty `evidence: []` → tagged `evidence_status: empty` → excluded from retro
 
 ### Validate:
 ```bash
-python scripts/validate_session_sidecars.py
+omega-validate-session-sidecars
 ```
 
 ### Protected fields — NEVER in audit event `inputs`/`outputs`:
@@ -134,20 +134,20 @@ Writer raises `ProtectedValueError` and rejects the append atomically.
 
 ```bash
 # SQLite workaround first only if on FUSE/network mount or TraceStore redirects
-cp omega_traces.db /tmp/omega_traces.db
+cp var/omega_traces.db /tmp/omega_traces.db
 export OMEGA_TRACE_DB=/tmp/omega_traces.db
 
 # Dry-run
-python scripts/ingest_traces.py --verbose --dry-run --db "$OMEGA_TRACE_DB"
+omega-ingest-traces --verbose --dry-run --db "$OMEGA_TRACE_DB"
 
 # Full ingest
-python scripts/ingest_traces.py --verbose --db "$OMEGA_TRACE_DB"
+omega-ingest-traces --verbose --db "$OMEGA_TRACE_DB"
 ```
 
 If `OMEGA_TRACE_DB` is unset, omit `--db` and let `TraceStore` resolve the repo
 default.
 
-Check `inbox/traces/failed/` — each rejected file has a `.error.txt` sidecar. Fix identity fields, re-drop.
+Check `var/inbox/traces/failed/` — each rejected file has a `.error.txt` sidecar. Fix identity fields, re-drop.
 
 ---
 
@@ -155,11 +155,11 @@ Check `inbox/traces/failed/` — each rejected file has a `.error.txt` sidecar. 
 
 ```bash
 # After placing bets (within 2h of game close)
-python scripts/fetch_closing_lines.py --dry-run
-python scripts/fetch_closing_lines.py
+omega-fetch-closing-lines --dry-run
+omega-fetch-closing-lines
 
 # After games complete
-python scripts/fetch_outcomes_all.py          # all leagues, idempotent
+omega-fetch-outcomes-all          # all leagues, idempotent
 ```
 
 Both are idempotent — re-running is safe.
@@ -169,11 +169,11 @@ Both are idempotent — re-running is safe.
 ## 9. Session Close Sequence
 
 ```bash
-python scripts/ingest_traces.py --verbose --db "$OMEGA_TRACE_DB"
-python scripts/validate_session_sidecars.py
-python scripts/render_session_audits.py --session-id <session_id>
-python scripts/report_calibration.py --db "$OMEGA_TRACE_DB" --league NBA --window-days 30
-python scripts/fetch_closing_lines.py --dry-run
+omega-ingest-traces --verbose --db "$OMEGA_TRACE_DB"
+omega-validate-session-sidecars
+omega-render-session-audits --session-id <session_id>
+omega-report-calibration --db "$OMEGA_TRACE_DB" --league NBA --window-days 30
+omega-fetch-closing-lines --dry-run
 ```
 
 If `OMEGA_TRACE_DB` is unset, omit `--db`.
@@ -198,5 +198,5 @@ If `OMEGA_TRACE_DB` is unset, omit `--db`.
 
 - `omega/trace/session_sidecar.py` — `append_audit_events`, `append_null_data_audit`, `ProtectedValueError`
 - `omega/trace/persistable.py` — `PersistableTrace.from_analyze_output()`
-- `scripts/ingest_traces.py` — ingest validation and failure routing
+- `omega-ingest-traces` — ingest validation and failure routing
 - `OMEGA_COWORK.md §6` — trace export contract, evidence signal spec

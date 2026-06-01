@@ -37,7 +37,7 @@ Usage:
     omega-backfill-trace-quality --db <path> -v
 
 Rollback:
-    omega_traces.db is git-tracked: `git checkout omega_traces.db` reverts all
+    var/omega_traces.db is git-tracked: `git checkout var/omega_traces.db` reverts all
     rewrites. (Or re-run with a restored DB.)
 """
 

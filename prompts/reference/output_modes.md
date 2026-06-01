@@ -15,7 +15,7 @@ When the engine is available:
 
 - **`analyze()` still runs.**
 - A **`sandbox-` trace_id is still minted** by the engine.
-- The **trace is still persisted** to `omega_traces.db` (export → `ingest_traces.py` → store).
+- The **trace is still persisted** to `var/omega_traces.db` (export → `ingest_traces.py` → store).
 - **User-facing betting numbers are withheld or downgraded** (no Bet Card, edge%, EV%, Kelly,
   units, confidence tier, or trace_id in the reply).
 - **Database trace generation is never withheld.** Withholding output from the user does **not**
@@ -55,7 +55,7 @@ is emitted before any wager exists.
 ### Machine-readable source of truth
 
 `omega-report-calibration` writes the current mode into the **frontmatter** of
-`reports/latest.md`:
+`var/reports/latest.md`:
 
 ```yaml
 output_mode: research_candidate        # or: actionable

@@ -53,7 +53,7 @@ def main() -> int:
         nargs="?",
         type=Path,
         default=Path("inbox") / "traces",
-        help="Root directory to scan recursively (default: inbox/traces)",
+        help="Root directory to scan recursively (default: var/inbox/traces)",
     )
     parser.add_argument("--dry-run", action="store_true", help="Report changes without writing")
     args = parser.parse_args()

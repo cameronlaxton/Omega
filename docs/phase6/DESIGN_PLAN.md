@@ -80,7 +80,7 @@ CREATE TABLE schema_versions (
 
 ```python
 class TraceStore:
-    def __init__(self, db_path: str = "omega_traces.db"):
+    def __init__(self, db_path: str = "var/omega_traces.db"):
         """Initialize SQLite connection and ensure schema exists."""
 
     def persist(self, trace: Dict[str, Any]) -> str:
@@ -410,7 +410,7 @@ A candidate profile is promoted to production when:
 
 | File | Change |
 |---|---|
-| `omega/skills/trace_recorder.py` | Update `_write_trace()` to call `TraceStore.persist()` with JSONL fallback |
+| `omega/trace/store.py` | Add `persist_trace(trace: PersistableTrace)` |
 | `omega/strategy/backtest/engine.py` | Accept `FrozenArtifact` alongside legacy dict; add `_compat_dict_to_artifact()` |
 | `omega/strategy/models.py` | Add `artifact_schema_version`, `calibration_policy`, `trace_ids` to `BacktestResult` |
 | `omega/core/calibration/probability.py` | Update `apply_calibration()` to check registry for league profile |
@@ -423,8 +423,7 @@ A candidate profile is promoted to production when:
 ### Phase 6a: Trace persistence (can ship independently)
 1. Create `omega/trace/schema.py` — DDL strings + version table
 2. Create `omega/trace/store.py` — TraceStore with persist, query, attach_outcome
-3. Create `omega/trace/models.py` — type aliases
-4. Update `omega/skills/trace_recorder.py` — call TraceStore with JSONL fallback
+3. Implement `omega/trace/audit_renderer.py` — derive markdown from sidecar + ledger
 5. Write `tests/trace/test_trace_store.py` — round-trip, idempotent persist, outcome attachment
 6. Migrate any existing JSONL traces into SQLite
 

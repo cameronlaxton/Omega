@@ -43,8 +43,8 @@
 
 **Outcome source — NBA/MLB:** ESPN scoreboard API for 2026-05-28.
 **Outcome source — props:** Internal props outcome script; no external fetch required.
-**TraceStore DB:** Redirected from `omega_traces.db` (FUSE mount) → `/sessions/affectionate-peaceful-maxwell/.omega/runtime/omega_traces.db`. Reads and writes against the runtime DB, not the repo-local file. This is expected behavior per OMEGA_COWORK.md §2c.
-**Calibration report output:** `reports/latest.md` — 0 traces, static fallback profile, NBA 30-day window.
+**TraceStore DB:** Redirected from `var/omega_traces.db` (FUSE mount) → `/sessions/affectionate-peaceful-maxwell/.omega/runtime/omega_traces.db`. Reads and writes against the runtime DB, not the repo-local file. This is expected behavior per OMEGA_COWORK.md §2c.
+**Calibration report output:** `var/reports/latest.md` — 0 traces, static fallback profile, NBA 30-day window.
 
 ---
 
@@ -127,7 +127,7 @@ None. No candidates were surfaced — the DB is empty of open traces for the rel
 ### Assumptions
 
 1. ESPN scoreboard API returning 0 results for 2026-05-28 means no games played or no matching traces — both are consistent with an empty DB.
-2. The `inbox/traces/backfill_20260528/` directory contains traces that were already processed in a prior session (hence not re-ingested).
+2. The `var/inbox/traces/backfill_20260528/` directory contains traces that were already processed in a prior session (hence not re-ingested).
 3. Sidecar truncation is a write-interrupt issue, not a serialization bug in the sidecar writer itself.
 
 ---

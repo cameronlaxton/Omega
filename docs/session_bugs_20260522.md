@@ -9,12 +9,12 @@ Session: sess-20260521-c001 — startup outcome backfill and calibration health
 **Severity:** High — `report_calibration.py` skips all 6 prior sidecars; sessions table shows `?` for model/closes/webfetch_fail across the board
 
 **Affected files:**
-- `inbox/sessions/sess-20260515-g7d1.json`
-- `inbox/sessions/sess-20260518-mlb1.json`
-- `inbox/sessions/sess-20260518-wcf1.json`
-- `inbox/sessions/sess-20260519-nba1.json`
-- `inbox/sessions/sess-20260519-nyk1.json`
-- `inbox/sessions/sess-20260520-g001.json`
+- `var/inbox/sessions/sess-20260515-g7d1.json`
+- `var/inbox/sessions/sess-20260518-mlb1.json`
+- `var/inbox/sessions/sess-20260518-wcf1.json`
+- `var/inbox/sessions/sess-20260519-nba1.json`
+- `var/inbox/sessions/sess-20260519-nyk1.json`
+- `var/inbox/sessions/sess-20260520-g001.json`
 
 **Extra keys present (not in schema):** `date`, `traces`, `bets_taken`, `game_result`, `notes`, `started_at`, `ended_at`, `created_at`
 
@@ -32,7 +32,7 @@ Session: sess-20260521-c001 — startup outcome backfill and calibration health
 
 **Reproduction:**
 ```bash
-python scripts/fetch_outcomes_nba.py --since 2026-05-18 --until 2026-05-20 --dry-run --verbose
+omega-fetch-outcomes-nba --since 2026-05-18 --until 2026-05-20 --dry-run --verbose
 ```
 Output: 8 `DRY` attach lines, then `unmatched=5` listing 5 of the same trace_ids.
 
@@ -48,7 +48,7 @@ Output: 8 `DRY` attach lines, then `unmatched=5` listing 5 of the same trace_ids
 
 **Reproduction:**
 ```bash
-python scripts/fetch_outcomes_props.py --since 2026-05-17 --until 2026-05-20 --verbose
+omega-fetch-outcomes-props --since 2026-05-17 --until 2026-05-20 --verbose
 ```
 Output: `sandbox-667e891d-7aed` listed 3× in missing_fields warnings; `sandbox-fe2718ac-28d4` listed 3×.
 

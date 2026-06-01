@@ -18,24 +18,24 @@ Use this skill for stop conditions, failure classification, bounded recovery, an
 For daily league sessions:
 
 ```bash
-python scripts/db_status.py
-python scripts/cowork_preflight.py --formal-output-gate
-python scripts/validate_session_sidecars.py
+omega-db-status
+omega-cowork-preflight --formal-output-gate
+omega-validate-session-sidecars
 ```
 
 For ingest/outcome/calibration sessions:
 
 ```bash
-python scripts/db_status.py
-python scripts/ingest_traces.py --dry-run --explain
-python scripts/validate_session_sidecars.py
+omega-db-status
+omega-ingest-traces --dry-run --explain
+omega-validate-session-sidecars
 ```
 
-For trace export validation (only if `scripts/validate_trace_export.py` exists):
+For trace export validation (only if `omega-validate-trace-export` exists):
 
 ```bash
-python scripts/validate_trace_export.py inbox/traces --strict   # fresh/formal exports
-python scripts/validate_trace_export.py inbox/traces            # legacy/backfill inspection
+omega-validate-trace-export var/inbox/traces --strict   # fresh/formal exports
+omega-validate-trace-export var/inbox/traces            # legacy/backfill inspection
 ```
 
 ---

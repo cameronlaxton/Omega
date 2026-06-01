@@ -673,7 +673,7 @@ class TestDbPathResolution:
         # empty-history guard is covered separately in test_db_path_policy.py;
         # opt into intentional empty history so resolution can proceed here.
         monkeypatch.setenv("OMEGA_ALLOW_EMPTY_DB", "1")
-        fake_mount = tmp_path / "fakemount" / "omega_traces.db"
+        fake_mount = tmp_path / "fakemount" / "var/omega_traces.db"
         fake_mount.parent.mkdir(parents=True, exist_ok=True)
 
         # Force the detector to return True only for our fake path.
@@ -684,7 +684,7 @@ class TestDbPathResolution:
 
         # Pin the redirect target to a temp dir so we don't pollute the real
         # user runtime path during tests.
-        redirect_target = tmp_path / "redirect" / "omega_traces.db"
+        redirect_target = tmp_path / "redirect" / "var/omega_traces.db"
         monkeypatch.setattr(
             store_mod, "_local_runtime_db_path", lambda: redirect_target
         )

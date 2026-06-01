@@ -3,7 +3,7 @@
 **Reported:** 2026-05-26  
 **Detected by:** weekly shadow calibration run (`run_action_plan.py weekly_shadow_review.json`)  
 **Severity:** Low (data not lost; session excluded from calibration report only)  
-**File:** `inbox/sessions/sess-20260524-nba1.json`
+**File:** `var/inbox/sessions/sess-20260524-nba1.json`
 
 ---
 
@@ -15,7 +15,7 @@
 WARNING report_calibration: Skipping invalid session sidecar sess-20260524-nba1.json: Extra data: line 16 column 1 (char 1079)
 ```
 
-The session appears in `reports/latest.md` with `?` for model version, closing-line count, and webfetch failures. Its exec stats and agent notes are absent from the report.
+The session appears in `var/reports/latest.md` with `?` for model version, closing-line count, and webfetch failures. Its exec stats and agent notes are absent from the report.
 
 ## Root cause
 
@@ -35,7 +35,7 @@ The JSON content itself is valid and complete. No data is missing.
 
 ```python
 import json
-with open("inbox/sessions/sess-20260524-nba1.json", "rb") as f:
+with open("var/inbox/sessions/sess-20260524-nba1.json", "rb") as f:
     raw = f.read()
 print(len(raw))          # 1334
 print(raw[1075:1090])    # b'trace."\n}\n\x00\x00\x00\x00'
@@ -56,7 +56,7 @@ json.loads(raw.rstrip(b"\x00"))  # parses OK
 ```bash
 python - <<'EOF'
 from pathlib import Path
-p = Path("inbox/sessions/sess-20260524-nba1.json")
+p = Path("var/inbox/sessions/sess-20260524-nba1.json")
 raw = p.read_bytes()
 p.write_bytes(raw.rstrip(b"\x00"))
 print(f"Trimmed to {len(p.read_bytes())} bytes")

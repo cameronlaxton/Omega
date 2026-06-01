@@ -11,7 +11,7 @@ DB is intentionally copy/paste (the sandbox cannot reach localhost).
 - Python 3.11+ with the project deps installed.
 - A local VM/MCP runtime with `omega.core.contracts.service.analyze` and
   `prompts/system_prompt.txt` uploaded to project knowledge.
-- Empty `omega_traces.db` (or fresh `--db <path>` for the smoke).
+- Empty `var/omega_traces.db` (or fresh `--db <path>` for the smoke).
 
 ## 1. Sandbox: emit a trace with `session_id`
 
@@ -22,7 +22,7 @@ In a Claude Project chat, ask the agent to analyze any NBA game. Per
 Expected emission (§10 + §12.2):
 
 ```json
-// SAVE AS: inbox/traces/sandbox-XXXX.json
+// SAVE AS: var/inbox/traces/sandbox-XXXX.json
 {
   "trace": {
     "trace_id": "sandbox-XXXX",
@@ -36,16 +36,16 @@ Expected emission (§10 + §12.2):
 }
 ```
 
-Save the JSON to `inbox/traces/sandbox-XXXX.json`. Then:
+Save the JSON to `var/inbox/traces/sandbox-XXXX.json`. Then:
 
 ```bash
-python scripts/ingest_traces.py
+omega-ingest-traces
 ```
 
 Verify:
 
 ```bash
-sqlite3 omega_traces.db "SELECT trace_id, session_id, league FROM traces;"
+sqlite3 var/omega_traces.db "SELECT trace_id, session_id, league FROM traces;"
 ```
 
 The `session_id` column must be populated.
@@ -55,12 +55,12 @@ The `session_id` column must be populated.
 Around T-30 minutes before tip-off, run the closing-line capture script locally:
 
 ```bash
-python scripts/fetch_closing_lines.py --league NBA
+omega-fetch-closing-lines --league NBA
 # add --dry-run first to verify matches without writing
 ```
 
 The script queries pending `bet_records`, calls the Odds API (BetMGM-first),
-and writes closing rows directly to `omega_traces.db` via
+and writes closing rows directly to `var/omega_traces.db` via
 `TraceStore.attach_closing_line()`. No inbox file is needed.
 
 For missed windows, use the paid historical endpoint:
@@ -74,7 +74,7 @@ snapshot = client.fetch_historical_odds(league="NBA", date="<ISO-8601 close time
 Verify:
 
 ```bash
-sqlite3 omega_traces.db "SELECT trace_id, market, selection_descriptor, \
+sqlite3 var/omega_traces.db "SELECT trace_id, market, selection_descriptor, \
   closing_line, closing_odds, source FROM closing_lines;"
 ```
 
@@ -86,14 +86,14 @@ Re-running the capture is a no-op for rows already written
 After the game completes:
 
 ```bash
-python scripts/fetch_outcomes_nba.py
+omega-fetch-outcomes-nba
 ```
 
 This uses the existing ESPN integration (NOT deprecated) to attach scores.
 Verify:
 
 ```bash
-sqlite3 omega_traces.db "SELECT trace_id, home_score, away_score, result FROM outcomes;"
+sqlite3 var/omega_traces.db "SELECT trace_id, home_score, away_score, result FROM outcomes;"
 ```
 
 ## 4. Sandbox: emit session sidecar
@@ -102,7 +102,7 @@ At the end of the session (or first message of the next), the agent emits per
 §12.3:
 
 ```json
-// SAVE AS: inbox/sessions/sess-20260515-a1b2.json
+// SAVE AS: var/inbox/sessions/sess-20260515-a1b2.json
 {
   "session_id": "sess-20260515-a1b2",
   "started_at": "...",
@@ -117,14 +117,14 @@ At the end of the session (or first message of the next), the agent emits per
 }
 ```
 
-Save to `inbox/sessions/sess-20260515-a1b2.json`. No script runs — the report
+Save to `var/inbox/sessions/sess-20260515-a1b2.json`. No script runs — the report
 job reads the sidecar directly.
 
 ## 5. Run the report
 
 ```bash
-python scripts/report_calibration.py --league NBA --window-days 30
-cat reports/latest.md
+omega-report-calibration --league NBA --window-days 30
+cat var/reports/latest.md
 ```
 
 Expected sections:
@@ -143,35 +143,35 @@ Once you have accumulated 100+ graded NBA traces (4–8 weeks of typical
 usage per `HANDOFF_phase6d_to_h.md`):
 
 ```bash
-python scripts/fit_calibration.py --league NBA --method both
+omega-fit-calibration --league NBA --method both
 ```
 
 Two CANDIDATE profiles register. Verify:
 
 ```bash
-python scripts/promote_profile.py --list-candidates --league NBA
+omega-promote-profile --list-candidates --league NBA
 ```
 
 Inspect gate status without promoting:
 
 ```bash
-python scripts/promote_profile.py --candidate-id <iso_profile_id>
+omega-promote-profile --candidate-id <iso_profile_id>
 ```
 
 Promote with full gates (operator must confirm gates 4 & 5 after manual review):
 
 ```bash
-python scripts/promote_profile.py --candidate-id <iso_profile_id> --auto \
+omega-promote-profile --candidate-id <iso_profile_id> --auto \
   --confirm-backtest-parity --confirm-clv-non-regression
 ```
 
 ## 7. Session-start brief loop
 
-In a NEW Claude Project session, upload `reports/latest.md` to project
+In a NEW Claude Project session, upload `var/reports/latest.md` to project
 knowledge. The agent reads it per §13 and emits an action-plan block:
 
 ```json
-// SAVE AS: inbox/action_plans/sess-XXXX.json
+// SAVE AS: var/inbox/action_plans/sess-XXXX.json
 {
   "session_id": "sess-XXXX",
   "actions": [
@@ -184,7 +184,7 @@ knowledge. The agent reads it per §13 and emits an action-plan block:
 Save and run:
 
 ```bash
-python scripts/run_action_plan.py inbox/action_plans/sess-XXXX.json
+omega-run-action-plan var/inbox/action_plans/sess-XXXX.json
 ```
 
 The runner dispatches each allowed action. Disallowed types (e.g. an LLM-emitted

@@ -21,10 +21,10 @@ needs to do. Read this first; the original plan lives at
 - `omega/trace/store.py` — added `record_bet()`, `get_bet_records()`,
   `update_bet_status()`, `attach_closing_line()`, `get_closing_lines()`.
   Schema-migration is forward-additive via `_record_version()`.
-- `scripts/ingest_traces.py` — scans `inbox/traces/*.json`, adapts engine
+- `omega-ingest-traces` — scans `var/inbox/traces/*.json`, adapts engine
   `analyze()` output, persists trace + optional bet, moves to processed/failed.
   Accepts both export-block shape and raw `analyze()` output. `--dry-run` flag.
-- `inbox/traces/` + `processed/` + `failed/` scaffold with `.gitkeep` and README.
+- `var/inbox/traces/` + `processed/` + `failed/` scaffold with `.gitkeep` and README.
 
 ### Step 2 — System prompt update ✅
 
@@ -46,11 +46,11 @@ needs to do. Read this first; the original plan lives at
 - `omega/trace/clv.py` — `compute_clv()` returning `CLVResult` dataclass.
   American↔decimal↔implied-prob helpers. Line-value scoring for over/under and
   home/away spread.
-- `scripts/fetch_outcomes_nba.py` — ESPN scoreboard → `TraceStore.attach_outcome()`.
+- `omega-fetch-outcomes-nba` — ESPN scoreboard → `TraceStore.attach_outcome()`.
   Accepts `--since today|yesterday|YYYY-MM-DD --until ...`. Searches game-date
   AND prior-day windows for decisions made the night before. Logs unmatched
   traces so the alias table can be extended.
-- `scripts/fetch_closing_lines.py` — sport-agnostic; joins `bet_records` × `traces`
+- `omega-fetch-closing-lines` — sport-agnostic; joins `bet_records` × `traces`
   × `closing_lines` to find pending bets with no close. Groups pending bets by
   `trace.league` and issues one the-odds-api call per league via
   `OddsApiClient.fetch_event_odds(league)` (which resolves through
@@ -58,13 +58,13 @@ needs to do. Read this first; the original plan lives at
   (`moneyline|spread|total`) → the-odds-api keys (`h2h|spreads|totals`). Skips
   `player_prop:*` markets (not in free-tier base). Accepts `--league` to restrict
   to one league; default iterates every league present in pending bets.
-  `scripts/fetch_closing_lines_nba.py` remains as a deprecation shim that
+  `omega-fetch-closing-lines-nba` remains as a deprecation shim that
   forwards to the generalized script with `--league NBA`.
 
 ### Tests ✅
 
 **268 tests passing.** New this session:
-- `tests/scripts/test_ingest_traces.py` — 7 tests (shape A + shape B + error
+- `tests/omega-test-ingest-traces` — 7 tests (shape A + shape B + error
   path + idempotency + dry-run).
 - `tests/integrations/test_espn_alias_resolver.py` — alias resolution + ESPN
   fixture parsing.
@@ -74,7 +74,7 @@ needs to do. Read this first; the original plan lives at
 
 ### What got smoke-tested manually
 
-- `python scripts/ingest_traces.py --dry-run` and full run against a synthetic
+- `omega-ingest-traces --dry-run` and full run against a synthetic
   `sandbox-smoke001.json` — file moved to `processed/`, row inserted with
   `schema_version=2` (and after step 3, `=3`).
 - Both new scripts respond to `--help` with their expected arg surface.
@@ -98,7 +98,7 @@ existing code already present in the repo are in **bold** — these are the
 building blocks, do not rebuild them.
 
 **Files to create:**
-- `scripts/fit_calibration.py --league NBA`
+- `omega-fit-calibration --league NBA`
   1. Load graded NBA traces: **`TraceStore.get_graded_traces(league="NBA")`**.
   2. Train/holdout split (last ~30 days = holdout). Be deterministic.
   3. **`CalibrationFitter.extract_pairs(traces)`** → (prediction, outcome) lists.
@@ -107,9 +107,9 @@ building blocks, do not rebuild them.
   4. Fit two candidates: **`fit_isotonic()`**, **`fit_shrinkage()`**.
   5. **`evaluate()`** each on holdout.
   6. Persist via **`CalibrationRegistry.register()`** (status=CANDIDATE).
-  7. Emit `reports/calibration_fit_{YYYYMMDD}.md` with metrics table + candidate IDs.
+  7. Emit `var/reports/calibration_fit_{YYYYMMDD}.md` with metrics table + candidate IDs.
 
-- `scripts/promote_profile.py --candidate-id <id> [--auto] [--manual-override]`
+- `omega-promote-profile --candidate-id <id> [--auto] [--manual-override]`
   Hybrid gate per user's answer in plan:
   - **Hard gates:** sample_size ≥ 100, Brier improvement ≥ 1pp absolute over
     incumbent on holdout, no log-loss regression.
@@ -121,8 +121,8 @@ building blocks, do not rebuild them.
     (this is *new* — bring in `compute_clv` from `omega.trace.clv`, joining
     `bet_records` × `closing_lines` for each holdout trace).
   - `--auto` + all gates pass → **`CalibrationRegistry.promote()`** and append
-    to `reports/promotion_audit.jsonl`.
-  - Any gate fails → write `reports/pending_review_{candidate_id}.md`, exit
+    to `var/reports/promotion_audit.jsonl`.
+  - Any gate fails → write `var/reports/pending_review_{candidate_id}.md`, exit
     non-zero. Manual approval via `--manual-override --reason "..."`.
 
 **Scheduled task** (don't create until script works manually):
@@ -130,14 +130,14 @@ building blocks, do not rebuild them.
   MCP. Chain: `fit_calibration.py` → `promote_profile.py --auto`.
 
 **Tests to add:**
-- `tests/scripts/test_fit_and_promote.py` — synthetic graded-trace fixture →
+- `tests/omega-test-fit-and-promote` — synthetic graded-trace fixture →
   fit → assert candidate registered → simulate gate pass/fail.
 - Parity check: `test_calibration_parity_service_and_backtest` must continue
   to pass after a promotion (existing test, do not break).
 
 **Risks for Step 4:**
 - Step 4 cannot meaningfully run until ≥100 graded NBA traces exist in
-  `omega_traces.db`. The scripts will be written and unit-tested with synthetic
+  `var/omega_traces.db`. The scripts will be written and unit-tested with synthetic
   data; the first real fit will need 4–8 weeks of NBA usage.
 - the-odds-api free tier excludes historical odds, so closing-line capture
   for any trace is one-shot at scheduled-task time. Missed windows = no CLV
@@ -149,7 +149,7 @@ building blocks, do not rebuild them.
 ## What's next — Step 5 (Drift / health report)
 
 **Files to create:**
-- `scripts/report_calibration.py --league NBA` — emits `reports/calibration_health_{YYYYMMDD}.md`:
+- `omega-report-calibration --league NBA` — emits `var/reports/calibration_health_{YYYYMMDD}.md`:
   - Trace counts: total / graded / with-bet-record / with-closing-line
     (last 7d, last 30d, all-time).
   - Current production profile (`CalibrationRegistry.get_production("NBA")`):
@@ -178,15 +178,15 @@ Then:
 1. Open `omega/core/calibration/fitter.py` and `omega/core/calibration/registry.py`
    to confirm method signatures (`extract_pairs`, `fit_isotonic`, `evaluate`,
    `compare`, `register`, `promote`, `get_production`).
-2. Write `scripts/fit_calibration.py` to exercise that surface. Keep it under
+2. Write `omega-fit-calibration` to exercise that surface. Keep it under
    200 lines.
-3. Write `scripts/promote_profile.py`. Pay attention to the backtest-replay
+3. Write `omega-promote-profile`. Pay attention to the backtest-replay
    parity gate — the existing **`BacktestEngine.run(strategy, artifacts)`**
    may need a `calibration_policy` kwarg or env override; check `omega/strategy/backtest/engine.py`
    and verify before writing.
-4. Add `tests/scripts/test_fit_and_promote.py` with a synthetic fixture.
+4. Add `tests/omega-test-fit-and-promote` with a synthetic fixture.
 5. Run full suite. Commit Step 4 (one PR).
-6. Write `scripts/report_calibration.py` + a small markdown formatter helper.
+6. Write `omega-report-calibration` + a small markdown formatter helper.
 7. Run full suite. Commit Step 5 (one PR).
 8. Schedule the two recurring tasks via the `scheduled-tasks` MCP.
 
@@ -204,9 +204,9 @@ Then:
    event-level The Odds API prop markets where the paid plan/book coverage
    supports them. BetMGM is the default book; multi-book prop scans are explicit
    line-shopping or audit operations.
-4. **Auto-ingest of `inbox/traces/`.** Plan flagged this as a future enhancement
+4. **Auto-ingest of `var/inbox/traces/`.** Plan flagged this as a future enhancement
    (Claude Code `/loop` or scheduled task). Worth doing once Steps 4+5 land so
-   you don't have to remember `python scripts/ingest_traces.py` after each
+   you don't have to remember `omega-ingest-traces` after each
    Claude.ai session.
 
 ---
@@ -219,12 +219,12 @@ Then:
 - `omega/integrations/__init__.py`
 - `omega/integrations/espn_nba.py`
 - `omega/integrations/odds_api.py`
-- `scripts/ingest_traces.py`
-- `scripts/fetch_outcomes_nba.py`
-- `scripts/fetch_closing_lines_nba.py` (now a deprecation shim — see `scripts/fetch_closing_lines.py`)
-- `inbox/README.md`
-- `inbox/traces/.gitkeep` + `processed/.gitkeep` + `failed/.gitkeep`
-- `tests/scripts/__init__.py` + `tests/scripts/test_ingest_traces.py`
+- `omega-ingest-traces`
+- `omega-fetch-outcomes-nba`
+- `omega-fetch-closing-lines-nba` (now a deprecation shim — see `omega-fetch-closing-lines`)
+- `var/inbox/README.md`
+- `var/inbox/traces/.gitkeep` + `processed/.gitkeep` + `failed/.gitkeep`
+- `tests/omega---init--` + `tests/omega-test-ingest-traces`
 - `tests/integrations/__init__.py` + `tests/integrations/test_espn_alias_resolver.py`
 - `tests/trace/test_clv.py`
 - `tests/trace/test_closing_lines.py`
@@ -251,7 +251,7 @@ Then:
   filters with `has_outcome=False` to avoid duplicates in practice. If you ever
   re-grade, delete the existing outcome row first.
 - The system_prompt.txt is the source of truth for what the LLM emits. Don't
-  rewrite the trace adapter in `scripts/ingest_traces.py` to accept a different
+  rewrite the trace adapter in `omega-ingest-traces` to accept a different
   shape — extend §10 instead, or you'll have skewed history.
 - Schema migration applies `CREATE TABLE IF NOT EXISTS` for every version on
   every connection. Old DBs converge to current. New tables only — never

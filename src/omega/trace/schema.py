@@ -19,7 +19,7 @@ Schema version 3 (additive):
 Schema version 4 (additive):
 - traces.session_id (nullable TEXT): groups traces produced in one Claude Project
   chat session. Legacy traces stay NULL. Session metadata lives in a JSON sidecar
-  under inbox/sessions/<session_id>.json — no separate sessions table.
+  under var/inbox/sessions/<session_id>.json — no separate sessions table.
 
 Schema version 5 (additive):
 - market_snapshots: provider market observations for line movement. Currently

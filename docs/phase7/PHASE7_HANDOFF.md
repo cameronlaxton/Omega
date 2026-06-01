@@ -137,7 +137,7 @@ re-create parallel versions.
 
 **New (integration/scripts):**
 - `omega/integrations/espn_wnba.py` (live), `omega/integrations/wehoop.py` (historical)
-- `scripts/capture_early_lines.py`, `scripts/refresh_wehoop.py`
+- `omega-capture-early-lines`, `omega-refresh-wehoop`
 - `data/aliases/WNBA.json`
 
 **Modified:**
@@ -168,10 +168,10 @@ python -m pytest tests/ -q
 python -m pytest tests/core/test_replay_wnba.py tests/integrations/test_wehoop.py -q
 
 # Early-line capture (needs OMEGA_ODDS_API_KEY; --dry-run is safe)
-python scripts/capture_early_lines.py --leagues WNBA --dry-run
+omega-capture-early-lines --leagues WNBA --dry-run
 
 # WNBA backtest artifacts from wehoop (network on cold pull; cached after)
-python scripts/refresh_wehoop.py --season 2025 --dry-run
+omega-refresh-wehoop --season 2025 --dry-run
 ```
 
 Replay safety: set `OMEGA_REPLAY_MODE=1` to block all live fetches (cached pulls
@@ -205,7 +205,7 @@ General recipe for each new sport (mirror M1):
 - **`rho` is a required dynamic prior** — backend raises
   `MissingDixonColesPriorError` if absent (fail closed → `status="skipped"`,
   `missing_requirements=["rho_prior"]`). **Do not hardcode a default rho.**
-- New: `priors_dixon_coles` table (schema V12) + `scripts/fit_dixon_coles.py`
+- New: `priors_dixon_coles` table (schema V12) + `omega-fit-dixon-coles`
   (minimise DC negative log-likelihood per competition profile, e.g.
   `fifa_intl_v1`). Fit from StatsBomb Open Data.
 - Adapters: `omega/integrations/statsbomb.py` (historical, primary fit source),
@@ -231,7 +231,7 @@ General recipe for each new sport (mirror M1):
   `player_aces`; until registered, `player_aces` falls back to the distribution
   router with a recorded note — registering it is a drop-in upgrade).
 - New: `priors_tennis`, `priors_tennis_pressure` tables + adapter
-  `omega/integrations/tennis_sackmann.py` + `scripts/fit_tennis_pressure_coefficients.py`
+  `omega/integrations/tennis_sackmann.py` + `omega-fit-tennis-pressure-coefficients`
   (group fallback below N=500 charted points; never silent 0.0).
 - League configs `ATP`/`WTA` already exist — add `default_game_backend`.
 - Acceptance: 20 mixed-surface matches replay; closed-form vs 100k MC within
@@ -246,7 +246,7 @@ General recipe for each new sport (mirror M1):
   router with a recorded note — correct, but not NB-accurate for the over-dispersed
   tail).
 - New: `priors_nfl_dispersion` table + adapter `omega/integrations/nflverse.py`
-  + `scripts/fit_nfl_dispersion.py` with **mandatory hierarchical Bayesian
+  + `omega-fit-nfl-dispersion` with **mandatory hierarchical Bayesian
   shrinkage** (`w(n)=n/(n+n0)`, `n0=8`; `nb_k_source` ∈ player|position_group|league).
   Backend stays shrinkage-agnostic — all hierarchy is offline.
 - Edge: `omega/core/edge/nfl_teasers.py` (Wong legs from the margin distribution).

@@ -12,7 +12,7 @@ Omega now runs local VM / MCP-first. The retired lite bridge and standalone sand
 ```bash
 python --version
 pip install -e .[mcp]
-python scripts/cowork_preflight.py
+omega-cowork-preflight
 python -m omega.mcp.server
 ```
 

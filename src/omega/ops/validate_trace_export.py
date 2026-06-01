@@ -15,9 +15,9 @@ Modes:
                         / backfill inspection).
 
 Usage:
-    omega-validate-trace-export inbox/traces
-    omega-validate-trace-export inbox/traces/foo.json --lenient
-    omega-validate-trace-export inbox/traces --json
+    omega-validate-trace-export var/inbox/traces
+    omega-validate-trace-export var/inbox/traces/foo.json --lenient
+    omega-validate-trace-export var/inbox/traces --json
 
 Exit codes:
     0 â€” all validated files pass (no errors)

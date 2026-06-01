@@ -42,9 +42,9 @@ NameError: name '_extract_calibration_audit' is not defined
     calibration_audit=_extract_calibration_audit(result),
 ```
 
-Observed instance: `omega/trace/persistable.py` arrived at 153 lines instead of 191; the trailing `_extract_calibration_audit` definition was missing, and `scripts/ingest_traces.py` crashed mid-pipeline with `NameError`.
+Observed instance: `omega/trace/persistable.py` arrived at 153 lines instead of 191; the trailing `_extract_calibration_audit` definition was missing, and `omega-ingest-traces` crashed mid-pipeline with `NameError`.
 
-Detection requires **content equality with the git blob** — same SHA-1 hash as the index. `scripts/cowork_preflight.py:verify_against_git()` (added 2026-05-23) does this for every tracked `.py` file using `git hash-object` versus `git rev-parse HEAD:<path>`. When divergence is reported, run `python scripts/cowork_preflight.py --repair-from-git` to restore via `git checkout`, which writes through the mount cache.
+Detection requires **content equality with the git blob** — same SHA-1 hash as the index. `omega-cowork-preflight:verify_against_git()` (added 2026-05-23) does this for every tracked `.py` file using `git hash-object` versus `git rev-parse HEAD:<path>`. When divergence is reported, run `omega-cowork-preflight --repair-from-git` to restore via `git checkout`, which writes through the mount cache.
 
 ---
 
@@ -72,8 +72,8 @@ Detection requires **content equality with the git blob** — same SHA-1 hash as
 | `omega/synthesis/composer.py` | 8,112 | 1 | ok |
 | `omega/trace/bet_record.py` | 3,581 | 12 | ok |
 | `omega/trace/clv.py` | 4,444 | 58 | ok |
-| `scripts/cowork_preflight.py` | 4,428 | 36 | ok |
-| `scripts/ingest_traces.py` | 14,792 | 3,509 | ok |
+| `omega-cowork-preflight` | 4,428 | 36 | ok |
+| `omega-ingest-traces` | 14,792 | 3,509 | ok |
 
 ### Pattern B — Hard truncation (repaired by appending missing tail)
 | File | Truncated At | Missing Content |
@@ -122,7 +122,7 @@ The `Write` tool (which writes to the Windows OneDrive path) produces no visible
 ### BUG-MOUNT-2: OneDrive sync left 22 Python source files corrupt on the mount
 Multiple files arrived at the sandbox with either trailing null bytes or hard truncation. This is an OneDrive partial-sync artifact: the file allocation table reserved the full block but sync did not finish writing all bytes before the mount snapshot was taken.
 
-**Recommended fix for Claude Code:** Add a preflight step to `scripts/cowork_preflight.py` that scans all repo `.py` files for:
+**Recommended fix for Claude Code:** Add a preflight step to `omega-cowork-preflight` that scans all repo `.py` files for:
 1. Trailing null bytes (`content != content.rstrip(b'\x00')`)
 2. Syntax errors (`ast.parse()` failure)
 
@@ -183,7 +183,7 @@ for root, dirs, files in os.walk(omega_dir):
             print(f'stripped: {path}')
 print(f'Done — {fixed} files repaired')
 "
-python scripts/cowork_preflight.py --direct-only
+omega-cowork-preflight --direct-only
 ```
 
 Then verify syntax on any file that still fails with a hard-truncation error and append the missing tail manually using the Read tool (Windows path) as the source of truth.

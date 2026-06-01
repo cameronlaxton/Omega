@@ -17,4 +17,4 @@ def var_dir() -> Path:
 
 def default_trace_db_path() -> Path:
     """Return the default SQLite trace store path under var/."""
-    return var_dir() / "omega_traces.db"
+    return var_dir() / "var/omega_traces.db"

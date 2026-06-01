@@ -13,7 +13,7 @@ Run the Omega {league} daily analysis session for {slate_date}.
 ## Boundaries (non-negotiable)
 
 - Typed execution only. MCP tools first, then `omega.core.contracts.service.analyze`. Never invent probabilities, edge, EV, Kelly, units, confidence tiers, fair/no-vig prices, or `trace_id`s in prose.
-- Sidecar audit state goes to `inbox/sessions/<session_id>.json` via `omega.trace.session_sidecar.append_audit_events` (atomic). Do **not** hand-edit the sidecar JSON.
+- Sidecar audit state goes to `var/inbox/sessions/<session_id>.json` via `omega.trace.session_sidecar.append_audit_events` (atomic). Do **not** hand-edit the sidecar JSON.
 - Do **not** create `RUN_AUDIT.md` or `RUN_TRACE.jsonl`. Both are retired.
 
 ## Pipeline
@@ -21,7 +21,7 @@ Run the Omega {league} daily analysis session for {slate_date}.
 1. **Preflight.** Mint a new `session_id` of the form `sess-YYYYMMDD-{league_lower}1`. Bootstrap the sidecar via `append_audit_events(..., bootstrap=bootstrap_payload(...))` and append the first event:
    - `event_type=preflight`, `step=cowork_preflight`, `status=ok|warn|fail`, `notes` summarizing repo / engine readiness.
 
-2. **Resolve odds.** Use BetMGM via Omega's typed odds path (`omega_resolve_odds` or `scripts/resolve_odds.py`). Append `data_provenance` events naming each source.
+2. **Resolve odds.** Use BetMGM via Omega's typed odds path (`omega_resolve_odds` or `omega-resolve-odds`). Append `data_provenance` events naming each source.
 
 3. **Gather evidence.** Per the league:
    - **NBA-flavored vocab:** `pace_up`, `pace_down`, `rest_advantage`, `b2b_fatigue`, `def_matchup_weak`, `def_matchup_strong`, `usage_role_change`, `blowout_risk`.
@@ -31,7 +31,7 @@ Run the Omega {league} daily analysis session for {slate_date}.
 
 4. **Run engine.** Call analyze for each eligible game and selected prop candidate. Reuse the canonical analyze output verbatim — no rewriting of numeric fields.
 
-5. **Export traces.** Write `{"trace": <full analyze return>, "bet_record": null}` to `inbox/traces/<trace_id>.json`. Nest `reasoning_inputs`, `reasoning_narrative`, `reasoning_downgrade_rationale`, and `trace_quality` **inside** the inner `trace` block. (Top-level siblings still work via ingest's compatibility merge but are deprecated.)
+5. **Export traces.** Write `{"trace": <full analyze return>, "bet_record": null}` to `var/inbox/traces/<trace_id>.json`. Nest `reasoning_inputs`, `reasoning_narrative`, `reasoning_downgrade_rationale`, and `trace_quality` **inside** the inner `trace` block. (Top-level siblings still work via ingest's compatibility merge but are deprecated.)
 
 6. **Append audit events.** For each major step, append a structured `AuditEvent`:
    - `engine_run` per analyze call, with `trace_ids=[<id>]` and notes summarizing what was provided/missing.
@@ -50,8 +50,8 @@ Run the Omega {league} daily analysis session for {slate_date}.
 After the session is closed, the operator (or scheduler) runs:
 
 ```
-python scripts/run_action_plan.py inbox/action_plans/templates/daily_trace_intake.json
-python scripts/run_action_plan.py inbox/action_plans/templates/render_session_audits.json
+omega-run-action-plan var/inbox/action_plans/templates/daily_trace_intake.json
+omega-run-action-plan var/inbox/action_plans/templates/render_session_audits.json
 ```
 
-The rendered audit markdown lands at `reports/run_audits/<session_id>.audit.md`.
+The rendered audit markdown lands at `var/reports/run_audits/<session_id>.audit.md`.

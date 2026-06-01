@@ -11,11 +11,11 @@ documentation for agents and operators, not a migration plan.
 | recommendations | list/dict of `Recommendation` models | `traces.recommendations`, trace JSON | calibration/report queries | retyped to `list[Recommendation]` (game) or singular prop `Recommendation` dict (prop) |
 | market | request/odds/bet contract | `MarketQuote`, `bet_records.market`, trace JSON | CLV/reporting | document field ownership |
 | market_family | current proxy is `trace.kind` | trace JSON | prompt/report vocabulary | defer explicit field |
-| league | request schema and trace metadata | `traces.league`, trace JSON | reports/outcome adapters | leave unchanged |
+| league | request schema and trace metadata | `traces.league`, trace JSON | var/reports/outcome adapters | leave unchanged |
 | entity_type | `Entity.entity_type` | request/context JSON | prompt routing | document only |
 | stat_key | `MarketQuote.stat_key` / prop `prop_type` | trace JSON, evidence rows, prop outcomes | prop grading/reporting | document accepted aliases |
 | outcome | game score or player stat result | `outcomes`, `prop_outcomes` | grading and calibration | keep both active |
-| grade | result derived from outcome vs prediction/line | outcome tables plus report code | reports/calibration | do not store in sidecars |
+| grade | result derived from outcome vs prediction/line | outcome tables plus report code | var/reports/calibration | do not store in sidecars |
 | calibration_eligible | `trace_quality.calibration_eligible` | trace JSON | calibration SQL/reporting | keep JSON-based |
 | bet_record | confirmed wager metadata | `bet_records` | CLV/session reports | optional only |
 | closing_line / CLV | market-close metadata | `closing_lines` | CLV report | optional only |

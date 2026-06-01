@@ -7,7 +7,7 @@ Session: `sess-20260519-nyk1` — NYK vs CLE ECF Game 1 prop scan (Harden / KAT 
 ## BUG-A: Cowork VM ships Python 3.10; preflight requires 3.12+
 
 **Severity:** High (hard wall — blocks all engine execution out-of-the-box)
-**Where:** `scripts/cowork_preflight.py` enforces `>=3.12`; the Cowork sandbox `/usr/bin/python` is 3.10.12.
+**Where:** `omega-cowork-preflight` enforces `>=3.12`; the Cowork sandbox `/usr/bin/python` is 3.10.12.
 **Symptom:**
 ```
 cowork_preflight_failed:
@@ -72,6 +72,6 @@ cowork_preflight_failed:
 ## Notes (not bugs)
 
 - `resolve_odds.py` BetMGM path worked first try once `.env` was sourced cleanly; Odds API quota at 19,890 remaining.
-- All 12 traces ingested cleanly via `scripts/ingest_traces.py`; no validation rejections.
+- All 12 traces ingested cleanly via `omega-ingest-traces`; no validation rejections.
 - Bankroll defaulted to $1000 (demo) because OMEGA_COWORK §2 requires asking before producing a Bet Card and the user hasn't supplied one for this session. **Action required before any real stake:** user confirms bankroll, rerun or scale units.
 

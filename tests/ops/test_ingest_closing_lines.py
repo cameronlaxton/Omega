@@ -1,5 +1,5 @@
 """
-Tests for scripts/ingest_closing_lines.py â€” closing-line ingest.
+Tests for omega-ingest-closing-lines â€” closing-line ingest.
 
 Covers:
 - valid file: rows attached, file moves to processed/

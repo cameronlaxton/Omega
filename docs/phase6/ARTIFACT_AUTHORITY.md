@@ -8,28 +8,28 @@ DB-path policy in `omega/trace/store.py` (`_resolve_db_path`, `db_status`).
 
 ## The one rule
 
-> **TraceStore (`omega_traces.db`) is the only source of truth for numbers.**
+> **TraceStore (`var/omega_traces.db`) is the only source of truth for numbers.**
 > Sidecars are the source of truth for session narrative/process. Everything in
-> `reports/` is derived and reproducible. Trace export files are import-only.
+> `var/reports/` is derived and reproducible. Trace export files are import-only.
 > Per-session JSONL is a recovery mirror.
 
 ## Authority table
 
 | Artifact | Role | Canonical? | Append-only? | Regenerable? | If missing/malformed |
 |---|---|---|---|---|---|
-| `omega_traces.db` (TraceStore) | model predictions, outcomes, grading, calibration state, optional wager/CLV | **canonical (numeric)** | no (idempotent writes) | no | guard refuses corrupt/ambiguous-empty DB; `db_status.py` diagnoses |
-| `inbox/traces/*.json` (trace export) | transfer analyze() output → ledger | no (import-only) | n/a (consumed) | re-export from analyze() output | bad shape → `failed/` + `.error.txt`; **re-wrap, never re-run analyze()** |
-| `inbox/sessions/<sid>.json` (sidecar) | session narrative: `exec_stats`, `agent_notes`, `audit_events` | source of truth for **narrative only** | events appended atomically | from JSONL mirror (events) | `load_sidecar_safe`→None; opt-in quarantine; numeric fields never live here |
-| `inbox/sessions/<sid>.events.jsonl` | recovery mirror of audit events | no (derived mirror) | yes | derived from sidecar writes | best-effort; write failure is warn-only; **not promoted to canonical** |
-| `reports/latest.md` | calibration health report | **derived** | no | `report_calibration.py` | regenerate; never edit by hand |
-| `reports/run_audits/<sid>.audit.md` | human session audit | **derived** (numbers from DB, prose from sidecar) | no | `render_session_audits.py` | regenerate; degraded mode if sidecar absent |
-| `inbox/action_plans/*.json` | prescriptive maintenance directive | no (ephemeral) | n/a | re-author | strict allowlist; unknown action → exit 2 |
+| `var/omega_traces.db` (TraceStore) | model predictions, outcomes, grading, calibration state, optional wager/CLV | **canonical (numeric)** | no (idempotent writes) | no | guard refuses corrupt/ambiguous-empty DB; `db_status.py` diagnoses |
+| `var/inbox/traces/*.json` (trace export) | transfer analyze() output → ledger | no (import-only) | n/a (consumed) | re-export from analyze() output | bad shape → `failed/` + `.error.txt`; **re-wrap, never re-run analyze()** |
+| `var/inbox/sessions/<sid>.json` (sidecar) | session narrative: `exec_stats`, `agent_notes`, `audit_events` | source of truth for **narrative only** | events appended atomically | from JSONL mirror (events) | `load_sidecar_safe`→None; opt-in quarantine; numeric fields never live here |
+| `var/inbox/sessions/<sid>.events.jsonl` | recovery mirror of audit events | no (derived mirror) | yes | derived from sidecar writes | best-effort; write failure is warn-only; **not promoted to canonical** |
+| `var/reports/latest.md` | calibration health report | **derived** | no | `report_calibration.py` | regenerate; never edit by hand |
+| `var/reports/run_audits/<sid>.audit.md` | human session audit | **derived** (numbers from DB, prose from sidecar) | no | `render_session_audits.py` | regenerate; degraded mode if sidecar absent |
+| `var/inbox/action_plans/*.json` | prescriptive maintenance directive | no (ephemeral) | n/a | re-author | strict allowlist; unknown action → exit 2 |
 | `bet_records` / `closing_lines` tables | optional wager / CLV metadata | optional | no | no | **absence is normal — never gates grading/calibration/output mode** |
 
 ## What to trust after a run
 
-- **Automated scripts** trust the ledger (`omega_traces.db`).
-- **A human after a failed run** reads `reports/run_audits/<sid>.audit.md`, then
+- **Automated scripts** trust the ledger (`var/omega_traces.db`).
+- **A human after a failed run** reads `var/reports/run_audits/<sid>.audit.md`, then
   the `*.events.jsonl` mirror if the sidecar was quarantined.
 
 ## Decoupling invariants (do not regress)

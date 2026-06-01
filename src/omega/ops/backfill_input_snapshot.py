@@ -227,7 +227,7 @@ def main() -> int:
     if args.db:
         db_path = args.db
     else:
-        db_path = str(_REPO_ROOT / "var" / "omega_traces.db")
+        db_path = str(_REPO_ROOT / "var" / "var/omega_traces.db")
 
     if not Path(db_path).exists():
         logger.error("Database not found: %s", db_path)

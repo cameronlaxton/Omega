@@ -29,8 +29,8 @@ python -m pip install -e .[mcp]
 ## Step 2 — Preflight
 
 ```bash
-python scripts/cowork_preflight.py
-python scripts/cowork_preflight.py --formal-output-gate
+omega-cowork-preflight
+omega-cowork-preflight --formal-output-gate
 ```
 
 | Preflight output | Meaning | Next action |
@@ -48,9 +48,9 @@ repair-taint lockfile, and requires the follow-up formal-output gate cycle befor
 formal output is authorized.
 
 ```bash
-python scripts/cowork_preflight.py --repair-from-git
-python scripts/cowork_preflight.py --formal-output-gate
-python scripts/cowork_preflight.py --formal-output-gate
+omega-cowork-preflight --repair-from-git
+omega-cowork-preflight --formal-output-gate
+omega-cowork-preflight --formal-output-gate
 ```
 
 If `--repair-from-git` fails to change the file or verification still reports the
@@ -75,7 +75,7 @@ repo-owned sync path at session close.
 Manual Linux-sandbox fallback:
 
 ```bash
-cp omega_traces.db /tmp/omega_traces.db
+cp var/omega_traces.db /tmp/omega_traces.db
 export OMEGA_TRACE_DB=/tmp/omega_traces.db
 ```
 
@@ -83,12 +83,12 @@ Use the configured DB path on all TraceStore scripts. If `OMEGA_TRACE_DB` is not
 set, omit `--db` and let `TraceStore` resolve the repo default.
 
 ```bash
-python scripts/report_calibration.py --db "$OMEGA_TRACE_DB" --league NBA --window-days 30
-python scripts/ingest_traces.py --db "$OMEGA_TRACE_DB" --verbose
+omega-report-calibration --db "$OMEGA_TRACE_DB" --league NBA --window-days 30
+omega-ingest-traces --db "$OMEGA_TRACE_DB" --verbose
 ```
 
 **Warning:** writes to a redirected/local copy are NOT auto-persisted. Sync with
-`scripts/sync_to_mount.ps1` when the Cowork contract requires it.
+`tools/windows/sync_to_mount.ps1` when the Cowork contract requires it.
 
 ---
 
@@ -102,7 +102,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 session_id = "sess-20260528-a1b2"
-path = Path(f"inbox/sessions/{session_id}.json")
+path = Path(f"var/inbox/sessions/{session_id}.json")
 
 # 1. Atomically CREATE the sidecar (temp + fsync + replace; never a partial/truncated file).
 create_sidecar(path, bootstrap_payload(
@@ -138,7 +138,7 @@ Never put engine-owned values in audit event fields — `ProtectedValueError` wi
 ## Step 5 — Calibration Health (when data exists)
 
 ```bash
-python scripts/report_calibration.py --db /tmp/omega_traces.db --league NBA --window-days 30
+omega-report-calibration --db /tmp/omega_traces.db --league NBA --window-days 30
 ```
 
 Read the "Evidence signal performance" section. Weight evidence: `predictive` → trust; `noise` → discount; `insufficient_n` → treat as unproven.
@@ -154,14 +154,14 @@ Default $1000 unless user specifies otherwise. Record in sidecar `bankroll` and 
 ## Session Close Checklist
 
 ```bash
-python scripts/ingest_traces.py --db "$OMEGA_TRACE_DB" --verbose
-python scripts/validate_session_sidecars.py
-python scripts/render_session_audits.py --session-id <session_id>
-python scripts/fetch_closing_lines.py --dry-run   # if bets placed
+omega-ingest-traces --db "$OMEGA_TRACE_DB" --verbose
+omega-validate-session-sidecars
+omega-render-session-audits --session-id <session_id>
+omega-fetch-closing-lines --dry-run   # if bets placed
 ```
 
 If `OMEGA_TRACE_DB` is unset, omit `--db`. If using a redirected/local DB copy,
-sync back through `scripts/sync_to_mount.ps1` per `OMEGA_COWORK.md`.
+sync back through `tools/windows/sync_to_mount.ps1` per `OMEGA_COWORK.md`.
 
 ---
 

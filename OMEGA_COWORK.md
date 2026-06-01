@@ -87,7 +87,7 @@ the first was restored), fix the new failure before running Pass 3.
 
 - **SQLite on a network/FUSE mount:** `TraceStore` detects FUSE/SMB/CIFS/NFS
   DB paths at open time and auto-redirects writes to a per-user local runtime
-  path (`%LOCALAPPDATA%\omega\runtime\omega_traces.db` on Windows,
+  path (`%LOCALAPPDATA%\omega\runtime\var/omega_traces.db` on Windows,
   `~/.omega/runtime/omega_traces.db` on POSIX). No `atexit` sync-back: archival
   back to the mount is owned by `tools/windows/sync_to_mount.ps1` (one-way, see Â§2d).
   The redirect is a safety net; the intended steady state is the local-workspace
@@ -239,7 +239,7 @@ repeatable one-off or batch calls instead of creating scratch Python under
 `src/omega/ops/`:
 
 ```bash
-omega-run-analyze --kind game --request-json request.json --session-id sess-YYYYMMDD-XXXX --bankroll 1000 --trace-out inbox/traces
+omega-run-analyze --kind game --request-json request.json --session-id sess-YYYYMMDD-XXXX --bankroll 1000 --trace-out var/inbox/traces
 ```
 
 Direct smoke test when no MCP client is available:
@@ -305,7 +305,7 @@ Concretely, `RESEARCH_CANDIDATE` is an **output-authorization** mode, not an exe
 - **User-facing betting numbers are withheld/downgraded** (no Bet Card, edge%, EV%, Kelly, units, confidence tier, or trace_id is shown in the reply).
 - Database trace generation is **never** withheld.
 
-To find the current output mode, check the `output_mode` field in the frontmatter of `reports/latest.md` (which is written automatically each time `report_calibration.py` runs).
+To find the current output mode, check the `output_mode` field in the frontmatter of `var/reports/latest.md` (which is written automatically each time `report_calibration.py` runs).
 
 The DB trace persists with its `sandbox-` trace_id for calibration â€” see [`output_modes.md`](prompts/reference/output_modes.md). Do not skip trace export just because the user-facing output was downgraded.
 
@@ -340,7 +340,7 @@ At session start, resume the current-day session ID from workspace memory when p
 
 ## 6. Trace Export
 
-After every analysis, write the trace file to `inbox/traces/<trace_id>.json`:
+After every analysis, write the trace file to `var/inbox/traces/<trace_id>.json`:
 
 ```json
 {
@@ -468,7 +468,7 @@ analyze({
 
 ### 6d. Trace completeness (required before filing any export block)
 
-Every export block filed to `inbox/traces/` must include structured reasoning fields alongside the `trace` output. These enable machine-auditable replay, retrospective evidence scoring, and calibration quality tracking.
+Every export block filed to `var/inbox/traces/` must include structured reasoning fields alongside the `trace` output. These enable machine-auditable replay, retrospective evidence scoring, and calibration quality tracking.
 
 **Required fields on the export block:**
 
@@ -519,7 +519,7 @@ Concretely:
 - Carry the same `input_snapshot` (player_name, prop_type, line, **home_team, away_team, game_date** for props) into the bet-confirming export.
 - Attach the `bet_record` block to that same export. Never split analysis and confirmation across two trace files.
 
-`src/omega/ops/ingest_traces.py` enforces this: a `bet_record` on a `kind: "prop"` trace missing `home_team`/`away_team`/`game_date` is **rejected** and the file is routed to `inbox/traces/failed/` with a `.error.txt` sidecar. Fix the export and re-drop the corrected file rather than working around the validation.
+`src/omega/ops/ingest_traces.py` enforces this: a `bet_record` on a `kind: "prop"` trace missing `home_team`/`away_team`/`game_date` is **rejected** and the file is routed to `var/inbox/traces/failed/` with a `.error.txt` sidecar. Fix the export and re-drop the corrected file rather than working around the validation.
 
 The ingest path also logs a warning if `bet_record.line_taken` differs from `input_snapshot.line` by more than 1.0, or `odds_taken` differs from the matching snapshot odds by more than 25 American points. Drift is allowed (line shopping is legitimate), but the warning is captured for the audit trail.
 
@@ -529,7 +529,7 @@ Ingest with:
 omega-ingest-traces --verbose
 ```
 
-Do not write to `omega_traces.db` directly.
+Do not write to `var/omega_traces.db` directly.
 
 ## 7. Closing Lines And Outcomes
 
@@ -564,20 +564,20 @@ At session start, run calibration health when enough data exists:
 omega-report-calibration --league NBA --window-days 30
 ```
 
-Action plans live at `inbox/action_plans/<session_id>.json`. Repo-local templates live under `inbox/action_plans/templates/`; see `docs/phase6/automation_playbook.md` for the trace intake, confirmed-bet closing-line, outcome/evidence, weekly shadow-review, and no-op loops.
+Action plans live at `var/inbox/action_plans/<session_id>.json`. Repo-local templates live under `var/inbox/action_plans/templates/`; see `docs/phase6/automation_playbook.md` for the trace intake, confirmed-bet closing-line, outcome/evidence, weekly shadow-review, and no-op loops.
 
 Allowed action types are command-gated by `src/omega/ops/run_action_plan.py`: `ingest_traces`, `fetch_closing_lines`, `fetch_outcomes`, `score_evidence_signals`, `report_calibration`, `fit_calibration`, `fit_adjustment_policy`, and `promote_profile`. `fit_adjustment_policy` is shadow-only in action plans; do not schedule `promote_adjustment_policy --go-live`.
 
 Dry-run before executing:
 
 ```bash
-omega-run-action-plan inbox/action_plans/<session_id>.json --dry-run
-omega-run-action-plan inbox/action_plans/<session_id>.json
+omega-run-action-plan var/inbox/action_plans/<session_id>.json --dry-run
+omega-run-action-plan var/inbox/action_plans/<session_id>.json
 ```
 
 ### Session Sidecar Schema (required)
 
-Write `inbox/sessions/<session_id>.json` via `omega.trace.session_sidecar.append_audit_events` (atomic). All top-level keys below are required; use exactly these key names.
+Write `var/inbox/sessions/<session_id>.json` via `omega.trace.session_sidecar.append_audit_events` (atomic). All top-level keys below are required; use exactly these key names.
 
 ```json
 {
@@ -617,7 +617,7 @@ The sidecar has three distinct roles for state, no overlap:
 
 **`audit_events` discipline:**
 - Each event has `ts`, `event_type` (one of `preflight`, `data_provenance`, `engine_run`, `candidate_rejected`, `downgrade`, `rationale`, `bug`, `command`, `step`, `note`), `step`, and `status` (`ok` | `warn` | `fail` | `skipped`). Optional: `notes`, `inputs`, `outputs`, `assumptions`, `bugs`, `trace_ids`.
-- **Never** put engine-owned quant values in `inputs`/`outputs`/`notes`: `edge_pct`, `ev_pct`, `kelly_fraction`, `units`, `confidence_tier`, `fair_price`, `no_vig_price`, `model_probability`, `over_prob`, `under_prob`. Those live in `omega_traces.db`. The writer raises `ProtectedValueError` and the append is rejected atomically â€” the on-disk file is untouched.
+- **Never** put engine-owned quant values in `inputs`/`outputs`/`notes`: `edge_pct`, `ev_pct`, `kelly_fraction`, `units`, `confidence_tier`, `fair_price`, `no_vig_price`, `model_probability`, `over_prob`, `under_prob`. Those live in `var/omega_traces.db`. The writer raises `ProtectedValueError` and the append is rejected atomically â€” the on-disk file is untouched.
 - Do **not** hand-edit the sidecar JSON. Always go through `append_audit_events(...)`. Writes are temp-file + `os.replace`; readers never observe a partial file.
 
 Do not add inline `outcomes` or trace-level grading summaries to the sidecar.
@@ -625,7 +625,7 @@ Game outcomes belong in `outcomes`, player-prop outcomes belong in
 `prop_outcomes`, and confirmed bet metadata belongs in the per-trace
 `bet_record`.
 
-**Retired:** `RUN_AUDIT.md` and `RUN_TRACE.jsonl`. Do not create either. The audit renderer at `omega/trace/audit_renderer.py` (invoked via the `render_audit` action plan step) produces `reports/run_audits/<session_id>.audit.md` from the sidecar + ledger.
+**Retired:** `RUN_AUDIT.md` and `RUN_TRACE.jsonl`. Do not create either. The audit renderer at `omega/trace/audit_renderer.py` (invoked via the `render_audit` action plan step) produces `var/reports/run_audits/<session_id>.audit.md` from the sidecar + ledger.
 
 `report_calibration.py` joins sidecar data with trace summaries by `session_id`. Validate sidecars before relying on report session sections:
 
@@ -641,11 +641,11 @@ All paths are relative to the repo root.
 |---|---|
 | `omega/core/contracts/service.py` | Canonical `analyze(request, session_id, bankroll) -> trace` entry point |
 | `omega/mcp/server.py` | MCP tools over deterministic contracts |
-| `omega_traces.db` | SQLite V6 - do not write directly |
-| `inbox/traces/` | Trace export files -> `ingest_traces.py` |
-| `inbox/sessions/` | Session sidecars |
-| `inbox/action_plans/` | Action plan JSON -> `run_action_plan.py` |
-| `inbox/action_plans/templates/` | Repo-local action-plan templates for scheduler/manual loops |
+| `var/omega_traces.db` | SQLite V6 - do not write directly |
+| `var/inbox/traces/` | Trace export files -> `ingest_traces.py` |
+| `var/inbox/sessions/` | Session sidecars |
+| `var/inbox/action_plans/` | Action plan JSON -> `run_action_plan.py` |
+| `var/inbox/action_plans/templates/` | Repo-local action-plan templates for scheduler/manual loops |
 | `src/omega/ops/ingest_traces.py` | Drains trace exports into trace and bet-record tables |
 | `src/omega/ops/run_action_plan.py` | Validates and dispatches action plans |
 | `src/omega/ops/report_calibration.py` | Calibration health and session summary report |
@@ -657,11 +657,11 @@ All paths are relative to the repo root.
 | `src/omega/ops/fetch_outcomes_mlb.py` | Attaches MLB game outcomes |
 | `src/omega/ops/fetch_outcomes_props.py` | Attaches player prop outcomes |
 | `src/omega/ops/backfill_closing_lines.py` | Backfills missed close windows |
-| `src/omega/ops/render_session_audits.py` | Renders `reports/run_audits/<session_id>.audit.md` from sidecar + ledger |
+| `src/omega/ops/render_session_audits.py` | Renders `var/reports/run_audits/<session_id>.audit.md` from sidecar + ledger |
 | `omega/trace/audit_renderer.py` | Library entry point for the audit renderer |
 | `omega/trace/session_sidecar.py` | Sidecar contract + `append_audit_events` atomic writer |
 | `omega/trace/_atomic.py` | Atomic text-file write helper used by sidecar and renderer |
-| `reports/run_audits/` | Rendered session audit markdown (output of `render_audit`) |
+| `var/reports/run_audits/` | Rendered session audit markdown (output of `render_audit`) |
 
 ## 10. Human Judgment Required
 

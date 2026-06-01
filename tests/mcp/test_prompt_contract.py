@@ -109,10 +109,10 @@ def test_active_daily_prompts_reference_failure_budget_skill():
 
 def test_local_agent_masks_if_present_cover_generated_artifacts():
     required = {
-        "reports/latest.md",
-        "reports/run_audits/",
-        "reports/*.txt",
-        "inbox/traces/",
+        "var/reports/latest.md",
+        "var/reports/run_audits/",
+        "var/reports/*.txt",
+        "var/inbox/traces/",
     }
     found_any = False
     for name in (".cursorignore", ".clineignore"):

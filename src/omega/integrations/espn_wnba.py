@@ -4,7 +4,7 @@ omega.integrations.espn_wnba -- ESPN public scoreboard for WNBA final scores.
 In-season live fetch path for WNBA. Mirrors espn_nba.py (same ESPN basketball
 scoreboard shape) with a WNBA team-alias map and the WNBA scoreboard URL. The
 richer historical source for WNBA replay artifacts is wehoop (see
-scripts/refresh_wehoop.py); this module is the live path only.
+omega-refresh-wehoop); this module is the live path only.
 """
 from __future__ import annotations
 

@@ -60,6 +60,5 @@ Every formal run produces a trace envelope with `trace_id`, `model_version`, `ra
 
 - `omega/core/contracts/service.py`: canonical analyze wrapper and trace envelope.
 - `omega/core/contracts/schemas.py`: request/response models.
-- `omega/mcp/server.py`: MCP tool layer.
-- `omega/synthesis/composer.py`: response composition.
+- `omega/core/contracts/service.py`: main entry point.
 - `omega/trace/store.py`: trace persistence.

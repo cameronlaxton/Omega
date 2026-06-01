@@ -1,11 +1,11 @@
 """
 omega.ops.render_session_audits â€” render session audit markdown.
 
-Reads `omega_traces.db` + `inbox/sessions/<session_id>.json` sidecars and
-writes `reports/run_audits/<session_id>.audit.md` atomically.
+Reads `var/omega_traces.db` + `var/inbox/sessions/<session_id>.json` sidecars and
+writes `var/reports/run_audits/<session_id>.audit.md` atomically.
 
 Two modes:
-    --all-open                  render every sidecar in inbox/sessions/
+    --all-open                  render every sidecar in var/inbox/sessions/
     --session-ids ID [ID ...]   render only the listed session_ids
 
 Numeric values shown in the rendered audit are sourced from the trace
@@ -45,7 +45,7 @@ def main() -> int:
     group.add_argument(
         "--all-open",
         action="store_true",
-        help="Render every sidecar in inbox/sessions/",
+        help="Render every sidecar in var/inbox/sessions/",
     )
     group.add_argument(
         "--session-ids",

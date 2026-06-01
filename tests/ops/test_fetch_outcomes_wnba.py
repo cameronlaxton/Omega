@@ -1,5 +1,5 @@
 """
-End-to-end tests for scripts/fetch_outcomes_wnba.py â€” WNBA game-outcome grading.
+End-to-end tests for omega-fetch-outcomes-wnba â€” WNBA game-outcome grading.
 
 Hits a real SQLite DB but stubs the ESPN WNBA scoreboard via the script's
 ``scoreboard_fetcher`` injection point â€” no network.

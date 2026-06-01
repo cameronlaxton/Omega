@@ -86,13 +86,13 @@ SQLite WAL mode unsupported on this mount. Falling back to DELETE mode.
 sqlite3.OperationalError: unable to open database file   ← fallback also fails
 ```
 
-The database file exists and is readable (`-rwx------ 737280`). The mount is otherwise writable — JSON files were written to `inbox/traces/` without issue. The failure appears specific to SQLite's requirement to create and unlink lock sidecar files in the same directory as the `.db` file.
+The database file exists and is readable (`-rwx------ 737280`). The mount is otherwise writable — JSON files were written to `var/inbox/traces/` without issue. The failure appears specific to SQLite's requirement to create and unlink lock sidecar files in the same directory as the `.db` file.
 
 **Workaround used this session:**
 ```bash
-cp omega_traces.db /sessions/<name>/tmp/omega_traces.db
-python scripts/ingest_traces.py --db /sessions/<name>/tmp/omega_traces.db --verbose
-cp /sessions/<name>/tmp/omega_traces.db omega_traces.db   # sync back
+cp var/omega_traces.db /sessions/<name>/tmp/omega_traces.db
+omega-ingest-traces --db /sessions/<name>/tmp/omega_traces.db --verbose
+cp /sessions/<name>/tmp/omega_traces.db var/omega_traces.db   # sync back
 ```
 
 This required a round-trip write-back. A crash between ingest and copy-back loses the writes.
@@ -109,7 +109,7 @@ This required a round-trip write-back. A crash between ingest and copy-back lose
 
 **Severity:** Medium
 
-**Affected file:** `scripts/cowork_preflight.py`
+**Affected file:** `omega-cowork-preflight`
 
 **Reproduction:** Preflight reported 3 divergent files this session, all test files:
 ```

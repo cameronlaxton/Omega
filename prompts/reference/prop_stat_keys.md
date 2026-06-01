@@ -1,6 +1,6 @@
 # Prop Type → Stat Key Reference
 
-Use this when calling `scripts/resolve_odds.py --kind prop` or supplying `prop_type` in an `analyze()` request. This documents the correct key values so you don't hit the silent `status: "unavailable"` from a wrong key (Issue #2 from `docs/phase6/engine_cowork_issues_2026-05-18.md`).
+Use this when calling `omega-resolve-odds --kind prop` or supplying `prop_type` in an `analyze()` request. This documents the correct key values so you don't hit the silent `status: "unavailable"` from a wrong key (Issue #2 from `docs/phase6/engine_cowork_issues_2026-05-18.md`).
 
 Source of truth: `omega/integrations/espn_boxscore.py` (NBA_STAT_KEYS, MLB_BATTING_KEYS, MLB_PITCHING_KEYS).
 
@@ -85,7 +85,7 @@ Source of truth: `omega/integrations/espn_boxscore.py` (NBA_STAT_KEYS, MLB_BATTI
 
 ## Free tier vs. paid tier (The Odds API)
 
-`scripts/resolve_odds.py` uses `OMEGA_ODDS_API_KEY`. Some prop markets are only available on paid tiers:
+`omega-resolve-odds` uses `OMEGA_ODDS_API_KEY`. Some prop markets are only available on paid tiers:
 
 | Market | Free tier | Paid tier |
 |---|---|---|

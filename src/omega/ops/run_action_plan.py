@@ -41,12 +41,12 @@ Allowlist:
         args.verbose: bool (default false)
     type=render_audit
         args.session_ids: list[str]   (optional; explicit list to render)
-        args.all_open: bool           (optional; render every sidecar in inbox/sessions/)
+        args.all_open: bool           (optional; render every sidecar in var/inbox/sessions/)
         args.verbose: bool (default false)
         Exactly one of session_ids or all_open must be provided.
 
 Usage:
-    omega-run-action-plan inbox/action_plans/<session_id>.json
+    omega-run-action-plan var/inbox/action_plans/<session_id>.json
     omega-run-action-plan <file> --dry-run
 
 Exit codes:

@@ -10,7 +10,7 @@ agent can learn, for example, that opponent-rank signals from box-score data are
 directionally correct 71% of the time while agent-judgment outlier calls are
 correct 48% of the time (below random) — and weight its evidence accordingly.
 
-This module is pure (no I/O, no DB). ``scripts/score_evidence_signals.py`` does
+This module is pure (no I/O, no DB). ``omega-score-evidence-signals`` does
 the trace/outcome/evidence JOIN and persistence; this file owns only the math.
 """
 

@@ -1,11 +1,11 @@
-# scripts/sync_to_mount.ps1
+# tools/windows/sync_to_mount.ps1
 #
 # One-way archival sync at the end of a Cowork session. Runs on the Windows
 # host AFTER the Cowork CLI / sandbox has exited.
 #
 # Direction is always: local workspace -> CIFS mount. The mount is an
 # append-only historical ledger (robocopy /E, never /MIR). The runtime
-# omega_traces.db NEVER overwrites the mount copy in place; instead a
+# var/omega_traces.db NEVER overwrites the mount copy in place; instead a
 # timestamped snapshot is dropped under <mount>\backups\omega_traces\.
 #
 # Code is pushed to the `backup` remote via `git push backup main --tags`.
@@ -48,7 +48,7 @@ function Log-Failure($section, $body) {
 }
 
 if (-not (Test-Path $Workspace)) {
-    Write-Err "Workspace not found: $Workspace. Run scripts/cowork_bootstrap.ps1 first."
+    Write-Err "Workspace not found: $Workspace. Run tools/windows/cowork_bootstrap.ps1 first."
     exit 1
 }
 
@@ -134,9 +134,9 @@ foreach ($pair in $artifactPairs) {
     }
 }
 
-# 4. Timestamped omega_traces.db snapshot on the mount. Write-once; the live
+# 4. Timestamped var/omega_traces.db snapshot on the mount. Write-once; the live
 # DB never crosses the boundary as a moving target.
-$liveDb = Join-Path $Workspace "var\omega_traces.db"
+$liveDb = Join-Path $Workspace "var\var/omega_traces.db"
 if (Test-Path $liveDb) {
     $backupDir = Join-Path $MountRoot "backups\omega_traces"
     if (-not (Test-Path $backupDir)) {
@@ -155,7 +155,7 @@ if (Test-Path $liveDb) {
         Copy-Item -Path $liveDb -Destination $snapshot -ErrorAction Stop
     }
 } else {
-    Write-Note "No local omega_traces.db found at $liveDb; skipping DB snapshot."
+    Write-Note "No local var/omega_traces.db found at $liveDb; skipping DB snapshot."
 }
 
 Write-Host ""

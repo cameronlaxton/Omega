@@ -6,8 +6,8 @@ and do not recreate them at the repo root.
 
 | File | Replaced by |
 |---|---|
-| `RUN_TRACE.jsonl` | Per-session JSONL mirror (`inbox/sessions/<sid>.events.jsonl`) + the ledger (`omega_traces.db`) |
-| `RUN_AUDIT.md` | `reports/run_audits/<sid>.audit.md`, rendered by `omega/trace/audit_renderer.py` |
+| `RUN_TRACE.jsonl` | Per-session JSONL mirror (`var/inbox/sessions/<sid>.events.jsonl`) + the ledger (`var/omega_traces.db`) |
+| `RUN_AUDIT.md` | `var/reports/run_audits/<sid>.audit.md`, rendered by `omega/trace/audit_renderer.py` |
 
 The audit renderer (`omega/trace/audit_renderer.py`) explicitly refuses to read
 either file. The agent runtime prompts (`prompts/system_prompt.txt`,

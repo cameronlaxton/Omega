@@ -34,7 +34,7 @@ The missing fields (`player_name`, `home_team`, etc.) are present in `result` in
 
 ### Why it went undetected
 
-The ingest validator (`scripts/ingest_traces.py`, function `_enforce_prop_game_identity`) only rejects a trace if it has **both** a missing field **and** an attached `bet_record`. Traces without `bet_record` pass ingest silently regardless of missing fields. This means the majority of affected traces — all those where the user did not confirm a bet — have been accumulating with no warning.
+The ingest validator (`omega-ingest-traces`, function `_enforce_prop_game_identity`) only rejects a trace if it has **both** a missing field **and** an attached `bet_record`. Traces without `bet_record` pass ingest silently regardless of missing fields. This means the majority of affected traces — all those where the user did not confirm a bet — have been accumulating with no warning.
 
 ### Root cause (requires investigation)
 
@@ -57,7 +57,7 @@ This path is correct. `PlayerPropRequest` defines `player_name`, `home_team`, `a
 
 **Step 1 — Ingest validation (fast, defensive):**
 
-In `scripts/ingest_traces.py`, `_enforce_prop_game_identity()` — extend to warn (not just reject) for prop traces **without** a bet_record that are also missing identity fields. This surfaces the gap on every ingest, not just when bets are attached.
+In `omega-ingest-traces`, `_enforce_prop_game_identity()` — extend to warn (not just reject) for prop traces **without** a bet_record that are also missing identity fields. This surfaces the gap on every ingest, not just when bets are attached.
 
 **Step 2 — Engine correctness:**
 
@@ -164,9 +164,9 @@ The `evidence_application` field will then be populated automatically by the eng
 | `omega/core/contracts/service.py` | Add `quality_gate` dict to `analyze()` return |
 | `omega/trace/persistable.py` | Add `reasoning_narrative: str \| None` field; verify `from_analyze_output` handles it |
 | `omega/trace/store.py` | Verify `evidence_application` is exploded into `evidence_signals` table on persist |
-| `scripts/ingest_traces.py` | Extend `_enforce_prop_game_identity()` to warn on identity-missing traces without bet_records |
+| `omega-ingest-traces` | Extend `_enforce_prop_game_identity()` to warn on identity-missing traces without bet_records |
 | `omega/mcp/server.py` | Audit whether MCP layer bypasses `analyze()` or strips request fields |
-| `scripts/backfill_input_snapshot.py` | **New script** — one-time fix for the 61–75 historically broken traces |
+| `omega-backfill-input-snapshot` | **New script** — one-time fix for the 61–75 historically broken traces |
 
 ---
 
@@ -176,7 +176,7 @@ The `evidence_application` field will then be populated automatically by the eng
 # After fix: all prop traces should have identity in input_snapshot
 python - << 'EOF'
 import sqlite3, json
-conn = sqlite3.connect('omega_traces.db')
+conn = sqlite3.connect('var/omega_traces.db')
 cur = conn.cursor()
 cur.execute("""
   SELECT COUNT(*) FROM traces
@@ -193,7 +193,7 @@ EOF
 # After fix: quality_gate should be populated
 python - << 'EOF'
 import sqlite3
-conn = sqlite3.connect('omega_traces.db')
+conn = sqlite3.connect('var/omega_traces.db')
 cur = conn.cursor()
 cur.execute("""
   SELECT COUNT(*) FROM traces
@@ -204,7 +204,7 @@ print(f"Traces with null aggregate_quality: {null_q} (target: 0 for new traces)"
 EOF
 
 # Smoke test: run analyze() and verify output has quality_gate
-python scripts/cowork_preflight.py
+omega-cowork-preflight
 ```
 
 ---

@@ -22,7 +22,7 @@ ERROR: Package 'omega' requires a different Python: 3.10.12 not in '>=3.12'
 
 ```bash
 python -m pip install -e .[mcp]
-python scripts/cowork_preflight.py
+omega-cowork-preflight
 ```
 
 If preflight reports a lower Python version or missing `pydantic`, `numpy`, `mcp`, or Omega package metadata, repair setup first. Do not emit formal Omega numeric outputs until preflight passes.

@@ -40,7 +40,7 @@ With this, low `away_def` (good opposing pitching) reduces `home_lambda`, which 
 **Fix steps:**
 1. Patch `_sim_baseball` and `_sim_hockey` divisor → multiplier flip.
 2. Add regression test in `tests/core/test_engine.py`: assert that holding `home_off` fixed, INCREASING `away_def` (worse opposing defense) INCREASES `home_lambda`. The existing test suite passed with the inverted code, so it has no asymmetric-defense assertion.
-3. Backfill: re-grade or invalidate every MLB trace older than the patch date in `omega_traces.db` so calibration learning doesn't anchor on broken predictions.
+3. Backfill: re-grade or invalidate every MLB trace older than the patch date in `var/omega_traces.db` so calibration learning doesn't anchor on broken predictions.
 
 **Rollback:** Trivial — single-line revert per simulator.
 
@@ -70,23 +70,23 @@ Baseball does not allow regulation draws — extra innings always resolve.
 
 **Severity:** High — masks Pattern C mount corruption
 
-**Affected file:** `scripts/cowork_preflight.py`
+**Affected file:** `omega-cowork-preflight`
 
 **Reproduction:** Six tracked files were truncated on mount at session start:
-- `scripts/cowork_preflight.py` (283 of 330 lines)
+- `omega-cowork-preflight` (283 of 330 lines)
 - `omega/core/contracts/evidence.py` (corrupt at line 470)
 - `omega/core/contracts/service.py` (corrupt at line 1252)
-- `scripts/run_champion_challenger.py` (corrupt at line 265)
+- `omega-run-champion-challenger` (corrupt at line 265)
 - `tests/core/test_engine.py` (corrupt at line 408)
 - `tests/mcp/test_mcp_tools.py` (corrupt at line 197)
 
-Running `python scripts/cowork_preflight.py --repair-from-git` exited without modifying any of the six files; re-running preflight immediately reported the same six errors.
+Running `omega-cowork-preflight --repair-from-git` exited without modifying any of the six files; re-running preflight immediately reported the same six errors.
 
 **Suspected root cause:** The `--repair-from-git` code path likely writes via Python `open(..., 'w')` or `Path.write_text(...)` through the FUSE mount cache, which does not invalidate on Windows-side writes (this is the same pathology the docstring warns about for the Write tool). The repair must shell out to `git checkout HEAD -- <file>` followed by `os.sync()` so the kernel re-reads.
 
 **Workaround used this session:**
 ```bash
-for f in scripts/cowork_preflight.py omega/core/contracts/evidence.py omega/core/contracts/service.py scripts/run_champion_challenger.py tests/core/test_engine.py tests/mcp/test_mcp_tools.py; do
+for f in omega-cowork-preflight omega/core/contracts/evidence.py omega/core/contracts/service.py omega-run-champion-challenger tests/core/test_engine.py tests/mcp/test_mcp_tools.py; do
   git cat-file -p "HEAD:$f" > "/tmp/_fix_$(basename $f)"
   cp "/tmp/_fix_$(basename $f)" "$f"
 done
@@ -107,13 +107,13 @@ This restored all six and preflight printed `cowork_preflight_ready`.
 ```
 sqlite3.OperationalError: unable to open database file
 ```
-The `omega_traces.db` itself is readable and the directory accepts `touch` (file creation). But the mount denies `rm`, and SQLite WAL requires the ability to manage `-wal` and `-shm` sidecar files. The journal-mode handshake fails on its own cleanup path.
+The `var/omega_traces.db` itself is readable and the directory accepts `touch` (file creation). But the mount denies `rm`, and SQLite WAL requires the ability to manage `-wal` and `-shm` sidecar files. The journal-mode handshake fails on its own cleanup path.
 
 **Workaround used this session:**
 ```bash
-cp omega_traces.db /tmp/omega_traces.db
-python scripts/report_calibration.py --db /tmp/omega_traces.db ...
-python scripts/ingest_traces.py --db /tmp/omega_traces.db ...
+cp var/omega_traces.db /tmp/omega_traces.db
+omega-report-calibration --db /tmp/omega_traces.db ...
+omega-ingest-traces --db /tmp/omega_traces.db ...
 ```
 Writes against `/tmp/omega_traces.db` are NOT persisted back to the mount, so this is a READ-only workaround. Production ingest from cowork still needs a real fix.
 
@@ -129,15 +129,15 @@ Option 1 is simpler and self-contained.
 
 **Severity:** Low — cosmetic; ingest completes before the crash
 
-**Affected file:** `scripts/ingest_traces.py` line ~373 — `store.close()` is called but `TraceStore` does not define `close()`
+**Affected file:** `omega-ingest-traces` line ~373 — `store.close()` is called but `TraceStore` does not define `close()`
 
 **Reproduction:**
 ```
 2026-05-25 18:23:40,476 INFO ingest_traces: Done. 34 ingested, 0 failed.
 Traceback (most recent call last):
-  File ".../scripts/ingest_traces.py", line 378, in <module>
+  File ".../omega-ingest-traces", line 378, in <module>
     sys.exit(main())
-  File ".../scripts/ingest_traces.py", line 373, in main
+  File ".../omega-ingest-traces", line 373, in main
     store.close()
 AttributeError: 'TraceStore' object has no attribute 'close'
 ```
@@ -150,7 +150,7 @@ AttributeError: 'TraceStore' object has no attribute 'close'
 
 **Severity:** Medium — recurrence of pattern from BUG-SS-1 (2026-05-22)
 
-**Affected file:** `inbox/sessions/sess-20260524-nba1.json` (extra `outcomes` key)
+**Affected file:** `var/inbox/sessions/sess-20260524-nba1.json` (extra `outcomes` key)
 
 **Symptom:** `validate_session_sidecars.py` and `report_calibration.py` both reject the sidecar with:
 ```
@@ -195,7 +195,7 @@ The agent chose the batch loop and put it in `scripts/`, which is wrong: `script
 
 **Recommended fixes (pick one or both):**
 
-1. **Add a thin CLI wrapper for `analyze()`:** `scripts/run_analyze.py --kind {game,prop} --league NBA --home-team ... --away-team ... --player-name ... --prop-type ... --line ... --odds-file <json> --session-id ... --bankroll ... --trace-out inbox/traces/`. Emits one trace per call. The agent then loops via shell; no per-session Python scratch needed. Wraps the engine and centralizes seed derivation, session_id propagation, reasoning_inputs/evidence collection, trace export, and aggregate_quality stamping.
+1. **Add a thin CLI wrapper for `analyze()`:** `omega-run-analyze --kind {game,prop} --league NBA --home-team ... --away-team ... --player-name ... --prop-type ... --line ... --odds-file <json> --session-id ... --bankroll ... --trace-out var/inbox/traces/`. Emits one trace per call. The agent then loops via shell; no per-session Python scratch needed. Wraps the engine and centralizes seed derivation, session_id propagation, reasoning_inputs/evidence collection, trace export, and aggregate_quality stamping.
 
 2. **Surface MCP tools in cowork:** Add the omega MCP server to the cowork tool registry (or document the connection procedure) so tier 1 actually works. Without this, every multi-game session forces tier 2 batching.
 

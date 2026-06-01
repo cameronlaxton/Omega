@@ -314,7 +314,7 @@ def _evaluate_signal(
 
     target, raw_factor = handler(signal, coeffs, baseline)
     # reliability_weight is the single seam that closes the Phase C -> Phase B
-    # loop: scripts/fit_adjustment_policy.py sets it per signal_type from
+    # loop: omega-fit-adjustment-policy sets it per signal_type from
     # measured empirical accuracy, damping the handler's deviation toward the
     # 1.0 no-op for signals that scored as noise. Absent => 1.0 (full trust),
     # so the hand-seeded v1 policy behaves exactly as the raw handler.

@@ -1,7 +1,7 @@
-"""Versioned contract for `inbox/sessions/<session_id>.json` sidecars.
+"""Versioned contract for `var/inbox/sessions/<session_id>.json` sidecars.
 
 Authority order (see docs/phase6/ARTIFACT_AUTHORITY.md): the ledger
-(`omega_traces.db`) is the source of truth for numbers/model state; this sidecar
+(`var/omega_traces.db`) is the source of truth for numbers/model state; this sidecar
 is a derived session summary — the human session view (`exec_stats`,
 `agent_notes`, the `audit_events` narrative) and never the source of truth for
 quant values. The sibling `<session_id>.events.jsonl` is a recovery mirror only
@@ -175,7 +175,7 @@ def _check_protected_fields(event: AuditEvent) -> None:
             if found_key:
                 raise ProtectedValueError(
                     f"audit_events '{field_name}' contains protected engine field {found_key!r}. "
-                    "Engine-owned quant values must stay in omega_traces.db."
+                    "Engine-owned quant values must stay in var/omega_traces.db."
                 )
 
 

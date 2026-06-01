@@ -4,11 +4,11 @@ omega-report-calibration â€” emit a markdown health & feedback report.
 Read by the LLM at session start (Â§13 of system_prompt.txt) to surface
 miscalibration trends, line-drift outliers, execution health, and pending
 candidate gate status. Writes a single markdown file the operator uploads
-to the Claude Project as `reports/latest.md`.
+to the Claude Project as `var/reports/latest.md`.
 
 Sources of truth:
-- `omega_traces.db` â€” traces, outcomes, bet_records, closing_lines, session_id
-- `inbox/sessions/*.json` â€” session sidecars with exec_stats
+- `var/omega_traces.db` â€” traces, outcomes, bet_records, closing_lines, session_id
+- `var/inbox/sessions/*.json` â€” session sidecars with exec_stats
 - `CalibrationRegistry` â€” active production profile + candidate gate status
 
 Determinism: this script makes no judgments. It tallies what is on disk. The
@@ -17,8 +17,8 @@ LLM is responsible for distinguishing signal from noise per Â§13.
 Usage:
     omega-report-calibration --league NBA
     omega-report-calibration --league NBA --window-days 30 \\
-        --out reports/2026-05-15-nba.md
-    omega-report-calibration --league NBA --sessions-inbox inbox/sessions
+        --out var/reports/2026-05-15-nba.md
+    omega-report-calibration --league NBA --sessions-inbox var/inbox/sessions
 
 Exit codes:
     0 â€” report written
@@ -67,7 +67,7 @@ _CALIBRATION_ELIGIBLE_SQL = """
 
 
 def _load_session_sidecars(inbox: Path) -> list[dict[str, Any]]:
-    """Read every inbox/sessions/*.json sidecar through the sidecar contract."""
+    """Read every var/inbox/sessions/*.json sidecar through the sidecar contract."""
     if not inbox.exists():
         return []
     out: list[dict[str, Any]] = []
@@ -706,7 +706,7 @@ def main() -> int:
     parser.add_argument("--league", required=True)
     parser.add_argument("--window-days", type=int, default=30)
     parser.add_argument(
-        "--out", type=Path, default=None, help="Output path (default: reports/latest.md)"
+        "--out", type=Path, default=None, help="Output path (default: var/reports/latest.md)"
     )
     parser.add_argument("--db", type=str, default=None)
     parser.add_argument(
@@ -761,7 +761,7 @@ def main() -> int:
     # report names the DB it was generated from (docs/phase6/ARTIFACT_AUTHORITY.md).
     header = header_for_store(
         store,
-        ["omega_traces.db", "inbox/sessions/*.json (sidecars)", "calibration registry"],
+        ["var/omega_traces.db", "var/inbox/sessions/*.json (sidecars)", "calibration registry"],
         extra_fields={
             "output_mode": output_mode.value,
             "output_mode_reasons": output_mode_reasons,

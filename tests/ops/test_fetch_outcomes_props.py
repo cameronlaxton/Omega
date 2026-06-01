@@ -1,5 +1,5 @@
 """
-End-to-end tests for scripts/fetch_outcomes_props.py.
+End-to-end tests for omega-fetch-outcomes-props.
 
 Hits a real SQLite DB but stubs both ESPN endpoints via the script's
 ``scoreboard_fetcher`` / ``box_score_fetcher`` injection points ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no network.

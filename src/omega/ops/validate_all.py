@@ -22,7 +22,7 @@ passes.
 Usage:
     omega-validate-all
     omega-validate-all --skip-tests        # policy/shape checks only (fast)
-    omega-validate-all --sessions-inbox inbox/sessions --traces inbox/traces
+    omega-validate-all --sessions-inbox var/inbox/sessions --traces var/inbox/traces
 
 Exit codes:
     0 â€” every executed check passed
@@ -70,13 +70,13 @@ def main(argv: list[str] | None = None) -> int:
         "--sessions-inbox",
         type=Path,
         default=_REPO_ROOT / "inbox" / "sessions",
-        help="Session sidecar directory (default: inbox/sessions)",
+        help="Session sidecar directory (default: var/inbox/sessions)",
     )
     parser.add_argument(
         "--traces",
         type=Path,
         default=_REPO_ROOT / "inbox" / "traces",
-        help="Exported trace directory (default: inbox/traces)",
+        help="Exported trace directory (default: var/inbox/traces)",
     )
     args = parser.parse_args(argv)
 

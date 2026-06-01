@@ -25,9 +25,9 @@ Eight decisions, locked before design, drive every section below:
 2. **`PropSimulationBackend` Protocol** parallel to `GameSimulationBackend`. Existing prop functions migrate to a default `prop_distribution_router` backend. Negative Binomial and bivariate-Poisson samplers ship as new backends, not as branches inside `select_distribution()`.
 3. **External-priors adapters are part of Phase 7**: Jeff Sackmann CSV (tennis SPW%/RPW%), Understat + FBref (soccer xG), nflverse-derived dispersion (NFL NB `k`). Each writes to a dedicated SQLite priors table read by its respective backend.
 4. **Implementation order: WNBA → Soccer → Tennis → NFL.** Soccer is built before tennis because the World Cup has a fixed external kickoff date (2026-06-11). Tennis ships in time for Wimbledon (2026-06-29).
-5. **Dixon-Coles `rho` is a dynamic prior, not a config constant** (red-team finding 1). Fit per competition profile by `scripts/fit_dixon_coles.py`, persisted in `priors_dixon_coles`, injected via `request.prior_payload`. Backend fails closed if absent.
-6. **NFL NB dispersion uses hierarchical Bayesian shrinkage** (red-team finding 2). Per-player `k` is shrunk toward `(position_group, stat_type)` posteriors in `scripts/fit_nfl_dispersion.py`. Backend stays shrinkage-agnostic; provenance (`nb_k_source`, `nb_k_shrinkage_weight`) flows through the priors table.
-7. **Tennis SPW% is state-dependent** (red-team finding 3). `TennisMarkovBackend` accepts a `pressure_coefficients` dict in `request.prior_payload` and applies per-state additive deltas at pressure nodes (break points, tiebreaks, set/match points). Fit by `scripts/fit_tennis_pressure_coefficients.py`; group-fallback used below the N=500 charted-points threshold.
+5. **Dixon-Coles `rho` is a dynamic prior, not a config constant** (red-team finding 1). Fit per competition profile by `omega-fit-dixon-coles`, persisted in `priors_dixon_coles`, injected via `request.prior_payload`. Backend fails closed if absent.
+6. **NFL NB dispersion uses hierarchical Bayesian shrinkage** (red-team finding 2). Per-player `k` is shrunk toward `(position_group, stat_type)` posteriors in `omega-fit-nfl-dispersion`. Backend stays shrinkage-agnostic; provenance (`nb_k_source`, `nb_k_shrinkage_weight`) flows through the priors table.
+7. **Tennis SPW% is state-dependent** (red-team finding 3). `TennisMarkovBackend` accepts a `pressure_coefficients` dict in `request.prior_payload` and applies per-state additive deltas at pressure nodes (break points, tiebreaks, set/match points). Fit by `omega-fit-tennis-pressure-coefficients`; group-fallback used below the N=500 charted-points threshold.
 8. **Early WNBA captures are segregated from CLV and calibration** (red-team finding 4). A dedicated `early_market_snapshots` table holds low-liquidity early lines. `closing_lines` is unchanged. CLV reads only `closing_lines`. The calibration fitter excludes early snapshots by default; opt-in forces a separate `context_slice="early_market_low_liq"` partition.
 
 ---
@@ -41,7 +41,7 @@ Eight decisions, locked before design, drive every section below:
 - League configs and Odds API mappings for WNBA, ATP, WTA, FIFA World Cup 2026, and updated NFL.
 - External-priors adapters with replay-mode guarding.
 - Replay-determinism tests per sport, mirroring `tests/core/test_replay_0526_mlb.py`.
-- Session-sidecar event parity: every new backend and adapter emits to `inbox/sessions/<session_id>.json` via the unmodified writer.
+- Session-sidecar event parity: every new backend and adapter emits to `var/inbox/sessions/<session_id>.json` via the unmodified writer.
 
 ### Non-goals
 
@@ -486,7 +486,7 @@ class NegBinomPropBackend:
         Emits over_prob, under_prob, p10/p50/p90, distribution_params for V10.
 
         Source of k: priors_nfl_dispersion table, populated by
-        scripts/fit_nfl_dispersion.py. The fitter mandates Bayesian
+        omega-fit-nfl-dispersion. The fitter mandates Bayesian
         shrinkage toward position-group means (see Part 5). Backend
         treats k as opaque; all hierarchical-pooling logic lives in the
         offline fitter so per-call latency stays flat. The
@@ -510,7 +510,7 @@ Thin shim wrapping the existing `select_distribution()` + sample logic from `eng
 - **ESPN scoreboard + boxscore (live)**: new file `omega/integrations/espn_wnba.py`, cloned from `espn_nba.py` with URL `basketball/wnba/scoreboard` and a WNBA team-alias map. Reuse `parse_box_score()` (`espn_boxscore.py:211`) with a new `WNBA_STAT_KEYS` constant. This is the in-season fetch path.
 - **`wehoop` (backtest/historical)**: the richer historical source for WNBA replay artifacts — play-by-play, box scores, shot locations (`github.com/sportsdataverse/wehoop`). `wehoop` is R-native; port via its data exports / API rather than an R bridge, following the same snapshot-and-load pattern used for nflverse. Feeds backtest artifacts and calibration, not the live request path. See Part 5B.
 - **Player-prop normalization**: WNBA stat keys identical to NBA (pts/reb/ast/stl/blk/3pm/pra). Reuse the NBA distribution router.
-- **Closing-line capture**: extend `scripts/fetch_closing_lines.py` to schedule an extra 6am ET pass for any league with `liquidity_profile == "low"`. Add a cron-callable shim `scripts/capture_early_lines.py` that takes `--leagues WNBA` and writes to a dedicated `early_market_snapshots` table — **not** the canonical `closing_lines` table. Early WNBA markets are highly inefficient and move violently on sharp action, so blending them into CLV destroys the metric. The dedicated table is keyed on `(trace_id, league, captured_at)` with a `liquidity_profile` column copied from the league config. The canonical CLV computation reads only `closing_lines`; the `early_market_snapshots` table is consumed separately by an "early-market lean" analysis and is **excluded from calibration fits by default**. To opt a profile in, the calibration fitter must explicitly pass `include_early_snapshots=True`, which forces a separate calibration profile slice (`context_slice="early_market_low_liq"`) so promoted profiles do not inherit phantom edges from pre-move pricing. See Part 8 for the CLV-distortion red-team detail.
+- **Closing-line capture**: extend `omega-fetch-closing-lines` to schedule an extra 6am ET pass for any league with `liquidity_profile == "low"`. Add a cron-callable shim `omega-capture-early-lines` that takes `--leagues WNBA` and writes to a dedicated `early_market_snapshots` table — **not** the canonical `closing_lines` table. Early WNBA markets are highly inefficient and move violently on sharp action, so blending them into CLV destroys the metric. The dedicated table is keyed on `(trace_id, league, captured_at)` with a `liquidity_profile` column copied from the league config. The canonical CLV computation reads only `closing_lines`; the `early_market_snapshots` table is consumed separately by an "early-market lean" analysis and is **excluded from calibration fits by default**. To opt a profile in, the calibration fitter must explicitly pass `include_early_snapshots=True`, which forces a separate calibration profile slice (`context_slice="early_market_low_liq"`) so promoted profiles do not inherit phantom edges from pre-move pricing. See Part 8 for the CLV-distortion red-team detail.
 - **Replay-mode guard**: new module must call `assert_not_replay_mode()` from `omega/integrations/_guards.py:11`. The shape-validator test in `tests/integrations/test_replay_mode_guard.py` will be extended to enforce this for every new integration module.
 
 ### Soccer (World Cup) — new external xG sources
@@ -521,22 +521,22 @@ Thin shim wrapping the existing `select_distribution()` + sample logic from `eng
 - **New file `omega/integrations/understat.py` (current season)**: adapter that pulls team and player xG from understat.com. HTML-backed; cache aggressively. Writes to `priors_xg` indexed by `(team, season, last_updated)`.
 - **New file `omega/integrations/fbref.py`**: FBref scraper, used as a redundancy source. Understat, FBref, and StatsBomb xG agree within a few percent at the season level; we keep them and surface disagreement in the session sidecar as a `data_provenance` audit event.
 - Both integrations call `assert_not_replay_mode()`. Both bound to a daily-refresh cadence; in-tournament refresh after each matchday. Priors freeze at tournament kickoff so mid-event source breakage cannot poison live decisions.
-- **New file `scripts/fit_dixon_coles.py` + `priors_dixon_coles` table**: Dixon-Coles `rho` is fit empirically per *competition profile*, not per league. Profile codes use the form `<competition>_<scope>_<version>`, e.g. `fifa_intl_v1` (FIFA-level international tournament), `epl_v3`, `ucl_v2`. The fitter consumes a historical match dataset filtered to the competition profile (5+ seasons of FIFA-tier internationals for `fifa_intl_v1`) and minimises the Dixon-Coles negative log-likelihood on (home_goals, away_goals) pairs. Output row: `(profile_id, rho, n_matches, fit_loss, as_of_date)`. Refit cadence: quarterly during a tournament cycle; pinned to a frozen `as_of_date` for the duration of a tournament so live decisions cannot drift on a refit. The gatherer reads the active profile by `rho_fit_profile` from `leagues.py` and injects `rho` + provenance fields into `request.prior_payload`. If no production profile exists for the active `rho_fit_profile`, the gatherer raises `MissingDixonColesPriorError` and the engine returns `status="skipped"` with `missing_requirements=["rho_prior"]` — fail closed rather than guess.
+- **New file `omega-fit-dixon-coles` + `priors_dixon_coles` table**: Dixon-Coles `rho` is fit empirically per *competition profile*, not per league. Profile codes use the form `<competition>_<scope>_<version>`, e.g. `fifa_intl_v1` (FIFA-level international tournament), `epl_v3`, `ucl_v2`. The fitter consumes a historical match dataset filtered to the competition profile (5+ seasons of FIFA-tier internationals for `fifa_intl_v1`) and minimises the Dixon-Coles negative log-likelihood on (home_goals, away_goals) pairs. Output row: `(profile_id, rho, n_matches, fit_loss, as_of_date)`. Refit cadence: quarterly during a tournament cycle; pinned to a frozen `as_of_date` for the duration of a tournament so live decisions cannot drift on a refit. The gatherer reads the active profile by `rho_fit_profile` from `leagues.py` and injects `rho` + provenance fields into `request.prior_payload`. If no production profile exists for the active `rho_fit_profile`, the gatherer raises `MissingDixonColesPriorError` and the engine returns `status="skipped"` with `missing_requirements=["rho_prior"]` — fail closed rather than guess.
 
 ### Tennis (ATP/WTA) — Jeff Sackmann CSVs
 
 - **Odds API**: add `"ATP": "tennis_atp"` and `"WTA": "tennis_wta"` to `SPORT_KEY_MAP`. Markets: `h2h`, `spreads` (sets / games handicaps), `totals` (total games). Player props (`player_aces`, `player_total_games`) covered via explicit market strings.
-- **New file `omega/integrations/tennis_sackmann.py`**: loads the Jeff Sackmann match-by-match CSVs from `https://github.com/JeffSackmann/tennis_atp` and `tennis_wta`. The standard open dataset for ATP/WTA stats. Cached into `data/external/sackmann/` and refreshed via a manual `scripts/refresh_sackmann.py` (weekly cadence; freeze for an event's lookahead window once a tournament starts).
+- **New file `omega/integrations/tennis_sackmann.py`**: loads the Jeff Sackmann match-by-match CSVs from `https://github.com/JeffSackmann/tennis_atp` and `tennis_wta`. The standard open dataset for ATP/WTA stats. Cached into `data/external/sackmann/` and refreshed via a manual `omega-refresh-sackmann` (weekly cadence; freeze for an event's lookahead window once a tournament starts).
 - Computes per-player rolling SPW%/RPW% by surface (12-month half-life), writes to a new `priors_tennis` table indexed by `(player, surface, as_of_date)`.
-- **New file `scripts/fit_tennis_pressure_coefficients.py` + `priors_tennis_pressure` table**: fits per-player additive SPW% deltas for each pressure state (`break_point_against`, `set_point_serving`, `match_point_serving`, `tiebreak`, `serving_for_set`, `serving_for_match`) using point-by-point Match Charting Project data from the Sackmann ecosystem. Players with fewer than N=500 charted points fall back to a tour+surface group mean (`atp_clay`, `wta_hard`, etc.) — flat 0.0 deltas are never used silently. The fit writes signed-delta values typically in the range `[-0.05, +0.02]` (servers usually take a small hit on pressure). The gatherer joins `priors_tennis_pressure` rows into `request.prior_payload["pressure_coefficients"]` along with the source (`player` | `group_fallback`) for audit events. Without these coefficients, derivative markets (set-winner, set-handicap, total-games-in-a-set) will be systematically mispriced; the IID assumption is a known failure mode of flat closed-form tennis models.
+- **New file `omega-fit-tennis-pressure-coefficients` + `priors_tennis_pressure` table**: fits per-player additive SPW% deltas for each pressure state (`break_point_against`, `set_point_serving`, `match_point_serving`, `tiebreak`, `serving_for_set`, `serving_for_match`) using point-by-point Match Charting Project data from the Sackmann ecosystem. Players with fewer than N=500 charted points fall back to a tour+surface group mean (`atp_clay`, `wta_hard`, etc.) — flat 0.0 deltas are never used silently. The fit writes signed-delta values typically in the range `[-0.05, +0.02]` (servers usually take a small hit on pressure). The gatherer joins `priors_tennis_pressure` rows into `request.prior_payload["pressure_coefficients"]` along with the source (`player` | `group_fallback`) for audit events. Without these coefficients, derivative markets (set-winner, set-handicap, total-games-in-a-set) will be systematically mispriced; the IID assumption is a known failure mode of flat closed-form tennis models.
 - No ESPN tennis module. Tennis match metadata (court, surface, R16/QF/etc.) read from the Odds API event payload.
 
 ### NFL — reuse + new ESPN module + nflverse adapter
 
 - **Odds API**: NFL already at `odds_api.py:58`. Markets: `h2h`, `spreads`, `totals`, `alternate_spreads` (needed for teaser leg pricing), and the standard player-prop markets.
 - **New file `omega/integrations/espn_nfl.py`**: cloned from `espn_nba.py`, URL `football/nfl/scoreboard`. Adds `NFL_STAT_KEYS` to `espn_boxscore.py`.
-- **New file `omega/integrations/nflverse.py`**: Python-side adapter over the nflverse ecosystem / `nflreadpy` (`github.com/nflverse`) — play-by-play, EPA, WPA, and roster data. Extracts team-level EPA (team-score lambda priors) and player-level yardage variance (NB dispersion `k`). Writes to `priors_nfl_dispersion` keyed by `(player_or_team, stat_type, season)`. The fit step ships as `scripts/fit_nfl_dispersion.py`, run once per week.
-- **Hierarchical Bayesian shrinkage is mandatory in `scripts/fit_nfl_dispersion.py`.** Estimating `k` per-player from small NFL sample sizes (17 games, fewer for rookies and backups) produces unstable values that over-fit individual outlier games. The fitter must:
+- **New file `omega/integrations/nflverse.py`**: Python-side adapter over the nflverse ecosystem / `nflreadpy` (`github.com/nflverse`) — play-by-play, EPA, WPA, and roster data. Extracts team-level EPA (team-score lambda priors) and player-level yardage variance (NB dispersion `k`). Writes to `priors_nfl_dispersion` keyed by `(player_or_team, stat_type, season)`. The fit step ships as `omega-fit-nfl-dispersion`, run once per week.
+- **Hierarchical Bayesian shrinkage is mandatory in `omega-fit-nfl-dispersion`.** Estimating `k` per-player from small NFL sample sizes (17 games, fewer for rookies and backups) produces unstable values that over-fit individual outlier games. The fitter must:
   1. Compute a group-level posterior for `k` per `(position_group, stat_type)` (e.g. `WR/receiving_yards`, `RB/rushing_yards`, `QB/passing_yards`) using all players in the group across multiple seasons.
   2. Compute a per-player posterior for `k` shrunk toward the group posterior via a conjugate prior (Gamma prior over `k`) with shrinkage weight `w(n) = n / (n + n0)` where `n` is per-player game count and `n0` is a tuned pseudocount per position group (initial: `n0=8`).
   3. Persist `nb_dispersion_k`, `nb_k_shrinkage_weight`, `nb_k_source` (`"player"` if `w >= 0.6`, `"position_group"` if `0.2 <= w < 0.6`, `"league"` for cold starts) in `priors_nfl_dispersion`.
@@ -567,8 +567,8 @@ NBA and MLB are existing sports; their repos are listed because Phase 7 uses the
 
 Each source gets a standalone adapter at `omega/integrations/<source>.py` that fetches, normalizes, validates, and stores data locally. Adapters never feed the request path directly — they populate the priors/backtest tables that backends and the strategy plane read.
 
-- **Tennis** — `omega/integrations/tennis_sackmann.py` parses the Sackmann CSVs to compute rolling SPW%/RPW% segmented by surface (12-month half-life) → `priors_tennis`. The Match Charting Project subset feeds `scripts/fit_tennis_pressure_coefficients.py` → `priors_tennis_pressure`.
-- **NFL** — `omega/integrations/nflverse.py` extracts team-level EPA and player-level yardage variance. `scripts/fit_nfl_dispersion.py` fits the Negative Binomial dispersion `k` with hierarchical shrinkage and runs weekly, committing to `priors_nfl_dispersion`. EPA/WPA also feed the team-score lambda priors consumed by `NflSimulationBackend`.
+- **Tennis** — `omega/integrations/tennis_sackmann.py` parses the Sackmann CSVs to compute rolling SPW%/RPW% segmented by surface (12-month half-life) → `priors_tennis`. The Match Charting Project subset feeds `omega-fit-tennis-pressure-coefficients` → `priors_tennis_pressure`.
+- **NFL** — `omega/integrations/nflverse.py` extracts team-level EPA and player-level yardage variance. `omega-fit-nfl-dispersion` fits the Negative Binomial dispersion `k` with hierarchical shrinkage and runs weekly, committing to `priors_nfl_dispersion`. EPA/WPA also feed the team-score lambda priors consumed by `NflSimulationBackend`.
 - **Soccer** — `omega/integrations/statsbomb.py` (backtest/historical) and `omega/integrations/understat.py` (current season) extract baseline team offensive and defensive xG → `priors_xg`, feeding the bivariate-Poisson engine. StatsBomb freeze-frame/pass-context data is reserved for future shot-quality refinement; Phase 7 consumes only team xG aggregates. `omega/integrations/fbref.py` remains the redundancy cross-check.
 - **NBA** — `omega/integrations/nba_play_types.py` loads Synergy play-type frequencies and points-per-possession percentiles → a new `priors_nba_play_types` table, available to the existing NBA prop router for context slicing. No new backend.
 - **MLB** — `omega/integrations/pybaseball_adapter.py` wraps `pybaseball` for Statcast/FanGraphs/Retrosheet pulls used to build richer MLB backtest artifacts. No new backend.
@@ -579,7 +579,7 @@ These three constraints are non-negotiable and apply to all adapters, new and ex
 
 1. **Local caching layer before transform.** Repositories that scrape live sites (e.g. `pybaseball` pulling from Baseball Savant) are rate-limited and risk IP bans. Every adapter must persist the **raw** upstream response to a local cache (Parquet for tabular pulls, raw JSON/HTML otherwise) under `data/cache/<source>/` *before* any transform. Transforms read from the cache, never re-fetch on retry. A cached pull within its TTL must not hit the network at all. This also makes backtests reproducible: the frozen cache *is* the knowable-at-the-time snapshot.
 
-2. **Pydantic schema validation at the ingestion boundary.** Public datasets rename columns without warning. Each adapter defines a Pydantic model for the upstream shape and validates every row/record at ingestion. On validation failure the adapter **fails the job loudly** — raises a typed `SourceSchemaDriftError`, writes a `fail`-status `data_provenance` event to the session sidecar (`inbox/sessions/<session_id>.json`), and exits non-zero. It must **never** silently coerce a missing/renamed field to `None` and pass it downstream into the calibration pipeline. Garbage priors are worse than a halted job.
+2. **Pydantic schema validation at the ingestion boundary.** Public datasets rename columns without warning. Each adapter defines a Pydantic model for the upstream shape and validates every row/record at ingestion. On validation failure the adapter **fails the job loudly** — raises a typed `SourceSchemaDriftError`, writes a `fail`-status `data_provenance` event to the session sidecar (`var/inbox/sessions/<session_id>.json`), and exits non-zero. It must **never** silently coerce a missing/renamed field to `None` and pass it downstream into the calibration pipeline. Garbage priors are worse than a halted job.
 
 3. **Cross-sport entity resolution via centralized alias tables.** Player and team names differ across databases ("Patrick Mahomes II" vs "Patrick Mahomes", accented vs ASCII tennis names, club name variants). A centralized alias table per league at `data/aliases/<league>.json` intercepts and resolves every entity name **before** it is written to a priors table. Resolution order: exact match → `normalize_player_name()` (`espn_boxscore.py:122`) → alias table → unresolved. Unresolved entities emit a `data_provenance` warning and are **excluded** from the priors write rather than written under an ambiguous key. The alias tables are versioned in git and reviewed when a new source is onboarded.
 
@@ -605,9 +605,9 @@ Each milestone is a self-contained, mergeable slice. No milestone leaves the eng
 
 - Implement and register `MarkovWNBAGameSimulationBackend` with WNBA-tuned pace/efficiency constants in `omega/core/sport_baselines.py`.
 - Wire `leagues.py:28` to point to the new backend; add `liquidity_profile: "low"` flag.
-- Build `omega/integrations/espn_wnba.py` (live); add `WNBA_STAT_KEYS` to the boxscore parser. Add `scripts/refresh_wehoop.py` to load `wehoop` historical PBP/box/shot data into backtest artifact storage for WNBA replay.
+- Build `omega/integrations/espn_wnba.py` (live); add `WNBA_STAT_KEYS` to the boxscore parser. Add `omega-refresh-wehoop` to load `wehoop` historical PBP/box/shot data into backtest artifact storage for WNBA replay.
 - Create `early_market_snapshots` table (separate from `closing_lines`) with `(trace_id, league, captured_at, liquidity_profile, market, price)` columns.
-- Extend `scripts/fetch_closing_lines.py` and add `scripts/capture_early_lines.py` so early-morning low-liquidity captures land in `early_market_snapshots`, never `closing_lines`.
+- Extend `omega-fetch-closing-lines` and add `omega-capture-early-lines` so early-morning low-liquidity captures land in `early_market_snapshots`, never `closing_lines`.
 - Update the calibration fitter to exclude `early_market_snapshots`-derived traces by default; add `include_early_snapshots=True` flag that forces the `context_slice="early_market_low_liq"` partition so promoted profiles never inherit phantom edges from pre-move pricing.
 - **Acceptance**: 5 historical WNBA games replay deterministically; closing-line capture cron tested end-to-end against the test Odds API key; CLV computation reads only `closing_lines` and ignores `early_market_snapshots`; calibration fit on a synthetic dataset with intentionally inflated early-line EV does **not** drift the production calibration profile.
 
@@ -615,7 +615,7 @@ Each milestone is a self-contained, mergeable slice. No milestone leaves the eng
 
 - Implement and register `SoccerPoissonBackend`. Backend **requires** `rho` in `request.prior_payload`; no static fallback. Raises `MissingDixonColesPriorError` if absent.
 - Build `omega/integrations/statsbomb.py` (historical xG, primary fit source), `omega/integrations/understat.py` (current season), and `omega/integrations/fbref.py` (redundancy); create `priors_xg` SQLite table.
-- Build `scripts/fit_dixon_coles.py` + `priors_dixon_coles` table; fit and promote a `fifa_intl_v1` profile before the World Cup deadline using 5+ seasons of FIFA-tier international matches from StatsBomb Open Data. Freeze `as_of_date` for the tournament duration.
+- Build `omega-fit-dixon-coles` + `priors_dixon_coles` table; fit and promote a `fifa_intl_v1` profile before the World Cup deadline using 5+ seasons of FIFA-tier international matches from StatsBomb Open Data. Freeze `as_of_date` for the tournament duration.
 - Wire the gatherer to read the active `rho_fit_profile` from `leagues.py`, look up the production profile in `priors_dixon_coles`, and inject `rho` + provenance into `request.prior_payload`.
 - Build `omega/core/edge/soccer_derivatives.py` for Asian Handicap, BTTS, correct-score, first-half-total markets.
 - Add `FIFA_WORLD_CUP_2026` league config; add the soccer sport key to Odds API map.
@@ -626,7 +626,7 @@ Each milestone is a self-contained, mergeable slice. No milestone leaves the eng
 
 - Implement and register `TennisMarkovBackend` with closed-form game/set/match probabilities and per-pressure-state Markov nodes.
 - Build `omega/integrations/tennis_sackmann.py`; create `priors_tennis` table with surface-segmented rolling SPW%/RPW%.
-- Build `scripts/fit_tennis_pressure_coefficients.py` + `priors_tennis_pressure` table; fit additive SPW% deltas for the six pressure states from Match Charting Project data. Players below the N=500-point threshold fall back to a tour+surface group mean; no silent 0.0 defaults.
+- Build `omega-fit-tennis-pressure-coefficients` + `priors_tennis_pressure` table; fit additive SPW% deltas for the six pressure states from Match Charting Project data. Players below the N=500-point threshold fall back to a tour+surface group mean; no silent 0.0 defaults.
 - Wire the gatherer to join `priors_tennis_pressure` into `request.prior_payload["pressure_coefficients"]` with `pressure_coefficient_source` (`player` | `group_fallback`) for the audit event.
 - Add `ATP`/`WTA` league configs; add tennis sport keys to Odds API map.
 - Calibration: tennis matches show higher player-level variance than basketball; expect the system to ride the identity profile longer before promotion.
@@ -637,7 +637,7 @@ Each milestone is a self-contained, mergeable slice. No milestone leaves the eng
 - Implement and register `NflSimulationBackend` (Gamma-Poisson team scores) and `NegBinomPropBackend`.
 - Build `omega/integrations/espn_nfl.py`; add NFL stat keys to boxscore parser.
 - Build `omega/integrations/nflverse.py`; create `priors_nfl_dispersion` table with `nb_dispersion_k`, `nb_k_shrinkage_weight`, `nb_k_source` columns.
-- Build `scripts/fit_nfl_dispersion.py` with mandatory hierarchical Bayesian shrinkage: per-player `k` is shrunk toward `(position_group, stat_type)` posteriors via a conjugate Gamma prior with shrinkage weight `w(n) = n / (n + n0)`, `n0=8` initial. Cold-start players inherit the league mean.
+- Build `omega-fit-nfl-dispersion` with mandatory hierarchical Bayesian shrinkage: per-player `k` is shrunk toward `(position_group, stat_type)` posteriors via a conjugate Gamma prior with shrinkage weight `w(n) = n / (n + n0)`, `n0=8` initial. Cold-start players inherit the league mean.
 - Build `omega/core/edge/nfl_teasers.py` evaluating Wong teaser legs from the discrete margin distribution.
 - **Acceptance**: 20 historical NFL games replay deterministically; teaser-leg EV computation tested on the classic Wong leg ranges (`-1.5 → +4.5`, `+1.5 → +7.5`, `-8.5 → -1.5`); shrinkage unit test asserts a rookie WR with 30 receptions gets `nb_k_source="position_group"` and `w < 0.6`; tail-probability test confirms `longest_reception over 40.5` for that rookie does not produce EV more than X bps above the position-group baseline.
 
@@ -654,7 +654,7 @@ End-to-end checks for each sport, mirroring the `tests/core/test_replay_0526_mlb
 5. **NFL-specific** — NB sampler empirical-variance check vs. `mean + mean²/k`; teaser-leg EV unit tests on known historical Wong opportunities; assert margin distribution sums to 1.0 over `{-21..+21}`.
 6. **Integration adapter tests** — each new integration in `tests/integrations/`, each calling `assert_not_replay_mode()` correctly. Mock `url_opener` for HTTP-bound tests; the guard is environment-driven so tests must not set `OMEGA_REPLAY_MODE=1`.
 7. **Calibration profile bootstrap** — assert each new league has an identity profile registered at `status=PRODUCTION` until N graded outcomes are collected. Promotion follows the existing Phase 6 policy in `omega/core/calibration/registry.py`.
-8. **Session sidecar parity** — every new backend emits an `engine_run` audit event to `inbox/sessions/<session_id>.json` via the unmodified `append_audit_events()` writer (`omega/trace/session_sidecar.py:147`). Every adapter emits a `data_provenance` event. No changes to the sidecar schema.
+8. **Session sidecar parity** — every new backend emits an `engine_run` audit event to `var/inbox/sessions/<session_id>.json` via the unmodified `append_audit_events()` writer (`omega/trace/session_sidecar.py:147`). Every adapter emits a `data_provenance` event. No changes to the sidecar schema.
 
 ### Red-team-finding verification tests
 
@@ -680,11 +680,11 @@ End-to-end checks for each sport, mirroring the `tests/core/test_replay_0526_mlb
 
 These four findings were raised in red-team review and the mitigations are now part of Phase 7 scope rather than deferred.
 
-- **Soccer — static Dixon-Coles `rho` is brittle.** International tournament soccer (World Cup) has materially different draw propensity and scoring variance than domestic club leagues. Hardcoding a single `rho` in `leagues.py` was the original sketch and is now removed. `rho` is treated as a dynamic prior, fit per *competition profile* (`fifa_intl_v1`, `epl_v3`, etc.) by `scripts/fit_dixon_coles.py`, persisted in `priors_dixon_coles`, and injected into `request.prior_payload`. The backend fails closed (`status="skipped"`, `missing_requirements=["rho_prior"]`) if no production profile exists; no implicit default. Refits are frozen at tournament kickoff for the duration of the event so live decisions cannot drift.
+- **Soccer — static Dixon-Coles `rho` is brittle.** International tournament soccer (World Cup) has materially different draw propensity and scoring variance than domestic club leagues. Hardcoding a single `rho` in `leagues.py` was the original sketch and is now removed. `rho` is treated as a dynamic prior, fit per *competition profile* (`fifa_intl_v1`, `epl_v3`, etc.) by `omega-fit-dixon-coles`, persisted in `priors_dixon_coles`, and injected into `request.prior_payload`. The backend fails closed (`status="skipped"`, `missing_requirements=["rho_prior"]`) if no production profile exists; no implicit default. Refits are frozen at tournament kickoff for the duration of the event so live decisions cannot drift.
 
-- **NFL — per-player NB dispersion `k` over-fits on small samples.** Estimating `k` strictly from individual nflverse per-player data is unstable: rookie wide receivers, backup running backs, and snap-share-limited players generate noisy `k` values that produce false-positive tail edges (longest-reception, longest-rush). The mitigation is mandatory hierarchical Bayesian shrinkage in `scripts/fit_nfl_dispersion.py`: per-player `k` is shrunk toward `(position_group, stat_type)` posteriors via a conjugate Gamma prior with shrinkage weight `w(n) = n / (n + n0)`. The `priors_nfl_dispersion` table carries `nb_k_source` (`player` | `position_group` | `league`) and `nb_k_shrinkage_weight` so audits can trace whether a high-EV tail call was driven by genuine player signal or group prior. The backend remains shrinkage-agnostic; all hierarchy lives offline.
+- **NFL — per-player NB dispersion `k` over-fits on small samples.** Estimating `k` strictly from individual nflverse per-player data is unstable: rookie wide receivers, backup running backs, and snap-share-limited players generate noisy `k` values that produce false-positive tail edges (longest-reception, longest-rush). The mitigation is mandatory hierarchical Bayesian shrinkage in `omega-fit-nfl-dispersion`: per-player `k` is shrunk toward `(position_group, stat_type)` posteriors via a conjugate Gamma prior with shrinkage weight `w(n) = n / (n + n0)`. The `priors_nfl_dispersion` table carries `nb_k_source` (`player` | `position_group` | `league`) and `nb_k_shrinkage_weight` so audits can trace whether a high-EV tail call was driven by genuine player signal or group prior. The backend remains shrinkage-agnostic; all hierarchy lives offline.
 
-- **Tennis — IID SPW% misprices pressure-state markets.** Closed-form Markov chains under an IID SPW% assumption are computationally cheap but ignore the measurable shift in serving distributions during break points, tiebreaks, set points, match points, and serving-for-set/match nodes. The flat-SPW% backend would systematically misprice set-winner, first-set games-handicap, and live derivative markets. The mitigation is per-pressure-state additive SPW% deltas fit by `scripts/fit_tennis_pressure_coefficients.py` from Match Charting Project point-by-point data, persisted in `priors_tennis_pressure`, and injected as `request.prior_payload["pressure_coefficients"]`. The Markov chain replaces the closed-form game polynomial with a finite-state game-level chain only at games containing pressure points — result is exact, runtime cost is small. Players with fewer than N=500 charted points fall back to a tour+surface group mean; flat 0.0 is never silently applied.
+- **Tennis — IID SPW% misprices pressure-state markets.** Closed-form Markov chains under an IID SPW% assumption are computationally cheap but ignore the measurable shift in serving distributions during break points, tiebreaks, set points, match points, and serving-for-set/match nodes. The flat-SPW% backend would systematically misprice set-winner, first-set games-handicap, and live derivative markets. The mitigation is per-pressure-state additive SPW% deltas fit by `omega-fit-tennis-pressure-coefficients` from Match Charting Project point-by-point data, persisted in `priors_tennis_pressure`, and injected as `request.prior_payload["pressure_coefficients"]`. The Markov chain replaces the closed-form game polynomial with a finite-state game-level chain only at games containing pressure points — result is exact, runtime cost is small. Players with fewer than N=500 charted points fall back to a tour+surface group mean; flat 0.0 is never silently applied.
 
 - **WNBA — early-morning line capture distorts CLV and calibration.** Capturing low-liquidity early WNBA lines is necessary to lock in size before sharp action moves the market, but those early lines do not reflect closing probability — they move violently and the implied EV is phantom. Blending early captures into the canonical `closing_lines` table would destroy CLV as a metric and bias calibration toward unrealistic edges. Mitigation: early captures land in a dedicated `early_market_snapshots` table flagged with `liquidity_profile`. The CLV computation reads only `closing_lines` and ignores `early_market_snapshots` entirely. The calibration fitter excludes `early_market_snapshots`-derived traces by default; opting in (`include_early_snapshots=True`) forces a separate calibration profile slice (`context_slice="early_market_low_liq"`) so promoted profiles inherit only closing-line-grounded calibration.
 
@@ -720,7 +720,7 @@ These four findings were raised in red-team review and the mitigations are now p
 ### nflverse
 
 - **R-native source**: Python ports drift. Direct R-bridge calls are fragile.
-- Mitigation: snapshot the relevant nflverse Parquet/CSV exports; load via a CSV-based adapter rather than an R bridge. Refresh script (`scripts/refresh_nflverse.py`) runs weekly.
+- Mitigation: snapshot the relevant nflverse Parquet/CSV exports; load via a CSV-based adapter rather than an R bridge. Refresh script (`omega-refresh-nflverse`) runs weekly.
 
 ### Open-repository ETL — rate limits & IP bans
 
@@ -789,11 +789,11 @@ Integrations — shared ETL + backtestable open-repository adapters:
 - `omega/integrations/pybaseball_adapter.py` — `pybaseball` Statcast/FanGraphs/Retrosheet for MLB backtests.
 
 Offline fit / refresh scripts:
-- `scripts/fit_dixon_coles.py` — per-competition Dixon-Coles `rho` fits (soccer).
-- `scripts/fit_tennis_pressure_coefficients.py` — per-player pressure-state SPW% deltas with group-fallback (tennis).
-- `scripts/fit_nfl_dispersion.py` — hierarchical Bayesian NB `k` with position-group shrinkage (NFL).
-- `scripts/capture_early_lines.py` — low-liquidity early-line cron writing to `early_market_snapshots` (WNBA, future low-liq sports).
-- `scripts/refresh_sackmann.py`, `scripts/refresh_nflverse.py`, `scripts/refresh_statsbomb.py`, `scripts/refresh_wehoop.py` — weekly priors/backtest-data refresh.
+- `omega-fit-dixon-coles` — per-competition Dixon-Coles `rho` fits (soccer).
+- `omega-fit-tennis-pressure-coefficients` — per-player pressure-state SPW% deltas with group-fallback (tennis).
+- `omega-fit-nfl-dispersion` — hierarchical Bayesian NB `k` with position-group shrinkage (NFL).
+- `omega-capture-early-lines` — low-liquidity early-line cron writing to `early_market_snapshots` (WNBA, future low-liq sports).
+- `omega-refresh-sackmann`, `omega-refresh-nflverse`, `omega-refresh-statsbomb`, `omega-refresh-wehoop` — weekly priors/backtest-data refresh.
 
 Data / config (versioned in git):
 - `data/aliases/<league>.json` — per-league entity alias tables (`WNBA`, `ATP`, `WTA`, `FIFA_WORLD_CUP_2026`, `NFL`, plus existing `NBA`/`MLB`).
@@ -809,7 +809,7 @@ New SQLite tables:
 - `priors_nba_play_types` — Synergy play-type frequencies / PPP percentiles (NBA prop context).
 - `early_market_snapshots` — segregated from `closing_lines`, excluded from CLV.
 
-WNBA historical (`wehoop`) data is loaded into existing backtest artifact storage via `scripts/refresh_wehoop.py`; it does not need a new priors table.
+WNBA historical (`wehoop`) data is loaded into existing backtest artifact storage via `omega-refresh-wehoop`; it does not need a new priors table.
 
 ### Modified files
 
@@ -819,7 +819,7 @@ WNBA historical (`wehoop`) data is loaded into existing backtest artifact storag
 - `omega/core/contracts/schemas.py` — `prior_payload` on `PlayerPropRequest`; `SoccerDerivativeMarket` enum.
 - `omega/core/config/leagues.py` — tune WNBA, add `ATP`/`WTA`/`FIFA_WORLD_CUP_2026`, flag NFL teaser-eval.
 - `omega/integrations/odds_api.py` — add ATP / WTA / FIFA World Cup sport keys.
-- `scripts/fetch_closing_lines.py` — early-line capture for low-liquidity leagues.
+- `omega-fetch-closing-lines` — early-line capture for low-liquidity leagues.
 - `tests/integrations/test_replay_mode_guard.py` — assert every integration module references the guard.
 
 ### New tests

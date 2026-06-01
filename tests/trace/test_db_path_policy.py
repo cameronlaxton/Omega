@@ -54,10 +54,10 @@ def _force_redirect(monkeypatch, source: Path, runtime: Path) -> None:
 
 class TestRedirectGuard:
     def test_valid_nonempty_source_absent_runtime_raises(self, tmp_path, monkeypatch):
-        source = tmp_path / "mount" / "omega_traces.db"
+        source = tmp_path / "mount" / "var/omega_traces.db"
         source.parent.mkdir(parents=True)
         _make_db(source, 3)
-        runtime = tmp_path / "rt" / "omega_traces.db"
+        runtime = tmp_path / "rt" / "var/omega_traces.db"
         _force_redirect(monkeypatch, source, runtime)
         monkeypatch.delenv("OMEGA_ALLOW_EMPTY_DB", raising=False)
 
@@ -66,8 +66,8 @@ class TestRedirectGuard:
         assert not runtime.exists(), "guard must not create an empty runtime DB"
 
     def test_missing_source_raises(self, tmp_path, monkeypatch):
-        source = tmp_path / "mount" / "omega_traces.db"  # never created
-        runtime = tmp_path / "rt" / "omega_traces.db"
+        source = tmp_path / "mount" / "var/omega_traces.db"  # never created
+        runtime = tmp_path / "rt" / "var/omega_traces.db"
         _force_redirect(monkeypatch, source, runtime)
         monkeypatch.delenv("OMEGA_ALLOW_EMPTY_DB", raising=False)
 
@@ -76,10 +76,10 @@ class TestRedirectGuard:
         assert not runtime.exists()
 
     def test_malformed_source_raises(self, tmp_path, monkeypatch):
-        source = tmp_path / "mount" / "omega_traces.db"
+        source = tmp_path / "mount" / "var/omega_traces.db"
         source.parent.mkdir(parents=True)
         source.write_bytes(b"this is not a sqlite database")
-        runtime = tmp_path / "rt" / "omega_traces.db"
+        runtime = tmp_path / "rt" / "var/omega_traces.db"
         _force_redirect(monkeypatch, source, runtime)
         monkeypatch.delenv("OMEGA_ALLOW_EMPTY_DB", raising=False)
 
@@ -88,8 +88,8 @@ class TestRedirectGuard:
         assert not runtime.exists()
 
     def test_allow_empty_db_opens_empty_runtime(self, tmp_path, monkeypatch):
-        source = tmp_path / "mount" / "omega_traces.db"  # missing
-        runtime = tmp_path / "rt" / "omega_traces.db"
+        source = tmp_path / "mount" / "var/omega_traces.db"  # missing
+        runtime = tmp_path / "rt" / "var/omega_traces.db"
         _force_redirect(monkeypatch, source, runtime)
         monkeypatch.setenv("OMEGA_ALLOW_EMPTY_DB", "1")
 
@@ -106,7 +106,7 @@ class TestSeedRuntimeDb:
     def test_seed_copies_trace_count(self, tmp_path):
         source = tmp_path / "src.db"
         _make_db(source, 4)
-        runtime = tmp_path / "rt" / "omega_traces.db"
+        runtime = tmp_path / "rt" / "var/omega_traces.db"
         result = seed_runtime_db(str(source), str(runtime))
         assert result["trace_count"] == 4
         assert runtime.exists()
@@ -139,10 +139,10 @@ class TestDbStatus:
         assert st["source"] == "requested"
 
     def test_does_not_create_runtime_and_recommends_seed(self, tmp_path, monkeypatch):
-        source = tmp_path / "mount" / "omega_traces.db"
+        source = tmp_path / "mount" / "var/omega_traces.db"
         source.parent.mkdir(parents=True)
         _make_db(source, 3)
-        runtime = tmp_path / "rt" / "omega_traces.db"
+        runtime = tmp_path / "rt" / "var/omega_traces.db"
         _force_redirect(monkeypatch, source, runtime)
 
         st = db_status(None)
@@ -151,10 +151,10 @@ class TestDbStatus:
         assert "seed" in st["recommended_action"]
 
     def test_divergence_reported_no_merge(self, tmp_path, monkeypatch):
-        source = tmp_path / "mount" / "omega_traces.db"
+        source = tmp_path / "mount" / "var/omega_traces.db"
         source.parent.mkdir(parents=True)
         _make_db(source, 5)
-        runtime = tmp_path / "rt" / "omega_traces.db"
+        runtime = tmp_path / "rt" / "var/omega_traces.db"
         runtime.parent.mkdir(parents=True)
         _make_db(runtime, 2)
         _force_redirect(monkeypatch, source, runtime)

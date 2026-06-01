@@ -52,7 +52,7 @@ UTC = timezone.utc
 
 logger = logging.getLogger("omega.trace.store")
 
-_DEFAULT_DB_NAME = "omega_traces.db"
+_DEFAULT_DB_NAME = "var/omega_traces.db"
 
 # Path-resolution sources reported back to callers and tests so the redirect
 # decision is observable without parsing log lines.
@@ -69,7 +69,7 @@ _NETWORK_FS_TYPES = frozenset(
 def _local_runtime_db_path() -> Path:
     """Per-user runtime DB path that lives on the local SSD, not a mount.
 
-    Windows: %LOCALAPPDATA%\\omega\\runtime\\omega_traces.db
+    Windows: %LOCALAPPDATA%\\omega\\runtime\\var/omega_traces.db
     POSIX:   ~/.omega/runtime/omega_traces.db
     """
     if os.name == "nt":

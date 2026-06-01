@@ -56,14 +56,14 @@ behavior-neutral until a policy is promoted to `mode='live'`.
 
 ### Phase C — Score and re-fit
 
-`omega/strategy/signal_performance.py` + `scripts/score_evidence_signals.py`
+`omega/strategy/signal_performance.py` + `omega-score-evidence-signals`
 JOIN `evidence_signals` to attached outcomes and measure, per
 `(signal_type, source, obs_window, league)`, whether each signal's `direction`
 matched the realized result and whether its `confidence` matched its empirical
 accuracy. Aggregates land in the `signal_performance` table (V9) and surface in
 `report_calibration.py` §6B for the agent at session start.
 
-`scripts/fit_adjustment_policy.py` reads `signal_performance` and derives a
+`omega-fit-adjustment-policy` reads `signal_performance` and derives a
 `reliability_weight ∈ [0,1]` per signal type:
 
 ```
@@ -75,7 +75,7 @@ The evidence evaluator damps every handler's deviation by this weight:
 that scored at chance is damped to a no-op; one that proved predictive keeps its
 strength. This is the single deterministic seam closing Phase C back into
 Phase B. The re-fit is written as a **CANDIDATE** policy;
-`scripts/promote_adjustment_policy.py` performs a gated, operator-driven
+`omega-promote-adjustment-policy` performs a gated, operator-driven
 promotion (and optional `--go-live` flip).
 
 ## Invariants
@@ -101,12 +101,12 @@ promotion (and optional `--go-live` flip).
 ```
 analyze() with evidence            # capture + shadow-apply, persist V9 rows
 scripts/fetch_outcomes_*.py        # attach outcomes
-scripts/backfill_evidence_signals.py --dry-run   # find pre-V9 traces missing rows
-scripts/backfill_evidence_signals.py --apply      # re-explode their own snapshots
-scripts/score_evidence_signals.py  # populate signal_performance
-scripts/report_calibration.py      # §6B surfaces signal performance to the agent
-scripts/fit_adjustment_policy.py   # CANDIDATE policy from measured accuracy
-scripts/promote_adjustment_policy.py --confirm-backtest --go-live   # gated live flip
+omega-backfill-evidence-signals --dry-run   # find pre-V9 traces missing rows
+omega-backfill-evidence-signals --apply      # re-explode their own snapshots
+omega-score-evidence-signals  # populate signal_performance
+omega-report-calibration      # §6B surfaces signal performance to the agent
+omega-fit-adjustment-policy   # CANDIDATE policy from measured accuracy
+omega-promote-adjustment-policy --confirm-backtest --go-live   # gated live flip
 ```
 
 ## Eligibility, QA verdicts, and evidence backfill
@@ -158,7 +158,7 @@ session**. Verdict scopes: `trace_id`, `timestamp_window`, `pre_trace_fatal`,
 
 ### Evidence backfill is RE-DERIVATION, not recovery
 
-`scripts/backfill_evidence_signals.py` re-explodes `evidence_signals` rows from a
+`omega-backfill-evidence-signals` re-explodes `evidence_signals` rows from a
 trace's own frozen **`input_snapshot.evidence`** — the only legitimate
 pre-decision source. Evidence is never lost; pre-V9 traces simply carry it in
 the blob with no table rows. Re-exploded rows are provenance `original` (same
@@ -172,7 +172,7 @@ source, materialized late) — there is no separate recovery source.
 
 ### Scorer coverage summary
 
-`scripts/score_evidence_signals.py` reports coverage by status instead of
+`omega-score-evidence-signals` reports coverage by status instead of
 silently skipping. Empty-evidence traces are reported as an evidence-learning
 gap — never as a probability-calibration failure — and producing rows for the
 available evidence is success, not breakage:

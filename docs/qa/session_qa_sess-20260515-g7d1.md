@@ -70,7 +70,7 @@ Five WebSearch calls returned accurate, current data: series stats through Game 
 - Session ID minted once: `sess-20260515-g7d1`
 - Calibration health run at session start
 - Action plan emitted (`actions: []`, correct for 0-trace DB)
-- Session sidecar written to `inbox/sessions/`
+- Session sidecar written to `var/inbox/sessions/`
 - All traces ingested via pipeline (not written to DB directly)
 
 ### 3.8 User-Facing Communication ✅
@@ -105,7 +105,7 @@ All 4 should fire at **2026-05-17T19:30:00-04:00** (7:30 PM ET). Target: theScor
 | `sandbox-58ee2ffa-63a4` | Harden Over 6.5 ast | player_prop:ast | `away_ast_over_6.5` |
 | `sandbox-354c32cd-8778` | Mobley Over 18.5 pts | player_prop:pts | `away_pts_over_18.5` |
 
-Each capture writes to `inbox/closing_lines/<trace_id>.json` then runs `python scripts/ingest_closing_lines.py`.
+Each capture writes to `var/inbox/closing_lines/<trace_id>.json` then runs `omega-ingest-closing-lines`.
 
 ---
 

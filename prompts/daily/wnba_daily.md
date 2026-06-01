@@ -20,15 +20,15 @@ Follow [OMEGA_COWORK.md](../../OMEGA_COWORK.md) and
 Run:
 
 ```bash
-python scripts/report_calibration.py --league WNBA --window-days 30
+omega-report-calibration --league WNBA --window-days 30
 ```
 
 **Mandatory:** read [`prompts/reference/output_modes.md`](../reference/output_modes.md) before
 producing any output, and read the machine-readable `output_mode` field from the
-`reports/latest.md` **frontmatter** (`research_candidate` or `actionable`). `RESEARCH_CANDIDATE`
+`var/reports/latest.md` **frontmatter** (`research_candidate` or `actionable`). `RESEARCH_CANDIDATE`
 restricts only what you show the user — it never skips the engine.
 
-Read `reports/latest.md` before analysis. Expect small samples; when the
+Read `var/reports/latest.md` before analysis. Expect small samples; when the
 calibration report says `insufficient_n`, treat that as unproven, not as
 positive evidence.
 
@@ -39,14 +39,14 @@ positive evidence.
 Run:
 
 ```bash
-python scripts/cowork_preflight.py --formal-output-gate
+omega-cowork-preflight --formal-output-gate
 ```
 
 If this does not print `cowork_preflight_ready`, do not emit Bet Cards.
 
 Mint one league session ID: `sess-YYYYMMDD-wnb1`.
 
-Bootstrap or update `inbox/sessions/<session_id>.json` and append a preflight
+Bootstrap or update `var/inbox/sessions/<session_id>.json` and append a preflight
 audit event with status and bankroll confirmation.
 
 ---
@@ -76,13 +76,13 @@ the primary actionable surface, but they still need the same league context.
 Game markets:
 
 ```bash
-python scripts/resolve_odds.py --kind game --league WNBA --home-team "Team A" --away-team "Team B"
+omega-resolve-odds --kind game --league WNBA --home-team "Team A" --away-team "Team B"
 ```
 
 Player props:
 
 ```bash
-python scripts/resolve_odds.py --kind prop --league WNBA --player "Player Name" --prop-type pts --line 15.5
+omega-resolve-odds --kind prop --league WNBA --player "Player Name" --prop-type pts --line 15.5
 ```
 
 WNBA prop rule:
@@ -267,7 +267,7 @@ downgraded to research-only. Do not emit Bet Cards for research-only traces.
 
 ## Step 10 - Export, Confirm, Close
 
-After each successful `analyze()` call, write `inbox/traces/<trace_id>.json`.
+After each successful `analyze()` call, write `var/inbox/traces/<trace_id>.json`.
 Nest `reasoning_inputs`, `reasoning_narrative`,
 `reasoning_downgrade_rationale`, and `trace_quality` inside the inner `trace`
 block.
@@ -285,8 +285,8 @@ Do not run ingest or audit rendering inside the live betting session.
 Run separately after session close:
 
 ```bash
-python scripts/run_action_plan.py inbox/action_plans/templates/daily_trace_intake.json
-python scripts/run_action_plan.py inbox/action_plans/templates/render_session_audits.json
+omega-run-action-plan var/inbox/action_plans/templates/daily_trace_intake.json
+omega-run-action-plan var/inbox/action_plans/templates/render_session_audits.json
 ```
 
 After games are final, run the outcome loop described in

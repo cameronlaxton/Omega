@@ -6,7 +6,7 @@ How Omega sources live and historical data. The full no-local self-heal loop is 
 
 The deterministic core service and MCP analyze tools perform no network calls.
 
-In local Cowork/Codex operation, pre-decision current odds are resolved through The Odds API with BetMGM as the default bookmaker. Use `scripts/resolve_odds.py` or the `omega_resolve_odds` MCP tool. Multi-book requests are reserved for explicit line shopping, consensus checks, or audit/backfill work.
+In local Cowork/Codex operation, pre-decision current odds are resolved through The Odds API with BetMGM as the default bookmaker. Use `omega-resolve-odds` or the `omega_resolve_odds` MCP tool. Multi-book requests are reserved for explicit line shopping, consensus checks, or audit/backfill work.
 
 No-local Project/API agents cannot read `.env` or call local tooling. They still use cited WebSearch/WebFetch evidence, or they ask the user to run the local resolver and paste/save the output.
 
@@ -16,9 +16,9 @@ The API key stays local in `.env` or the runtime environment and is never copied
 
 | Missing slot | Local Cowork/Codex source | No-local fallback |
 |---|---|---|
-| `odds_over` / `odds_under` / `odds.markets` | `omega_resolve_odds` / `scripts/resolve_odds.py` using BetMGM | Cited sportsbook WebFetch/WebSearch |
+| `odds_over` / `odds_under` / `odds.markets` | `omega_resolve_odds` / `omega-resolve-odds` using BetMGM | Cited sportsbook WebFetch/WebSearch |
 | Line-shopping / consensus odds | `resolve_odds.py --line-shopping` or `all_books=true` | Cited multi-book search |
-| Closing line | `scripts/fetch_closing_lines.py` through The Odds API, then `scripts/ingest_closing_lines.py` | WebFetch closing snapshot block |
+| Closing line | `omega-fetch-closing-lines` through The Odds API, then `omega-ingest-closing-lines` | WebFetch closing snapshot block |
 | Historical odds / replay market artifact | The Odds API historical endpoints through `omega.integrations.odds_api` | Not available without local access |
 | `player_context.{prop}_mean` | Official/reference stats or local curated inputs | Same |
 | `player_context.{prop}_std` | Last 5-10 game logs; compute `statistics.stdev(values)` in Python | Same |
@@ -69,7 +69,7 @@ When an injected value is older than its window, label it as `stale` in `Inputs 
 ## Code Anchors
 
 - `omega/integrations/odds_api.py`: The Odds API client.
-- `scripts/resolve_odds.py`: BetMGM-default pre-decision odds resolver.
+- `omega-resolve-odds`: BetMGM-default pre-decision odds resolver.
 - `omega/mcp/server.py`: `omega_resolve_odds` MCP tool.
 - `omega/trace/market_snapshot.py`: line-movement snapshot model.
 - `omega/core/simulation/archetypes.py`: supported `prop_type` keys per sport archetype.

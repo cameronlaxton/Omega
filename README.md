@@ -31,7 +31,7 @@ Formal numeric outputs require Python execution and a `sandbox-` trace ID return
 - `src/omega/mcp/`: typed local MCP tools over the deterministic contracts.
 - `src/omega/ops/`: operational entrypoints (ingest, grading, calibration/reporting, validation, action-plan dispatch).
 
-Runtime state now belongs under `var/` (`var/omega_traces.db`, transient inbox/report artifacts) and is intentionally git-ignored.
+Runtime state now belongs under `var/` (`var/omega_traces.db`, transient var/inbox/report artifacts) and is intentionally git-ignored.
 
 ## Quick Start
 

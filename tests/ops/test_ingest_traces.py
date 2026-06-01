@@ -1,5 +1,5 @@
 """
-Tests for scripts/ingest_traces.py — sandbox export ingestion.
+Tests for omega-ingest-traces — sandbox export ingestion.
 
 Covers:
 - Export-block (shape A): wrapped trace + bet_record
@@ -584,7 +584,7 @@ class TestPropMatchupDerivation:
     """Phase 6h: prop traces should denormalize matchup to the game pair when
     home_team/away_team are present on input_snapshot. This makes prop traces
     discoverable by the existing time-window + league query path used by
-    scripts/fetch_outcomes_props.py.
+    omega-fetch-outcomes-props.
     """
 
     def test_prop_with_game_identity_denormalizes_to_game_pair(self):

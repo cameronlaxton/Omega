@@ -43,7 +43,7 @@ the project must be installed with the MCP extra:
 
 ```bash
 python -m pip install -e .[mcp]
-python scripts/cowork_preflight.py
+omega-cowork-preflight
 ```
 
 For an MCP client that supports command-based local servers:

@@ -1,8 +1,8 @@
 """
-omega-ingest-traces â€” drain `inbox/traces/*.json` into `omega_traces.db`.
+omega-ingest-traces â€” drain `var/inbox/traces/*.json` into `var/omega_traces.db`.
 
 Workflow:
-    1. Scan `inbox/traces/*.json` (non-recursive, processed/ and failed/ are skipped).
+    1. Scan `var/inbox/traces/*.json` (non-recursive, processed/ and failed/ are skipped).
     2. For each file: parse â†’ adapt analyze() output to TraceStore shape â†’ persist trace
        â†’ persist bet_record if present â†’ move file to processed/.
     3. On parse or persistence error: move file to failed/ with a sibling `.error.txt`.
@@ -476,7 +476,7 @@ def _move_to(src: Path, dst_dir: Path) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Ingest sandbox trace exports into omega_traces.db"
+        description="Ingest sandbox trace exports into var/omega_traces.db"
     )
     parser.add_argument(
         "--inbox",

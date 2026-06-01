@@ -1,7 +1,7 @@
 """Deterministic session audit renderer.
 
-Inputs: a ``SessionSidecar`` JSON file + the ``omega_traces.db`` ledger.
-Output: ``reports/run_audits/<session_id>.audit.md`` written atomically.
+Inputs: a ``SessionSidecar`` JSON file + the ``var/omega_traces.db`` ledger.
+Output: ``var/reports/run_audits/<session_id>.audit.md`` written atomically.
 
 Hard rule: any numeric/quant value shown in the rendered markdown
 (probabilities, edge%, EV%, Kelly, units, confidence tiers, fair/no-vig
@@ -75,7 +75,7 @@ def render_session_audit(
         # Derived-artifact front-matter, built from the live store so the audit
         # always names the DB it was rendered from (ARTIFACT_AUTHORITY.md).
         header = header_for_store(
-            store, ["omega_traces.db", f"inbox/sessions/{session_id}.json"]
+            store, ["var/omega_traces.db", f"var/inbox/sessions/{session_id}.json"]
         )
     finally:
         store.close()
@@ -140,7 +140,7 @@ def _render_markdown(
     lines.append(f"## Traces ({len(rows)})")
     lines.append("")
     if not rows:
-        lines.append("_No traces in `omega_traces.db` for this session._")
+        lines.append("_No traces in `var/omega_traces.db` for this session._")
         lines.append("")
     else:
         lines.append(

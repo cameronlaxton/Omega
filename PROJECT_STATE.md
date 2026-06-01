@@ -23,7 +23,7 @@ Omega is a **research assistant + betting decision engine that continuously impr
 ## Source-of-Truth Authority
 
 Canonical source-of-truth rules must be consistent everywhere:
-- `omega_traces.db`: Canonical numeric ledger for predictions, outcomes, grading, calibration data, optional wager/CLV metadata. **Live DB is runtime state, not source-controlled truth.**
+- `var/omega_traces.db`: Canonical numeric ledger for predictions, outcomes, grading, calibration data, optional wager/CLV metadata. **Live DB is runtime state, not source-controlled truth.**
 - **Sidecars:** Canonical session/process narrative.
 - **Reports:** Generated, derived, non-canonical. Any generated reports committed to the repo must include metadata showing `canonical: false`.
 - **Trace Exports:** Import-only transfer artifacts. Live processed traces are runtime artifacts.
@@ -99,7 +99,7 @@ Soccer is now wired end-to-end at the game plane:
 - Leagues: MLS, EPL, LA_LIGA, BUNDESLIGA, SERIE_A, LIGUE_1, CHAMPIONS_LEAGUE, LIGA_MX
   in `omega/core/config/leagues.py`.
 - Outcomes: `omega/integrations/espn_soccer.py` (per-competition ESPN scoreboard) +
-  `scripts/fetch_outcomes_soccer.py`, dispatched by `scripts/fetch_outcomes_all.py`.
+  `omega-fetch-outcomes-soccer`, dispatched by `omega-fetch-outcomes-all`.
 - 3-way result: draws are graded by `TraceStore.attach_outcome` (equal scores → `draw`)
   and calibrated via `CalibrationFitter.extract_draw_pairs`.
 

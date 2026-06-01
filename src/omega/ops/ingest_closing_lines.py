@@ -1,5 +1,5 @@
 """
-omega-ingest-closing-lines â€” drain `inbox/closing_lines/*.json` into omega_traces.db.
+omega-ingest-closing-lines â€” drain `var/inbox/closing_lines/*.json` into var/omega_traces.db.
 
 This is the stable file-to-DB bridge for closing-line snapshots. The snapshot may
 come from agent WebFetch, live Odds API capture, or paid historical Odds API
@@ -33,7 +33,7 @@ selection_descriptor); re-ingesting the same file is a no-op for already-attache
 selections.
 
 Workflow:
-    1. Scan inbox/closing_lines/*.json (non-recursive; processed/ and failed/ skipped).
+    1. Scan var/inbox/closing_lines/*.json (non-recursive; processed/ and failed/ skipped).
     2. For each file: parse â†’ validate â†’ apply each `lines` entry via TraceStore â†’
        move file to processed/.
     3. On any error: move file to failed/ with .error.txt sidecar.
@@ -172,7 +172,7 @@ def _move_to(src: Path, dst_dir: Path) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Ingest agent-emitted closing-line snapshots into omega_traces.db"
+        description="Ingest agent-emitted closing-line snapshots into var/omega_traces.db"
     )
     parser.add_argument(
         "--inbox",

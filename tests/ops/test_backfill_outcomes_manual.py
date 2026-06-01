@@ -1,5 +1,5 @@
 """
-Tests for scripts/backfill_outcomes_manual.py â€” interactive backlog grading.
+Tests for omega-backfill-outcomes-manual â€” interactive backlog grading.
 
 Hits a real SQLite DB but stubs ESPN scoreboard and box-score fetches.
 Confirmation prompts are stubbed via the `confirm=` callable.

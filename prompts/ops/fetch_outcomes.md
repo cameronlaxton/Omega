@@ -12,14 +12,14 @@ Run this after all games for the day are final. It attaches ESPN final scores an
 ## Run the outcome loop
 
 ```bash
-python scripts/run_action_plan.py inbox/action_plans/templates/daily_outcome_evidence_loop.json
+omega-run-action-plan var/inbox/action_plans/templates/daily_outcome_evidence_loop.json
 ```
 
 This dispatches four steps in sequence:
-1. `ingest_traces` — drains `inbox/traces/*.json` into the DB so outcomes see the latest exports
-2. `fetch_outcomes` (NBA + MLB + props) — attaches final scores and box-score stats
-3. `score_evidence_signals` — retrospectively scores signal predictiveness
-4. `report_calibration --league NBA --window-days 30` — writes `reports/latest.md`
+1. `omega-ingest-traces` — drains `var/inbox/traces/*.json` into the DB so outcomes see the latest exports
+2. `omega-fetch-outcomes` (NBA + MLB + props) — attaches final scores and box-score stats
+3. `omega-score-evidence-signals` — retrospectively scores signal predictiveness
+4. `omega-report-calibration --league NBA --window-days 30` — writes `var/reports/latest.md`
 
 ---
 
@@ -30,20 +30,20 @@ This dispatches four steps in sequence:
 [fetch_outcomes] NBA: M outcomes attached, K unmatched
 [fetch_outcomes] MLB: M outcomes attached, K unmatched
 [fetch_outcomes] props: M outcomes attached, K unmatched
-[score_evidence_signals] scored N signal instances
-[report_calibration] wrote reports/latest.md
+[omega-score-evidence-signals] scored N signal instances
+[omega-report-calibration] wrote var/reports/latest.md
 ```
 
 **If unmatched > 20% of traces:** check alias table or date range. ESPN aliases change with trades — add new mappings to `omega/integrations/espn_nba.py::TEAM_ALIASES` or `espn_mlb.py::MLB_TEAMS`.
 
-**If a sub-step fails:** check `inbox/traces/failed/` for `.error.txt` sidecars. Common causes: missing `home_team`/`away_team`/`game_date` on prop traces, or `ingest_traces` validation errors.
+**If a sub-step fails:** check `var/inbox/traces/failed/` for `.error.txt` sidecars. Common causes: missing `home_team`/`away_team`/`game_date` on prop traces, or `omega-ingest-traces` validation errors.
 
 ---
 
 ## Dry run first (optional)
 
 ```bash
-python scripts/run_action_plan.py inbox/action_plans/templates/daily_outcome_evidence_loop.json --dry-run
+omega-run-action-plan var/inbox/action_plans/templates/daily_outcome_evidence_loop.json --dry-run
 ```
 
 Shows what would be dispatched without writing to the DB.
@@ -55,11 +55,11 @@ Shows what would be dispatched without writing to the DB.
 If you only need outcomes for one league:
 
 ```bash
-python scripts/fetch_outcomes_all.py --leagues nba
-python scripts/fetch_outcomes_all.py --leagues mlb
-python scripts/fetch_outcomes_all.py --leagues props
-python scripts/fetch_outcomes_all.py --since 2026-05-25 --until 2026-05-27  # backfill range
-python scripts/fetch_outcomes_all.py --dry-run
+omega-fetch-outcomes-all --leagues nba
+omega-fetch-outcomes-all --leagues mlb
+omega-fetch-outcomes-all --leagues props
+omega-fetch-outcomes-all --since 2026-05-25 --until 2026-05-27  # backfill range
+omega-fetch-outcomes-all --dry-run
 ```
 
 ### WNBA coverage
@@ -67,20 +67,20 @@ python scripts/fetch_outcomes_all.py --dry-run
 WNBA is fully wired for both planes and is included in the default
 `fetch_outcomes_all.py` league set and the daily outcome loop.
 
-- **WNBA games** (moneyline/spread): `scripts/fetch_outcomes_wnba.py`
+- **WNBA games** (moneyline/spread): `omega-fetch-outcomes-wnba`
   (ESPN WNBA scoreboard). Run alone with:
 
   ```bash
-  python scripts/fetch_outcomes_all.py --leagues wnba
+  omega-fetch-outcomes-all --leagues wnba
   # or directly:
-  python scripts/fetch_outcomes_wnba.py --since yesterday
+  omega-fetch-outcomes-wnba --since yesterday
   ```
 
-- **WNBA player props**: graded by the `props` step — `fetch_outcomes_props.py`
+- **WNBA player props**: graded by the `props` step — `omega-fetch-outcomes-props`
   covers NBA/WNBA/MLB. Run WNBA props only with:
 
   ```bash
-  python scripts/fetch_outcomes_props.py --league WNBA
+  omega-fetch-outcomes-props --league WNBA
   ```
 
 Unmapped-team warnings mean a WNBA team alias is missing from
@@ -95,7 +95,7 @@ If you are evaluating **historical** traces (not live today's games), set `OMEGA
 
 ```bash
 # WRONG — live fetch during historical evaluation:
-python scripts/fetch_outcomes_all.py --since 2026-05-01 --until 2026-05-10
+omega-fetch-outcomes-all --since 2026-05-01 --until 2026-05-10
 
 # CORRECT — for historical evaluation, use frozen fixtures:
 export OMEGA_REPLAY_MODE=1   # blocks all live ESPN/Odds API fetches
@@ -109,7 +109,7 @@ unset OMEGA_REPLAY_MODE       # restore for live operations
 
 ## After the loop completes
 
-Read the refreshed `reports/latest.md`:
+Read the refreshed `var/reports/latest.md`:
 - §3 game Brier/ECE — flag if ECE > 0.05
 - §3B prop pairs — watch for progress toward 100+ (required for first calibration fit)
 - §6B evidence signals — update your confidence weights for the next session

@@ -12,7 +12,7 @@ Two modes:
   game_context) are ERRORS.
 - ``strict=False`` (lenient; for legacy/backfill inspection): those extra checks
   are downgraded to WARNINGS. The set of *errors* in lenient mode mirrors what
-  ``scripts/ingest_traces.py`` actually rejects, so lenient ⊆ ingest reality.
+  ``omega-ingest-traces`` actually rejects, so lenient ⊆ ingest reality.
 
 This module is the single home of export-shape detection (``split_export_block``);
 ``ingest_traces.py`` keeps its own historical ValueError messages but the shape

@@ -22,12 +22,11 @@ join table for user-confirmed bets.
 Omega already has the right high-level boundaries:
 
 - `omega/trace/*` owns durable trace, bet-record, closing-line, outcome, and CLV persistence primitives.
-- `scripts/ingest_traces.py` owns trace export ingestion from `inbox/traces/*.json`.
-- `scripts/ingest_closing_lines.py` owns file-to-DB closing-line ingestion.
-- `scripts/resolve_odds.py` owns BetMGM-default pre-decision odds resolution.
-- `scripts/fetch_closing_lines.py` owns post-decision current odds capture for pending bets.
+- `omega-ingest-traces` owns trace export ingestion from `var/inbox/traces/*.json`.
+- `omega-ingest-closing-lines` owns file-to-DB closing-line ingestion.
+- `omega-resolve-odds` owns BetMGM-default pre-decision odds resolution.
+- `omega-fetch-closing-lines` owns post-decision current odds capture for pending bets.
 - `omega/integrations/odds_api.py` is the only Odds API client.
-- `omega/skills/*` contains older logging/QA helpers, but these are not currently wired as the source of truth for trace persistence or benchmark evaluation.
 - `prompts/system_prompt.txt` is correct for no-local-access agents, but it must not be treated as the Cowork automation contract.
 - `OMEGA_COWORK.md` is the correct place for local automation instructions.
 
@@ -44,7 +43,7 @@ The LLM can orchestrate and explain these ledgers, but it never computes the pro
 
 For odds sourcing:
 
-- **Current decision-time odds:** sourced locally by `omega_resolve_odds` / `scripts/resolve_odds.py`, defaulting to BetMGM.
+- **Current decision-time odds:** sourced locally by `omega_resolve_odds` / `omega-resolve-odds`, defaulting to BetMGM.
 - **Closing-line CLV:** Cowork should prefer `OMEGA_ODDS_API_KEY` through `omega.integrations.odds_api` over WebFetch.
 - **Historical replay/backfill:** paid historical Odds API endpoints should create frozen market snapshots for replay/backtests, not mutate original trace inputs.
 - **Manual WebFetch capture:** remains a fallback for no-local-access Project agents and for books/markets the API cannot resolve.
@@ -61,9 +60,9 @@ Implemented now:
 
 Recommended next:
 
-- `scripts/backfill_closing_lines.py` - use historical Odds API snapshots to fill missing `closing_lines` for pending/graded bets.
+- `omega-backfill-closing-lines` - use historical Odds API snapshots to fill missing `closing_lines` for pending/graded bets.
 - `omega/trace/market_snapshot.py` - typed, versioned artifact model if historical snapshots become benchmark inputs.
-- `tests/scripts/test_backfill_closing_lines.py` - no-network fixture tests for event and market matching.
+- `tests/omega-test-backfill-closing-lines` - no-network fixture tests for event and market matching.
 - `docs/phase6/HISTORICAL_ODDS_ARTIFACTS.md` - freeze policy for benchmark artifacts.
 
 ## Logical Ownership
@@ -75,8 +74,8 @@ Recommended next:
 | Bet tracking | `omega/trace/bet_record.py` + `TraceStore.record_bet()` | User-confirmed wager metadata only |
 | Closing lines | `TraceStore.attach_closing_line()` | One row per exact trace/market/selection descriptor |
 | CLV math | `omega/trace/clv.py` | Deterministic conversion and line-value math |
-| Outcome grading | `scripts/fetch_outcomes_nba.py` today; `omega/strategy/*` long-term | Outcomes attach after trace persistence |
-| QA/reporting | `scripts/report_calibration.py`, future QA report helpers | Read-only summaries, never new recommendations |
+| Outcome grading | `omega-fetch-outcomes-nba` today; `omega/strategy/*` long-term | Outcomes attach after trace persistence |
+| QA/reporting | `omega-report-calibration`, future QA report helpers | Read-only summaries, never new recommendations |
 | Historical odds source | `omega/integrations/odds_api.py` | HTTP + parsing only; no persistence or business logic |
 | Prompt/runtime automation | `OMEGA_COWORK.md` | Cowork local automation contract |
 
@@ -107,7 +106,7 @@ Recommended next:
 ## Rollback Plan
 
 - Revert `omega/integrations/odds_api.py` to live-only behavior if historical API coverage is unreliable.
-- Keep `scripts/ingest_closing_lines.py` as the stable fallback; it can ingest manual WebFetch captures independently of the API client.
+- Keep `omega-ingest-closing-lines` as the stable fallback; it can ingest manual WebFetch captures independently of the API client.
 - Do not roll back the DB schema unless absolutely necessary; additive trace schema keeps old data readable.
 
 ## Ordered Implementation Steps

@@ -7,10 +7,10 @@ recommendations, compute protected values, or promote adjustment policies live.
 ## Operator Loop
 
 1. Analyze through `omega.core.contracts.service.analyze()` or MCP tools.
-2. Export the full trace block to `inbox/traces/<trace_id>.json`.
+2. Export the full trace block to `var/inbox/traces/<trace_id>.json`.
 3. If the user confirms they placed a wager, attach the real `bet_record` to
    that same trace export. A bet record is user-confirmed metadata only.
-4. Run trace intake with `inbox/action_plans/templates/daily_trace_intake.json`.
+4. Run trace intake with `var/inbox/action_plans/templates/daily_trace_intake.json`.
 5. Near close, run `bet_closing_line_capture.json` to capture closing lines for
    pending confirmed `bet_records`.
 6. After games finish, run `daily_outcome_evidence_loop.json` to attach outcomes,
@@ -20,9 +20,9 @@ recommendations, compute protected values, or promote adjustment policies live.
 
 ## Template Semantics
 
-- `daily_trace_intake`: runs `scripts/ingest_traces.py`; review failed files,
+- `daily_trace_intake`: runs `omega-ingest-traces`; review failed files,
   missing identity warnings, empty evidence warnings, and bet-record counts.
-- `bet_closing_line_capture`: runs `scripts/fetch_closing_lines.py` for pending
+- `bet_closing_line_capture`: runs `omega-fetch-closing-lines` for pending
   confirmed bet records. This is not a bet discovery or recommendation action.
 - `daily_outcome_evidence_loop`: runs outcome attachment, evidence scoring, and
   calibration reporting against canonical trace data.
@@ -33,8 +33,8 @@ recommendations, compute protected values, or promote adjustment policies live.
 Run every template through the dispatcher before executing it:
 
 ```bash
-python scripts/run_action_plan.py inbox/action_plans/templates/daily_trace_intake.json --dry-run
-python scripts/run_action_plan.py inbox/action_plans/templates/daily_trace_intake.json
+omega-run-action-plan var/inbox/action_plans/templates/daily_trace_intake.json --dry-run
+omega-run-action-plan var/inbox/action_plans/templates/daily_trace_intake.json
 ```
 
 ## Expected Summary Counts
