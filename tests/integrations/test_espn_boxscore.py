@@ -301,6 +301,27 @@ class TestParseBoxScoreMLB:
         assert stats["andre pallante"]["strikeouts"] == 4.0
         assert stats["andre pallante"]["pitching_outs"] == 16.0
 
+    def test_total_bases_derived_from_plays(self):
+        fixture = _mlb_fixture()
+        fixture["boxscore"]["players"][0]["statistics"][0]["athletes"][0]["athlete"]["id"] = "12345"
+        fixture["plays"] = [
+            {
+                "type": {"text": "Single"},
+                "participants": [{"athlete": {"id": "12345"}, "type": "batter"}]
+            },
+            {
+                "type": {"text": "Double"},
+                "participants": [{"athlete": {"id": "12345"}, "type": "batter"}]
+            },
+            {
+                "type": {"text": "Home Run"},
+                "participants": [{"athlete": {"id": "12345"}, "type": "batter"}]
+            }
+        ]
+        stats = parse_box_score(fixture, "MLB")
+        # 1 Single (1) + 1 Double (2) + 1 HR (4) = 7.0
+        assert stats["rafael devers"]["total_bases"] == 7.0
+
 
 class TestSupportedPropType:
     def test_nba_pts_supported(self):
@@ -313,6 +334,7 @@ class TestSupportedPropType:
     def test_mlb_batting_and_pitching(self):
         assert supported_prop_type("MLB", "hits") is True
         assert supported_prop_type("MLB", "strikeouts") is True
+        assert supported_prop_type("MLB", "total_bases") is True
 
     def test_unsupported_prop_type(self):
         assert supported_prop_type("NBA", "double_double") is False
@@ -455,6 +477,31 @@ class TestParseBoxScoreSoccer:
         stats = parse_box_score(_soccer_fixture(), "CHAMPIONS_LEAGUE")
         assert "kylian mbappe" in stats
         assert "vinicius junior" in stats
+
+    def test_soccer_stats_derived_from_plays_fallback(self):
+        fixture = {
+            "rosters": [
+                {
+                    "team": {"displayName": "United States"},
+                    "roster": [
+                        {
+                            "athlete": {"displayName": "Christian Pulisic"},
+                            "plays": [
+                                {"didScore": True},
+                                {"didAssist": True},
+                                {"yellowCard": True}
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+        stats = parse_box_score(fixture, "WORLD_CUP")
+        pulisic = stats["christian pulisic"]
+        assert pulisic["goals"] == 1.0
+        assert pulisic["assists"] == 1.0
+        assert pulisic["yellow_cards"] == 1.0
+        assert pulisic["red_cards"] == 0.0
 
 
 class TestSupportedPropTypeSoccer:

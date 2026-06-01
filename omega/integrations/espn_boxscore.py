@@ -283,6 +283,20 @@ def _parse_soccer_roster(payload: dict[str, Any]) -> dict[str, dict[str, float]]
                     except (TypeError, ValueError):
                         pass
             if not raw_stats:
+                # Fall back to deriving from plays list if stats are missing
+                plays = entry.get("plays") or []
+                if plays:
+                    goals = sum(1 for p in plays if p.get("didScore"))
+                    assists = sum(1 for p in plays if p.get("didAssist"))
+                    yellows = sum(1 for p in plays if p.get("yellowCard"))
+                    reds = sum(1 for p in plays if p.get("redCard"))
+                    raw_stats = {
+                        "totalGoals": float(goals),
+                        "goalAssists": float(assists),
+                        "yellowCards": float(yellows),
+                        "redCards": float(reds),
+                    }
+            if not raw_stats:
                 continue
             player_stats = out.setdefault(player_norm, {})
             for prop_type, espn_stat_name in SOCCER_ROSTER_STAT_MAP.items():
@@ -306,6 +320,7 @@ def parse_box_score(
         return _parse_soccer_roster(payload)
 
     out: dict[str, dict[str, float]] = {}
+    athlete_id_to_norm: dict[str, str] = {}
     boxscore = payload.get("boxscore") or {}
     for team_blob in boxscore.get("players") or []:
         for category in team_blob.get("statistics") or []:
@@ -320,10 +335,13 @@ def parse_box_score(
 
             for athlete_blob in category.get("athletes") or []:
                 athlete = athlete_blob.get("athlete") or {}
+                athlete_id = athlete.get("id")
                 display = athlete.get("displayName") or athlete.get("shortName") or ""
                 player_norm = normalize_player_name(display)
                 if not player_norm:
                     continue
+                if athlete_id:
+                    athlete_id_to_norm[athlete_id] = player_norm
                 stats: list[Any] = list(athlete_blob.get("stats") or [])
 
                 player_stats = out.setdefault(player_norm, {})
@@ -354,6 +372,41 @@ def parse_box_score(
                     ast = player_stats.get("assists") if ast is None else ast
                     if pts is not None and reb is not None and ast is not None:
                         player_stats.setdefault("pra", pts + reb + ast)
+
+    if league.upper() == "MLB" and "plays" in payload:
+        play_singles: dict[str, int] = {}
+        play_doubles: dict[str, int] = {}
+        play_triples: dict[str, int] = {}
+        play_hrs: dict[str, int] = {}
+        for play in payload.get("plays") or []:
+            pt = play.get("type", {}).get("text")
+            if pt not in ("Single", "Double", "Triple", "Home Run"):
+                continue
+            batter_id = None
+            for p in play.get("participants") or []:
+                if p.get("type") == "batter":
+                    batter_id = p.get("athlete", {}).get("id")
+                    break
+            if batter_id:
+                if pt == "Single":
+                    play_singles[batter_id] = play_singles.get(batter_id, 0) + 1
+                elif pt == "Double":
+                    play_doubles[batter_id] = play_doubles.get(batter_id, 0) + 1
+                elif pt == "Triple":
+                    play_triples[batter_id] = play_triples.get(batter_id, 0) + 1
+                elif pt == "Home Run":
+                    play_hrs[batter_id] = play_hrs.get(batter_id, 0) + 1
+
+        for athlete_id, player_norm in athlete_id_to_norm.items():
+            singles = play_singles.get(athlete_id, 0)
+            doubles = play_doubles.get(athlete_id, 0)
+            triples = play_triples.get(athlete_id, 0)
+            hrs = play_hrs.get(athlete_id, 0)
+            tb = float(singles + 2 * doubles + 3 * triples + 4 * hrs)
+            if player_norm in out:
+                if "hits" in out[player_norm]:
+                    out[player_norm]["total_bases"] = tb
+
     return out
 
 
@@ -385,7 +438,7 @@ def supported_prop_type(league: str, prop_type: str, category_hint: str = "") ->
         return prop_type.lower() in WNBA_STAT_KEYS
     if league_upper == "MLB":
         pt = prop_type.lower()
-        return pt in MLB_BATTING_KEYS or pt in MLB_PITCHING_KEYS
+        return pt in MLB_BATTING_KEYS or pt in MLB_PITCHING_KEYS or pt == "total_bases"
     if league_upper in SOCCER_LEAGUE_SLUGS:
         return prop_type.lower() in SOCCER_STAT_KEYS
     return False

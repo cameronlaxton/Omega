@@ -181,11 +181,24 @@ def fetch_scoreboard(
         raise ValueError(f"Unknown soccer league code: {league!r}")
     date_str = date.replace("-", "")
     query = urllib.parse.urlencode({"dates": date_str})
-    url = f"{_SCOREBOARD_BASE}/{slug}/scoreboard?{query}"
-    logger.debug("fetching ESPN soccer scoreboard: %s", url)
-    with url_opener(url, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
-    return parse_scoreboard(payload, league=league)
+
+    slugs = [slug]
+    if league.upper() == "WORLD_CUP":
+        slugs.append("fifa.friendly")
+
+    results: list[FinalGame] = []
+    for s in slugs:
+        url = f"{_SCOREBOARD_BASE}/{s}/scoreboard?{query}"
+        logger.debug("fetching ESPN soccer scoreboard: %s", url)
+        try:
+            with url_opener(url, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            results.extend(parse_scoreboard(payload, league=league))
+        except Exception as exc:
+            logger.warning("Failed to fetch scoreboard for %s on %s: %s", s, date, exc)
+            if len(slugs) == 1:
+                raise
+    return results
 
 
 def parse_scoreboard(payload: dict, league: str = "") -> list[FinalGame]:
