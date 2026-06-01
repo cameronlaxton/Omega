@@ -967,6 +967,7 @@ def analyze_game(
             over_under=total_value,
             allow_baseline=request.allow_baseline,
             transition_modifiers=transition_modifiers,
+            prior_payload=request.prior_payload,
             backend=backend,
         )
     except Exception as exc:

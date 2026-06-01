@@ -265,17 +265,29 @@ pass the live prop path falls back to `prop_distribution_router` for these
 unregistered names (with a note on the response), so nothing breaks in the
 interim** — registering the real backend silently upgrades the math.
 
-### 5.5 ⚠️ Open seam: how game-level priors reach the backend
-`GameSimulationInput` (`backends.py`) currently has **no `prior_payload` field** —
-only `PropSimulationInput` does. The design says soccer `rho` and tennis
-`pressure_coefficients` flow through `request.prior_payload`. **Decide early in
-M2:** either
-- (a) add `prior_payload: dict | None = None` to `GameSimulationInput` and have
-  `service.analyze_game` populate it from the gatherer, **or**
-- (b) route these priors through `home_context`/`away_context` (the plan's
-  default style for `xg_*`, `spw_pct`, etc.).
-The plan text uses both phrasings; (a) is cleaner for non-team-scoped priors like
-`rho`. Whichever you pick, keep it consistent across M2–M4 and document it.
+### 5.5 ✅ Resolved: how game-level priors reach the backend
+**Decision (M0 hardening, 2026-06-01): option (a).** `GameSimulationInput`
+(`backends.py`) now has a `prior_payload: dict | None = None` field, parallel to
+`PropSimulationInput`. End-to-end flow:
+
+```
+GameAnalysisRequest.prior_payload          # schemas.py — gatherer populates this
+  → service.analyze_game
+  → OmegaSimulationEngine.run_fast_game_simulation(..., prior_payload=...)
+  → GameSimulationInput.prior_payload
+  → backend.run(request)                   # backend reads request.prior_payload
+```
+
+- **M2/M3 gatherers** populate `GameAnalysisRequest.prior_payload` with the
+  non-team-scoped priors (soccer `rho`, tennis `pressure_coefficients`).
+- A backend that **requires** a prior fails closed (`status="skipped"`,
+  `missing_requirements=[...]`) when it is absent — **do not hardcode a default**
+  (no default `rho`; see decision 5).
+- Team-scoped quantities (`xg_*`, `spw_pct`, `off_rating`, ...) still travel in
+  `home_context`/`away_context`; `prior_payload` is only for priors that are not
+  naturally per-team.
+- Seam test:
+  `tests/core/test_backend_registry.py::test_game_prior_payload_flows_to_backend`.
 
 ---
 
@@ -306,5 +318,7 @@ The plan text uses both phrasings; (a) is cleaner for non-team-scoped priors lik
 1. `git log --oneline -6` — confirm you are on/after `b709c99`.
 2. `python -m pytest tests/ -q` — confirm green (993+).
 3. Read `docs/phase7/MULTI_SPORT_EXPANSION.md` §M2 + this §5.1.
-4. Resolve the §5.5 prior-payload seam decision first.
+4. §5.5 prior-payload seam is **resolved** (option a — `GameSimulationInput.prior_payload`
+   + request/engine plumbing). The M2 gatherer just populates
+   `GameAnalysisRequest.prior_payload`; the backend reads `request.prior_payload`.
 5. Start M2 (Soccer) — it has the binding 2026-06-11 deadline.

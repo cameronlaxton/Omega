@@ -172,6 +172,16 @@ class GameAnalysisRequest(BaseModel):
             "is preserved in context_labels for calibration fitting."
         ),
     )
+    prior_payload: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Game-level dynamic priors for the simulation backend that are not "
+            "team-scoped — e.g. Dixon-Coles 'rho' (soccer) or 'pressure_coefficients' "
+            "(tennis). Supplied by the gatherer; flows verbatim into "
+            "GameSimulationInput.prior_payload. A backend that requires a prior fails "
+            "closed (status='skipped', missing_requirements) when it is absent."
+        ),
+    )
     seed: int | None = Field(default=None, description="RNG seed for reproducible simulations")
     evidence: list[EvidenceSignal] = Field(
         default_factory=list,

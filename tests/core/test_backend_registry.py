@@ -292,3 +292,50 @@ def test_register_prop_backend_validates_contract():
     with pytest.raises(TypeError, match="missing required attributes"):
         register_prop_backend("p_missing_cv", _NoComponentVersion())
     assert resolve_prop_backend("p_missing_cv") is None
+
+
+# ---------------------------------------------------------------------------
+# §5.5 seam — game-level priors reach the backend via prior_payload
+# ---------------------------------------------------------------------------
+
+
+def test_game_request_carries_prior_payload():
+    from omega.core.contracts.schemas import GameAnalysisRequest
+
+    req = GameAnalysisRequest(
+        home_team="A", away_team="B", league="FIFA_WORLD_CUP_2026",
+        prior_payload={"rho": -0.13},
+    )
+    assert req.prior_payload == {"rho": -0.13}
+
+
+def test_game_prior_payload_flows_to_backend():
+    """GameAnalysisRequest.prior_payload must reach the backend's run() request."""
+    from omega.core.simulation.backends import GameSimulationInput
+    from omega.core.simulation.engine import OmegaSimulationEngine
+
+    captured: dict = {}
+
+    class _CaptureBackend:
+        backend_name = "capture"
+        component_version = "capture_v1"
+        evidence_mode = "plane_adjustment"
+
+        def run(self, request: GameSimulationInput) -> dict:
+            captured["prior_payload"] = request.prior_payload
+            return {"success": False}  # contract-exempt (no distribution rows required)
+
+    OmegaSimulationEngine().run_fast_game_simulation(
+        home_team="A",
+        away_team="B",
+        league="NBA",
+        n_iterations=100,
+        home_context={},
+        away_context={},
+        prior_payload={"rho": -0.13, "pressure_coefficients": {"break_point": 0.02}},
+        backend=_CaptureBackend(),
+    )
+    assert captured["prior_payload"] == {
+        "rho": -0.13,
+        "pressure_coefficients": {"break_point": 0.02},
+    }

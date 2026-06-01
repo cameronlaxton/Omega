@@ -64,6 +64,12 @@ class GameSimulationInput:
     over_under: float | None = None
     allow_baseline: bool = False
     transition_modifiers: dict[str, float] | None = None
+    # Game-level dynamic priors that are not team-scoped (soccer Dixon-Coles
+    # ``rho``, tennis ``pressure_coefficients``, ...). Parallel to
+    # ``PropSimulationInput.prior_payload``. Populated by ``service.analyze_game``
+    # from ``GameAnalysisRequest.prior_payload``; backends that require a prior
+    # fail closed when it is absent.
+    prior_payload: dict[str, Any] | None = None
 
 
 class GameSimulationBackend(Protocol):

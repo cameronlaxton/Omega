@@ -1585,6 +1585,7 @@ class OmegaSimulationEngine:
         over_under: float | None = None,
         allow_baseline: bool = False,
         transition_modifiers: dict | None = None,
+        prior_payload: dict | None = None,
         backend: GameSimulationBackend | None = None,
     ) -> dict:
         """
@@ -1620,6 +1621,7 @@ class OmegaSimulationEngine:
             over_under=over_under,
             allow_baseline=allow_baseline,
             transition_modifiers=transition_modifiers,
+            prior_payload=prior_payload,
         )
         return enforce_game_backend_contract(active.run(request))
 
