@@ -239,7 +239,7 @@ def _git(repo_root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 _CRITICAL_FILES = frozenset({
-    "omega/core/contracts/service.py",  # Service layer; repeated corruption across sessions
+    "src/omega/core/contracts/service.py",  # Service layer; repeated corruption across sessions
 })
 
 

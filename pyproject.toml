@@ -52,7 +52,6 @@ omega-validate-docs = "omega.ops.validate_docs:main"
 omega-validate-repo-state = "omega.ops.validate_repo_state:main"
 omega-validate-session-sidecars = "omega.ops.validate_session_sidecars:main"
 omega-validate-trace-export = "omega.ops.validate_trace_export:main"
-omega-preflight = "omega.ops.cowork_preflight:main"
 
 [project.optional-dependencies]
 dev = [

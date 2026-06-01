@@ -12,7 +12,7 @@
 # Trace JSON, session sidecars, and reports are mirrored additively via
 # robocopy /E with explicit excludes for DB sidecars and noise.
 #
-# Pre-sync gate: cowork_preflight.py --direct-only and pytest must pass from
+# Pre-sync gate: omega-cowork-preflight --direct-only and pytest must pass from
 # the local workspace. If either fails, sync is aborted and the failure log
 # is dropped under sync_failures\.
 #
@@ -58,9 +58,9 @@ if ($WhatIf) { Write-Note "DRY RUN: no destructive side effects." }
 
 # 1. Preflight gate. Fail closed.
 if (-not $SkipTests) {
-    Write-Step "Running omega-preflight --direct-only"
+    Write-Step "Running omega-cowork-preflight --direct-only"
     if (-not $WhatIf) {
-        $preflight = & omega-preflight --direct-only 2>&1
+        $preflight = & omega-cowork-preflight --direct-only 2>&1
         if ($LASTEXITCODE -ne 0) {
             Log-Failure "preflight" ($preflight -join "`n")
             exit 1

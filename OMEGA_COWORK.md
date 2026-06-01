@@ -24,8 +24,8 @@ direct engine imports:
 ```bash
 python --version
 python -m pip install -e .[mcp]
-omega-preflight
-omega-preflight --formal-output-gate
+omega-cowork-preflight
+omega-cowork-preflight --formal-output-gate
 ```
 
 If `python --version` is below 3.10, stop and switch to a Python 3.10+
@@ -33,12 +33,12 @@ interpreter. Do not bypass the package install with `sys.path` plus ad hoc
 `pip install pydantic numpy`; that hides the wrong interpreter and leaves the
 agent to rediscover setup failures during engine execution.
 
-If `cowork_preflight.py` reports missing `pydantic`, `numpy`, `mcp`, or Omega
+If `omega-cowork-preflight` reports missing `pydantic`, `numpy`, `mcp`, or Omega
 package metadata, repair setup with:
 
 ```bash
 python -m pip install -e .[mcp]
-omega-preflight
+omega-cowork-preflight
 ```
 
 Only after the formal gate prints `cowork_preflight_ready` may the agent
@@ -53,7 +53,7 @@ that drops trailing function/class definitions while leaving the file
 AST-valid). Restore via:
 
 ```bash
-omega-preflight --repair-from-git
+omega-cowork-preflight --repair-from-git
 ```
 
 `--repair-from-git` runs `git checkout HEAD -- <file>` through bash so the
@@ -151,7 +151,7 @@ git cat-file -p HEAD:omega/core/contracts/service.py
 
 This avoids git commands that can create or collide with background
 `.git/index.lock` activity on the Windows-to-Linux mount. For source repair,
-prefer `omega-preflight --repair-from-git`; use manual
+prefer `omega-cowork-preflight --repair-from-git`; use manual
 `git cat-file -p ... > /tmp/file && cp /tmp/file target` only when the preflight
 repair path explicitly fails.
 
@@ -188,7 +188,7 @@ fast-forwards `main` and verifies the `backup` remote.
 ```
 
 `sync_to_mount.ps1` is one-way (local â†’ mount). It runs
-`cowork_preflight.py --direct-only` and `pytest -q --maxfail=3` first; if
+`omega-cowork-preflight --direct-only` and `pytest -q --maxfail=3` first; if
 either fails, sync is aborted and a log file is written under
 `%USERPROFILE%\.omega\workspace\sync_failures\`. On success it:
 
@@ -219,7 +219,7 @@ devcontainer in `.devcontainer/`. It runs the active workspace from the Docker
 named volume `omega-linux-workspace`, not from the Windows `C:\repos\Omega` bind
 mount, and validates:
 
-- `omega-preflight --direct-only`
+- `omega-cowork-preflight --direct-only`
 - SQLite `PRAGMA journal_mode=WAL` on a Linux-native filesystem
 
 Use git inside the container to sync source changes back to the remote. Mirror
@@ -246,7 +246,7 @@ Direct smoke test when no MCP client is available:
 
 ```bash
 python -m pip install -e .
-omega-preflight --direct-only
+omega-cowork-preflight --direct-only
 ```
 
 ```python
