@@ -1,8 +1,0 @@
-ValueError: trace.ran_at is missing or empty
-
-Traceback (most recent call last):
-  File "/sessions/awesome-affectionate-knuth/mnt/Omega/scripts/ingest_traces.py", line 460, in main
-    trace_id, bet_id = ingest_file(
-  File "/sessions/awesome-affectionate-knuth/mnt/Omega/scripts/ingest_traces.py", line 307, in ingest_file
-    raise ValueError("trace.ran_at is missing or empty")
-ValueError: trace.ran_at is missing or empty

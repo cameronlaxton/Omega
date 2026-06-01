@@ -1,7 +1,0 @@
-{
-  "template_id": "empty_slate",
-  "session_id": "template-empty-slate",
-  "generated_at": "2026-05-25T00:00:00Z",
-  "description": "Valid no-op action plan for days with no traces, confirmed bets, games, or review work.",
-  "actions": []
-}
