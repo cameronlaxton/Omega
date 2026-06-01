@@ -12,7 +12,6 @@ References:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from omega.integrations._etl import (
     load_alias_table,

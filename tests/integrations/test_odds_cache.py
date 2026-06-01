@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import tempfile
 import time
@@ -13,14 +12,14 @@ import pytest
 
 from omega.integrations.odds_cache import OddsCache
 from omega.integrations.odds_resolver import resolve_odds
-from omega.integrations.odds_api import EventOdds, BookOdds
+
 
 @pytest.fixture
 def temp_db_path(tmp_path: Path) -> Path:
     return tmp_path / "test_odds_cache.db"
 
 def test_cache_schema_initialization(temp_db_path: Path):
-    cache = OddsCache(db_path=temp_db_path)
+    OddsCache(db_path=temp_db_path)
     assert temp_db_path.exists()
 
     with sqlite3.connect(str(temp_db_path)) as conn:
@@ -46,7 +45,7 @@ def test_cache_hit_and_ttl_expiration(temp_db_path: Path):
     payload = {"status": "success", "event_id": "evt-1", "metadata": []}
 
     cache.set(key, "NBA", "game", payload)
-    
+
     # Hit Verification
     hit = cache.get(key)
     assert hit is not None
@@ -91,7 +90,7 @@ def test_fallback_db_path_resolution(monkeypatch):
         return original_mkdir(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "mkdir", mock_mkdir)
-    
+
     cache = OddsCache()
     assert "omega" in str(cache.db_path)
     assert tempfile.gettempdir() in str(cache.db_path)
@@ -259,18 +258,18 @@ def test_resolver_short_circuits_on_cached_negative(temp_db_path: Path, monkeypa
 class TestPropCacheIdentity:
     def test_two_players_same_game_different_keys_no_cross_serve(self, temp_db_path: Path):
         cache = OddsCache(db_path=temp_db_path)
-        
+
         key_lebron = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="LeBron James")
         key_tatum = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="Jayson Tatum")
-        
+
         assert key_lebron != key_tatum
-        
+
         payload_lebron = {"status": "success", "player": "LeBron James", "quotes": [{"player": "LeBron James", "price": -110}]}
         payload_tatum = {"status": "success", "player": "Jayson Tatum", "quotes": [{"player": "Jayson Tatum", "price": -115}]}
-        
+
         cache.set(key_lebron, "NBA", "pts", payload_lebron)
         cache.set(key_tatum, "NBA", "pts", payload_tatum)
-        
+
         res_lebron = cache.get(key_lebron)
         assert res_lebron is not None
         assert res_lebron["player"] == "LeBron James"
@@ -281,16 +280,16 @@ class TestPropCacheIdentity:
 
     def test_one_player_with_stable_id(self, temp_db_path: Path):
         cache = OddsCache(db_path=temp_db_path)
-        
+
         key_by_id = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_id="pid-123")
         payload = {
             "status": "success",
             "player_id": "pid-123",
             "quotes": [{"player_id": "pid-123", "player": "LeBron James", "price": -110}]
         }
-        
+
         cache.set(key_by_id, "NBA", "pts", payload)
-        
+
         # Retrieval with ID succeeds
         hit_by_id = cache.get(key_by_id)
         assert hit_by_id is not None
@@ -298,16 +297,16 @@ class TestPropCacheIdentity:
 
     def test_unmapped_player_normalized_name_fallback_works(self, temp_db_path: Path):
         cache = OddsCache(db_path=temp_db_path)
-        
+
         # Retrieval using different name casing / spacing / accents Normalization
         key_original = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="Luka Dončić")
         key_normalized = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="luka doncic  ")
-        
+
         assert key_original == key_normalized
 
     def test_legacy_playerless_prop_entry_misses_for_player_specific_lookup(self, temp_db_path: Path):
         cache = OddsCache(db_path=temp_db_path)
-        
+
         # Legacy entry has no player_name/id in its cache key, and no quotes with the player inside
         key_legacy = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16")
         payload_legacy = {
@@ -315,8 +314,7 @@ class TestPropCacheIdentity:
             "quotes": []  # empty/no player info
         }
         cache.set(key_legacy, "NBA", "pts", payload_legacy)
-        
+
         # Querying with a specific player should miss when using find_by_teams on the legacy record
         res = cache.find_by_teams("NBA", "pts", "lakers", "celtics", player_name="LeBron James")
         assert res is None
-

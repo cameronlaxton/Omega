@@ -76,3 +76,11 @@ inbox/sessions/*.events.jsonl
 reports/*.txt
 reports/run_audits/*.audit.md
 inbox/traces/processed/
+
+# Runtime state root (DB, inbox dumps, generated reports) must stay out of git.
+var/
+/inbox/
+/reports/
+/omega_traces.db
+/omega_traces.db-shm
+/omega_traces.db-wal

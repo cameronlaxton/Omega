@@ -22,7 +22,6 @@ from omega.core.simulation.engine import (
     MarkovGameSimulationBackend,
 )
 
-
 _GAME_CONTEXT = {"is_playoff": False, "rest_days": 2}
 _N_ITER = 2000
 _SEED = 12345

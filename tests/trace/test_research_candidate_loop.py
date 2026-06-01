@@ -14,12 +14,9 @@ Ensures that:
 from __future__ import annotations
 
 import tempfile
-from typing import Any
-
-import pytest
 
 from omega.core.contracts.service import analyze
-from omega.synthesis.output_guard import OutputMode, classify_output_mode, contains_blocked_phrase
+from omega.ops.output_modes import OutputMode, classify_output_mode, contains_blocked_phrase
 from omega.trace.persistable import PersistableTrace
 from omega.trace.store import TraceStore
 

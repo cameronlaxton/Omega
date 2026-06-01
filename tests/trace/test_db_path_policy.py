@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from omega.trace import store as store_mod
-from omega.trace.store import TraceStore, db_status, seed_runtime_db, _raw_trace_count
+from omega.trace.store import TraceStore, _raw_trace_count, db_status, seed_runtime_db
 
 
 def _trace(trace_id: str) -> dict[str, Any]:
@@ -61,7 +61,7 @@ class TestRedirectGuard:
         _force_redirect(monkeypatch, source, runtime)
         monkeypatch.delenv("OMEGA_ALLOW_EMPTY_DB", raising=False)
 
-        with pytest.raises(RuntimeError, match="db_status.py --seed"):
+        with pytest.raises(RuntimeError, match="omega-db-status --seed"):
             TraceStore(db_path=None)
         assert not runtime.exists(), "guard must not create an empty runtime DB"
 

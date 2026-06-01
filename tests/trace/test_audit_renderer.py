@@ -10,7 +10,6 @@ from omega.trace.audit_renderer import render_session_audit
 from omega.trace.persistable import PersistableTrace
 from omega.trace.session_sidecar import (
     AuditEvent,
-    SessionSidecar,
     append_audit_events,
 )
 from omega.trace.store import TraceStore

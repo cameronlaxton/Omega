@@ -1,4 +1,4 @@
-# Omega
+﻿# Omega
 
 Omega is a reasoning-led sports analytics system: an LLM/operator layer gathers auditable inputs, and a deterministic Python engine performs simulation, calibration, edge, EV, Kelly staking, confidence tiering, backtesting, grading, and trace ID generation.
 
@@ -22,15 +22,16 @@ from omega.core.contracts.service import analyze
 
 Formal numeric outputs require Python execution and a `sandbox-` trace ID returned by the engine. If the deterministic path cannot run, produce qualitative research only.
 
-## What Lives In `omega/`
+## What Lives In `src/omega/`
 
-- `omega/core/`: simulation, sport archetypes, calibration, request/response contracts, Kelly staking, and parlay math.
-- `omega/reasoning/`: quality and evidence policy helpers.
-- `omega/integrations/odds_api.py`: The Odds API client for BetMGM-first current odds, closing lines, and historical market snapshots.
-- `omega/trace/`: trace persistence, bet records, closing lines, outcomes, CLV, and market snapshots.
-- `omega/strategy/`: frozen artifacts, backtest engine, anchor-parlay scanner, and strategy versioning.
-- `omega/mcp/`: typed local MCP tools over the deterministic contracts.
-- `omega/synthesis/`: response composition for narrative and fallback surfaces.
+- `src/omega/core/`: simulation, sport archetypes, calibration, request/response contracts, Kelly staking, and parlay math.
+- `src/omega/integrations/`: external providers (Odds API, ESPN, WeHoop, ETL guards).
+- `src/omega/trace/`: trace persistence, bet records, closing lines, outcomes, CLV, and market snapshots.
+- `src/omega/strategy/`: frozen artifacts, backtest engine, anchor-parlay scanner, and strategy versioning.
+- `src/omega/mcp/`: typed local MCP tools over the deterministic contracts.
+- `src/omega/ops/`: operational entrypoints (ingest, grading, calibration/reporting, validation, action-plan dispatch).
+
+Runtime state now belongs under `var/` (`var/omega_traces.db`, transient inbox/report artifacts) and is intentionally git-ignored.
 
 ## Quick Start
 
@@ -48,7 +49,7 @@ Install optional MCP dependencies when running an MCP client:
 
 ```bash
 pip install -e .[mcp]
-python scripts/cowork_preflight.py
+omega-preflight
 python -m omega.mcp.server
 ```
 
@@ -57,20 +58,20 @@ python -m omega.mcp.server
 Normal local odds resolution uses BetMGM:
 
 ```bash
-python scripts/resolve_odds.py --kind game --league NBA --home-team "Los Angeles Lakers" --away-team "Boston Celtics"
+omega-resolve-odds --kind game --league NBA --home-team "Los Angeles Lakers" --away-team "Boston Celtics"
 ```
 
 Use multi-book mode only when explicitly shopping lines or auditing consensus:
 
 ```bash
-python scripts/resolve_odds.py --kind game --league NBA --event-id evt-id --line-shopping
+omega-resolve-odds --kind game --league NBA --event-id evt-id --line-shopping
 ```
 
 The resolver prepares market inputs and provenance only. It does not compute probabilities, edge, EV, Kelly, staking, confidence tiers, or trace IDs.
 
 ## Operating Documents
 
-- [AGENTS.md](AGENTS.md): **cross-agent entrypoint — start here.** (`CLAUDE.md` is a shim to it.)
+- [AGENTS.md](AGENTS.md): **cross-agent entrypoint â€” start here.** (`CLAUDE.md` is a shim to it.)
 - [prompts/reference/output_modes.md](prompts/reference/output_modes.md): canonical output-mode + engine-execution rules.
 - [OMEGA_COWORK.md](OMEGA_COWORK.md): local VM / Cowork runtime instruction.
 - [docs/LLM_MCP_INTERFACE.md](docs/LLM_MCP_INTERFACE.md): MCP tool contract and replay boundary.
@@ -86,3 +87,4 @@ python -m pytest tests/ -v
 ```
 
 Tests are network-free and do not spend Odds API quota.
+

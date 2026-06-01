@@ -19,7 +19,6 @@ import pytest
 
 from omega.integrations._guards import OmegaReplayModeError
 
-
 # ---------------------------------------------------------------------------
 # Helper: make a mock url_opener that should never be called
 # ---------------------------------------------------------------------------

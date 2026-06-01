@@ -42,7 +42,7 @@ skips the engine.
 
 ## How `output_mode` is determined
 
-Computed by `omega.synthesis.output_guard.classify_output_mode(calibration_profile, trace_count,
+Computed by `omega.ops.output_modes.classify_output_mode(calibration_profile, trace_count,
 sidecar_valid)`. It returns `RESEARCH_CANDIDATE` if **any** of:
 
 - no fitted production calibration profile (static fallback active), or
@@ -54,7 +54,7 @@ is emitted before any wager exists.
 
 ### Machine-readable source of truth
 
-`scripts/report_calibration.py` writes the current mode into the **frontmatter** of
+`omega-report-calibration` writes the current mode into the **frontmatter** of
 `reports/latest.md`:
 
 ```yaml

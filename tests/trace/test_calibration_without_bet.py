@@ -21,7 +21,7 @@ from __future__ import annotations
 import tempfile
 from typing import Any
 
-from omega.synthesis.output_guard import OutputMode, classify_output_mode
+from omega.ops.output_modes import OutputMode, classify_output_mode
 from omega.trace.bet_record import BetRecord
 from omega.trace.store import TraceStore
 

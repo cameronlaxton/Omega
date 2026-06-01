@@ -658,7 +658,8 @@ class TestDbPathResolution:
         store = TraceStore()
         try:
             assert store.db_path_source == "default"
-            assert store.db_path.endswith("omega_traces.db")
+            normalized = store.db_path.replace("\\", "/")
+            assert normalized.endswith("/var/omega_traces.db")
         finally:
             store.close()
 
@@ -705,7 +706,7 @@ class TestDbPathResolution:
             )
             assert registered == [], (
                 "TraceStore must not register an atexit sync-back hook; "
-                "archival is owned by scripts/sync_to_mount.ps1"
+                "archival is owned by tools/windows/sync_to_mount.ps1"
             )
         finally:
             store.close()

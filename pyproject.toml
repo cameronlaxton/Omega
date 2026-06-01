@@ -10,6 +10,50 @@ dependencies = [
     "pydantic>=2.0.0",
 ]
 
+[project.scripts]
+omega-backfill-closing-lines = "omega.ops.backfill_closing_lines:main"
+omega-backfill-evidence-signals = "omega.ops.backfill_evidence_signals:main"
+omega-backfill-input-snapshot = "omega.ops.backfill_input_snapshot:main"
+omega-backfill-outcomes-manual = "omega.ops.backfill_outcomes_manual:main"
+omega-backfill-trace-quality = "omega.ops.backfill_trace_quality:main"
+omega-capture-early-lines = "omega.ops.capture_early_lines:main"
+omega-cowork-preflight = "omega.ops.cowork_preflight:main"
+omega-db-status = "omega.ops.db_status:main"
+omega-fetch-closing-lines = "omega.ops.fetch_closing_lines:main"
+omega-fetch-outcomes = "omega.ops.fetch_outcomes_all:main"
+omega-fetch-outcomes-mlb = "omega.ops.fetch_outcomes_mlb:main"
+omega-fetch-outcomes-nba = "omega.ops.fetch_outcomes_nba:main"
+omega-fetch-outcomes-props = "omega.ops.fetch_outcomes_props:main"
+omega-fetch-outcomes-soccer = "omega.ops.fetch_outcomes_soccer:main"
+omega-fetch-outcomes-wnba = "omega.ops.fetch_outcomes_wnba:main"
+omega-fit-adjustment-policy = "omega.ops.fit_adjustment_policy:main"
+omega-fit-calibration = "omega.ops.fit_calibration:main"
+omega-ingest-closing-lines = "omega.ops.ingest_closing_lines:main"
+omega-ingest-traces = "omega.ops.ingest_traces:main"
+omega-install-hooks = "omega.ops.install_hooks:main"
+omega-mark-session-qa-failed = "omega.ops.mark_session_qa_failed:main"
+omega-promote-adjustment-policy = "omega.ops.promote_adjustment_policy:main"
+omega-promote-profile = "omega.ops.promote_profile:main"
+omega-quarantine-legacy-traces = "omega.ops.quarantine_legacy_traces:main"
+omega-quarantine-sim-bug-traces = "omega.ops.quarantine_sim_bug_traces:main"
+omega-refresh-wehoop = "omega.ops.refresh_wehoop:main"
+omega-render-session-audits = "omega.ops.render_session_audits:main"
+omega-report-calibration = "omega.ops.report_calibration:main"
+omega-resolve-odds = "omega.ops.resolve_odds:main"
+omega-run-action-plan = "omega.ops.run_action_plan:main"
+omega-run-analyze = "omega.ops.run_analyze:main"
+omega-run-baseline-sweep = "omega.ops.run_baseline_sweep:main"
+omega-run-champion-challenger = "omega.ops.run_champion_challenger:main"
+omega-sanitize-trace-exports = "omega.ops.sanitize_trace_exports:main"
+omega-score-evidence-signals = "omega.ops.score_evidence_signals:main"
+omega-validate-all = "omega.ops.validate_all:main"
+omega-validate-artifact-policy = "omega.ops.validate_artifact_policy:main"
+omega-validate-docs = "omega.ops.validate_docs:main"
+omega-validate-repo-state = "omega.ops.validate_repo_state:main"
+omega-validate-session-sidecars = "omega.ops.validate_session_sidecars:main"
+omega-validate-trace-export = "omega.ops.validate_trace_export:main"
+omega-preflight = "omega.ops.cowork_preflight:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
@@ -51,9 +95,10 @@ no_implicit_optional = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["omega*"]
-exclude = ["tests*", "docs*", "inbox*", "reports*", "config*", "scripts*"]
+exclude = ["tests*", "docs*", "inbox*", "reports*", "config*"]

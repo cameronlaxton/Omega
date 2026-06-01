@@ -80,7 +80,7 @@ def test_optional_actionability_fields_round_trip():
         {
             "league": "NBA",
             "window": "2026-05-29",
-            "effective_db_path": "C:/repos/Omega/omega_traces.db",
+            "effective_db_path": "C:/repos/Omega/var/omega_traces.db",
             "runtime_db_status": "ok",
             "pipeline_status": {"overall": "needs_outcomes", "ingest": "ok"},
             "next_required_action": "attach outcomes when games are final",

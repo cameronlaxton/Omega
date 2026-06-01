@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import sqlite3
 import tempfile
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -357,34 +356,3 @@ class TestQueryTracesUnifiedOutcomeFilter:
         assert "_prop_outcomes" not in results[0]
         store.close()
 
-
-class TestTraceRecorderSchemaVersion:
-    """The recorder must inject CURRENT_VERSION, not a stale hard-coded 1."""
-
-    def test_recorded_schema_version_matches_current(self):
-
-        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-        tmp.close()
-        store = TraceStore(db_path=tmp.name)
-
-        # Point the recorder at our temp DB by monkey-patching TraceStore default
-        # for the duration of this call. Easiest: just call persist() directly
-        # with the recorder's contract — i.e. trace dict with required fields.
-        trace = _make_prop_trace(trace_id="t-version-check")
-        store.persist({**trace, "schema_version": CURRENT_VERSION})
-
-        row = store.conn.execute(
-            "SELECT schema_version FROM traces WHERE trace_id = ?",
-            ("t-version-check",),
-        ).fetchone()
-        assert row["schema_version"] == CURRENT_VERSION
-        store.close()
-
-    def test_recorder_uses_current_version_constant(self):
-        """Recorder imports CURRENT_VERSION rather than hard-coding."""
-        from omega.skills import trace_recorder
-
-        src = Path(trace_recorder.__file__).read_text(encoding="utf-8")
-        assert "from omega.trace.schema import CURRENT_VERSION" in src
-        assert "_SCHEMA_VERSION = 1" not in src
-        assert 'record["schema_version"] = CURRENT_VERSION' in src

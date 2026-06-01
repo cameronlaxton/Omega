@@ -148,10 +148,10 @@ If no, defer it.
 
 ## Preferred ownership boundaries
 
-- `omega/reasoning/*` owns orchestration and replay-mode hooks
-- `omega/trace/*` owns trace persistence and retrieval
-- `omega/strategy/*` owns backtest artifacts, historical grading, and benchmark execution
-- `omega/core/calibration/*` owns calibration fit logic, profiles, and selection policy
+- `src/omega/ops/*` owns operational orchestration and replay-mode hooks
+- `src/omega/trace/*` owns trace persistence and retrieval
+- `src/omega/strategy/*` owns backtest artifacts, historical grading, and benchmark execution
+- `src/omega/core/calibration/*` owns calibration fit logic, profiles, and selection policy
 - `docs/phase6/*` owns phase-specific design specifications
 
 Prefer responsibility-based architecture over file-based sprawl.
