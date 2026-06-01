@@ -46,6 +46,7 @@ class MarkovWNBAGameSimulationBackend:
 
     backend_name = "markov_state_wnba"
     component_version = "markov_wnba_v1"
+    evidence_mode = "markov_transition"
 
     def run(self, request: GameSimulationInput) -> dict[str, Any]:
         # Lazy import avoids an import cycle: engine.py imports this module at the

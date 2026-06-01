@@ -1311,6 +1311,7 @@ class FastScoreSimulationBackend:
 
     backend_name = "fast_score"
     component_version = "fast_score_v1"
+    evidence_mode = "plane_adjustment"
 
     def run(self, request: GameSimulationInput) -> dict[str, Any]:
         if np is not None:
@@ -1552,6 +1553,7 @@ class MarkovGameSimulationBackend:
 
     backend_name = "markov_state"
     component_version = "markov_state_v1"
+    evidence_mode = "markov_transition"
 
     def run(self, request: GameSimulationInput) -> dict[str, Any]:
         return run_markov_game_simulation(
@@ -1583,6 +1585,7 @@ class OmegaSimulationEngine:
         over_under: float | None = None,
         allow_baseline: bool = False,
         transition_modifiers: dict | None = None,
+        backend: GameSimulationBackend | None = None,
     ) -> dict:
         """
         Run a fast game simulation using team stats dispatched by sport archetype.
@@ -1597,10 +1600,14 @@ class OmegaSimulationEngine:
             seed: Optional RNG seed for reproducible results
             transition_modifiers: Scalar modifiers for the Markov backend (ignored
                 by fast_score). Produced by evidence_to_modifier.signals_to_transition_modifiers().
+            backend: Optional per-call game backend. When supplied it overrides the
+                engine's default backend, so a single shared engine can run any
+                registered backend without re-instantiation or name-based dispatch.
 
         Returns:
             Dict with score distributions, win probabilities, and missing_requirements
         """
+        active = backend or self._game_backend
         request = GameSimulationInput(
             home_team=home_team,
             away_team=away_team,
@@ -1614,7 +1621,7 @@ class OmegaSimulationEngine:
             allow_baseline=allow_baseline,
             transition_modifiers=transition_modifiers,
         )
-        return enforce_game_backend_contract(self._game_backend.run(request))
+        return enforce_game_backend_contract(active.run(request))
 
     def run_game_simulation(
         self,
@@ -1966,8 +1973,14 @@ class PropDistributionRouterBackend:
             "variance": variance,
             "market_line": request.line,
         }
-        if request.prior_payload and "dud_prob" in request.prior_payload:
-            player_proj["dud_prob"] = request.prior_payload["dud_prob"]
+        # Forward caller-supplied distribution override and dud probability when
+        # present so registry dispatch stays bit-identical to the direct
+        # run_player_simulation path in service.analyze_player_prop.
+        prior = request.prior_payload or {}
+        if "distribution" in prior:
+            player_proj["distribution"] = prior["distribution"]
+        if "dud_prob" in prior:
+            player_proj["dud_prob"] = prior["dud_prob"]
         return run_player_simulation(
             player_proj, n_iter=request.n_iter, seed=request.seed
         )

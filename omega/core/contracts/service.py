@@ -43,10 +43,15 @@ from omega.core.contracts.schemas import (
     SlateAnalysisResponse,
 )
 from omega.core.simulation.archetypes import get_archetype_name
-from omega.core.simulation.backends import resolve_game_backend
+from omega.core.simulation.backends import (
+    GameSimulationBackend,
+    PropSimulationInput,
+    resolve_default_prop_backend,
+    resolve_game_backend,
+    resolve_prop_backend,
+)
 from omega.core.simulation.engine import (
     OmegaSimulationEngine,
-    run_player_simulation,
     select_distribution,
 )
 from omega.core.simulation.evidence_handlers import (
@@ -630,9 +635,15 @@ def _effective_game_backend_name(request: GameAnalysisRequest) -> str:
     return name
 
 
-def _is_markov_family(backend_name: str) -> bool:
-    """True for any Markov state-transition backend (markov_state, markov_state_wnba)."""
-    return backend_name.startswith("markov_state")
+def _uses_transition_modifiers(backend: GameSimulationBackend | None) -> bool:
+    """True when *backend* consumes Markov transition modifiers for evidence.
+
+    Reads the backend's ``evidence_mode`` capability rather than sniffing its
+    name, so a new Markov-family backend need not be named ``markov_state*`` to
+    route evidence correctly. Defaults to plane-adjustment routing for an unknown
+    backend (``None``) or any backend predating the attribute.
+    """
+    return getattr(backend, "evidence_mode", "plane_adjustment") == "markov_transition"
 
 
 def _game_evidence_plan_for(request: GameAnalysisRequest) -> EvidenceExecutionPlan:
@@ -641,7 +652,8 @@ def _game_evidence_plan_for(request: GameAnalysisRequest) -> EvidenceExecutionPl
         return EvidenceExecutionPlan()
 
     suppressed = _suppressed_player_signal_indices(evidence)
-    if _is_markov_family(_effective_game_backend_name(request)):
+    backend = resolve_game_backend(_effective_game_backend_name(request))
+    if _uses_transition_modifiers(backend):
         active_indices = {idx for idx in range(len(evidence)) if idx not in suppressed}
         active_evidence = [sig for idx, sig in enumerate(evidence) if idx in active_indices]
         transition_modifiers = signals_to_transition_modifiers(
@@ -920,7 +932,7 @@ def analyze_game(
             context_source="missing",
         )
 
-    use_markov = _is_markov_family(backend.backend_name)
+    use_markov = _uses_transition_modifiers(backend)
     if evidence_plan is None:
         evidence_plan = _game_evidence_plan_for(request)
     effective_adjustment = None if use_markov else (
@@ -943,12 +955,7 @@ def analyze_game(
         )
 
     try:
-        engine = (
-            _engine
-            if backend.backend_name == "fast_score"
-            else OmegaSimulationEngine(game_backend=backend)
-        )
-        sim_result = engine.run_fast_game_simulation(
+        sim_result = _engine.run_fast_game_simulation(
             home_team=request.home_team,
             away_team=request.away_team,
             league=request.league,
@@ -960,6 +967,7 @@ def analyze_game(
             over_under=total_value,
             allow_baseline=request.allow_baseline,
             transition_modifiers=transition_modifiers,
+            backend=backend,
         )
     except Exception as exc:
         logger.warning("Simulation error for %s: %s", matchup, exc)
@@ -1450,10 +1458,12 @@ def analyze_player_prop(
 ) -> PlayerPropResponse:
     """Analyze a single player prop. Never raises.
 
-    Uses run_player_simulation: archetype-aware Poisson/Normal sampling over
-    a player rolling-stat distribution (mean, std) against the prop line.
-    Caller must supply player_context with `{stat}_mean` and optionally
-    `{stat}_std` keys (e.g. for pts: pts_mean=24.3, pts_std=6.1).
+    Dispatches through the prop-backend registry (resolve_default_prop_backend
+    -> resolve_prop_backend); the default distribution router performs
+    archetype-aware Poisson/Normal sampling over a player rolling-stat
+    distribution (mean, std) against the prop line. Caller must supply
+    player_context with `{stat}_mean` and optionally `{stat}_std` keys (e.g. for
+    pts: pts_mean=24.3, pts_std=6.1).
 
     ``evidence_adjustment`` is the precomputed structured-evidence adjustment;
     when omitted it is derived from ``request.evidence`` so direct callers and
@@ -1557,22 +1567,37 @@ def analyze_player_prop(
     # with mean < 3.0) to Poisson where Normal would understate right-tail mass.
     distribution_override = player_ctx.get("distribution")
 
-    player_proj = {
-        "league": request.league,
-        "stat_key": stat_key,
-        "mean": mean_f,
-        "variance": std_f**2,
-        "market_line": request.line,
-        "distribution": distribution_override,
-        "dud_prob": float(player_ctx.get("dud_prob", 0.0)),
-    }
+    notes: list[str] = []
+
+    # Dispatch through the prop-backend registry. The (league, stat_type) routing
+    # table selects the model; an unregistered target (e.g. prop_neg_binom /
+    # tennis_prop_serve pending Milestone 3) falls back to the distribution router
+    # so the prop still prices, with the substitution recorded in notes. The
+    # router forwards distribution + dud_prob from prior_payload, so this is
+    # bit-identical to the prior direct run_player_simulation call.
+    backend_name = resolve_default_prop_backend(request.league, stat_key)
+    prop_backend = resolve_prop_backend(backend_name)
+    if prop_backend is None:
+        prop_backend = resolve_prop_backend("prop_distribution_router")
+        notes.append(f"prop backend {backend_name!r} unregistered; using distribution router")
+
+    sim_input = PropSimulationInput(
+        player_name=request.player_name,
+        league=request.league,
+        stat_type=stat_key,
+        line=request.line,
+        projection_mean=mean_f,
+        n_iter=request.n_iterations,
+        seed=request.seed,
+        projection_std=std_f,
+        prior_payload={
+            "distribution": distribution_override,
+            "dud_prob": float(player_ctx.get("dud_prob", 0.0)),
+        },
+    )
 
     try:
-        sim_result = run_player_simulation(
-            player_proj,
-            n_iter=request.n_iterations,
-            seed=request.seed,
-        )
+        sim_result = prop_backend.run(sim_input)
     except Exception as exc:
         logger.warning("Prop simulation error for %s: %s", request.player_name, exc)
         return PlayerPropResponse(
@@ -1587,8 +1612,6 @@ def analyze_player_prop(
     # run_player_simulation returns probabilities as decimals (0-1)
     over_prob = sim_result.get("over_prob", 0.0)
     under_prob = sim_result.get("under_prob", 0.0)
-
-    notes: list[str] = []
     resolved_dist = select_distribution(
         stat_key,
         request.league,

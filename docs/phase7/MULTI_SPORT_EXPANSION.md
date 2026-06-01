@@ -152,6 +152,8 @@ engine = OmegaSimulationEngine(game_backend=backend) if backend.backend_name != 
 
 The `fast_score` special-case preserves the shared singleton `_engine` and keeps Phase 6 replay tests bit-identical.
 
+> **Implementation note — M0 hardening (2026-06-01).** This `backend_name != "fast_score"` special-case was later removed. `OmegaSimulationEngine.run_fast_game_simulation` now takes a per-call `backend` argument, so the shared `_engine` runs *any* registered backend with no name check and no per-call re-instantiation. Replay stays bit-identical. Current state: `PHASE7_HANDOFF.md` §2.3.
+
 ### Changes to `omega/core/simulation/engine.py`
 
 At module import time, register the two existing backends under their existing names:
@@ -168,6 +170,8 @@ register_prop_backend("prop_distribution_router", PropDistributionRouterBackend(
 ```
 
 `PropDistributionRouterBackend.run()` delegates verbatim to `select_distribution()` + the existing sampler logic. No behavior change for NBA/MLB props.
+
+> **Implementation note — M0 hardening (2026-06-01).** `service.analyze_player_prop` now dispatches through the prop registry (`resolve_default_prop_backend` → `resolve_prop_backend`) rather than calling `run_player_simulation` directly. Routed-but-unregistered names (`prop_neg_binom`, `tennis_prop_serve`) fall back to `prop_distribution_router` with a note on the response. The router forwards the caller `distribution` override and `dud_prob` through `prior_payload`, keeping NBA/MLB props bit-identical. Current state: `PHASE7_HANDOFF.md` §2.2.
 
 ### Acceptance gate for Milestone 0
 
@@ -595,6 +599,7 @@ Each milestone is a self-contained, mergeable slice. No milestone leaves the eng
 - Add `PropSimulationBackend` Protocol, `PropSimulationInput` dataclass, and `PropDistributionRouterBackend` wrapping the existing `run_player_simulation()` logic.
 - Build the shared ETL harness `omega/integrations/_etl.py` (Parquet caching decorator, Pydantic validate-or-fail wrapper, alias resolver). Every Phase 7 adapter depends on it, so it lands in the precondition milestone alongside the registry. Add the three ETL-standard tests.
 - **Gate**: all Phase 6 replay-determinism tests pass bit-identically (NBA + MLB); ETL harness tests green.
+- **Hardening (post-merge, 2026-06-01).** Closed four residual seams left by the scaffolding: (1) removed the residual `fast_score` dispatch branch — `run_fast_game_simulation` takes a per-call `backend=`; (2) added `evidence_mode` to the `GameSimulationBackend` Protocol so evidence routing reads a capability instead of sniffing the name (`_is_markov_family` → `_uses_transition_modifiers`); (3) wired `analyze_player_prop` through the prop registry with a `prop_distribution_router` fallback for unregistered routes; (4) the router now forwards `distribution`/`dud_prob` to keep that routing bit-identical. Full suite green at **993 passed**; new coverage in `tests/core/test_backend_registry.py`. See `PHASE7_HANDOFF.md` §2.2–§2.3.
 
 ### Milestone 1 — WNBA
 

@@ -71,6 +71,12 @@ class GameSimulationBackend(Protocol):
 
     backend_name: str
     component_version: str
+    # Evidence routing mode for this backend. "plane_adjustment" applies a
+    # PlaneAdjustment to team context; "markov_transition" feeds transition
+    # modifiers to the Markov sampler. Dispatch reads this attribute instead of
+    # sniffing the backend name, so a new Markov-family backend need not be
+    # named ``markov_state*`` to route evidence correctly.
+    evidence_mode: str
 
     def run(self, request: GameSimulationInput) -> dict[str, Any]:
         """Return a standard engine result dict satisfying V10 provenance."""

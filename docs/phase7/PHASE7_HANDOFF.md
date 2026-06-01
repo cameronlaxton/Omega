@@ -5,7 +5,8 @@ the single source of truth for *what is built*, *what the seams are*, and *exact
 how to implement the remaining milestones*. Read it alongside the locked design
 plan `docs/phase7/MULTI_SPORT_EXPANSION.md` (authoritative for design intent).
 
-Last updated after Milestone 1. All work below is committed to `main`.
+Last updated after Milestone 1, plus an **M0 registry-hardening pass (2026-06-01)**.
+All work below is committed to `main`.
 
 ---
 
@@ -13,13 +14,14 @@ Last updated after Milestone 1. All work below is committed to `main`.
 
 | Milestone | Scope | Status | Commits |
 |-----------|-------|--------|---------|
-| **M0** | Backend registry + shared ETL harness | ✅ Done | `f2ccf80` |
+| **M0** | Backend registry + shared ETL harness | ✅ Done · hardened (see §2.2–§2.3) | `f2ccf80` |
 | **M1** | WNBA (backend, integration, early-line isolation, wehoop history) | ✅ Done | `80134b3` (A), `f128711` (B), `b709c99` (C) |
 | **M2** | Soccer (World Cup) — bivariate Poisson + Dixon-Coles | ⬜ Not started | — |
 | **M3** | Tennis (ATP/WTA) — IID Markov + pressure coefficients | ⬜ Not started | — |
 | **M4** | NFL — Gamma-Poisson + NB props + Wong teasers | ⬜ Not started | — |
 
-**Test baseline:** `python -m pytest tests/ -q` → **744 passed** (last green run).
+**Test baseline:** `python -m pytest tests/ -q` → **993 passed** (last green run;
+744 at M1 close, the rest added by later milestones + the M0 hardening pass).
 Phase 6 NBA + MLB replay determinism is bit-identical. Do not regress this.
 
 > ⚠️ **Deadline:** M2 (Soccer) has a hard external deadline of **2026-06-11**
@@ -48,26 +50,46 @@ re-create parallel versions.
 
 ### 2.2 Prop-backend registry — same file
 - `PROP_BACKENDS`, `register_prop_backend`, `resolve_prop_backend`.
-- `PropSimulationInput` dataclass (has `prior_payload` for NB `k`, SPW%, etc.).
+- `PropSimulationInput` dataclass (has `prior_payload` for NB `k`, SPW%, etc.; the
+  distribution router also reads a caller `distribution` override and `dud_prob`
+  out of `prior_payload`).
 - `DEFAULT_PROP_BACKEND_BY_LEAGUE_STAT` + `resolve_default_prop_backend(league, stat)`.
-  NFL yardage already routes to `"prop_neg_binom"`; tennis aces to
-  `"tennis_prop_serve"`. **Those backend names are routed but not yet registered**
-  — M3/M4 must register them.
+  NFL yardage routes to `"prop_neg_binom"`; tennis aces to `"tennis_prop_serve"`.
+- **Live wiring (M0 hardening).** `service.analyze_player_prop` now dispatches
+  through the registry — `resolve_default_prop_backend` → `resolve_prop_backend` —
+  instead of calling `run_player_simulation` directly. Any routed name that is
+  **not yet registered** (`prop_neg_binom`, `tennis_prop_serve`) **falls back to
+  `prop_distribution_router`** and appends a note to the response. So unregistered
+  routes price correctly via the router today instead of breaking, and M3/M4
+  registering the real backend is a drop-in upgrade. The fallback is bit-identical
+  to the prior direct call for NBA/MLB props (verified in
+  `tests/core/test_backend_registry.py`).
 
 ### 2.3 Dispatch + league default — `omega/core/contracts/service.py`
-- `analyze_game` dispatches via `resolve_game_backend(_effective_game_backend_name(request))`.
+- `analyze_game` dispatches via `resolve_game_backend(_effective_game_backend_name(request))`,
+  then passes the resolved backend **per call** into
+  `_engine.run_fast_game_simulation(..., backend=backend)`, so a single shared
+  `_engine` runs every backend. *(M0 hardening removed the old
+  `backend_name == "fast_score"` branch that built a fresh `OmegaSimulationEngine`
+  for non-fast-score backends; replay stays bit-identical.)*
 - `_effective_game_backend_name(request)`: when the caller leaves
   `simulation_backend="fast_score"` (the default), the league's
   `default_game_backend` from `leagues.py` is used. **This is how a sport
   auto-selects its backend.** Set `default_game_backend` in the league config and
   it just works.
-- `_is_markov_family(name)` (`startswith("markov_state")`) decides whether the
-  evidence plan builds **transition modifiers** (markov path) or **handler
-  adjustments** (fast-score path). **⚠️ Decision point for M2–M4:** soccer/
-  tennis/NFL backends are *not* markov-family, so today they take the fast-score
-  evidence path (handler adjustments applied to contexts). Verify that is what
-  you want; if a new backend needs different evidence handling, generalize
-  `_game_evidence_plan_for` rather than special-casing call sites.
+- **Evidence routing reads a backend capability, not its name (M0 hardening).**
+  Every game backend declares `evidence_mode` on the `GameSimulationBackend`
+  Protocol — `"plane_adjustment"` (fast-score path: handler adjustments applied
+  to contexts) or `"markov_transition"` (markov path: transition modifiers).
+  `service._uses_transition_modifiers(backend)` reads it via
+  `getattr(backend, "evidence_mode", "plane_adjustment")`. This replaced the old
+  `_is_markov_family(name)`/`startswith("markov_state")` name sniff, so a
+  Markov-family backend no longer has to be *named* `markov_state*` to route
+  evidence correctly.
+  **⚠️ Decision point for M2–M4:** soccer/tennis/NFL backends default to
+  `"plane_adjustment"` (the fast-score evidence path). If a new backend needs the
+  transition-modifier path — or a third mode — set its `evidence_mode` and extend
+  the handling in `_game_evidence_plan_for` rather than special-casing call sites.
 
 ### 2.4 Shared Markov body — `omega/core/simulation/engine.py`
 - `run_markov_game_simulation(request, *, backend_name, component_version, context_source="provided", baseline_used=False)`.
@@ -206,7 +228,8 @@ General recipe for each new sport (mirror M1):
   `draw_prob=0.0`, no team_score.
 - `pressure_coefficients` injected via `request.prior_payload` (see §5.5).
 - Also register prop backend `"tennis_prop_serve"` (already routed for
-  `player_aces`).
+  `player_aces`; until registered, `player_aces` falls back to the distribution
+  router with a recorded note — registering it is a drop-in upgrade).
 - New: `priors_tennis`, `priors_tennis_pressure` tables + adapter
   `omega/integrations/tennis_sackmann.py` + `scripts/fit_tennis_pressure_coefficients.py`
   (group fallback below N=500 charted points; never silent 0.0).
@@ -219,7 +242,9 @@ General recipe for each new sport (mirror M1):
   (`backend_name="nfl_neg_binom"`, Gamma-Poisson team scores, discrete margin
   distribution over {-21..+21}) and `omega/core/simulation/prop_neg_binom.py`
   (`backend_name="prop_neg_binom"`, NB sampler — **register it**, it is already
-  routed for NFL yardage).
+  routed for NFL yardage; until then NFL yardage falls back to the distribution
+  router with a recorded note — correct, but not NB-accurate for the over-dispersed
+  tail).
 - New: `priors_nfl_dispersion` table + adapter `omega/integrations/nflverse.py`
   + `scripts/fit_nfl_dispersion.py` with **mandatory hierarchical Bayesian
   shrinkage** (`w(n)=n/(n+n0)`, `n0=8`; `nb_k_source` ∈ player|position_group|league).
@@ -235,7 +260,10 @@ General recipe for each new sport (mirror M1):
 file list but the router currently lives as `PropDistributionRouterBackend` in
 `engine.py` (registered). That is fine — no separate module required unless you
 prefer to extract it. `prop_neg_binom` and `tennis_prop_serve` are **routed but
-not registered**; register them in M4/M3 respectively.
+not registered**; register them in M4/M3 respectively. **As of the M0 hardening
+pass the live prop path falls back to `prop_distribution_router` for these
+unregistered names (with a note on the response), so nothing breaks in the
+interim** — registering the real backend silently upgrades the math.
 
 ### 5.5 ⚠️ Open seam: how game-level priors reach the backend
 `GameSimulationInput` (`backends.py`) currently has **no `prior_payload` field** —
@@ -255,6 +283,9 @@ The plan text uses both phrasings; (a) is cleaner for non-team-scoped priors lik
 
 - **Register backends at engine import time**; new sport modules lazy-import
   engine helpers inside `run()` to avoid cycles.
+- **Game backends declare `evidence_mode`** (`"plane_adjustment"` |
+  `"markov_transition"`); evidence dispatch reads that attribute, never the
+  backend name. New backends default to plane-adjustment unless they set it.
 - **Bump version-pin tests** whenever `CURRENT_VERSION` changes
   (`tests/trace/test_schema_v7.py`, `test_schema_v9.py`).
 - **`TraceStore.schema_version()` is a method, not a property.**
@@ -273,7 +304,7 @@ The plan text uses both phrasings; (a) is cleaner for non-team-scoped priors lik
 ## 7. Quick-start for the next session
 
 1. `git log --oneline -6` — confirm you are on/after `b709c99`.
-2. `python -m pytest tests/ -q` — confirm green (744+).
+2. `python -m pytest tests/ -q` — confirm green (993+).
 3. Read `docs/phase7/MULTI_SPORT_EXPANSION.md` §M2 + this §5.1.
 4. Resolve the §5.5 prior-payload seam decision first.
 5. Start M2 (Soccer) — it has the binding 2026-06-11 deadline.

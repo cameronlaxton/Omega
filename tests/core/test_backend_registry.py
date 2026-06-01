@@ -17,6 +17,7 @@ import pytest
 import omega.core.simulation.engine  # noqa: F401
 from omega.core.simulation.backends import (
     DEFAULT_PROP_BACKEND_BY_LEAGUE_STAT,
+    GAME_BACKENDS,
     PropSimulationInput,
     register_game_backend,
     register_prop_backend,
@@ -90,3 +91,162 @@ def test_prop_distribution_router_matches_direct_call():
         seed=42,
     )
     assert via_router == direct
+
+
+# ---------------------------------------------------------------------------
+# Gap 4 — evidence routing reads a backend capability, not the name
+# ---------------------------------------------------------------------------
+
+
+def test_game_backends_expose_valid_evidence_mode():
+    assert GAME_BACKENDS, "expected import-time game backend registration"
+    for name, backend in GAME_BACKENDS.items():
+        assert getattr(backend, "evidence_mode", None) in {
+            "plane_adjustment",
+            "markov_transition",
+        }, f"{name} has invalid evidence_mode"
+    assert resolve_game_backend("fast_score").evidence_mode == "plane_adjustment"
+    assert resolve_game_backend("markov_state").evidence_mode == "markov_transition"
+    assert resolve_game_backend("markov_state_wnba").evidence_mode == "markov_transition"
+
+
+# ---------------------------------------------------------------------------
+# Step 3 — router forwards distribution override + dud_prob (bit-identical)
+# ---------------------------------------------------------------------------
+
+
+def test_router_forwards_distribution_override():
+    """A caller distribution override must survive routing through prior_payload."""
+    from omega.core.simulation.engine import run_player_simulation
+
+    router = resolve_prop_backend("prop_distribution_router")
+    via_router = router.run(
+        PropSimulationInput(
+            player_name="P",
+            league="NBA",
+            stat_type="blk",
+            line=1.5,
+            projection_mean=1.2,
+            n_iter=4000,
+            seed=7,
+            projection_std=1.1,
+            prior_payload={"distribution": "poisson"},
+        )
+    )
+    direct = run_player_simulation(
+        {
+            "league": "NBA",
+            "stat_key": "blk",
+            "mean": 1.2,
+            "variance": 1.1**2,
+            "market_line": 1.5,
+            "distribution": "poisson",
+        },
+        n_iter=4000,
+        seed=7,
+    )
+    assert via_router == direct
+    assert via_router["distribution_type"] == "poisson"
+
+
+def test_router_forwards_dud_prob():
+    """A dud probability must survive routing through prior_payload."""
+    from omega.core.simulation.engine import run_player_simulation
+
+    router = resolve_prop_backend("prop_distribution_router")
+    via_router = router.run(
+        PropSimulationInput(
+            player_name="P",
+            league="NBA",
+            stat_type="pts",
+            line=20.5,
+            projection_mean=24.0,
+            n_iter=4000,
+            seed=11,
+            projection_std=6.0,
+            prior_payload={"dud_prob": 0.3},
+        )
+    )
+    direct = run_player_simulation(
+        {
+            "league": "NBA",
+            "stat_key": "pts",
+            "mean": 24.0,
+            "variance": 36.0,
+            "market_line": 20.5,
+            "dud_prob": 0.3,
+        },
+        n_iter=4000,
+        seed=11,
+    )
+    assert via_router == direct
+
+
+# ---------------------------------------------------------------------------
+# Step 4 — analyze_player_prop dispatches through the registry
+# ---------------------------------------------------------------------------
+
+
+def test_analyze_prop_routes_through_registry_bit_identical():
+    """The live prop path must match a direct router call with the same inputs.
+
+    game_context is left unset so no context adjustment shifts the mean, making
+    the service path's PropSimulationInput identical to the one built here.
+    """
+    from omega.core.contracts.service import PlayerPropRequest, analyze_player_prop
+
+    req = PlayerPropRequest(
+        player_name="LeBron James",
+        league="NBA",
+        prop_type="pts",
+        line=25.5,
+        home_team="Los Angeles Lakers",
+        away_team="Boston Celtics",
+        game_date="2026-05-17",
+        n_iterations=500,
+        seed=42,
+        player_context={"pts_mean": 27.0, "pts_std": 5.5},
+    )
+    resp = analyze_player_prop(req)
+    assert resp.status == "success"
+
+    router = resolve_prop_backend("prop_distribution_router")
+    sim = router.run(
+        PropSimulationInput(
+            player_name="LeBron James",
+            league="NBA",
+            stat_type="pts",
+            line=25.5,
+            projection_mean=27.0,
+            n_iter=500,
+            seed=42,
+            projection_std=5.5,
+            prior_payload={"distribution": None, "dud_prob": 0.0},
+        )
+    )
+    assert resp.over_prob == sim["over_prob"]
+    assert resp.under_prob == sim["under_prob"]
+
+
+def test_analyze_prop_unregistered_route_falls_back_to_router():
+    """NFL yardage routes to prop_neg_binom (unregistered) -> router + a note."""
+    from omega.core.contracts.service import PlayerPropRequest, analyze_player_prop
+
+    assert resolve_default_prop_backend("NFL", "rushing_yards") == "prop_neg_binom"
+    assert resolve_prop_backend("prop_neg_binom") is None  # not yet registered
+
+    req = PlayerPropRequest(
+        player_name="Saquon Barkley",
+        league="NFL",
+        prop_type="rushing_yards",
+        line=82.5,
+        home_team="Philadelphia Eagles",
+        away_team="Dallas Cowboys",
+        game_date="2026-05-17",
+        n_iterations=500,
+        seed=1,
+        player_context={"rushing_yards_mean": 90.0, "rushing_yards_std": 30.0},
+    )
+    resp = analyze_player_prop(req)
+    assert resp.status == "success"
+    assert any("prop_neg_binom" in n and "distribution router" in n for n in resp.notes)
