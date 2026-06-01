@@ -129,12 +129,32 @@ def enforce_game_backend_contract(result: dict[str, Any]) -> dict[str, Any]:
 GAME_BACKENDS: dict[str, GameSimulationBackend] = {}
 
 
+def _require_backend_contract(name: str, backend: Any, required_attrs: tuple[str, ...]) -> None:
+    """Validate a backend satisfies its Protocol's required surface.
+
+    Protocols are structurally typed and not enforced at runtime, so a backend
+    missing an attribute would only fail later at dispatch. This makes a wiring
+    mistake fail loudly at registration (import) time instead, matching the
+    fail-loud-on-duplicate philosophy.
+    """
+    missing = [attr for attr in required_attrs if not hasattr(backend, attr)]
+    if missing:
+        raise TypeError(f"backend {name!r} missing required attributes: {missing}")
+    if not callable(getattr(backend, "run", None)):
+        raise TypeError(f"backend {name!r} must define a callable run()")
+
+
 def register_game_backend(name: str, backend: GameSimulationBackend) -> None:
     """Register a game-simulation backend under *name*.
 
-    Raises ValueError on duplicate registration so import-time wiring mistakes
-    fail loudly rather than silently shadowing an existing backend.
+    Raises TypeError if *backend* does not satisfy the ``GameSimulationBackend``
+    surface, and ValueError on duplicate registration, so import-time wiring
+    mistakes fail loudly rather than silently shadowing an existing backend or
+    deferring an attribute error to dispatch time.
     """
+    _require_backend_contract(
+        name, backend, ("backend_name", "component_version", "evidence_mode")
+    )
     if name in GAME_BACKENDS:
         raise ValueError(f"game backend {name!r} already registered")
     GAME_BACKENDS[name] = backend
@@ -186,9 +206,10 @@ PROP_BACKENDS: dict[str, PropSimulationBackend] = {}
 def register_prop_backend(name: str, backend: PropSimulationBackend) -> None:
     """Register a prop-simulation backend under *name*.
 
-    Raises ValueError on duplicate registration, mirroring
-    ``register_game_backend``.
+    Raises TypeError on an incomplete backend surface and ValueError on duplicate
+    registration, mirroring ``register_game_backend``.
     """
+    _require_backend_contract(name, backend, ("backend_name", "component_version"))
     if name in PROP_BACKENDS:
         raise ValueError(f"prop backend {name!r} already registered")
     PROP_BACKENDS[name] = backend

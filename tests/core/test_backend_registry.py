@@ -250,3 +250,45 @@ def test_analyze_prop_unregistered_route_falls_back_to_router():
     resp = analyze_player_prop(req)
     assert resp.status == "success"
     assert any("prop_neg_binom" in n and "distribution router" in n for n in resp.notes)
+
+
+# ---------------------------------------------------------------------------
+# Registration-time Protocol validation (fail-loud at import, not at dispatch)
+# ---------------------------------------------------------------------------
+
+
+def test_register_game_backend_validates_contract():
+    class _NoEvidenceMode:
+        backend_name = "x"
+        component_version = "x_v1"
+
+        def run(self, request):  # pragma: no cover - never reached
+            return {}
+
+    with pytest.raises(TypeError, match="missing required attributes"):
+        register_game_backend("x_missing_evidence_mode", _NoEvidenceMode())
+
+    class _NonCallableRun:
+        backend_name = "y"
+        component_version = "y_v1"
+        evidence_mode = "plane_adjustment"
+        run = 123  # not callable
+
+    with pytest.raises(TypeError, match="callable run"):
+        register_game_backend("y_bad_run", _NonCallableRun())
+
+    # A rejected backend must not pollute the registry.
+    assert resolve_game_backend("x_missing_evidence_mode") is None
+    assert resolve_game_backend("y_bad_run") is None
+
+
+def test_register_prop_backend_validates_contract():
+    class _NoComponentVersion:
+        backend_name = "p"
+
+        def run(self, request):  # pragma: no cover - never reached
+            return {}
+
+    with pytest.raises(TypeError, match="missing required attributes"):
+        register_prop_backend("p_missing_cv", _NoComponentVersion())
+    assert resolve_prop_backend("p_missing_cv") is None
