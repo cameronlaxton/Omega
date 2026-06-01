@@ -58,9 +58,9 @@ if ($WhatIf) { Write-Note "DRY RUN: no destructive side effects." }
 
 # 1. Preflight gate. Fail closed.
 if (-not $SkipTests) {
-    Write-Step "Running cowork_preflight.py --direct-only"
+    Write-Step "Running omega-preflight --direct-only"
     if (-not $WhatIf) {
-        $preflight = & python (Join-Path $Workspace "scripts\cowork_preflight.py") --direct-only 2>&1
+        $preflight = & omega-preflight --direct-only 2>&1
         if ($LASTEXITCODE -ne 0) {
             Log-Failure "preflight" ($preflight -join "`n")
             exit 1
@@ -136,7 +136,7 @@ foreach ($pair in $artifactPairs) {
 
 # 4. Timestamped omega_traces.db snapshot on the mount. Write-once; the live
 # DB never crosses the boundary as a moving target.
-$liveDb = Join-Path $Workspace "omega_traces.db"
+$liveDb = Join-Path $Workspace "var\omega_traces.db"
 if (Test-Path $liveDb) {
     $backupDir = Join-Path $MountRoot "backups\omega_traces"
     if (-not (Test-Path $backupDir)) {
