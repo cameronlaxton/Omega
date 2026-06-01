@@ -21,4 +21,4 @@ PY=python
 command -v python >/dev/null 2>&1 || PY=python3
 
 echo "[pre-push] running Omega validation harness..."
-PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m omega.ops.validate_all
+omega-validate-all
