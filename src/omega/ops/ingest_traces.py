@@ -2,7 +2,7 @@
 omega-ingest-traces â€” drain `var/inbox/traces/*.json` into `var/omega_traces.db`.
 
 Workflow:
-    1. Scan `var/inbox/traces/*.json` (non-recursive, processed/ and failed/ are skipped).
+    1. Scan `var/inbox/traces/*.json` (non-recursive; processed/ and failed/ skipped unless --include-processed is passed).
     2. For each file: parse â†’ adapt analyze() output to TraceStore shape â†’ persist trace
        â†’ persist bet_record if present â†’ move file to processed/.
     3. On parse or persistence error: move file to failed/ with a sibling `.error.txt`.
@@ -23,9 +23,10 @@ Usage:
     omega-ingest-traces
     omega-ingest-traces --inbox <path> --db <path>
     omega-ingest-traces --dry-run
-    omega-ingest-traces --explain        # no-write validation report
-    omega-ingest-traces --strict         # fresh-export discipline
-    omega-ingest-traces --no-validate    # bypass gate (rollback)
+    omega-ingest-traces --explain            # no-write validation report
+    omega-ingest-traces --strict             # fresh-export discipline
+    omega-ingest-traces --no-validate        # bypass gate (rollback)
+    omega-ingest-traces --include-processed  # recover traces stuck in processed/
 
 Exit codes:
     0 â€” all files processed (some may have failed; check failed/)
@@ -539,6 +540,16 @@ def main() -> int:
             "still apply. Use only to bypass a regression in the gate."
         ),
     )
+    parser.add_argument(
+        "--include-processed",
+        action="store_true",
+        help=(
+            "Also scan <inbox>/processed/*.json for recovery. Since ingest is "
+            "INSERT OR IGNORE, already-ingested traces are silently skipped. "
+            "Use when traces were moved to processed/ before being persisted "
+            "(e.g. after a stash-pop conflict or partial session export)."
+        ),
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -556,6 +567,13 @@ def main() -> int:
     failed_dir = inbox / "failed"
 
     files = sorted(p for p in inbox.glob("*.json") if p.is_file())
+    if args.include_processed and processed_dir.exists():
+        recovered = sorted(p for p in processed_dir.glob("*.json") if p.is_file())
+        if recovered:
+            logger.info(
+                "--include-processed: found %d file(s) in processed/ to recover.", len(recovered)
+            )
+            files = recovered + files
     if not files:
         logger.info("No new trace files in %s", inbox)
         return 0
