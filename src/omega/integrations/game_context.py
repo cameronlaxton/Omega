@@ -47,6 +47,11 @@ _ESPN_SCOREBOARD = {
     "MLB": espn_mlb,
 }
 
+# Vintage of the hand-maintained static tables below (playoff windows + park
+# factors). Surfaced in provenance so a consumer can judge staleness rather than
+# trusting an undated approximation; bump when the tables are reviewed/refreshed.
+STATIC_DATA_VINTAGE = "2026"
+
 # Per-league playoff date windows (inclusive), (start_month, start_day)..(end). A
 # coarse heuristic — flagged as such in provenance; unknown leagues -> needs_manual.
 _PLAYOFF_WINDOWS: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {
@@ -335,14 +340,14 @@ def resolve_game_context(
         provenance["is_playoff_source"] = None
     else:
         game_context["is_playoff"] = playoff
-        provenance["is_playoff_source"] = "date_heuristic"
+        provenance["is_playoff_source"] = f"date_heuristic:{STATIC_DATA_VINTAGE}"
 
     # Layer 1 — MLB park factor (static table).
     if league_u == "MLB":
         park = _mlb_park_factor(home_team)
         if park is not None:
             game_context["park_factor"] = park
-            provenance["park_factor_source"] = "static_approximate"
+            provenance["park_factor_source"] = f"static_approximate:{STATIC_DATA_VINTAGE}"
         else:
             needs_manual.append("park_factor")
 

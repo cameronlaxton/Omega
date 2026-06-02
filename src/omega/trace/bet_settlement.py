@@ -213,7 +213,14 @@ def _resolve_game_book(
         if not isinstance(q, dict) or str(q.get("market_type") or "") != market:
             continue
         sel = _nrm(q.get("selection"))
-        if not (sel in labels or any(label and sel.startswith(f"{label} ") for label in labels)):
+        # Match either direction: a quote selection equal to/prefixing a label
+        # ("B" vs label "B -3.5", the best_bet fallback case) or a label
+        # prefixing the quote selection. Either pins the bet to a real quote.
+        if not (
+            sel in labels
+            or any(label and sel.startswith(f"{label} ") for label in labels)
+            or any(label and sel and label.startswith(f"{sel} ") for label in labels)
+        ):
             continue
         if line is not None and q.get("line") is not None:
             try:
