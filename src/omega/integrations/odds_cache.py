@@ -13,10 +13,16 @@ from typing import Any
 # Per-entry-type TTLs (seconds). Success payloads keep the original 15-minute
 # window; negative results (unavailable/empty markets) get a short 3-minute soft
 # window so an automated loop stops re-hitting the Odds API on the same miss
-# without masking a market that goes live shortly after.
+# without masking a market that goes live shortly after. Event-list payloads
+# use a hard 5-minute TTL for both populated and empty slate responses.
 SUCCESS_TTL_SECONDS = 900
 NEGATIVE_TTL_SECONDS = 180
-_TTL_BY_ENTRY_TYPE = {"success": SUCCESS_TTL_SECONDS, "negative": NEGATIVE_TTL_SECONDS}
+EVENT_LIST_TTL_SECONDS = 300
+_TTL_BY_ENTRY_TYPE = {
+    "success": SUCCESS_TTL_SECONDS,
+    "negative": NEGATIVE_TTL_SECONDS,
+    "event_list": EVENT_LIST_TTL_SECONDS,
+}
 
 
 class OddsCache:
@@ -92,6 +98,18 @@ class OddsCache:
         raw_str = f"{norm_league}{norm_market}{norm_home}{norm_away}{norm_date}{player_part}"
         return hashlib.sha256(raw_str.encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def compute_event_list_cache_key(
+        league: str,
+        commence_time_from: str | None = None,
+        commence_time_to: str | None = None,
+    ) -> str:
+        """Deterministic cache key for active slate discovery."""
+        norm_league = league.strip().upper()
+        norm_from = (commence_time_from or "").strip()
+        norm_to = (commence_time_to or "").strip()
+        return f"events:{norm_league}:{norm_from}:{norm_to}"
+
     def get(self, cache_key: str) -> dict[str, Any] | None:
         """Retrieve a cached record if it exists and has not expired.
 
@@ -119,6 +137,8 @@ class OddsCache:
                             data["metadata"].append("source: local_cache")
                         if entry_type == "negative" and "source: negative_cache" not in data["metadata"]:
                             data["metadata"].append("source: negative_cache")
+                        if entry_type == "event_list" and "cache_kind: event_list" not in data["metadata"]:
+                            data["metadata"].append("cache_kind: event_list")
                         return data
                     except json.JSONDecodeError:
                         return None
@@ -137,7 +157,7 @@ class OddsCache:
 
         ``market`` scopes the key so game and prop lookups never cross-pollute.
         ``entry_type`` selects the TTL applied on read and eviction: ``success``
-        (900s) or ``negative`` (180s).
+        (900s), ``negative`` (180s), or ``event_list`` (300s).
         """
         if entry_type not in _TTL_BY_ENTRY_TYPE:
             raise ValueError(f"entry_type must be one of {sorted(_TTL_BY_ENTRY_TYPE)}")
@@ -156,8 +176,16 @@ class OddsCache:
             conn.execute(
                 "DELETE FROM odds_cache WHERE "
                 "(entry_type = 'success'  AND ? - inserted_at > ?) OR "
-                "(entry_type = 'negative' AND ? - inserted_at > ?)",
-                (current_time, SUCCESS_TTL_SECONDS, current_time, NEGATIVE_TTL_SECONDS),
+                "(entry_type = 'negative' AND ? - inserted_at > ?) OR "
+                "(entry_type = 'event_list' AND ? - inserted_at > ?)",
+                (
+                    current_time,
+                    SUCCESS_TTL_SECONDS,
+                    current_time,
+                    NEGATIVE_TTL_SECONDS,
+                    current_time,
+                    EVENT_LIST_TTL_SECONDS,
+                ),
             )
             conn.commit()
 
@@ -254,23 +282,4 @@ class OddsCache:
                         if player_name or player_id:
                             quotes = data.get("quotes") or []
                             has_match = False
-                            for q in quotes:
-                                q_player_name = q.get("player")
-                                q_player_id = q.get("player_id")
-                                if target_id_norm and q_player_id and str(q_player_id).strip().lower() == target_id_norm:
-                                    has_match = True
-                                    break
-                                if target_name_norm and q_player_name and normalize_player_name(q_player_name) == target_name_norm:
-                                    has_match = True
-                                    break
-                            if not has_match:
-                                continue
-
-                        if "metadata" not in data:
-                            data["metadata"] = []
-                        if "source: local_cache" not in data["metadata"]:
-                            data["metadata"].append("source: local_cache")
-                        return data
-                except (json.JSONDecodeError, KeyError):
-                    continue
-        return None
+ 

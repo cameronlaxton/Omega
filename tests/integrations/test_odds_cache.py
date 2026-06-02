@@ -177,6 +177,33 @@ def test_negative_entry_180s_ttl(temp_db_path: Path):
     assert cache.get(key) is None
 
 
+def test_event_list_entry_300s_ttl(temp_db_path: Path):
+    cache = OddsCache(db_path=temp_db_path)
+    key = cache.compute_event_list_cache_key(
+        "NBA",
+        commence_time_from="2026-06-02T00:00:00Z",
+        commence_time_to="2026-06-03T00:00:00Z",
+    )
+    payload = {"status": "empty", "events": [], "metadata": []}
+
+    cache.set(key, "NBA", "events", payload, entry_type="event_list")
+
+    hit = cache.get(key)
+    assert hit is not None
+    assert hit["status"] == "empty"
+    assert "source: local_cache" in hit["metadata"]
+    assert "cache_kind: event_list" in hit["metadata"]
+
+    with sqlite3.connect(str(temp_db_path)) as conn:
+        conn.execute(
+            "UPDATE odds_cache SET inserted_at = ? WHERE cache_key = ?",
+            (time.time() - 301, key),
+        )
+        conn.commit()
+
+    assert cache.get(key) is None
+
+
 def test_success_vs_negative_ttl_differential(temp_db_path: Path):
     cache = OddsCache(db_path=temp_db_path)
     key_success = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
@@ -300,21 +327,4 @@ class TestPropCacheIdentity:
 
         # Retrieval using different name casing / spacing / accents Normalization
         key_original = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="Luka Dončić")
-        key_normalized = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="luka doncic  ")
-
-        assert key_original == key_normalized
-
-    def test_legacy_playerless_prop_entry_misses_for_player_specific_lookup(self, temp_db_path: Path):
-        cache = OddsCache(db_path=temp_db_path)
-
-        # Legacy entry has no player_name/id in its cache key, and no quotes with the player inside
-        key_legacy = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16")
-        payload_legacy = {
-            "status": "success",
-            "quotes": []  # empty/no player info
-        }
-        cache.set(key_legacy, "NBA", "pts", payload_legacy)
-
-        # Querying with a specific player should miss when using find_by_teams on the legacy record
-        res = cache.find_by_teams("NBA", "pts", "lakers", "celtics", player_name="LeBron James")
-        assert res is None
+        key_normalized = cache.compute_cache_key("NBA", "pts", "lakers"

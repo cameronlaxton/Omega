@@ -20,7 +20,7 @@ The deterministic Omega engine owns simulation, probability calibration, fair-pr
 - `omega_trace_attach_outcome`: attaches outcomes after initial trace persistence.
 - `omega_calibration_fit_preview`: previews calibration fitting without writing profiles or promoting candidates.
 - `omega_evidence_retrieve`: returns a no-live-fetch skipped response in this adapter.
-- `omega_resolve_odds`: resolves current Odds API markets into engine-ready input fields and provenance.
+- `omega_resolve_odds`: resolves current Odds API markets into engine-ready input fields and provenance. For terminal slate discovery before a specific matchup is known, use `omega-resolve-odds --list-events --league <LEAGUE>`; repeated identical event-list calls are locally cached for 5 minutes, and Odds API budget exhaustion is a hard-stop CLI error.
 
 Analyze tools require explicit `session_id` and `bankroll`. Callers must not rely on default bankroll values for formal recommendations.
 
@@ -52,12 +52,4 @@ For an MCP client that supports command-based local servers:
 {
   "mcpServers": {
     "omega": {
-      "command": "python",
-      "args": ["-m", "omega.mcp.server"],
-      "cwd": "C:\\repos\\Omega"
-    }
-  }
-}
-```
-
-The optional MCP SDK is loaded only by `build_server()`. Direct imports and unit tests for the domain tool functions do not require the optional dependency.
+      "command": "python"

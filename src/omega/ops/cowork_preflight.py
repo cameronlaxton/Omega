@@ -60,6 +60,46 @@ def check_import(module: str, install_hint: str) -> list[str]:
     return []
 
 
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _cowork_runtime_marker_present() -> bool:
+    return (
+        _truthy_env("COWORK_SANDBOX")
+        or _truthy_env("COWORK_LOCAL_WORKSPACE")
+        or bool(os.environ.get("OMEGA_LOCAL_WORKSPACE"))
+    )
+
+
+def _expected_local_workspace() -> Path:
+    configured = os.environ.get("OMEGA_LOCAL_WORKSPACE")
+    if configured:
+        return Path(configured)
+    return Path.home() / ".omega" / "workspace" / "Omega"
+
+
+def check_cowork_local_workspace(repo_root: Path) -> list[str]:
+    """Fail Cowork/sandbox runs that execute from the network-mounted checkout."""
+    if not _cowork_runtime_marker_present():
+        return []
+
+    expected = _expected_local_workspace()
+    try:
+        if repo_root.resolve() == expected.resolve():
+            return []
+    except OSError:
+        pass
+
+    return [
+        "Cowork local workspace violation: this runtime is marked as Cowork/sandbox "
+        f"but is executing from {repo_root.resolve()}, not the durable local workspace "
+        f"{expected}. Run tools/windows/cowork_bootstrap.ps1 on the Windows host, "
+        "Set-Location $env:OMEGA_LOCAL_WORKSPACE, then relaunch the Cowork CLI. "
+        "Do not emit formal Omega numeric outputs or write traces from the mounted checkout."
+    ]
+
+
 def _index_lock_backup_path(repo_root: Path) -> Path:
     git_dir = repo_root / ".git"
     candidate = git_dir / "index.lock.bak"
@@ -494,6 +534,10 @@ def run_checks(
     if repo_root is None:
         repo_root = Path(__file__).resolve().parents[3]
 
+    failures.extend(check_cowork_local_workspace(repo_root))
+    if failures:
+        return failures
+
     # Fail fast on git environment problems before any content equality checks.
     failures.extend(check_git_health(repo_root))
     if failures:
@@ -702,38 +746,4 @@ def main(argv: Sequence[str] | None = None) -> int:
     if failures:
         print("cowork_preflight_failed:")
         for failure in failures:
-            print(f"- {failure}")
-        print("- Do not emit formal Omega numeric outputs until preflight passes.")
-        return 1
-
-    # Banner: if any tracked files diverge from HEAD after all checks passed,
-    # the divergences are either non-critical core edits (warned above, not
-    # blocked) or test-tier edits.  Both are safe for engine execution â€”
-    # critical-file corruption and import failures were already blocked above.
-    # Emit cowork_preflight_core_ready so automated runs can distinguish this
-    # state from a hard failure.
-    tracked_files, git_failures = _tracked_python_files(repo_root)
-    if not git_failures:
-        diverged = _diverged_tracked_files(repo_root, tracked_files)
-        core_diverged, test_diverged = _split_tiers(diverged)
-        if core_diverged or test_diverged:
-            dirty_parts = []
-            if core_diverged:
-                dirty_parts.append(f"core_dirty={len(core_diverged)}")
-            if test_diverged:
-                dirty_parts.append(f"test_tier_diverged={len(test_diverged)}")
-            print(
-                "cowork_preflight_core_ready: python="
-                f"{_version_text(tuple(sys.version_info[:3]))} "
-                f"({'  '.join(dirty_parts)})"
-            )
-            return 0
-
-    print(f"cowork_preflight_ready: python={_version_text(tuple(sys.version_info[:3]))}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-# EOF: cowork_preflight_completed
-
+          

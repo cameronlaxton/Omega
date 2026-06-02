@@ -239,9 +239,21 @@ class OddsApiClient:
         data[key] = used + n
         self._write_budget(data)
 
-    def remaining_budget(self) -> int:
+    def current_usage(self) -> int:
         data = self._read_budget()
-        return max(0, self._monthly_budget - data.get(self._current_month_key(), 0))
+        return data.get(self._current_month_key(), 0)
+
+    def monthly_budget(self) -> int:
+        return self._monthly_budget
+
+    def budget_status(self) -> dict[str, int]:
+        return {
+            "current_usage": self.current_usage(),
+            "monthly_cap": self.monthly_budget(),
+        }
+
+    def remaining_budget(self) -> int:
+        return max(0, self._monthly_budget - self.current_usage())
 
     # ------------------------------------------------------------------
     # HTTP
@@ -281,6 +293,8 @@ class OddsApiClient:
         league: str,
         commence_time_from: str | None = None,
         commence_time_to: str | None = None,
+        *,
+        request_cost: int = 0,
     ) -> list[HistoricalEvent]:
         """Fetch current/live event metadata for resolving event IDs."""
         sport_key = _require_sport_key(league)
@@ -289,7 +303,7 @@ class OddsApiClient:
             params["commenceTimeFrom"] = commence_time_from
         if commence_time_to:
             params["commenceTimeTo"] = commence_time_to
-        payload = self._get_json(f"/sports/{sport_key}/events", params, request_cost=0)
+        payload = self._get_json(f"/sports/{sport_key}/events", params, request_cost=request_cost)
         return parse_events_metadata(payload)
 
     def fetch_scores(self, league: str, days_from: int = 3) -> list[ScoreEvent]:
@@ -685,14 +699,4 @@ def parse_historical_events(payload: Any) -> list[HistoricalEvent]:
     if not isinstance(data, list):
         return []
     events: list[HistoricalEvent] = []
-    for evt in data:
-        events.append(
-            HistoricalEvent(
-                event_id=str(evt.get("id", "")),
-                sport_key=evt.get("sport_key", ""),
-                commence_time=evt.get("commence_time", ""),
-                home_team=evt.get("home_team", ""),
-                away_team=evt.get("away_team", ""),
-            )
-        )
-    return events
+    

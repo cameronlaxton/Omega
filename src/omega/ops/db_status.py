@@ -26,15 +26,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from omega.trace.store import db_status, seed_runtime_db  # noqa: E402
+from omega.trace.store import TraceStore, db_status, seed_runtime_db  # noqa: E402
 
 
 def _render(status: dict) -> str:
@@ -68,49 +70,46 @@ def _render(status: dict) -> str:
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Read-only TraceStore DB doctor.")
-    parser.add_argument(
-        "--db",
-        default=None,
-        help="Requested DB path (default resolver: OMEGA_TRACE_DB or var/omega_traces.db)",
-    )
-    parser.add_argument("--json", action="store_true", help="Emit JSON instead of text")
-    parser.add_argument(
-        "--seed",
-        action="store_true",
-        help="MUTATING: copy a valid non-empty source DB into an absent runtime DB",
-    )
-    args = parser.parse_args(argv)
+def _path_under(path: Path, root: Path) -> bool:
+    try:
+        resolved_path = path.resolve()
+        resolved_root = root.resolve()
+    except OSError:
+        return False
+    return resolved_path == resolved_root or resolved_root in resolved_path.parents
 
-    status = db_status(args.db)
 
-    if args.seed:
-        # Seed only makes sense when the effective path is a redirected runtime DB.
-        source = status["repo_default_path"]
-        runtime = status["would_be_runtime_path"]
+def _workspace_identity(status: dict[str, Any]) -> str:
+    source = status["source"]
+    if source == "env_override":
+        return "Env Override"
+    if source == "auto_redirect_network_fs":
+        return "Runtime Redirect"
+
+    effective = Path(status["effective_path"])
+    active_workspace = os.environ.get("OMEGA_LOCAL_WORKSPACE")
+    if active_workspace:
+        active_db = Path(active_workspace) / "var" / "omega_traces.db"
         try:
-            result = seed_runtime_db(source=source, runtime=runtime)
-        except RuntimeError as exc:
-            print(f"SEED REFUSED: {exc}", file=sys.stderr)
-            return 1
-        print(f"SEEDED {result['runtime']} from {result['source']} ({result['trace_count']} traces)")
-        status = db_status(args.db)
+            return (
+                "Matches Active Workspace"
+                if effective.resolve() == active_db.resolve()
+                else "Different Workspace"
+            )
+        except OSError:
+            return "Unknown Workspace"
 
-    if args.json:
-        print(json.dumps(status, indent=2))
-    else:
-        print(_render(status))
-
-    # Non-zero only when an existing effective DB is actually corrupt.
-    if status["effective_exists"] and status["effective_integrity_ok"] is False:
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    default_path = Path(status["repo_default_path"])
+    try:
+        if effective.resolve() == default_path.resolve() or _path_under(effective, _REPO_ROOT):
+            return "Matches Active Workspace"
+    except OSError:
+        pass
+    return "Unknown Workspace"
 
 
-
-
+def _identity_meta(status: dict[str, Any]) -> dict[str, Any]:
+    path = str(Path(status["effective_path"]).resolve())
+    return {
+        "trace_store_db_path": path,
+        "trace_store_db_source": status["sourc

@@ -8,11 +8,13 @@ must never silently become believable-empty history.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from omega.ops import db_status as db_status_cli
 from omega.trace import store as store_mod
 from omega.trace.store import TraceStore, _raw_trace_count, db_status, seed_runtime_db
 
@@ -162,4 +164,3 @@ class TestDbStatus:
         st = db_status(None)
         assert st["divergence"] is not None
         assert st["divergence"]["source_trace_count"] == 5
-        assert st["divergence"]["runtime_trace_count"] == 2

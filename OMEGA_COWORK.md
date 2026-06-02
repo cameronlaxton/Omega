@@ -108,7 +108,11 @@ the first was restored), fix the new failure before running Pass 3.
   and `omega-db-status` (read-only) reports the repo/default path,
   the would-be runtime path, existence, integrity_check, trace counts,
   divergence, latest session IDs, and a recommended action â€” even when the
-  redirect guard would refuse to open.
+  redirect guard would refuse to open. For direct inspection, use
+  `omega-db-status --query-traces ...` or `omega-db-status --view-ledger ...`;
+  plaintext lookup output starts with `TraceStore DB Path: ... [label]`, and JSON
+  lookup output carries `trace_store_db_path`, `trace_store_db_source`, and
+  `workspace_identity`.
 - **Disk artifacts (FUSE/SQLite):** `.fuse_hidden*` files are harmless remnants
   of deleted-but-open files on the FUSE mount â€” ignore them (gitignored). Ad-hoc
   DB probing leaves `*.probe.db`, `tmp*.probe.db-journal`, `*.db-wal-test`; these
@@ -177,7 +181,9 @@ Set-Location $env:OMEGA_LOCAL_WORKSPACE
 remote (NOT the mount, to avoid pulling Pattern C corruption into the local
 copy) into `%USERPROFILE%\.omega\workspace\Omega` and configures a `backup`
 remote pointing at the bare repo on the CIFS share. On subsequent runs it
-fast-forwards `main` and verifies the `backup` remote.
+fast-forwards `main` and verifies the `backup` remote. Cowork/sandbox preflight
+fails closed when the runtime is marked as Cowork but is not executing from this
+local workspace.
 
 **Session close (Windows host PowerShell, AFTER the Cowork CLI exits):**
 
@@ -660,14 +666,4 @@ All paths are relative to the repo root.
 | `src/omega/ops/render_session_audits.py` | Renders `var/reports/run_audits/<session_id>.audit.md` from sidecar + ledger |
 | `omega/trace/audit_renderer.py` | Library entry point for the audit renderer |
 | `omega/trace/session_sidecar.py` | Sidecar contract + `append_audit_events` atomic writer |
-| `omega/trace/_atomic.py` | Atomic text-file write helper used by sidecar and renderer |
-| `var/reports/run_audits/` | Rendered session audit markdown (output of `render_audit`) |
-
-## 10. Human Judgment Required
-
-Surface these to the user instead of automating around them:
-
-- Calibration promotion with manual override.
-- Team/player alias table extension.
-- API key setup and rotation.
-- Stake-unit confirmation for recorded bets.
+| `omega/trace/_atomic.
