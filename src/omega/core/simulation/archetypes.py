@@ -610,6 +610,7 @@ LEAGUE_TO_ARCHETYPE: dict[str, str] = {
     "COPA_AMERICA": "soccer",
     "EURO": "soccer",
     "NATIONS_LEAGUE": "soccer",
+    "FIFA_FRIENDLY": "soccer",
     # Tennis
     "ATP": "tennis",
     "WTA": "tennis",

@@ -965,7 +965,24 @@ def _sim_soccer(
     modelled via a Dixon-Coles tau correction (see :func:`_dixon_coles_scores`);
     otherwise home and away goals are sampled independently.
     """
-    league_avg_gpg = config.get("avg_total", 2.5) / 2.0  # ~1.25
+    # Defensive clamp: if the config's avg_total is unreasonably high for soccer
+    # (e.g. falling through to the generic _DEFAULT_CONFIG with avg_total=100),
+    # the Poisson lambda shrinks to near-zero and the model hallucinates 0-0
+    # draws at 90%+ probability.  Clamp to the SOCCER archetype default.
+    _SOCCER_AVG_TOTAL_CEILING = 10.0
+    _SOCCER_ARCHETYPE_AVG_TOTAL = 2.5
+    config_avg_total = config.get("avg_total", _SOCCER_ARCHETYPE_AVG_TOTAL)
+    if config_avg_total > _SOCCER_AVG_TOTAL_CEILING:
+        import logging as _logging
+        _logging.getLogger("omega.core.simulation.engine").warning(
+            "Soccer league %s has avg_total=%.1f (>%.0f); clamping to archetype "
+            "default %.1f — check leagues.py for a missing config entry",
+            league, config_avg_total, _SOCCER_AVG_TOTAL_CEILING,
+            _SOCCER_ARCHETYPE_AVG_TOTAL,
+        )
+        config_avg_total = _SOCCER_ARCHETYPE_AVG_TOTAL
+
+    league_avg_gpg = config_avg_total / 2.0  # ~1.25
 
     home_off = home_ctx.get("off_rating", league_avg_gpg)
     home_def = home_ctx.get("def_rating", league_avg_gpg)
@@ -985,8 +1002,11 @@ def _sim_soccer(
     home_lambda += hca / 2.0
     away_lambda -= hca / 2.0
 
-    home_lambda = max(0.2, home_lambda)
-    away_lambda = max(0.2, away_lambda)
+    # Floor: Poisson(0.5) gives P(0)≈0.607; the old floor of 0.2 produced
+    # P(0)≈0.819, generating structurally unrealistic draw probabilities
+    # even in legitimate low-scoring matchups.
+    home_lambda = max(0.5, home_lambda)
+    away_lambda = max(0.5, away_lambda)
 
     use_dc = config.get("dixon_coles", _SOCCER_DIXON_COLES_DEFAULT)
     if use_dc and np is not None:
