@@ -691,11 +691,21 @@ def omega_record_flat_bet(
         if trace is None:
             return _error("omega_record_flat_bet", "trace_not_found", req.trace_id)
         ts = str(trace.get("timestamp") or "")
+        league = trace.get("league")
+        sport = None
+        if league:
+            try:
+                from omega.core.config.leagues import get_league_config
+
+                sport = get_league_config(str(league)).get("sport")
+            except Exception:  # noqa: BLE001 - sport is a slice nicety, never fatal
+                sport = None
         bet = LedgerBet(
             ledger_id=uuid.uuid4().hex[:12],
             trace_id=req.trace_id,
             bet_date=ts[:10] if len(ts) >= 10 else None,
-            league=trace.get("league"),
+            league=league,
+            sport=sport,
             matchup=trace.get("matchup") or "",
             market=req.market,
             bookmaker=req.bookmaker,

@@ -195,3 +195,82 @@ class TestLedgerCrud:
             assert len(store.query_ledger(provenance="backfill")) == 1
         finally:
             store.close()
+
+
+def _bet_with(provenance: BetProvenance, *, odds: float = -110,
+              bookmaker: str = "consensus", ledger_id: str = "led-x") -> LedgerBet:
+    bet = _ledger_bet()
+    bet.ledger_id = ledger_id
+    bet.provenance = provenance
+    bet.odds = odds
+    bet.bookmaker = bookmaker
+    return bet
+
+
+class TestProvenanceUpgrade:
+    """A user confirmation must take over the engine's auto-logged row for the
+    same selection (they share the idempotency key) so the CLV pipeline, which
+    reads provenance='user_confirmed', sees the real wager."""
+
+    def test_user_confirmed_upgrades_pending_engine_auto_in_place(self):
+        store = _tmp_store()
+        try:
+            _persist_trace(store)
+            store.record_ledger_bet(
+                _bet_with(BetProvenance.ENGINE_AUTO, odds=-110,
+                          bookmaker="consensus", ledger_id="auto-1")
+            )
+            # User confirms the same selection at a different price/book.
+            store.record_ledger_bet(
+                _bet_with(BetProvenance.USER_CONFIRMED, odds=-105,
+                          bookmaker="draftkings", ledger_id="user-1")
+            )
+            rows = store.get_ledger_bets("t-1")
+            assert len(rows) == 1  # still one row — upgraded in place
+            row = rows[0]
+            assert row["ledger_id"] == "auto-1"  # original row id is preserved
+            assert row["provenance"] == "user_confirmed"
+            assert row["odds"] == -105
+            assert row["bookmaker"] == "draftkings"
+            # And it is now visible to user_confirmed-only consumers.
+            assert len(store.query_ledger(provenance="user_confirmed")) == 1
+        finally:
+            store.close()
+
+    def test_engine_auto_does_not_downgrade_user_confirmed(self):
+        store = _tmp_store()
+        try:
+            _persist_trace(store)
+            store.record_ledger_bet(
+                _bet_with(BetProvenance.USER_CONFIRMED, odds=-105,
+                          bookmaker="draftkings", ledger_id="user-1")
+            )
+            store.record_ledger_bet(
+                _bet_with(BetProvenance.ENGINE_AUTO, odds=-110,
+                          bookmaker="consensus", ledger_id="auto-1")
+            )
+            row = store.get_ledger_bets("t-1")[0]
+            assert row["provenance"] == "user_confirmed"
+            assert row["odds"] == -105  # untouched
+            assert row["bookmaker"] == "draftkings"
+        finally:
+            store.close()
+
+    def test_graded_row_is_not_clobbered_by_upgrade(self):
+        store = _tmp_store()
+        try:
+            _persist_trace(store)
+            store.record_ledger_bet(
+                _bet_with(BetProvenance.ENGINE_AUTO, odds=-110, ledger_id="auto-1")
+            )
+            store.grade_ledger_bet("auto-1", LedgerStatus.WON, 47.73, 22.73)
+            # A late user confirmation must NOT silently invalidate a settled grade.
+            store.record_ledger_bet(
+                _bet_with(BetProvenance.USER_CONFIRMED, odds=-105, ledger_id="user-1")
+            )
+            row = store.get_ledger_bets("t-1")[0]
+            assert row["status"] == "won"
+            assert row["odds"] == -110  # guard held: settled row untouched
+            assert row["provenance"] == "engine_auto"
+        finally:
+            store.close()

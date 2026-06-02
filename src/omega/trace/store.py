@@ -1436,6 +1436,21 @@ class TraceStore:
         session_id is sourced from the linked trace so it stays consistent with
         traces.session_id without the caller plumbing it through.
 
+        Provenance upgrade: the unique key omits provenance, so the engine's
+        gated autolog (engine_auto) and a later user confirmation of the same
+        selection would otherwise collide. A `user_confirmed` write upgrades an
+        existing non-user_confirmed row in place — promoting provenance and
+        overwriting the wager fields with the user's actual price/book/stake —
+        so the CLV/closing-line pipeline (which reads provenance='user_confirmed')
+        sees the real wager. The upgrade is guarded to PENDING rows so an already
+        graded row's settled PnL is never silently invalidated. All other
+        conflicts (engine_auto/backfill onto an existing row, or a duplicate
+        user_confirmed) are no-ops, preserving the prior INSERT-OR-IGNORE
+        behavior.
+
+        Returns the ledger_id of the stored row (the pre-existing row's id on an
+        upgrade/no-op, not necessarily ``bet.ledger_id``).
+
         Raises:
             ValueError: if the referenced trace does not exist.
         """
@@ -1445,14 +1460,27 @@ class TraceStore:
         if row is None:
             raise ValueError(f"No trace found with trace_id={bet.trace_id!r}")
 
-        cur = self.conn.execute(
-            """INSERT OR IGNORE INTO bet_ledger
+        self.conn.execute(
+            """INSERT INTO bet_ledger
                (ledger_id, trace_id, bet_date, league, sport, matchup, market,
                 bookmaker, selection, selection_descriptor, line, odds,
                 stake_amount, payout_amount, net_pnl, bankroll_at_open, status,
                 provenance, decision_timestamp, graded_at, session_id)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                       (SELECT session_id FROM traces WHERE trace_id = ?))""",
+                       (SELECT session_id FROM traces WHERE trace_id = ?))
+               ON CONFLICT(trace_id, market, selection_descriptor) DO UPDATE SET
+                   provenance         = excluded.provenance,
+                   bookmaker          = excluded.bookmaker,
+                   selection          = excluded.selection,
+                   line               = excluded.line,
+                   odds               = excluded.odds,
+                   stake_amount       = excluded.stake_amount,
+                   bankroll_at_open   = excluded.bankroll_at_open,
+                   bet_date           = excluded.bet_date,
+                   decision_timestamp = excluded.decision_timestamp
+               WHERE excluded.provenance = 'user_confirmed'
+                 AND bet_ledger.provenance != 'user_confirmed'
+                 AND bet_ledger.status = 'pending'""",
             (
                 bet.ledger_id,
                 bet.trace_id,
@@ -1478,14 +1506,12 @@ class TraceStore:
             ),
         )
         self.conn.commit()
-        if not cur.rowcount:
-            logger.debug(
-                "bet_ledger row for (%s, %s, %s) already exists; insert ignored",
-                bet.trace_id,
-                bet.market,
-                bet.selection_descriptor,
-            )
-        return bet.ledger_id
+        stored = self.conn.execute(
+            "SELECT ledger_id FROM bet_ledger "
+            "WHERE trace_id = ? AND market = ? AND selection_descriptor = ?",
+            (bet.trace_id, bet.market, bet.selection_descriptor),
+        ).fetchone()
+        return stored["ledger_id"] if stored else bet.ledger_id
 
     def grade_ledger_bet(
         self,
