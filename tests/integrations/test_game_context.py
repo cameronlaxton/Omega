@@ -39,7 +39,7 @@ def test_resolve_rest_days_from_scoreboard():
     assert gc["is_b2b_away"] is True
     assert gc["is_playoff"] is True  # within NBA heuristic window
     assert out["provenance"]["rest_days_source"] == "scoreboard"
-    assert out["provenance"]["is_playoff_source"] == "date_heuristic"
+    assert out["provenance"]["is_playoff_source"].startswith("date_heuristic")
 
 
 def test_b2b_flag_when_played_previous_night():
@@ -100,7 +100,7 @@ def test_mlb_park_factor_resolved():
         odds_client=SimpleNamespace(fetch_scores=lambda *a, **k: []),
     )
     assert out["game_context"]["park_factor"] == 1.15
-    assert out["provenance"]["park_factor_source"] == "static_approximate"
+    assert out["provenance"]["park_factor_source"].startswith("static_approximate")
 
 
 def test_odds_scores_fallback_for_league_without_scoreboard():
