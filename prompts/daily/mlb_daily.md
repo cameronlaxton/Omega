@@ -312,8 +312,8 @@ Do not run ingest or audit rendering inside the live betting session.
 Run separately after session close:
 
 ```bash
-omega-run-action-plan var/inbox/action_plans/templates/daily_trace_intake.json
-omega-run-action-plan var/inbox/action_plans/templates/render_session_audits.json
+omega-run-action-plan fixtures/action_plans/daily_trace_intake.json
+omega-run-action-plan fixtures/action_plans/render_session_audits.json
 ```
 
 After games are final, run the outcome loop described in

@@ -25,6 +25,13 @@ Allowlist:
         args.leagues: list[str] (default ["nba", "mlb", "props"])
         args.since: str YYYY-MM-DD (optional)
         args.until: str YYYY-MM-DD (optional)
+    type=settle_bets
+        args.league: str (optional)
+        args.sport: str (optional)
+        args.provenance: "user_confirmed" | "engine_auto" | "backfill" | "all"
+                         (default "user_confirmed")
+        args.since: str YYYY-MM-DD (optional)
+        args.until: str YYYY-MM-DD (optional)
     type=ingest_traces
         args.verbose: bool (default false)
     type=fetch_closing_lines
@@ -207,6 +214,29 @@ def _validate_ingest_traces(args: dict[str, Any]) -> list[str]:
     return cmd
 
 
+def _validate_settle_bets(args: dict[str, Any]) -> list[str]:
+    _reject_unknown_args("settle_bets", args, {"league", "sport", "provenance", "since", "until"})
+    league = _optional_nonempty_str("settle_bets", args, "league")
+    sport = _optional_nonempty_str("settle_bets", args, "sport")
+    provenance = args.get("provenance", "user_confirmed")
+    if provenance not in ("user_confirmed", "engine_auto", "backfill", "all"):
+        raise ValueError(f"settle_bets.args.provenance invalid: {provenance!r}")
+    since = _optional_date("settle_bets", args, "since")
+    until = _optional_date("settle_bets", args, "until")
+
+    cmd = _module_cmd("settle_bets", "--provenance", provenance)
+    if league:
+        cmd += ["--league", league.upper()]
+    if sport:
+        cmd += ["--sport", sport]
+    if since:
+        cmd += ["--start", since]
+    if until:
+        cmd += ["--end", until]
+    cmd.append("--apply")
+    return cmd
+
+
 def _validate_fetch_closing_lines(args: dict[str, Any]) -> list[str]:
     _reject_unknown_args("fetch_closing_lines", args, {"league", "verbose"})
     league = _optional_nonempty_str("fetch_closing_lines", args, "league")
@@ -310,6 +340,7 @@ _DISPATCH: dict[str, Any] = {
     "promote_profile": _validate_promote_profile,
     "report_calibration": _validate_report_calibration,
     "fetch_outcomes": _validate_fetch_outcomes,
+    "settle_bets": _validate_settle_bets,
     "ingest_traces": _validate_ingest_traces,
     "fetch_closing_lines": _validate_fetch_closing_lines,
     "score_evidence_signals": _validate_score_evidence_signals,
@@ -423,7 +454,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

@@ -564,9 +564,9 @@ At session start, run calibration health when enough data exists:
 omega-report-calibration --league NBA --window-days 30
 ```
 
-Action plans live at `var/inbox/action_plans/<session_id>.json`. Repo-local templates live under `var/inbox/action_plans/templates/`; see `docs/phase6/automation_playbook.md` for the trace intake, confirmed-bet closing-line, outcome/evidence, weekly shadow-review, and no-op loops.
+Action plans live at `var/inbox/action_plans/<session_id>.json`. Repo-local templates live under `fixtures/action_plans/`; see `docs/phase6/automation_playbook.md` for the trace intake, confirmed-bet closing-line, outcome/evidence, weekly shadow-review, and no-op loops.
 
-Allowed action types are command-gated by `src/omega/ops/run_action_plan.py`: `ingest_traces`, `fetch_closing_lines`, `fetch_outcomes`, `score_evidence_signals`, `report_calibration`, `fit_calibration`, `fit_adjustment_policy`, and `promote_profile`. `fit_adjustment_policy` is shadow-only in action plans; do not schedule `promote_adjustment_policy --go-live`.
+Allowed action types are command-gated by `src/omega/ops/run_action_plan.py`: `ingest_traces`, `fetch_closing_lines`, `fetch_outcomes`, `settle_bets`, `score_evidence_signals`, `report_calibration`, `fit_calibration`, `fit_adjustment_policy`, and `promote_profile`. `fit_adjustment_policy` is shadow-only in action plans; do not schedule `promote_adjustment_policy --go-live`.
 
 Dry-run before executing:
 
@@ -645,7 +645,7 @@ All paths are relative to the repo root.
 | `var/inbox/traces/` | Trace export files -> `ingest_traces.py` |
 | `var/inbox/sessions/` | Session sidecars |
 | `var/inbox/action_plans/` | Action plan JSON -> `run_action_plan.py` |
-| `var/inbox/action_plans/templates/` | Repo-local action-plan templates for scheduler/manual loops |
+| `fixtures/action_plans/` | Tracked action-plan templates for scheduler/manual loops |
 | `src/omega/ops/ingest_traces.py` | Drains trace exports into trace and bet-record tables |
 | `src/omega/ops/run_action_plan.py` | Validates and dispatches action plans |
 | `src/omega/ops/report_calibration.py` | Calibration health and session summary report |
@@ -671,5 +671,3 @@ Surface these to the user instead of automating around them:
 - Team/player alias table extension.
 - API key setup and rotation.
 - Stake-unit confirmation for recorded bets.
-
-

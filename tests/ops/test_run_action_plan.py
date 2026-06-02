@@ -46,6 +46,10 @@ def test_new_deterministic_actions_validate_to_expected_commands():
                 "type": "fit_calibration",
                 "args": {"league": "nba", "plane": "prop", "method": "both"},
             },
+            {
+                "type": "settle_bets",
+                "args": {"league": "nba", "provenance": "user_confirmed"},
+            },
         ],
     }
 
@@ -63,6 +67,14 @@ def test_new_deterministic_actions_validate_to_expected_commands():
     assert _script_name(cmds["fit_calibration"]) == "omega.ops.fit_calibration"
     assert "--plane" in cmds["fit_calibration"]
     assert "prop" in cmds["fit_calibration"]
+    assert _script_name(cmds["settle_bets"]) == "omega.ops.settle_bets"
+    assert cmds["settle_bets"][-5:] == [
+        "--provenance",
+        "user_confirmed",
+        "--league",
+        "NBA",
+        "--apply",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -75,6 +87,8 @@ def test_new_deterministic_actions_validate_to_expected_commands():
         {"type": "ingest_traces", "args": {"verbose": "yes"}},
         {"type": "fetch_closing_lines", "args": {"league": "KBO"}},
         {"type": "fit_calibration", "args": {"league": "NBA", "plane": "all"}},
+        {"type": "settle_bets", "args": {"provenance": "phantom"}},
+        {"type": "settle_bets", "args": {"apply": True}},
     ],
 )
 def test_action_plan_validation_rejects_unsafe_or_invalid_args(action: dict):
@@ -83,10 +97,9 @@ def test_action_plan_validation_rejects_unsafe_or_invalid_args(action: dict):
 
 
 def test_action_plan_templates_dry_run_and_do_not_go_live():
-    template_dir = _REPO_ROOT / "inbox" / "action_plans" / "templates"
+    template_dir = _REPO_ROOT / "fixtures" / "action_plans"
     templates = sorted(template_dir.glob("*.json"))
-    if not templates:
-        pytest.skip("var/inbox/action_plans/templates is runtime state and may be absent")
+    assert templates, "fixtures/action_plans must contain tracked action-plan templates"
 
     for template in templates:
         payload = json.loads(template.read_text(encoding="utf-8"))
@@ -110,4 +123,3 @@ def test_action_plan_templates_dry_run_and_do_not_go_live():
             check=False,
         )
         assert result.returncode == 0, result.stderr
-

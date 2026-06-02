@@ -1,0 +1,32 @@
+{
+  "session_id": "template-daily-outcome-evidence-loop",
+  "actions": [
+    {
+      "type": "ingest_traces",
+      "args": {
+        "verbose": true
+      }
+    },
+    {
+      "type": "fetch_outcomes",
+      "args": {
+        "leagues": ["nba", "wnba", "mlb", "props"]
+      }
+    },
+    {
+      "type": "settle_bets",
+      "args": {}
+    },
+    {
+      "type": "score_evidence_signals",
+      "args": {}
+    },
+    {
+      "type": "report_calibration",
+      "args": {
+        "league": "NBA",
+        "window_days": 30
+      }
+    }
+  ]
+}

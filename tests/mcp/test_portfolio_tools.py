@@ -102,12 +102,12 @@ def test_portfolio_summary_reflects_pending_then_graded(db_path):
     assert s["current_bankroll"] == 1000.0
     assert s["net_pnl"] == 0.0
 
-    # Settle the bet: attach a home win + regrade the pending ledger row.
-    from omega.ops.backfill_bets import BackfillSummary, regrade_pending
+    # Settle the bet: attach a home win + settle the pending ledger row.
+    from omega.trace.ledger_settlement import settle_pending_ledger
 
     store = TraceStore(db_path=db_path)
     store.attach_outcome(trace_id="g1", home_score=110, away_score=104)
-    regrade_pending(store, apply=True, summary=BackfillSummary())
+    settle_pending_ledger(store, apply=True)
     store.close()
 
     graded = omega_get_portfolio_summary(db_path=db_path)["summary"]

@@ -12,14 +12,15 @@ Run this after all games for the day are final. It attaches ESPN final scores an
 ## Run the outcome loop
 
 ```bash
-omega-run-action-plan var/inbox/action_plans/templates/daily_outcome_evidence_loop.json
+omega-run-action-plan fixtures/action_plans/daily_outcome_evidence_loop.json
 ```
 
-This dispatches four steps in sequence:
+This dispatches five steps in sequence:
 1. `omega-ingest-traces` — drains `var/inbox/traces/*.json` into the DB so outcomes see the latest exports
 2. `omega-fetch-outcomes` (NBA + MLB + props) — attaches final scores and box-score stats
-3. `omega-score-evidence-signals` — retrospectively scores signal predictiveness
-4. `omega-report-calibration --league NBA --window-days 30` — writes `var/reports/latest.md`
+3. `omega-settle` - settles pending user-confirmed ledger rows with attached outcomes
+4. `omega-score-evidence-signals` - retrospectively scores signal predictiveness
+5. `omega-report-calibration --league NBA --window-days 30` - writes `var/reports/latest.md`
 
 ---
 
@@ -30,6 +31,7 @@ This dispatches four steps in sequence:
 [fetch_outcomes] NBA: M outcomes attached, K unmatched
 [fetch_outcomes] MLB: M outcomes attached, K unmatched
 [fetch_outcomes] props: M outcomes attached, K unmatched
+[omega-settle] settled S pending ledger rows
 [omega-score-evidence-signals] scored N signal instances
 [omega-report-calibration] wrote var/reports/latest.md
 ```
@@ -43,7 +45,7 @@ This dispatches four steps in sequence:
 ## Dry run first (optional)
 
 ```bash
-omega-run-action-plan var/inbox/action_plans/templates/daily_outcome_evidence_loop.json --dry-run
+omega-run-action-plan fixtures/action_plans/daily_outcome_evidence_loop.json --dry-run
 ```
 
 Shows what would be dispatched without writing to the DB.

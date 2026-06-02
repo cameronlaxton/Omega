@@ -50,8 +50,8 @@ Run the Omega {league} daily analysis session for {slate_date}.
 After the session is closed, the operator (or scheduler) runs:
 
 ```
-omega-run-action-plan var/inbox/action_plans/templates/daily_trace_intake.json
-omega-run-action-plan var/inbox/action_plans/templates/render_session_audits.json
+omega-run-action-plan fixtures/action_plans/daily_trace_intake.json
+omega-run-action-plan fixtures/action_plans/render_session_audits.json
 ```
 
 The rendered audit markdown lands at `var/reports/run_audits/<session_id>.audit.md`.

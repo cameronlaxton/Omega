@@ -10,7 +10,7 @@ recommendations, compute protected values, or promote adjustment policies live.
 2. Export the full trace block to `var/inbox/traces/<trace_id>.json`.
 3. If the user confirms they placed a wager, attach the real `bet_record` to
    that same trace export. A bet record is user-confirmed metadata only.
-4. Run trace intake with `var/inbox/action_plans/templates/daily_trace_intake.json`.
+4. Run trace intake with `fixtures/action_plans/daily_trace_intake.json`.
 5. Near close, run `bet_closing_line_capture.json` to capture closing lines for
    pending confirmed `bet_records`.
 6. After games finish, run `daily_outcome_evidence_loop.json` to attach outcomes,
@@ -24,8 +24,8 @@ recommendations, compute protected values, or promote adjustment policies live.
   missing identity warnings, empty evidence warnings, and bet-record counts.
 - `bet_closing_line_capture`: runs `omega-fetch-closing-lines` for pending
   confirmed bet records. This is not a bet discovery or recommendation action.
-- `daily_outcome_evidence_loop`: runs outcome attachment, evidence scoring, and
-  calibration reporting against canonical trace data.
+- `daily_outcome_evidence_loop`: runs outcome attachment, ledger settlement,
+  evidence scoring, and calibration reporting against canonical trace data.
 - `weekly_shadow_review`: scores evidence, reports calibration health, and fits
   a shadow-only adjustment-policy candidate. It does not promote live behavior.
 - `empty_slate`: validates the scheduler path on days with no work.
@@ -33,8 +33,8 @@ recommendations, compute protected values, or promote adjustment policies live.
 Run every template through the dispatcher before executing it:
 
 ```bash
-omega-run-action-plan var/inbox/action_plans/templates/daily_trace_intake.json --dry-run
-omega-run-action-plan var/inbox/action_plans/templates/daily_trace_intake.json
+omega-run-action-plan fixtures/action_plans/daily_trace_intake.json --dry-run
+omega-run-action-plan fixtures/action_plans/daily_trace_intake.json
 ```
 
 ## Expected Summary Counts
@@ -45,8 +45,9 @@ Operators should record or review these counts after each loop:
   warnings, missing identity warnings, bet records recorded.
 - Bet follow-up: pending bet records found, closing lines attached, records
   skipped, missing API key or budget failures.
-- Outcomes: game outcomes attached, prop outcomes attached, unmatched traces,
-  skipped traces, unresolved team/player aliases.
+- Outcomes and settlement: game outcomes attached, prop outcomes attached,
+  ledger rows settled, unmatched traces, skipped traces, unresolved team/player
+  aliases.
 - Evidence scoring: graded traces loaded, evidence-bearing traces, scoreable
   signals, rows written or dry-run rows computed.
 - Candidate fitting: league, mode, min samples, signal types fitted, candidate

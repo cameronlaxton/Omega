@@ -1,0 +1,11 @@
+{
+  "session_id": "template-render-session-audits",
+  "actions": [
+    {
+      "type": "render_audit",
+      "args": {
+        "all_open": true
+      }
+    }
+  ]
+}

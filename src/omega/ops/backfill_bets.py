@@ -42,10 +42,7 @@ if str(_SRC_ROOT) not in sys.path:
 
 from omega.trace.bet_settlement import (  # noqa: E402
     ExtractResult,
-    compute_pnl,
     extract_recommended_bet,
-    settle_game_bet,
-    settle_prop_bet,
 )
 from omega.trace.ledger_bet import (  # noqa: E402
     DEFAULT_BANKROLL,
@@ -54,11 +51,14 @@ from omega.trace.ledger_bet import (  # noqa: E402
     LedgerBet,
     LedgerStatus,
 )
+from omega.trace.ledger_settlement import (  # noqa: E402
+    grade_ledger_bet,
+    grade_ledger_fields,
+    settle_pending_ledger,
+)
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("backfill_bets")
-
-_GRADEABLE_GAME_SIDES = {"home", "away", "draw", "over", "under"}
 
 
 @dataclass
@@ -120,47 +120,19 @@ def _grade_fields(
     stake: float,
 ) -> tuple[LedgerStatus, float | None, float | None] | None:
     """Grade a bet against an attached outcome. None => leave pending."""
-    if market.startswith("player_prop:"):
-        row = store.conn.execute(
-            "SELECT side, result FROM prop_outcomes WHERE trace_id = ? "
-            "ORDER BY attached_at LIMIT 1",
-            (trace_id,),
-        ).fetchone()
-        if row is None:
-            return None
-        rec_side = (
-            "over" if "_over" in selection_descriptor
-            else "under" if "_under" in selection_descriptor else ""
-        )
-        if not rec_side:
-            return None
-        status = settle_prop_bet(rec_side, row["result"], row["side"])
-    else:
-        row = store.conn.execute(
-            "SELECT home_score, away_score FROM outcomes WHERE trace_id = ? "
-            "ORDER BY attached_at LIMIT 1",
-            (trace_id,),
-        ).fetchone()
-        if row is None:
-            return None
-        side = selection_descriptor.split("_", 1)[0]
-        if side not in _GRADEABLE_GAME_SIDES:
-            return None  # e.g. best_bet fallback with no structured side
-        status = settle_game_bet(market, side, line, row["home_score"], row["away_score"])
-    payout, net = compute_pnl(status, odds, stake)
-    return status, payout, net
+    return grade_ledger_fields(
+        store,
+        trace_id=trace_id,
+        market=market,
+        selection_descriptor=selection_descriptor,
+        line=line,
+        odds=odds,
+        stake=stake,
+    )
 
 
 def _grade(store: TraceStore, bet: LedgerBet) -> tuple[LedgerStatus, float | None, float | None] | None:
-    return _grade_fields(
-        store,
-        trace_id=bet.trace_id,
-        market=bet.market,
-        selection_descriptor=bet.selection_descriptor,
-        line=bet.line,
-        odds=bet.odds,
-        stake=bet.stake_amount,
-    )
+    return grade_ledger_bet(store, bet)
 
 
 def regrade_pending(store: TraceStore, *, apply: bool, summary: BackfillSummary) -> None:
@@ -170,26 +142,10 @@ def regrade_pending(store: TraceStore, *, apply: bool, summary: BackfillSummary)
     (pending), fetch outcomes, then re-run — these rows get settled in place.
     Idempotent: a row that stays ungradeable is left pending.
     """
-    pending = store.query_ledger(status="pending", limit=100000)
-    for row in pending:
-        graded = _grade_fields(
-            store,
-            trace_id=row["trace_id"],
-            market=row["market"],
-            selection_descriptor=row["selection_descriptor"],
-            line=row["line"],
-            odds=row["odds"],
-            stake=row["stake_amount"],
-        )
-        if graded is None:
-            continue
-        status, payout, net = graded
-        summary.regraded[status.value] += 1
-        if net is not None:
-            summary.total_staked += row["stake_amount"]
-            summary.total_net += net
-        if apply:
-            store.grade_ledger_bet(row["ledger_id"], status, payout, net)
+    settled = settle_pending_ledger(store, apply=apply, provenance=None)
+    summary.regraded.update(settled.settled)
+    summary.total_staked += settled.total_staked
+    summary.total_net += settled.total_net
 
 
 def run_backfill(

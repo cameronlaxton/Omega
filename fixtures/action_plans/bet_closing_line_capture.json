@@ -1,0 +1,11 @@
+{
+  "session_id": "template-bet-closing-line-capture",
+  "actions": [
+    {
+      "type": "fetch_closing_lines",
+      "args": {
+        "verbose": true
+      }
+    }
+  ]
+}
