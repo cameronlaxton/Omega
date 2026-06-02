@@ -216,17 +216,18 @@ def _pending_bets_needing_close(
 ) -> list[dict]:
     """Return rows joining bet_records, traces, closing_lines â€” only pending bets
     with no closing-line attached yet. Optionally filter to a single league."""
-    sql = """SELECT b.bet_id, b.trace_id, b.book, b.market, b.selection,
-                  b.selection_descriptor, b.line_taken, b.odds_taken,
-                  b.decision_timestamp, b.status,
+    sql = """SELECT b.ledger_id AS bet_id, b.trace_id, b.bookmaker AS book, b.market,
+                  b.selection, b.selection_descriptor, b.line AS line_taken,
+                  b.odds AS odds_taken, b.decision_timestamp, b.status,
                   t.league, t.full_trace
-           FROM bet_records b
+           FROM bet_ledger b
            JOIN traces t ON t.trace_id = b.trace_id
            LEFT JOIN closing_lines c
              ON c.trace_id = b.trace_id
             AND c.market = b.market
             AND c.selection_descriptor = b.selection_descriptor
            WHERE b.status = 'pending'
+             AND b.provenance = 'user_confirmed'
              AND c.closing_id IS NULL"""
     params: tuple = ()
     if league_filter:

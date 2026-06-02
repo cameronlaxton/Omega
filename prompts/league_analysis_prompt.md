@@ -29,7 +29,7 @@ Run the Omega {league} daily analysis session for {slate_date}.
    - Express material evidence as typed `EvidenceSignal` objects on the analyze request — never as free text inside protected fields.
    - Cite each source. Record missing inputs as `assumptions`/`bugs` on the relevant audit event.
 
-4. **Run engine.** Call analyze for each eligible game and selected prop candidate. Reuse the canonical analyze output verbatim — no rewriting of numeric fields.
+4. **Run engine.** Call analyze for each eligible game and selected prop candidate. Ensure that both `home_context` and `away_context` are fully populated with their required team keys (e.g. `off_rating`, `def_rating`, `pace` for basketball/NBA/WNBA; `off_rating`, `def_rating` for MLB) to guarantee `context_source="provided"` and satisfy the trace calibration eligibility gate. Reuse the canonical analyze output verbatim — no rewriting of numeric fields.
 
 5. **Export traces.** Write `{"trace": <full analyze return>, "bet_record": null}` to `var/inbox/traces/<trace_id>.json`. Nest `reasoning_inputs`, `reasoning_narrative`, `reasoning_downgrade_rationale`, and `trace_quality` **inside** the inner `trace` block. (Top-level siblings still work via ingest's compatibility merge but are deprecated.)
 

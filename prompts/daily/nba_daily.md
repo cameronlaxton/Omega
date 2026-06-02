@@ -96,6 +96,13 @@ omega-resolve-odds --kind prop --league NBA --player "Player Name" --prop-type p
 Default book is BetMGM unless the user asks for broader line shopping. Append
 `data_provenance` audit events for sources used. Never expose API keys.
 
+The source book is recorded on every persisted bet (`bet_ledger.bookmaker`).
+When you line-shop (`--line-shopping` / `--all-books`), the resolver payload
+includes a `best_prices` block — surface it as the advisory "Best available"
+line on the Bet Card per
+[`prompts/reference/output_modes.md`](../reference/output_modes.md#book-provenance--line-shopping-in-the-bet-card).
+It is advisory only: never recompute edge/EV/Kelly against a shopped price.
+
 If a prop line is unavailable from the typed resolver or a direct sportsbook
 board, keep it research-only. Do not pass guessed or milestone-derived lines
 to `analyze()`.
@@ -132,6 +139,8 @@ away_context={"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0}
 
 Never pass raw FG%, opponent FG%, eFG%, or other fractional proxies as
 `off_rating` or `def_rating`.
+
+Both `home_context` and `away_context` must contain all required team context keys (e.g., `off_rating`, `def_rating`, `pace` for NBA) to guarantee `context_source="provided"` and satisfy the calibration eligibility gate.
 
 `game_context` is mandatory for every NBA game and prop trace:
 

@@ -56,36 +56,40 @@ def _make_bet(trace_id: str, descriptor: str) -> BetRecord:
     )
 
 
-class TestV7SchemaColumn:
-    def test_session_id_column_exists(self):
+class TestSchemaVersionAndLedger:
+    def test_current_version_is_fourteen(self):
         store = TraceStore(db_path=_tmp_db_path())
-        cols = {row[1] for row in store.conn.execute("PRAGMA table_info(bet_records)").fetchall()}
-        assert "session_id" in cols
+        assert CURRENT_VERSION == 14
+        assert store.schema_version() == 14
         store.close()
 
-    def test_session_id_index_exists(self):
+    def test_bet_records_table_dropped_at_v14(self):
         store = TraceStore(db_path=_tmp_db_path())
-        idx = store.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_bet_records_session_id'"
+        tbl = store.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='bet_records'"
         ).fetchone()
-        assert idx is not None
+        assert tbl is None  # consolidated into bet_ledger
         store.close()
 
-    def test_current_version_is_twelve(self):
+    def test_bet_ledger_has_session_id_column(self):
         store = TraceStore(db_path=_tmp_db_path())
-        assert CURRENT_VERSION == 12
-        assert store.schema_version() == 12
+        cols = {row[1] for row in store.conn.execute("PRAGMA table_info(bet_ledger)").fetchall()}
+        assert "session_id" in cols
         store.close()
 
 
 class TestRecordBetPopulatesSessionId:
+    """record_bet() now writes a user_confirmed row into bet_ledger; session_id
+    is still sourced from the linked trace."""
+
     def test_session_id_pulled_from_trace(self):
         store = TraceStore(db_path=_tmp_db_path())
         _persist_trace(store, "t-sess-1", session_id="sess-20260517-abcd")
         store.record_bet(_make_bet("t-sess-1", "tatum_over_27.5_pts"))
 
         row = store.conn.execute(
-            "SELECT session_id FROM bet_records WHERE trace_id = 't-sess-1'"
+            "SELECT session_id FROM bet_ledger WHERE trace_id = 't-sess-1' "
+            "AND provenance = 'user_confirmed'"
         ).fetchone()
         assert row["session_id"] == "sess-20260517-abcd"
         store.close()
@@ -96,53 +100,10 @@ class TestRecordBetPopulatesSessionId:
         store.record_bet(_make_bet("t-null-sess", "x_over_1.5"))
 
         row = store.conn.execute(
-            "SELECT session_id FROM bet_records WHERE trace_id = 't-null-sess'"
+            "SELECT session_id FROM bet_ledger WHERE trace_id = 't-null-sess' "
+            "AND provenance = 'user_confirmed'"
         ).fetchone()
         assert row["session_id"] is None
-        store.close()
-
-
-class TestBackfill:
-    def test_backfill_populates_existing_rows(self):
-        # Build a V6-shape DB by hand: bet_records without session_id column,
-        # then run the V7 migration directly and check that rows acquire it.
-        db_path = _tmp_db_path()
-        # First call creates V7 schema; tear it down to simulate pre-V7 state.
-        store = TraceStore(db_path=db_path)
-        _persist_trace(store, "t-back-1", session_id="sess-20260515-zzzz")
-
-        # Insert a bet directly bypassing record_bet() to simulate a row inserted
-        # by old code before V7 wired session_id into INSERT.
-        store.conn.execute("UPDATE bet_records SET session_id = NULL")
-        store.conn.execute(
-            """INSERT INTO bet_records
-               (bet_id, trace_id, book, market, selection, selection_descriptor,
-                line_taken, odds_taken, stake_units, decision_timestamp, status,
-                session_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)""",
-            (
-                "bet-backfill-1",
-                "t-back-1",
-                "DraftKings",
-                "player_prop:pts",
-                "Test",
-                "test_over_1.5",
-                1.5,
-                -110,
-                1.0,
-                "2026-05-15T15:00:00Z",
-                "pending",
-            ),
-        )
-        store.conn.commit()
-
-        deleted = apply_v7_migration(store.conn)
-        assert deleted >= 0  # no bad outcomes seeded
-
-        row = store.conn.execute(
-            "SELECT session_id FROM bet_records WHERE bet_id = 'bet-backfill-1'"
-        ).fetchone()
-        assert row["session_id"] == "sess-20260515-zzzz"
         store.close()
 
 
@@ -197,12 +158,14 @@ class TestIdempotency:
         _persist_trace(store, "t-idem", session_id="sess-20260517-xxxx")
         store.record_bet(_make_bet("t-idem", "x_over_1.5"))
 
-        # Running V7 again should not error and should not double-count
+        # Running V7 again should not error (bet_records is gone; only the
+        # BUG-3 outcome cleanup runs) and should not double-count.
         for _ in range(3):
             apply_v7_migration(store.conn)
 
         row = store.conn.execute(
-            "SELECT session_id FROM bet_records WHERE trace_id = 't-idem'"
+            "SELECT session_id FROM bet_ledger WHERE trace_id = 't-idem' "
+            "AND provenance = 'user_confirmed'"
         ).fetchone()
         assert row["session_id"] == "sess-20260517-xxxx"
 

@@ -27,7 +27,7 @@ _EXPECTED_TABLES = {
     "traces",
     "outcomes",
     "schema_versions",
-    "bet_records",
+    "bet_ledger",  # bet_records was consolidated into this at V14
     "closing_lines",
     "market_snapshots",
     "prop_outcomes",
@@ -35,8 +35,12 @@ _EXPECTED_TABLES = {
     "signal_performance",
     "simulation_distributions",
     "early_market_snapshots",
+    "trace_qa_verdicts",
 }
-_EXPECTED_VIEWS = {"v_distribution_outcomes"}
+_EXPECTED_VIEWS = {"v_distribution_outcomes", "v_bet_ledger_dashboard"}
+
+# V14 consolidation removed this table; assert it stays gone on a fresh DB.
+_REMOVED_TABLES = {"bet_records"}
 
 
 def _tmp_db() -> str:
@@ -71,6 +75,8 @@ class TestMigrationChain:
         tables = _objects(store, "table")
         missing = _EXPECTED_TABLES - tables
         assert not missing, f"missing tables: {missing}"
+        leftover = _REMOVED_TABLES & tables
+        assert not leftover, f"tables that should be dropped: {leftover}"
         store.close()
 
     def test_distribution_outcomes_view_created(self):

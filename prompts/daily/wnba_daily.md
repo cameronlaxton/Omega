@@ -95,6 +95,14 @@ WNBA prop rule:
 
 Never infer a standard O/U line from a milestone threshold.
 
+Default book is BetMGM unless the user asks for broader line shopping. The
+source book is recorded on every persisted bet (`bet_ledger.bookmaker`). When
+you line-shop (`--line-shopping` / `--all-books`), the resolver payload includes
+a `best_prices` block — surface it as the advisory "Best available" line on the
+Bet Card per
+[`prompts/reference/output_modes.md`](../reference/output_modes.md#book-provenance--line-shopping-in-the-bet-card).
+It is advisory only: never recompute edge/EV/Kelly against a shopped price.
+
 ---
 
 ## Step 4 - League Context And Injury Translation
@@ -126,6 +134,8 @@ away_context={"off_rating": 108.0, "def_rating": 101.0, "pace": 82.0}
 
 Never pass raw FG%, opponent FG%, eFG%, or other fractional proxies as
 `off_rating` or `def_rating`.
+
+Both `home_context` and `away_context` must contain all required team context keys (e.g., `off_rating`, `def_rating`, `pace` for WNBA) to guarantee `context_source="provided"` and satisfy the calibration eligibility gate.
 
 `game_context` is mandatory for every WNBA game and prop trace:
 

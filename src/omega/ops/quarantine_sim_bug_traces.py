@@ -19,7 +19,7 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-_DEFAULT_DB = _REPO_ROOT / "var" / "var/omega_traces.db"
+_DEFAULT_DB = _REPO_ROOT / "var" / "omega_traces.db"
 _REASON = "sim_def_rating_inverted_pre_20260525"
 UTC = timezone.utc
 

@@ -98,6 +98,13 @@ omega-resolve-odds --kind prop --league MLB --player "Player Name" --prop-type s
 Default book is BetMGM unless the user asks for broader line shopping. Append
 `data_provenance` events for sources used. Never expose API keys.
 
+The source book is recorded on every persisted bet (`bet_ledger.bookmaker`).
+When you line-shop (`--line-shopping` / `--all-books`), the resolver payload
+includes a `best_prices` block — surface it as the advisory "Best available"
+line on the Bet Card per
+[`prompts/reference/output_modes.md`](../reference/output_modes.md#book-provenance--line-shopping-in-the-bet-card).
+It is advisory only: never recompute edge/EV/Kelly against a shopped price.
+
 If a prop line is unavailable from the typed resolver or a direct sportsbook
 board, keep it research-only. Do not pass guessed or narrative-only lines to
 `analyze()`.
@@ -141,6 +148,8 @@ game_context={
 Do not feed basketball-style ratings, raw batting average, or raw ERA into
 `off_rating`/`def_rating`. For MLB those fields are runs scored/allowed per
 game.
+
+Both `home_context` and `away_context` must contain all required team context keys (e.g., `off_rating`, `def_rating` for MLB) to guarantee `context_source="provided"` and satisfy the calibration eligibility gate.
 
 ---
 

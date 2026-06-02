@@ -16,6 +16,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
+from omega.core.betting.odds import american_to_decimal
 from omega.integrations._guards import assert_not_replay_mode
 from omega.integrations.odds_api import (
     DEFAULT_BOOKMAKER,
@@ -351,6 +352,63 @@ def _select_prop_input(
     return {}
 
 
+def best_price_quotes(quotes: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Across all books, return the single best-priced quote per selection.
+
+    Groups quotes by (market_type, normalized selection, line) and keeps, for
+    each group, the quote whose price pays the bettor the most — i.e. the
+    highest decimal payout. `american_to_decimal` is monotonic in the bettor's
+    favor, so comparing decimals ranks +150 above +120 and -110 above -130
+    correctly across the sign boundary.
+
+    Each returned row keeps its originating `bookmaker`, so a surfaced best
+    price is always attributable to one real, placeable book. This intentionally
+    does NOT fabricate a cross-book line (e.g. best over from book A + best under
+    from book B): those two sides live in separate selection groups and are
+    reported independently, as advisory line-shopping output. De-vig and the
+    engine's OddsInput must still be sourced from a single consistent book.
+
+    Ties (equal decimal payout) are broken deterministically: most recent
+    `last_update`, then bookmaker name.
+    """
+    best: dict[tuple[str, str, Any], dict[str, Any]] = {}
+    for quote in quotes:
+        price = quote.get("price")
+        if price is None:
+            continue
+        try:
+            payout = american_to_decimal(float(price))
+        except (TypeError, ValueError):
+            continue
+        key = (
+            str(quote.get("market_type") or ""),
+            _norm(quote.get("selection")),
+            quote.get("line"),
+        )
+        current = best.get(key)
+        if current is None or _is_better_price(quote, payout, current):
+            enriched = dict(quote)
+            enriched["decimal_payout"] = round(payout, 4)
+            best[key] = enriched
+    return sorted(
+        best.values(),
+        key=lambda q: (str(q.get("market_type") or ""), _norm(q.get("selection"))),
+    )
+
+
+def _is_better_price(quote: dict[str, Any], payout: float, current: dict[str, Any]) -> bool:
+    """True if `quote` should replace `current` as the best price for its group."""
+    cur_payout = current.get("decimal_payout", 0.0)
+    if payout != cur_payout:
+        return payout > cur_payout
+    # Tie on payout: prefer the fresher quote, then a stable bookmaker order.
+    q_update = str(quote.get("last_update") or "")
+    c_update = str(current.get("last_update") or "")
+    if q_update != c_update:
+        return q_update > c_update
+    return str(quote.get("bookmaker") or "") < str(current.get("bookmaker") or "")
+
+
 def resolve_odds(
     *,
     kind: str,
@@ -487,6 +545,12 @@ def resolve_odds(
             prop_type=prop_type or "",
             line=line,
         )
+        # Record book provenance only when a single book was queried — in that
+        # case both sides came from `bookmaker`. Under line shopping the two
+        # sides may differ, so leave it unset (ledger records 'consensus') and
+        # rely on the best_prices advisory block below.
+        if selected and not (line_shopping or all_books):
+            selected["bookmaker"] = bookmaker
         request_patch = selected
         output_quotes = player_quotes
     else:
@@ -525,6 +589,13 @@ def resolve_odds(
         "quota": dict(client.last_quota_headers),
         "metadata": [],
     }
+
+    # Advisory line-shopping output: when more than one book was fetched, surface
+    # the best available price per selection with the book that offers it. This
+    # is informational only — request_patch (the engine's OddsInput) stays
+    # anchored to a single book so de-vig/CLV semantics are not mixed across books.
+    if line_shopping or all_books:
+        result_payload["best_prices"] = best_price_quotes(output_quotes)
 
     # 3. Store freshly fetched result in cache
     actual_home = event.home_team or home_team or ""

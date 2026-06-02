@@ -115,8 +115,9 @@ def _section_counts(store: TraceStore, league: str, cutoff: str) -> dict[str, in
     ).fetchone()[0]
     n_with_bet = conn.execute(
         """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
-           JOIN bet_records b ON t.trace_id = b.trace_id
-           WHERE t.league = ? AND t.timestamp >= ?""",
+           JOIN bet_ledger b ON t.trace_id = b.trace_id
+           WHERE b.provenance = 'user_confirmed'
+             AND t.league = ? AND t.timestamp >= ?""",
         (league, cutoff),
     ).fetchone()[0]
     n_with_close = conn.execute(
@@ -323,14 +324,15 @@ def _section_clv(store: TraceStore, league: str, cutoff: str) -> dict[str, Any]:
     """Mean CLV cents and beat-close rate across bets with attached closes in the window."""
     conn = store.conn
     rows = conn.execute(
-        """SELECT b.market, b.selection, b.line_taken, b.odds_taken,
+        """SELECT b.market, b.selection, b.line AS line_taken, b.odds AS odds_taken,
                   c.closing_line, c.closing_odds
-           FROM bet_records b
+           FROM bet_ledger b
            JOIN closing_lines c ON b.trace_id = c.trace_id
               AND b.market = c.market
               AND b.selection_descriptor = c.selection_descriptor
            JOIN traces t ON b.trace_id = t.trace_id
-           WHERE t.league = ? AND t.timestamp >= ?""",
+           WHERE b.provenance = 'user_confirmed'
+             AND t.league = ? AND t.timestamp >= ?""",
         (league, cutoff),
     ).fetchall()
 
