@@ -31,12 +31,15 @@ if str(_SRC_ROOT) not in sys.path:
 
 logger = logging.getLogger("fetch_outcomes_all")
 
-_SCRIPTS: dict[str, Path] = {
-    "nba": _REPO_ROOT / "scripts" / "fetch_outcomes_nba.py",
-    "wnba": _REPO_ROOT / "scripts" / "fetch_outcomes_wnba.py",
-    "mlb": _REPO_ROOT / "scripts" / "fetch_outcomes_mlb.py",
-    "soccer": _REPO_ROOT / "scripts" / "fetch_outcomes_soccer.py",
-    "props": _REPO_ROOT / "scripts" / "fetch_outcomes_props.py",
+# Invoke the canonical module entrypoints (python -m omega.ops.fetch_outcomes_*).
+# The legacy top-level scripts/ directory was removed; pointing at it made this
+# dispatcher a silent no-op (every league "Script not found, skipping").
+_MODULES: dict[str, str] = {
+    "nba": "omega.ops.fetch_outcomes_nba",
+    "wnba": "omega.ops.fetch_outcomes_wnba",
+    "mlb": "omega.ops.fetch_outcomes_mlb",
+    "soccer": "omega.ops.fetch_outcomes_soccer",
+    "props": "omega.ops.fetch_outcomes_props",
 }
 
 _DEFAULT_LEAGUES = ("nba", "wnba", "mlb", "soccer", "props")
@@ -49,10 +52,11 @@ def main() -> int:
     parser.add_argument(
         "--leagues",
         nargs="+",
-        choices=sorted(_SCRIPTS),
+        choices=sorted(_MODULES),
         default=list(_DEFAULT_LEAGUES),
         help="Which leagues to process (default: all)",
     )
+    parser.add_argument("--db", default=None, help="SQLite path (passed through)")
     parser.add_argument("--since", default=None, help="Start date YYYY-MM-DD (passed through)")
     parser.add_argument("--until", default=None, help="End date YYYY-MM-DD (passed through)")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without running")
@@ -66,12 +70,10 @@ def main() -> int:
 
     failures = 0
     for league in args.leagues:
-        script = _SCRIPTS[league]
-        if not script.exists():
-            logger.warning("Script not found, skipping: %s", script)
-            continue
-
-        cmd = [sys.executable, str(script)]
+        module = _MODULES[league]
+        cmd = [sys.executable, "-m", module]
+        if args.db:
+            cmd += ["--db", args.db]
         if args.since:
             cmd += ["--since", args.since]
         if args.until:
@@ -80,9 +82,6 @@ def main() -> int:
             cmd.append("--dry-run")
 
         logger.info("Running %s: %s", league, " ".join(cmd))
-        if args.dry_run and not script.exists():
-            continue
-
         result = subprocess.run(cmd, cwd=_REPO_ROOT)
         if result.returncode != 0:
             failures += 1

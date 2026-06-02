@@ -16,5 +16,11 @@ def var_dir() -> Path:
 
 
 def default_trace_db_path() -> Path:
-    """Return the default SQLite trace store path under var/."""
-    return var_dir() / "var/omega_traces.db"
+    """Return the default SQLite trace store path under var/.
+
+    NOTE: var_dir() already returns <repo>/var, so the filename here must NOT be
+    prefixed with another "var/" — doing so produced a stray <repo>/var/var/
+    omega_traces.db that silently captured writes from any no-explicit-path
+    caller (see the 2026-06-01 stale-dup cleanup).
+    """
+    return var_dir() / "omega_traces.db"

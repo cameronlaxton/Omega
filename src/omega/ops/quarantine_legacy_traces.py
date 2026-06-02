@@ -19,7 +19,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
-_DEFAULT_DB = _REPO_ROOT / "var" / "var/omega_traces.db"
+_DEFAULT_DB = _REPO_ROOT / "var" / "omega_traces.db"
 
 _PROP_IDENTITY_FIELDS = ("player_name", "home_team", "away_team", "game_date", "line")
 

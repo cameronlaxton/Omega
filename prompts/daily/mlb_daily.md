@@ -142,6 +142,8 @@ Do not feed basketball-style ratings, raw batting average, or raw ERA into
 `off_rating`/`def_rating`. For MLB those fields are runs scored/allowed per
 game.
 
+Both `home_context` and `away_context` must contain all required team context keys (e.g., `off_rating`, `def_rating` for MLB) to guarantee `context_source="provided"` and satisfy the calibration eligibility gate.
+
 ---
 
 ## Step 5 - Typed Evidence

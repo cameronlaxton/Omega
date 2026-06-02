@@ -133,6 +133,8 @@ away_context={"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0}
 Never pass raw FG%, opponent FG%, eFG%, or other fractional proxies as
 `off_rating` or `def_rating`.
 
+Both `home_context` and `away_context` must contain all required team context keys (e.g., `off_rating`, `def_rating`, `pace` for NBA) to guarantee `context_source="provided"` and satisfy the calibration eligibility gate.
+
 `game_context` is mandatory for every NBA game and prop trace:
 
 ```python
