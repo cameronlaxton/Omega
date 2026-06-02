@@ -236,6 +236,8 @@ CREATE TABLE IF NOT EXISTS closing_lines (
     closing_timestamp     TEXT NOT NULL,
     source                TEXT NOT NULL,
     captured_at           TEXT NOT NULL DEFAULT (datetime('now')),
+    -- Idempotent per recommendation; record_ledger_bet upgrades pending
+    -- engine_auto/backfill rows when the same selection is user_confirmed.
     UNIQUE (trace_id, market, selection_descriptor)
 );
 

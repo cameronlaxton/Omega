@@ -1386,6 +1386,7 @@ class TraceStore:
         clauses = [
             "b.status = 'pending'",
             "b.market LIKE 'player_prop:%'",
+            "b.provenance = 'user_confirmed'",
             "NOT EXISTS (SELECT 1 FROM prop_outcomes p WHERE p.trace_id = b.trace_id)",
         ]
         params: list[Any] = []

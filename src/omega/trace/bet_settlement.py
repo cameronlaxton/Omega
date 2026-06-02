@@ -213,13 +213,18 @@ def _resolve_game_book(
         if not isinstance(q, dict) or str(q.get("market_type") or "") != market:
             continue
         sel = _nrm(q.get("selection"))
-        # Match either direction: a quote selection equal to/prefixing a label
-        # ("B" vs label "B -3.5", the best_bet fallback case) or a label
-        # prefixing the quote selection. Either pins the bet to a real quote.
+        # Match a real quote for this market. The reverse-prefix form is only
+        # safe when the recommended bet has a line and the quote carries the
+        # same line; otherwise a spread label like "B -3.5" can incorrectly
+        # attach to a plain moneyline quote for "B".
         if not (
             sel in labels
             or any(label and sel.startswith(f"{label} ") for label in labels)
-            or any(label and sel and label.startswith(f"{sel} ") for label in labels)
+            or (
+                line is not None
+                and q.get("line") is not None
+                and any(label and sel and label.startswith(f"{sel} ") for label in labels)
+            )
         ):
             continue
         if line is not None and q.get("line") is not None:

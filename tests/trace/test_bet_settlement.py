@@ -215,10 +215,11 @@ class TestBookProvenance:
         bet = extract_recommended_bet(_game_trace(), provenance=BetProvenance.BACKFILL).bet
         assert bet.bookmaker == "consensus"
 
-    def test_game_book_best_bet_fallback_resolves_via_reverse_prefix(self):
+    def test_game_book_best_bet_fallback_does_not_use_moneyline_quote_for_spread_label(self):
         # No actionable structured edge, but an actionable best_bet whose label
-        # ("B -3.5") prefixes a real moneyline quote selection ("B"). The
-        # fallback should still pin the bet to that quote's book.
+        # ("B -3.5") prefixes a moneyline quote selection ("B"). That quote is
+        # not the spread bet being logged, so mixed-book snapshots must fall
+        # back to consensus rather than borrowing the moneyline book.
         trace = _game_trace()
         trace["result"]["edges"] = [
             {"side": "home", "team": "B", "market": "spread", "line": -3.5,
@@ -231,10 +232,12 @@ class TestBookProvenance:
             "markets": [
                 {"market_type": "moneyline", "selection": "B", "price": -140,
                  "bookmaker": "betmgm"},
+                {"market_type": "spread", "selection": "B", "line": -4.5, "price": -110,
+                 "bookmaker": "draftkings"},
             ]
         }
         bet = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL).bet
-        assert bet.bookmaker == "betmgm"
+        assert bet.bookmaker == "consensus"
 
     def test_prop_book_from_request_field(self):
         trace = _prop_trace()

@@ -28,6 +28,7 @@ import fetch_outcomes_props  # type: ignore  # noqa: E402
 
 from omega.integrations.espn_nba import FinalGame  # noqa: E402
 from omega.trace.bet_record import BetRecord, BetStatus  # noqa: E402
+from omega.trace.ledger_bet import BetProvenance, LedgerBet, LedgerStatus  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 
@@ -96,6 +97,33 @@ def _make_bet(trace_id: str, descriptor: str = "tatum_over_24.5_pts") -> BetReco
         stake_units=1.0,
         decision_timestamp="2026-05-17T19:30:00Z",
         status=BetStatus.PENDING,
+    )
+
+
+def _make_ledger_bet(
+    trace_id: str,
+    *,
+    provenance: BetProvenance,
+    descriptor: str = "tatum_over_24.5_pts",
+) -> LedgerBet:
+    return LedgerBet(
+        ledger_id=uuid.uuid4().hex[:12],
+        trace_id=trace_id,
+        bet_date="2026-05-17",
+        league="NBA",
+        sport="basketball",
+        matchup="Boston Celtics @ Miami Heat",
+        market="player_prop:pts",
+        bookmaker="DraftKings",
+        selection="Jayson Tatum Over 24.5 pts",
+        selection_descriptor=descriptor,
+        line=24.5,
+        odds=-110,
+        stake_amount=25.0,
+        bankroll_at_open=1000.0,
+        status=LedgerStatus.PENDING,
+        provenance=provenance,
+        decision_timestamp="2026-05-17T19:30:00Z",
     )
 
 
@@ -215,6 +243,23 @@ class TestBetSweep:
         assert store.get_prop_outcomes("sandbox-bet-noid") == []
         store.close()
 
+    def test_sweep_ignores_engine_auto_prop_ledger_rows(self):
+        """The confirmation sweep is for real user wagers only; auto-logged
+        recommendations must not leak into prop grading as phantom bets."""
+        db = _tmp_db_path()
+        store = TraceStore(db_path=db)
+        store.persist(_make_prop_trace("sandbox-auto-prop"))
+        store.record_ledger_bet(
+            _make_ledger_bet(
+                "sandbox-auto-prop",
+                provenance=BetProvenance.ENGINE_AUTO,
+            )
+        )
+
+        candidates = store.query_ungraded_prop_bet_traces(league="NBA")
+        assert all(t["trace_id"] != "sandbox-auto-prop" for t in candidates)
+        store.close()
+
     def test_sweep_ignores_already_graded_bet(self):
         """A bet whose trace already has a prop_outcome should not appear in
         the sweep candidate list (NOT EXISTS clause filters it out)."""
@@ -247,4 +292,3 @@ class TestBetSweep:
         candidates = store.query_ungraded_prop_bet_traces(league="NBA")
         assert all(t["trace_id"] != "sandbox-bet-won" for t in candidates)
         store.close()
-
