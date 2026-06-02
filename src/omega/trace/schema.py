@@ -87,6 +87,32 @@ Schema version 12 (additive):
   timestamp window, pre-trace fatal, or conservative session fallback) so an
   operator can tell a trace-specific failure from a session-wide fallback.
 
+Schema version 13 (additive):
+- bet_ledger: dollar-denominated, flat-stake bet log for PnL/ROI tracking and a
+  future betting dashboard. One row per (trace_id, market, selection_descriptor),
+  recording the engine's RECOMMENDED selection (not a user-confirmed wager) as a
+  bet at a fixed stake. Deliberately SEPARATE from bet_records: bet_records is the
+  units-based CLV substrate meaning "what the user actually wagered" and drives
+  CLV + live prop-outcome fetching, so it must never see auto-logged/backfilled
+  phantom bets. bet_ledger carries dollar stake_amount, payout_amount, net_pnl,
+  bankroll_at_open, and a provenance column (backfill | engine_auto |
+  user_confirmed) so dashboard rows are attributable. Denormalized slice columns
+  (league, sport, matchup, bookmaker, odds, line, bet_date) exist for dashboard
+  querying only; the full_trace JSON blob remains the source of truth and is
+  joined back via trace_id. v_bet_ledger_dashboard adds per-bet return_pct and an
+  odds bucket for slicing.
+
+Schema version 14 (consolidation, store-side migration):
+- bet_records is REMOVED. Its role (the units-based "what the user actually
+  wagered" CLV substrate) is absorbed by bet_ledger via the provenance column:
+  the four legacy rows migrate in as provenance='user_confirmed', and all CLV /
+  closing-line / prop-sweep / ingest consumers now read bet_ledger (filtering
+  provenance='user_confirmed' where true-wager semantics matter). bet_ledger is
+  the single source of truth for bets. The migrate-and-drop is performed by
+  TraceStore._consolidate_legacy_bet_records() (it needs odds/Kelly helpers, so
+  it lives in the store, not here). SCHEMA_V2/V7 remain in history but are only
+  (re)applied on DBs that have not yet reached V14.
+
 Design rules:
 - Full trace stored as JSON blob to decouple trace evolution from SQLite schema
 - Denormalized columns exist for querying only — the blob is source of truth
@@ -98,7 +124,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 12
+CURRENT_VERSION = 14
 
 # ---------------------------------------------------------------------------
 # Version lineage (applied in order by TraceStore._ensure_schema)
@@ -126,6 +152,8 @@ CURRENT_VERSION = 12
 #   V10 SCHEMA_V10           simulation_distributions (+ dynamic outcome view)
 #   V11 SCHEMA_V11           early_market_snapshots (segregated from CLV)
 #   V12 SCHEMA_V12           trace_qa_verdicts (trace-scoped QA audit)
+#   V13 SCHEMA_V13           bet_ledger (dollar/PnL bet log; separate from bet_records)
+#   V14 (store-side)         consolidate bet_records -> bet_ledger, then DROP it
 #
 # There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
 # apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
@@ -308,12 +336,20 @@ def apply_v7_migration(conn) -> int:
     """Idempotently apply V7: bet_records.session_id + BUG-3 outcome cleanup.
 
     Returns the number of bad outcome rows deleted (for audit logging).
+
+    The bet_records.session_id portion is skipped when bet_records no longer
+    exists (it is dropped at V14, consolidated into bet_ledger); the BUG-3
+    outcome cleanup is independent of bet_records and always runs.
     """
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(bet_records)").fetchall()}
-    if "session_id" not in cols:
-        conn.execute(V7_ADD_COLUMN_SQL)
-    conn.execute(V7_INDEX_SQL)
-    conn.execute(V7_BACKFILL_SQL)
+    has_bet_records = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='bet_records'"
+    ).fetchone()
+    if has_bet_records:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(bet_records)").fetchall()}
+        if "session_id" not in cols:
+            conn.execute(V7_ADD_COLUMN_SQL)
+        conn.execute(V7_INDEX_SQL)
+        conn.execute(V7_BACKFILL_SQL)
     cur = conn.execute(V7_CLEANUP_BAD_PROP_OUTCOMES_SQL)
     deleted = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
     conn.commit()
@@ -524,4 +560,80 @@ CREATE INDEX IF NOT EXISTS idx_trace_qa_verdicts_session
     ON trace_qa_verdicts(session_id);
 CREATE INDEX IF NOT EXISTS idx_trace_qa_verdicts_verdict
     ON trace_qa_verdicts(verdict, scope);
+"""
+
+
+# V13 is purely additive (one new table + one view) so it can be applied via
+# executescript. bet_ledger is a sibling of bet_records, NOT an extension of it:
+# keeping them separate makes it structurally impossible for the CLV query and
+# the live prop-outcome sweep (both read bet_records) to pick up auto-logged or
+# backfilled phantom bets. The money columns are dollar-denominated (bet_records
+# is units-based) and recomputed at grade time; the JSON blob stays source of
+# truth and is joined back via trace_id.
+SCHEMA_V13 = """
+CREATE TABLE IF NOT EXISTS bet_ledger (
+    ledger_id            TEXT PRIMARY KEY,
+    trace_id             TEXT NOT NULL REFERENCES traces(trace_id),
+    bet_date             TEXT,
+    league               TEXT,
+    sport                TEXT,
+    matchup              TEXT,
+    market               TEXT NOT NULL,
+    bookmaker            TEXT NOT NULL DEFAULT 'consensus',
+    selection            TEXT NOT NULL,
+    selection_descriptor TEXT NOT NULL,
+    line                 REAL,
+    odds                 REAL NOT NULL,
+    stake_amount         REAL NOT NULL DEFAULT 25.0,
+    payout_amount        REAL,
+    net_pnl              REAL,
+    bankroll_at_open     REAL DEFAULT 1000.0,
+    status               TEXT NOT NULL DEFAULT 'pending',
+    provenance           TEXT NOT NULL,
+    decision_timestamp   TEXT NOT NULL,
+    graded_at            TEXT,
+    session_id           TEXT,
+    created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (trace_id, market, selection_descriptor)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bet_ledger_trace_id ON bet_ledger(trace_id);
+CREATE INDEX IF NOT EXISTS idx_bet_ledger_status   ON bet_ledger(status);
+CREATE INDEX IF NOT EXISTS idx_bet_ledger_league   ON bet_ledger(league);
+CREATE INDEX IF NOT EXISTS idx_bet_ledger_sport    ON bet_ledger(sport);
+CREATE INDEX IF NOT EXISTS idx_bet_ledger_book     ON bet_ledger(bookmaker);
+CREATE INDEX IF NOT EXISTS idx_bet_ledger_date     ON bet_ledger(bet_date);
+
+CREATE VIEW IF NOT EXISTS v_bet_ledger_dashboard AS
+SELECT
+    l.ledger_id,
+    l.trace_id,
+    l.bet_date,
+    l.league,
+    l.sport,
+    l.matchup,
+    l.market,
+    l.bookmaker,
+    l.selection,
+    l.selection_descriptor,
+    l.line,
+    l.odds,
+    l.stake_amount,
+    l.payout_amount,
+    l.net_pnl,
+    l.bankroll_at_open,
+    l.status,
+    l.provenance,
+    l.decision_timestamp,
+    l.graded_at,
+    l.session_id,
+    l.created_at,
+    CASE WHEN l.status IN ('won', 'lost', 'push', 'void') AND l.stake_amount > 0
+         THEN l.net_pnl / l.stake_amount END                    AS return_pct,
+    CASE WHEN l.odds > 0 THEN 'underdog' ELSE 'favorite' END     AS odds_side,
+    CASE
+        WHEN l.odds BETWEEN -110 AND 110 THEN 'pickem'
+        WHEN l.odds < -110 THEN 'heavy_fav'
+        ELSE 'plus_money' END                                    AS odds_bucket
+FROM bet_ledger l;
 """

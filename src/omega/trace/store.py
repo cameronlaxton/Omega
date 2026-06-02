@@ -24,6 +24,13 @@ from typing import TYPE_CHECKING, Any
 
 from omega.paths import default_trace_db_path
 from omega.trace.bet_record import BetRecord
+from omega.trace.bet_settlement import compute_pnl, extract_recommended_bet
+from omega.trace.ledger_bet import (
+    DEFAULT_BANKROLL,
+    BetProvenance,
+    LedgerBet,
+    LedgerStatus,
+)
 from omega.trace.market_snapshot import (
     EarlyMarketSnapshot,
     MarketMovement,
@@ -40,6 +47,7 @@ from omega.trace.schema import (
     SCHEMA_V10,
     SCHEMA_V11,
     SCHEMA_V12,
+    SCHEMA_V13,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
@@ -549,12 +557,19 @@ class TraceStore:
         NOT EXISTS so a fresh DB and an old-version DB converge to CURRENT_VERSION
         without an explicit migration step.
         """
+        # Capture the pre-migration version so the V2/V7 bet_records steps are
+        # not re-applied (which would resurrect the table) once V14 has dropped
+        # it. Must be read before any _record_version() call below.
+        prior_version = self._existing_schema_version()
+
         # V1: traces, outcomes, schema_versions
         self.conn.executescript(SCHEMA_V1)
         self._record_version(1, "Initial schema: traces, outcomes, schema_versions")
 
-        # V2: bet_records (user-confirmed wagers, for CLV resolution)
-        self.conn.executescript(SCHEMA_V2)
+        # V2: bet_records (legacy CLV substrate; removed at V14). Only (re)create
+        # on DBs that have not yet been consolidated, so the V14 drop sticks.
+        if prior_version < 14:
+            self.conn.executescript(SCHEMA_V2)
         self._record_version(2, "Phase 6d: bet_records table for CLV tracking")
 
         # V3: closing_lines (market close snapshots for CLV)
@@ -573,8 +588,10 @@ class TraceStore:
         self.conn.executescript(SCHEMA_V6)
         self._record_version(6, "Phase 6h: prop_outcomes table for player-prop grading")
 
-        # V7: bet_records.session_id (mirrors traces.session_id) + BUG-3 cleanup
-        apply_v7_migration(self.conn)
+        # V7: bet_records.session_id + BUG-3 cleanup. Gated like V2 — the
+        # ALTER targets bet_records, which no longer exists post-V14.
+        if prior_version < 14:
+            apply_v7_migration(self.conn)
         self._record_version(
             7,
             "Phase 6i: bet_records.session_id column + BUG-3 prop-trace outcome cleanup",
@@ -614,6 +631,108 @@ class TraceStore:
             12,
             "Trace-scoped QA: trace_qa_verdicts audit table",
         )
+
+        # V13: bet_ledger (dollar/PnL bet log; the single bet table from V14 on)
+        self.conn.executescript(SCHEMA_V13)
+        self._record_version(
+            13,
+            "Bet logging: bet_ledger table + dashboard view (dollar-denominated PnL)",
+        )
+
+        # V14: consolidate bet_records into bet_ledger, then drop bet_records.
+        self._consolidate_legacy_bet_records()
+        self._record_version(
+            14,
+            "Consolidate bet_records into bet_ledger (provenance=user_confirmed); drop bet_records",
+        )
+
+    def _existing_schema_version(self) -> int:
+        """Highest applied schema version, or 0 if the DB is brand new."""
+        try:
+            row = self.conn.execute("SELECT MAX(version) FROM schema_versions").fetchone()
+        except sqlite3.OperationalError:
+            return 0
+        return int(row[0]) if row and row[0] is not None else 0
+
+    def _consolidate_legacy_bet_records(self) -> int:
+        """Migrate any rows from the legacy bet_records table into bet_ledger
+        (as provenance='user_confirmed'), then drop bet_records.
+
+        Idempotent: a no-op once bet_records is gone. Dollar stake is derived
+        from the units-based stake (1 unit = 1% of bankroll; default $1000), and
+        settled rows get payout/PnL recomputed from odds + status.
+        """
+        tbl = self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='bet_records'"
+        ).fetchone()
+        if tbl is None:
+            return 0
+
+        rows = self.conn.execute(
+            """SELECT b.bet_id, b.trace_id, b.book, b.market, b.selection,
+                      b.selection_descriptor, b.line_taken, b.odds_taken,
+                      b.stake_units, b.decision_timestamp, b.status, b.session_id,
+                      t.league, t.matchup
+               FROM bet_records b JOIN traces t ON t.trace_id = b.trace_id"""
+        ).fetchall()
+
+        migrated = 0
+        for r in rows:
+            status = LedgerStatus(r["status"]) if r["status"] in {s.value for s in LedgerStatus} else LedgerStatus.PENDING
+            bankroll = DEFAULT_BANKROLL
+            stake = round((r["stake_units"] or 0.0) * (bankroll / 100.0), 2) or 25.0
+            odds = float(r["odds_taken"]) if r["odds_taken"] is not None else 0.0
+            payout, net = compute_pnl(status, odds, stake) if odds else (None, None)
+            sport = None
+            if r["league"]:
+                try:
+                    from omega.core.config.leagues import get_league_config
+
+                    sport = get_league_config(str(r["league"])).get("sport")
+                except Exception:  # noqa: BLE001 - sport is a nicety, never fatal
+                    sport = None
+            ts = r["decision_timestamp"] or ""
+            self.conn.execute(
+                """INSERT OR IGNORE INTO bet_ledger
+                   (ledger_id, trace_id, bet_date, league, sport, matchup, market,
+                    bookmaker, selection, selection_descriptor, line, odds,
+                    stake_amount, payout_amount, net_pnl, bankroll_at_open, status,
+                    provenance, decision_timestamp, session_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    r["bet_id"],
+                    r["trace_id"],
+                    ts[:10] if len(ts) >= 10 else None,
+                    r["league"],
+                    sport,
+                    r["matchup"],
+                    r["market"],
+                    r["book"],
+                    r["selection"],
+                    r["selection_descriptor"],
+                    r["line_taken"],
+                    odds,
+                    stake,
+                    payout,
+                    net,
+                    bankroll,
+                    status.value,
+                    BetProvenance.USER_CONFIRMED.value,
+                    r["decision_timestamp"],
+                    r["session_id"] if "session_id" in r.keys() else None,
+                ),
+            )
+            migrated += 1
+
+        self.conn.execute("DROP TABLE IF EXISTS bet_records")
+        self.conn.commit()
+        if migrated:
+            logger.info(
+                "V14: migrated %d bet_records row(s) into bet_ledger (user_confirmed) "
+                "and dropped bet_records.",
+                migrated,
+            )
+        return migrated
 
     def _record_version(self, version: int, description: str) -> None:
         """Idempotently stamp a schema version into schema_versions."""
@@ -703,8 +822,27 @@ class TraceStore:
         if cur.rowcount and cur.rowcount > 0:
             self._write_evidence_signals(trace_id, trace)
             self._write_simulation_distributions(trace_id, trace)
+            self._maybe_autolog_ledger_bet(trace_id, trace)
         self.conn.commit()
         return trace_id
+
+    def _maybe_autolog_ledger_bet(self, trace_id: str, trace: dict[str, Any]) -> None:
+        """Gated dual-write: log the recommended selection into bet_ledger.
+
+        Runs only on a genuine first insert (guarded by the caller's rowcount
+        check, like the other explode helpers). Gated behind
+        OMEGA_BET_LEDGER_AUTOLOG (default on) so the deliberate calibration/bet
+        decouple stays explicit and reversible. Never raises into persist(): a
+        malformed recommendation must not cost us the trace write.
+        """
+        if os.environ.get("OMEGA_BET_LEDGER_AUTOLOG", "1") not in ("1", "true", "True"):
+            return
+        try:
+            result = extract_recommended_bet(trace, provenance=BetProvenance.ENGINE_AUTO)
+            if result.bet is not None:
+                self.record_ledger_bet(result.bet)
+        except Exception as exc:  # noqa: BLE001 - never let autolog break persist
+            logger.warning("bet_ledger autolog skipped for %s: %s", trace_id, exc)
 
     def _write_simulation_distributions(self, trace_id: str, trace: dict[str, Any]) -> int:
         """Explode deterministic distribution summaries into V10 query rows."""
@@ -1146,65 +1284,84 @@ class TraceStore:
         return [dict(row) for row in rows]
 
     # ------------------------------------------------------------------
-    # Bet records (Phase 6d — CLV substrate)
+    # User-confirmed wagers (CLV substrate) — now stored in bet_ledger as
+    # provenance='user_confirmed'. The legacy bet_records table was dropped at
+    # schema V14; these methods preserve the historical API on top of the
+    # unified bet_ledger so wager-tracking callers (ingest, audit) are unchanged.
     # ------------------------------------------------------------------
 
     def record_bet(self, bet: BetRecord) -> str:
-        """Persist a user-confirmed wager. Idempotent on (trace_id, market, selection_descriptor).
+        """Persist a user-confirmed wager into bet_ledger. Idempotent on
+        (trace_id, market, selection_descriptor).
 
-        Args:
-            bet: A populated BetRecord. trace_id must reference an existing trace.
-
-        Returns:
-            bet_id of the persisted row.
+        Accepts the legacy units-based BetRecord (the LLM export-block DTO) and
+        converts it to a dollar LedgerBet tagged provenance='user_confirmed'.
+        Returns the ledger_id (== bet.bet_id).
 
         Raises:
             ValueError: if the referenced trace does not exist.
         """
-        row = self.conn.execute(
-            "SELECT trace_id FROM traces WHERE trace_id = ?", (bet.trace_id,)
-        ).fetchone()
-        if row is None:
-            raise ValueError(f"No trace found with trace_id={bet.trace_id!r}")
-
-        # session_id is sourced from the linked trace so it stays consistent
-        # with traces.session_id without requiring callers to plumb it through
-        # the BetRecord model.
-        self.conn.execute(
-            """INSERT OR IGNORE INTO bet_records
-               (bet_id, trace_id, book, market, selection, selection_descriptor,
-                line_taken, odds_taken, stake_units, decision_timestamp, status,
-                session_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                       (SELECT session_id FROM traces WHERE trace_id = ?))""",
-            (
-                bet.bet_id,
-                bet.trace_id,
-                bet.book,
-                bet.market,
-                bet.selection,
-                bet.selection_descriptor,
-                bet.line_taken,
-                bet.odds_taken,
-                bet.stake_units,
-                bet.decision_timestamp,
-                bet.status.value,
-                bet.trace_id,
-            ),
+        stake = round((bet.stake_units or 0.0) * (DEFAULT_BANKROLL / 100.0), 2) or 25.0
+        ts = bet.decision_timestamp or ""
+        ledger = LedgerBet(
+            ledger_id=bet.bet_id,
+            trace_id=bet.trace_id,
+            bet_date=ts[:10] if len(ts) >= 10 else None,
+            league=None,
+            sport=None,
+            matchup="",
+            market=bet.market,
+            bookmaker=bet.book,
+            selection=bet.selection,
+            selection_descriptor=bet.selection_descriptor,
+            line=bet.line_taken,
+            odds=bet.odds_taken,
+            stake_amount=stake,
+            bankroll_at_open=DEFAULT_BANKROLL,
+            status=LedgerStatus(bet.status.value)
+            if bet.status.value in {s.value for s in LedgerStatus}
+            else LedgerStatus.PENDING,
+            provenance=BetProvenance.USER_CONFIRMED,
+            decision_timestamp=bet.decision_timestamp,
         )
-        self.conn.commit()
-        return bet.bet_id
+        return self.record_ledger_bet(ledger)
 
     def get_bet_records(self, trace_id: str) -> list[dict[str, Any]]:
-        """Return all bet records attached to a trace (may be empty)."""
+        """Return user-confirmed wagers for a trace in the legacy bet_records
+        shape (bet_id/book/odds_taken/line_taken/stake_units), read from
+        bet_ledger where provenance='user_confirmed'. May be empty."""
         rows = self.conn.execute(
-            """SELECT bet_id, trace_id, book, market, selection, selection_descriptor,
-                      line_taken, odds_taken, stake_units, decision_timestamp,
-                      status, recorded_at, session_id
-               FROM bet_records WHERE trace_id = ? ORDER BY recorded_at""",
+            """SELECT ledger_id, trace_id, bookmaker, market, selection,
+                      selection_descriptor, line, odds, stake_amount,
+                      bankroll_at_open, decision_timestamp, status, created_at,
+                      session_id
+               FROM bet_ledger
+               WHERE trace_id = ? AND provenance = 'user_confirmed'
+               ORDER BY created_at""",
             (trace_id,),
         ).fetchall()
-        return [dict(row) for row in rows]
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            bankroll = r["bankroll_at_open"] or DEFAULT_BANKROLL
+            units = round(r["stake_amount"] / (bankroll / 100.0), 4) if bankroll else None
+            out.append(
+                {
+                    "bet_id": r["ledger_id"],
+                    "trace_id": r["trace_id"],
+                    "book": r["bookmaker"],
+                    "market": r["market"],
+                    "selection": r["selection"],
+                    "selection_descriptor": r["selection_descriptor"],
+                    "line_taken": r["line"],
+                    "odds_taken": r["odds"],
+                    "stake_units": units,
+                    "decision_timestamp": r["decision_timestamp"],
+                    "status": r["status"],
+                    "recorded_at": r["created_at"],
+                    "session_id": r["session_id"],
+                }
+            )
+        return out
 
     def query_ungraded_prop_bet_traces(
         self,
@@ -1213,8 +1370,8 @@ class TraceStore:
         end: str | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
-        """Return traces linked to pending player-prop bet_records that have no
-        prop_outcome yet.
+        """Return traces linked to pending player-prop bets (bet_ledger) that
+        have no prop_outcome yet.
 
         Defense-in-depth for BUG-2 (docs/session_bugs_20260519.md): when the
         agent minted a separate bet-confirmation trace, the bet's trace_id and
@@ -1245,7 +1402,7 @@ class TraceStore:
 
         sql = f"""
             SELECT DISTINCT t.trace_id, t.full_trace
-            FROM bet_records b
+            FROM bet_ledger b
             JOIN traces t ON t.trace_id = b.trace_id
             WHERE {" AND ".join(clauses)}
             ORDER BY t.timestamp DESC
@@ -1255,12 +1412,153 @@ class TraceStore:
         return [json.loads(row["full_trace"]) for row in rows]
 
     def update_bet_status(self, bet_id: str, status: str) -> None:
-        """Mark a bet won/lost/void/push after outcome resolves."""
+        """Mark a bet won/lost/void/push after outcome resolves (bet_ledger)."""
         self.conn.execute(
-            "UPDATE bet_records SET status = ? WHERE bet_id = ?",
+            "UPDATE bet_ledger SET status = ? WHERE ledger_id = ?",
             (status, bet_id),
         )
         self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Bet ledger (V13 — dollar-denominated PnL log; the single bet table)
+    # ------------------------------------------------------------------
+
+    _LEDGER_COLUMNS = (
+        "ledger_id, trace_id, bet_date, league, sport, matchup, market, bookmaker, "
+        "selection, selection_descriptor, line, odds, stake_amount, payout_amount, "
+        "net_pnl, bankroll_at_open, status, provenance, decision_timestamp, "
+        "graded_at, session_id, created_at"
+    )
+
+    def record_ledger_bet(self, bet: LedgerBet) -> str:
+        """Persist a ledger bet. Idempotent on (trace_id, market, selection_descriptor).
+
+        session_id is sourced from the linked trace so it stays consistent with
+        traces.session_id without the caller plumbing it through.
+
+        Raises:
+            ValueError: if the referenced trace does not exist.
+        """
+        row = self.conn.execute(
+            "SELECT trace_id FROM traces WHERE trace_id = ?", (bet.trace_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"No trace found with trace_id={bet.trace_id!r}")
+
+        cur = self.conn.execute(
+            """INSERT OR IGNORE INTO bet_ledger
+               (ledger_id, trace_id, bet_date, league, sport, matchup, market,
+                bookmaker, selection, selection_descriptor, line, odds,
+                stake_amount, payout_amount, net_pnl, bankroll_at_open, status,
+                provenance, decision_timestamp, graded_at, session_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       (SELECT session_id FROM traces WHERE trace_id = ?))""",
+            (
+                bet.ledger_id,
+                bet.trace_id,
+                bet.bet_date,
+                bet.league,
+                bet.sport,
+                bet.matchup,
+                bet.market,
+                bet.bookmaker,
+                bet.selection,
+                bet.selection_descriptor,
+                bet.line,
+                bet.odds,
+                bet.stake_amount,
+                bet.payout_amount,
+                bet.net_pnl,
+                bet.bankroll_at_open,
+                bet.status.value,
+                bet.provenance.value,
+                bet.decision_timestamp,
+                bet.graded_at,
+                bet.trace_id,
+            ),
+        )
+        self.conn.commit()
+        if not cur.rowcount:
+            logger.debug(
+                "bet_ledger row for (%s, %s, %s) already exists; insert ignored",
+                bet.trace_id,
+                bet.market,
+                bet.selection_descriptor,
+            )
+        return bet.ledger_id
+
+    def grade_ledger_bet(
+        self,
+        ledger_id: str,
+        status: LedgerStatus | str,
+        payout_amount: float | None,
+        net_pnl: float | None,
+    ) -> None:
+        """Settle a ledger bet: write status + money + graded_at."""
+        status_val = status.value if isinstance(status, LedgerStatus) else str(status)
+        self.conn.execute(
+            """UPDATE bet_ledger
+               SET status = ?, payout_amount = ?, net_pnl = ?,
+                   graded_at = ?
+               WHERE ledger_id = ?""",
+            (
+                status_val,
+                payout_amount,
+                net_pnl,
+                datetime.now(UTC).isoformat(),
+                ledger_id,
+            ),
+        )
+        self.conn.commit()
+
+    def get_ledger_bets(self, trace_id: str) -> list[dict[str, Any]]:
+        """Return all ledger bets attached to a trace (may be empty)."""
+        rows = self.conn.execute(
+            f"SELECT {self._LEDGER_COLUMNS} FROM bet_ledger "
+            "WHERE trace_id = ? ORDER BY created_at",
+            (trace_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def query_ledger(
+        self,
+        league: str | None = None,
+        sport: str | None = None,
+        status: str | None = None,
+        provenance: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        limit: int = 10000,
+    ) -> list[dict[str, Any]]:
+        """Return ledger bets matching filters, newest first (for dashboard/export)."""
+        clauses: list[str] = []
+        params: list[Any] = []
+        if league:
+            clauses.append("league = ?")
+            params.append(league)
+        if sport:
+            clauses.append("sport = ?")
+            params.append(sport)
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if provenance:
+            clauses.append("provenance = ?")
+            params.append(provenance)
+        if start:
+            clauses.append("decision_timestamp >= ?")
+            params.append(start)
+        if end:
+            clauses.append("decision_timestamp <= ?")
+            params.append(end)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(limit)
+        rows = self.conn.execute(
+            f"SELECT {self._LEDGER_COLUMNS} FROM bet_ledger {where} "
+            "ORDER BY decision_timestamp DESC LIMIT ?",
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     # ------------------------------------------------------------------
     # Closing lines (Phase 6e — CLV resolution)
