@@ -98,6 +98,13 @@ omega-resolve-odds --kind prop --league MLB --player "Player Name" --prop-type s
 Default book is BetMGM unless the user asks for broader line shopping. Append
 `data_provenance` events for sources used. Never expose API keys.
 
+The source book is recorded on every persisted bet (`bet_ledger.bookmaker`).
+When you line-shop (`--line-shopping` / `--all-books`), the resolver payload
+includes a `best_prices` block — surface it as the advisory "Best available"
+line on the Bet Card per
+[`prompts/reference/output_modes.md`](../reference/output_modes.md#book-provenance--line-shopping-in-the-bet-card).
+It is advisory only: never recompute edge/EV/Kelly against a shopped price.
+
 If a prop line is unavailable from the typed resolver or a direct sportsbook
 board, keep it research-only. Do not pass guessed or narrative-only lines to
 `analyze()`.

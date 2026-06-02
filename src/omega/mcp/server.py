@@ -8,6 +8,8 @@ logic.
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import ValidationError
@@ -16,6 +18,9 @@ from omega.mcp.schemas import (
     MCP_SCHEMA_VERSION,
     CalibrationFitPreviewRequest,
     EvidenceRetrieveRequest,
+    FlatBetRequest,
+    GameContextRequest,
+    PortfolioSummaryRequest,
     ReplayBundle,
     ReplayToolRequest,
     TraceAttachOutcomeRequest,
@@ -35,6 +40,9 @@ TOOL_NAMES = (
     "omega_calibration_fit_preview",
     "omega_evidence_retrieve",
     "omega_resolve_odds",
+    "omega_record_flat_bet",
+    "omega_get_portfolio_summary",
+    "omega_get_game_context",
 )
 
 RESOURCE_URIS = (
@@ -614,6 +622,213 @@ def omega_resolve_odds(
         return _error("omega_resolve_odds", "odds_resolution_failed", str(exc))
 
 
+def omega_record_flat_bet(
+    trace_id: str,
+    market: str,
+    side: str,
+    odds: float,
+    line: float | None = None,
+    bookmaker: str = "betmgm",
+    stake_amount: float = 25.0,
+    selection: str | None = None,
+    player_name: str | None = None,
+    prop_type: str | None = None,
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Log a flat dollar wager into bet_ledger, tied to an existing trace.
+
+    Bookkeeping / input-prep only — this does NOT compute probability, edge, EV,
+    Kelly, units, tiers, or grades. The bet is written with provenance
+    'user_confirmed' and lands 'pending'; the outcome + regrade pipelines settle
+    it (dollar PnL) later.
+
+    `market`   moneyline | spread | total | player_prop (or player_prop:<stat>)
+    `side`     home | away | draw | over | under (required so the bet is gradeable)
+    `line`     point/total; None for moneyline
+    """
+    from omega.trace.bet_settlement import build_selection_descriptor, coerce_american_odds
+    from omega.trace.ledger_bet import BetProvenance, LedgerBet, LedgerStatus
+    from omega.trace.store import TraceStore
+
+    try:
+        req = FlatBetRequest(
+            trace_id=trace_id,
+            market=market,
+            side=side,
+            odds=odds,
+            line=line,
+            bookmaker=bookmaker,
+            stake_amount=stake_amount,
+            selection=selection,
+            player_name=player_name,
+            prop_type=prop_type,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_record_flat_bet", "invalid_request", exc.errors())
+    except ValueError as exc:
+        return _error("omega_record_flat_bet", "invalid_request", str(exc))
+
+    american = coerce_american_odds(req.odds)
+    if american is None:
+        return _error(
+            "omega_record_flat_bet",
+            "invalid_request",
+            f"odds={req.odds!r} is not valid American odds",
+        )
+
+    descriptor, label = build_selection_descriptor(
+        req.market,
+        req.side,
+        line=req.line,
+        player=req.player_name,
+        stat=req.prop_type,
+    )
+
+    store = TraceStore(db_path=req.db_path)
+    try:
+        trace = store.get_trace(req.trace_id)
+        if trace is None:
+            return _error("omega_record_flat_bet", "trace_not_found", req.trace_id)
+        ts = str(trace.get("timestamp") or "")
+        bet = LedgerBet(
+            ledger_id=uuid.uuid4().hex[:12],
+            trace_id=req.trace_id,
+            bet_date=ts[:10] if len(ts) >= 10 else None,
+            league=trace.get("league"),
+            matchup=trace.get("matchup") or "",
+            market=req.market,
+            bookmaker=req.bookmaker,
+            selection=req.selection or label,
+            selection_descriptor=descriptor,
+            line=req.line,
+            odds=american,
+            stake_amount=req.stake_amount,
+            status=LedgerStatus.PENDING,
+            provenance=BetProvenance.USER_CONFIRMED,
+            decision_timestamp=ts or datetime.now(timezone.utc).isoformat(),
+        )
+        store.record_ledger_bet(bet)
+        # Idempotent insert: resolve the stored row by its idempotency key so the
+        # response reflects reality whether this call inserted or matched an existing row.
+        rows = store.get_ledger_bets(req.trace_id)
+        recorded = next(
+            (
+                r
+                for r in rows
+                if r.get("market") == req.market
+                and r.get("selection_descriptor") == descriptor
+            ),
+            None,
+        )
+        ledger_id = recorded["ledger_id"] if recorded else bet.ledger_id
+        return _ok(
+            "omega_record_flat_bet",
+            ledger_id=ledger_id,
+            already_existed=bool(recorded and recorded["ledger_id"] != bet.ledger_id),
+            bet=recorded,
+        )
+    except ValueError as exc:
+        return _error("omega_record_flat_bet", "trace_not_found", str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_record_flat_bet", "record_failed", str(exc))
+    finally:
+        store.close()
+
+
+def omega_get_portfolio_summary(
+    league: str | None = None,
+    sport: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    base_bankroll: float = 1000.0,
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Return the financial state of the bet_ledger: bankroll, pending stakes,
+    ROI, net PnL, win%. Read-only aggregation over stored dollar PnL — computes
+    no protected betting output."""
+    from omega.trace.portfolio import summarize_ledger
+    from omega.trace.store import TraceStore
+
+    try:
+        req = PortfolioSummaryRequest(
+            league=league,
+            sport=sport,
+            start=start,
+            end=end,
+            base_bankroll=base_bankroll,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_get_portfolio_summary", "invalid_request", exc.errors())
+
+    store = TraceStore(db_path=req.db_path)
+    try:
+        rows = store.query_ledger(
+            league=req.league,
+            sport=req.sport,
+            start=req.start,
+            end=req.end,
+            limit=100000,
+        )
+        summary = summarize_ledger(rows, base_bankroll=req.base_bankroll)
+        return _ok(
+            "omega_get_portfolio_summary",
+            summary=summary,
+            filters={
+                "league": req.league,
+                "sport": req.sport,
+                "start": req.start,
+                "end": req.end,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_get_portfolio_summary", "summary_failed", str(exc))
+    finally:
+        store.close()
+
+
+def omega_get_game_context(
+    league: str,
+    home_team: str,
+    away_team: str,
+    game_date: str,
+    lookback_days: int = 5,
+) -> dict[str, Any]:
+    """Resolve the situational context pack for a matchup.
+
+    Returns deterministic game_context keys analyze() consumes (rest_days /
+    is_b2b_* / is_playoff / park_factor where derivable), the applicable
+    EvidenceSignal worksheet for the sport, and suggested evidence for semantic
+    context with no wired data source. Input-prep only — splice
+    result['game_context'] into an analyze request. Computes no protected output.
+    """
+    try:
+        req = GameContextRequest(
+            league=league,
+            home_team=home_team,
+            away_team=away_team,
+            game_date=game_date,
+            lookback_days=lookback_days,
+        )
+    except ValidationError as exc:
+        return _error("omega_get_game_context", "invalid_request", exc.errors())
+
+    try:
+        from omega.integrations.game_context import resolve_game_context
+
+        result = resolve_game_context(
+            league=req.league,
+            home_team=req.home_team,
+            away_team=req.away_team,
+            game_date=req.game_date,
+            lookback_days=req.lookback_days,
+        )
+        return _ok("omega_get_game_context", result=result)
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_get_game_context", "game_context_failed", str(exc))
+
+
 def build_server():
     """Build the optional FastMCP server.
 
@@ -641,6 +856,9 @@ def build_server():
         omega_calibration_fit_preview,
         omega_evidence_retrieve,
         omega_resolve_odds,
+        omega_record_flat_bet,
+        omega_get_portfolio_summary,
+        omega_get_game_context,
     ):
         mcp.tool()(tool)
 

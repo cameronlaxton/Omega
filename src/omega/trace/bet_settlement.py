@@ -97,6 +97,55 @@ def _fmt_line(line: float | None) -> str:
     return str(line)
 
 
+def build_selection_descriptor(
+    market: str,
+    side: str,
+    *,
+    line: float | None = None,
+    player: str | None = None,
+    stat: str | None = None,
+    team: str | None = None,
+) -> tuple[str, str]:
+    """Build the canonical ``(selection_descriptor, human_label)`` for a bet.
+
+    The descriptor is the snake_case idempotency key stored alongside
+    ``(trace_id, market)``; its first token is the gradeable side so settlement
+    can recover it (see ``settle_game_bet`` / ``backfill_bets._grade_fields``).
+    This is the single source of truth shared by ``extract_recommended_bet``
+    (engine/backfill auto-logging) and the ``omega_record_flat_bet`` MCP tool,
+    so the two never drift.
+
+    Forms::
+
+        moneyline      -> "{side}_moneyline"
+        spread         -> "{side}_spread_{line}"
+        total          -> "{side}_total_{line}"
+        player_prop:*  -> "{player}_{side}_{line}_{stat}"
+    """
+    s = (side or "").strip().lower()
+    line_str = _fmt_line(line)
+
+    if market.startswith("player_prop"):
+        stat_name = stat or (market.split(":", 1)[1] if ":" in market else "")
+        descriptor = "_".join(
+            p for p in (_slug(player), s, line_str, _slug(stat_name)) if p
+        )
+        label = f"{player or ''} {s.title()} {line_str} {stat_name}".strip()
+        return descriptor, label
+
+    m = _norm_market(market)
+    label_team = team or s
+    if m == "spread":
+        return f"{s}_spread_{line_str}", f"{label_team} {line_str}".strip()
+    if m == "total":
+        return f"{s}_total_{line_str}", f"{s.title()} {line_str}".strip()
+    if m == "moneyline":
+        return f"{s}_moneyline", f"{label_team} ML".strip()
+    # Exotic / unrecognized market — keep side + slugged market in the descriptor.
+    descriptor = "_".join(p for p in (s, _slug(m), line_str) if p)
+    return descriptor, f"{label_team} {m} {line_str}".strip()
+
+
 def _trace_kind(trace: dict) -> str:
     """Best-effort classification of a trace as game | prop | slate | unknown."""
     kind = str(trace.get("kind") or "").lower()
@@ -128,6 +177,58 @@ def _date_of(timestamp: str) -> str | None:
     if not timestamp:
         return None
     return timestamp[:10] if len(timestamp) >= 10 else None
+
+
+CONSENSUS_BOOK = "consensus"
+
+
+def _nrm(s: object) -> str:
+    return str(s or "").strip().casefold()
+
+
+def _resolve_prop_book(trace: dict) -> str:
+    """Book recorded on a prop trace's request (provenance only), else consensus."""
+    input_snap = trace.get("input_snapshot") or {}
+    result = trace.get("result") or {}
+    book = input_snap.get("bookmaker") or result.get("bookmaker")
+    return str(book) if book else CONSENSUS_BOOK
+
+
+def _resolve_game_book(
+    trace: dict, *, market: str, side: str, team: str | None, line: float | None
+) -> str:
+    """Recover the sportsbook behind a game selection from input_snapshot.odds.
+
+    Matches the chosen market/selection/line against the persisted
+    ``OddsInput.markets`` quotes (each carries its source bookmaker). Falls back
+    to the single book if every quote shares one, else 'consensus' (unknown).
+    """
+    odds = (trace.get("input_snapshot") or {}).get("odds") or {}
+    markets = odds.get("markets") or []
+    if not isinstance(markets, list):
+        return CONSENSUS_BOOK
+    labels = {_nrm(side)} if market == "total" else {_nrm(team), _nrm(side)}
+    labels.discard("")
+    for q in markets:
+        if not isinstance(q, dict) or str(q.get("market_type") or "") != market:
+            continue
+        sel = _nrm(q.get("selection"))
+        if not (sel in labels or any(label and sel.startswith(f"{label} ") for label in labels)):
+            continue
+        if line is not None and q.get("line") is not None:
+            try:
+                if float(q["line"]) != float(line):
+                    continue
+            except (TypeError, ValueError):
+                pass
+        if q.get("bookmaker"):
+            return str(q["bookmaker"])
+    books = {
+        str(q["bookmaker"])
+        for q in markets
+        if isinstance(q, dict) and q.get("bookmaker")
+    }
+    return books.pop() if len(books) == 1 else CONSENSUS_BOOK
 
 
 def _best_game_edge(result: dict) -> dict | None:
@@ -167,7 +268,7 @@ def extract_recommended_bet(
     league, sport, matchup, ts = _common_fields(trace)
     bankroll_val = bankroll if bankroll is not None else DEFAULT_BANKROLL
 
-    def _mk(market, selection, descriptor, line, odds) -> ExtractResult:
+    def _mk(market, selection, descriptor, line, odds, bookmaker) -> ExtractResult:
         american = coerce_american_odds(odds)
         if american is None:
             return ExtractResult(None, REASON_SKIP_BAD_ODDS)
@@ -179,6 +280,7 @@ def extract_recommended_bet(
             sport=sport,
             matchup=matchup,
             market=market,
+            bookmaker=bookmaker,
             selection=selection,
             selection_descriptor=descriptor,
             line=line,
@@ -204,10 +306,10 @@ def extract_recommended_bet(
         if odds is None:
             odds = input_snap.get("odds_over") if rec == "over" else input_snap.get("odds_under")
         market = f"player_prop:{_slug(stat)}"
-        line_str = _fmt_line(line)
-        descriptor = "_".join(p for p in (_slug(player), rec, line_str, _slug(stat)) if p)
-        label = f"{player} {rec.title()} {line_str} {stat}".strip()
-        return _mk(market, label, descriptor, line, odds)
+        descriptor, label = build_selection_descriptor(
+            market, rec, line=line, player=player, stat=stat
+        )
+        return _mk(market, label, descriptor, line, odds, _resolve_prop_book(trace))
 
     # kind == "game"
     edge = _best_game_edge(result)
@@ -221,7 +323,8 @@ def extract_recommended_bet(
             if not sel:
                 return ExtractResult(None, REASON_SKIP_NO_EDGE)
             descriptor = _slug(sel) or "best_bet"
-            return _mk("moneyline", sel, descriptor, None, best_bet.get("odds"))
+            book = _resolve_game_book(trace, market="moneyline", side="", team=sel, line=None)
+            return _mk("moneyline", sel, descriptor, None, best_bet.get("odds"), book)
         return ExtractResult(None, REASON_SKIP_PASS)
 
     market = _norm_market(edge.get("market"))
@@ -230,24 +333,13 @@ def extract_recommended_bet(
     odds = edge.get("market_odds")
     team = edge.get("team") or side
 
-    line_str = _fmt_line(line)
-    if market == "moneyline":
-        descriptor = f"{side}_moneyline"
-        label = f"{team} ML"
-    elif market == "spread":
-        descriptor = f"{side}_spread_{line_str}"
-        label = f"{team} {line_str}".strip()
-    elif market == "total":
-        descriptor = f"{side}_total_{line_str}"
-        label = f"{side.title()} {line_str}".strip()
-    else:
-        descriptor = "_".join(p for p in (side, _slug(market), line_str) if p)
-        label = f"{team} {market} {line_str}".strip()
+    descriptor, label = build_selection_descriptor(market, side, line=line, team=team)
 
     # Prefer the human-readable best_bet selection when it lines up.
     if isinstance(best_bet, dict) and best_bet.get("selection"):
         label = str(best_bet["selection"])
-    return _mk(market, label, descriptor, line, odds)
+    book = _resolve_game_book(trace, market=market, side=side, team=team, line=line)
+    return _mk(market, label, descriptor, line, odds, book)
 
 
 # ---------------------------------------------------------------------------

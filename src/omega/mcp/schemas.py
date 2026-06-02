@@ -86,3 +86,55 @@ class EvidenceRetrieveRequest(BaseModel):
     """
 
     slots: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class FlatBetRequest(BaseModel):
+    """Log a flat dollar wager into bet_ledger, tied to an existing trace.
+
+    `side` is required (and must be a gradeable side) so the canonical
+    selection_descriptor remains settleable by the outcome/regrade pipeline.
+    Money fields are filled later at grade time; the bet lands pending.
+    """
+
+    trace_id: str = Field(description="FK to traces.trace_id; must already exist")
+    market: str = Field(
+        description="moneyline | spread | total | player_prop (or player_prop:<stat>)"
+    )
+    side: str = Field(description="home | away | draw | over | under")
+    odds: float = Field(description="American odds, e.g. -110 or +135")
+    line: float | None = Field(default=None, description="Point/total; None for moneyline")
+    bookmaker: str = Field(default="betmgm", description="Sportsbook the price came from")
+    stake_amount: float = Field(default=25.0, gt=0, description="Flat dollar stake")
+    selection: str | None = Field(
+        default=None, description="Human-readable label; auto-derived if omitted"
+    )
+    player_name: str | None = Field(default=None, description="Required for player_prop")
+    prop_type: str | None = Field(default=None, description="Stat key for player_prop, e.g. pts")
+    db_path: str | None = None
+
+    @model_validator(mode="after")
+    def _check_side(self) -> FlatBetRequest:
+        if self.side.strip().lower() not in {"home", "away", "draw", "over", "under"}:
+            raise ValueError("side must be one of: home, away, draw, over, under")
+        return self
+
+
+class PortfolioSummaryRequest(BaseModel):
+    """Filters for the financial summary over bet_ledger."""
+
+    league: str | None = None
+    sport: str | None = None
+    start: str | None = None
+    end: str | None = None
+    base_bankroll: float = Field(default=1000.0, gt=0, description="Starting bankroll")
+    db_path: str | None = None
+
+
+class GameContextRequest(BaseModel):
+    """Resolve the situational context pack for one matchup."""
+
+    league: str
+    home_team: str
+    away_team: str
+    game_date: str = Field(description="Matchup date, YYYY-MM-DD")
+    lookback_days: int = Field(default=5, ge=1, le=14, description="Rest-days search window")

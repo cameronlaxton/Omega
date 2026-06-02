@@ -138,6 +138,22 @@ class HistoricalEvent:
 
 
 @dataclass(frozen=True)
+class ScoreEvent:
+    """One game returned by GET /sports/{sport}/scores.
+
+    Used to derive schedule facts (rest days) — only the completion flag, the
+    commence time, and the two team names are needed; live scores are ignored.
+    """
+
+    event_id: str
+    sport_key: str
+    commence_time: str
+    completed: bool
+    home_team: str
+    away_team: str
+
+
+@dataclass(frozen=True)
 class SportInfo:
     """One sport returned by The Odds API sports endpoint."""
 
@@ -274,6 +290,18 @@ class OddsApiClient:
             params["commenceTimeTo"] = commence_time_to
         payload = self._get_json(f"/sports/{sport_key}/events", params, request_cost=0)
         return parse_events_metadata(payload)
+
+    def fetch_scores(self, league: str, days_from: int = 3) -> list[ScoreEvent]:
+        """Fetch recent (completed) and upcoming games for a league.
+
+        ``days_from`` is the number of days in the past to include completed
+        games for; the-odds-api caps it at 3. Used to derive schedule facts
+        (e.g. rest days) for leagues without a free ESPN scoreboard.
+        """
+        sport_key = _require_sport_key(league)
+        params: dict[str, Any] = {"dateFormat": "iso", "daysFrom": int(days_from)}
+        payload = self._get_json(f"/sports/{sport_key}/scores", params)
+        return parse_scores(payload)
 
     def fetch_event_markets(
         self,
@@ -542,6 +570,27 @@ def parse_events_metadata(payload: Any) -> list[HistoricalEvent]:
             )
         )
     return events
+
+
+def parse_scores(payload: Any) -> list[ScoreEvent]:
+    """Parse recent/upcoming games from GET /sports/{sport}/scores."""
+    scores: list[ScoreEvent] = []
+    if not isinstance(payload, list):
+        return scores
+    for evt in payload:
+        if not isinstance(evt, dict):
+            continue
+        scores.append(
+            ScoreEvent(
+                event_id=str(evt.get("id", "")),
+                sport_key=str(evt.get("sport_key", "")),
+                commence_time=str(evt.get("commence_time", "")),
+                completed=bool(evt.get("completed", False)),
+                home_team=str(evt.get("home_team", "")),
+                away_team=str(evt.get("away_team", "")),
+            )
+        )
+    return scores
 
 
 def parse_event_markets(payload: Any) -> list[EventMarketAvailability]:

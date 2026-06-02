@@ -269,7 +269,11 @@ def test_resolve_prop_returns_exact_betmgm_patch():
     )
 
     assert result["status"] == "success"
-    assert result["request_patch"] == {"line": 27.5, "odds_over": -115, "odds_under": -105}
+    # Single-book mode stamps the source book onto the prop patch for ledger
+    # provenance; the over/under prices are unchanged.
+    assert result["request_patch"] == {
+        "line": 27.5, "odds_over": -115, "odds_under": -105, "bookmaker": "betmgm",
+    }
 
 
 def test_resolve_wnba_points_prop_uses_standard_ou_market():
@@ -285,7 +289,9 @@ def test_resolve_wnba_points_prop_uses_standard_ou_market():
     )
 
     assert result["status"] == "success"
-    assert result["request_patch"] == {"line": 27.5, "odds_over": -115, "odds_under": -105}
+    assert result["request_patch"] == {
+        "line": 27.5, "odds_over": -115, "odds_under": -105, "bookmaker": "betmgm",
+    }
     assert {q["provider_market_key"] for q in result["quotes"]} == {"player_points"}
 
 
@@ -303,3 +309,24 @@ def test_resolve_prop_does_not_fallback_when_betmgm_market_missing():
 
     assert result["status"] == "unavailable"
     assert "betmgm does not list market" in result["skipped_reasons"][0]
+
+
+def test_resolve_prop_line_shopping_omits_book_provenance():
+    # Under line shopping the over/under sides can come from different books, so
+    # no single book is stamped — the ledger records 'consensus' and best_prices
+    # carries the per-side shopping detail.
+    result = resolve_odds(
+        kind="prop",
+        league="NBA",
+        home_team="Los Angeles Lakers",
+        away_team="Boston Celtics",
+        player_name="Jayson Tatum",
+        prop_type="pts",
+        line=27.5,
+        line_shopping=True,
+        client=FakeOddsClient(),
+    )
+
+    assert result["status"] == "success"
+    assert "bookmaker" not in result["request_patch"]
+    assert "best_prices" in result

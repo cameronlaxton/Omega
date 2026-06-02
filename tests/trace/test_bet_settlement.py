@@ -167,3 +167,60 @@ class TestExtractRecommendedBet:
             provenance=BetProvenance.BACKFILL,
         )
         assert res.reason == REASON_SKIP_SLATE
+
+
+class TestBookProvenance:
+    def test_game_book_from_matching_market_quote(self):
+        trace = _game_trace()
+        trace["input_snapshot"]["odds"] = {
+            "markets": [
+                {"market_type": "spread", "selection": "B", "line": -3.5,
+                 "price": -110, "bookmaker": "draftkings"},
+                {"market_type": "moneyline", "selection": "A", "price": 120,
+                 "bookmaker": "fanduel"},
+            ]
+        }
+        bet = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL).bet
+        assert bet.bookmaker == "draftkings"  # matched the chosen spread selection
+
+    def test_game_book_uniform_fallback_when_no_exact_match(self):
+        trace = _game_trace()
+        # No spread quote for the chosen selection, but every quote is one book.
+        trace["input_snapshot"]["odds"] = {
+            "markets": [
+                {"market_type": "moneyline", "selection": "A", "price": 120,
+                 "bookmaker": "caesars"},
+                {"market_type": "moneyline", "selection": "B", "price": -140,
+                 "bookmaker": "caesars"},
+            ]
+        }
+        bet = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL).bet
+        assert bet.bookmaker == "caesars"
+
+    def test_game_book_consensus_when_books_mixed_and_no_match(self):
+        trace = _game_trace()
+        trace["input_snapshot"]["odds"] = {
+            "markets": [
+                {"market_type": "moneyline", "selection": "A", "price": 120,
+                 "bookmaker": "caesars"},
+                {"market_type": "moneyline", "selection": "B", "price": -140,
+                 "bookmaker": "fanduel"},
+            ]
+        }
+        bet = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL).bet
+        assert bet.bookmaker == "consensus"
+
+    def test_game_book_consensus_when_no_markets(self):
+        # The default _game_trace carries no odds.markets — unknown book.
+        bet = extract_recommended_bet(_game_trace(), provenance=BetProvenance.BACKFILL).bet
+        assert bet.bookmaker == "consensus"
+
+    def test_prop_book_from_request_field(self):
+        trace = _prop_trace()
+        trace["input_snapshot"]["bookmaker"] = "betmgm"
+        bet = extract_recommended_bet(trace, provenance=BetProvenance.ENGINE_AUTO).bet
+        assert bet.bookmaker == "betmgm"
+
+    def test_prop_book_consensus_when_absent(self):
+        bet = extract_recommended_bet(_prop_trace(), provenance=BetProvenance.ENGINE_AUTO).bet
+        assert bet.bookmaker == "consensus"

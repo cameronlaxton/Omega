@@ -545,6 +545,12 @@ def resolve_odds(
             prop_type=prop_type or "",
             line=line,
         )
+        # Record book provenance only when a single book was queried — in that
+        # case both sides came from `bookmaker`. Under line shopping the two
+        # sides may differ, so leave it unset (ledger records 'consensus') and
+        # rely on the best_prices advisory block below.
+        if selected and not (line_shopping or all_books):
+            selected["bookmaker"] = bookmaker
         request_patch = selected
         output_quotes = player_quotes
     else:

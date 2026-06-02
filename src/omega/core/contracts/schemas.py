@@ -230,6 +230,14 @@ class PlayerPropRequest(BaseModel):
     line: float = Field(description="The prop line, e.g. 22.5")
     odds_over: float | None = Field(default=None, description="American odds for Over")
     odds_under: float | None = Field(default=None, description="American odds for Under")
+    bookmaker: str | None = Field(
+        default=None,
+        description=(
+            "Source sportsbook for odds_over/odds_under (provenance only; does not "
+            "affect simulation). Recorded into the bet ledger. Leave None when the "
+            "prices were line-shopped across books."
+        ),
+    )
     player_context: dict[str, Any] | None = Field(
         default=None, description="Player statistical context"
     )

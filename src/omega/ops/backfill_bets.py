@@ -41,7 +41,6 @@ if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
 from omega.trace.bet_settlement import (  # noqa: E402
-    REASON_OK,
     ExtractResult,
     compute_pnl,
     extract_recommended_bet,
@@ -164,7 +163,7 @@ def _grade(store: TraceStore, bet: LedgerBet) -> tuple[LedgerStatus, float | Non
     )
 
 
-def regrade_pending(store: TraceStore, *, apply: bool, summary: "BackfillSummary") -> None:
+def regrade_pending(store: TraceStore, *, apply: bool, summary: BackfillSummary) -> None:
     """Grade ledger rows still 'pending' that now have an attached outcome.
 
     This is what lets a later run pick up bets logged earlier: log first

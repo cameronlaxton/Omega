@@ -105,6 +105,33 @@ user-facing output is downgraded. If fewer than 3 real facts are available and q
 
 ---
 
+## Book provenance & line shopping in the Bet Card
+
+Every actionable Bet Card must name the **source sportsbook** for the price it
+quotes. This is the book the engine's `market_odds` came from — in the default
+flow that is BetMGM (`omega-resolve-odds` is BetMGM-first). The book is recorded
+on the persisted bet (`bet_ledger.bookmaker`); when it is genuinely unknown the
+ledger stores `consensus`, and the Bet Card should say so rather than guess.
+
+When odds were resolved with `--line-shopping` / `--all-books`, the resolver
+payload carries a **`best_prices`** block: the best available price per
+selection, each tagged with the real book that offers it. Surface it as an
+advisory line under the Bet Card, e.g.:
+
+> **Bet:** Celtics ML −130 (BetMGM) · *Best available: −115 (DraftKings)*
+
+Rules for this advisory:
+
+- `best_prices` is a **listed sportsbook line from a cited source**, so it is
+  permitted even in `RESEARCH_CANDIDATE` mode (unlike edge%/EV%/Kelly/tier).
+- It is **advisory only**. The engine's edge/EV/Kelly stay computed against the
+  single anchored book in `market_odds` — never recompute them against a
+  best-shopped price, and never present a synthetic cross-book line (best-over
+  from one book + best-under from another is two separate quotes, not one bet).
+- If you did not line-shop (no `best_prices` block), omit the advisory line.
+
+---
+
 ## The LLM ⊥ engine ownership boundary (hard rule)
 
 The LLM may control: reasoning, planning, routing, evidence arbitration, explanation, and
