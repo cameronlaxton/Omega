@@ -13,6 +13,7 @@ The deterministic Omega engine owns simulation, probability calibration, fair-pr
 - `omega_analyze_game`: validates a single-game request and delegates to `omega.core.contracts.service.analyze`.
 - `omega_analyze_prop`: validates a player-prop request and delegates to `omega.core.contracts.service.analyze`.
 - `omega_analyze_slate`: validates a slate request and delegates to `omega.core.contracts.service.analyze`.
+- `omega_run_batch`: accepts a list of `BatchAnalysisEntry` dicts (mixed game/prop), resolves odds per-entry via `omega_resolve_odds` (with prop_type fallback chain if a list is supplied), calls `analyze()` per entry, and writes each export block to `var/inbox/traces/<trace_id>.json`. Use for sessions producing more than 3 analyses — replaces the need for manual looping or scratch scripts. Returns a summary with per-entry status (ok/skipped/error), all trace_ids, and export paths.
 - `omega_chat_orchestrate`: returns an explicit unsupported response until a real chat orchestrator exists.
 - `omega_replay_bundle`: performs replay-plane audit over a frozen `ReplayBundle`; live fetching is disabled.
 - `omega_trace_get`: retrieves a persisted trace through `TraceStore`.

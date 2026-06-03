@@ -34,6 +34,7 @@ TOOL_NAMES = (
     "omega_analyze_game",
     "omega_analyze_prop",
     "omega_analyze_slate",
+    "omega_run_batch",
     "omega_chat_orchestrate",
     "omega_replay_bundle",
     "omega_trace_get",
@@ -299,6 +300,206 @@ def omega_analyze_slate(
         return _error("omega_analyze_slate", "invalid_request", str(exc))
     except Exception as exc:
         return _error("omega_analyze_slate", "analysis_failed", str(exc))
+
+
+def omega_run_batch(
+    entries: list[dict[str, Any]],
+    bankroll: float,
+    session_id: str,
+) -> dict[str, Any]:
+    """Run N game/prop analyses in one call: resolve odds, analyze, write export blocks.
+
+    Each entry is a BatchAnalysisEntry dict.  If odds fields are absent the tool
+    resolves them via omega_resolve_odds before calling analyze().  For props,
+    prop_type may be a list — the first market that resolves successfully is used.
+
+    Export blocks are written to ``var/inbox/traces/<trace_id>.json`` in the
+    standard shape required by ``omega-ingest-traces``.
+
+    Returns a summary envelope with per-entry status (ok/skipped/error) and the
+    list of trace_ids and export paths for successfully completed entries.
+    """
+    import hashlib
+    import json as _json
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from omega.core.contracts.schemas import BatchAnalysisEntry
+    from omega.core.contracts.service import analyze
+    from omega.integrations.odds_resolver import resolve_odds
+    from omega.paths import repo_root
+
+    # Gate check runs once for the entire batch.
+    gate_failures = _formal_output_gate_failures()
+    if gate_failures:
+        return _formal_output_blocked("omega_run_batch", gate_failures)
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    inbox_dir = repo_root() / "var" / "inbox" / "traces"
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+
+    results: list[dict[str, Any]] = []
+    trace_ids: list[str] = []
+    export_paths: list[str] = []
+    errors: list[dict[str, Any]] = []
+
+    for idx, raw in enumerate(entries):
+        try:
+            entry = BatchAnalysisEntry(**raw)
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"index": idx, "identifier": str(raw.get("player_name") or raw.get("home_team") or idx), "error": str(exc)})
+            results.append({"index": idx, "status": "error", "error": str(exc)})
+            continue
+
+        game_date = entry.game_date or today
+        identifier = entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
+
+        # --- Odds resolution ---
+        if entry.kind == "prop":
+            prop_types = entry.prop_type if isinstance(entry.prop_type, list) else ([entry.prop_type] if entry.prop_type else [])
+            odds_patch: dict[str, Any] | None = None
+            resolved_prop_type: str | None = None
+            if entry.odds_over is not None and entry.odds_under is not None and entry.line is not None:
+                # Pre-supplied
+                odds_patch = {"line": entry.line, "odds_over": entry.odds_over, "odds_under": entry.odds_under}
+                resolved_prop_type = prop_types[0] if prop_types else None
+            else:
+                for pt in prop_types:
+                    try:
+                        res = resolve_odds(
+                            kind="prop",
+                            league=entry.league,
+                            player_name=entry.player_name,
+                            prop_type=pt,
+                            home_team=entry.home_team,
+                            away_team=entry.away_team,
+                        )
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if res.get("status") == "success" and res.get("request_patch"):
+                        odds_patch = res["request_patch"]
+                        resolved_prop_type = pt
+                        break
+            if odds_patch is None:
+                results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": "odds_unavailable"})
+                continue
+
+            request_dict: dict[str, Any] = {
+                "player_name": entry.player_name,
+                "league": entry.league,
+                "prop_type": resolved_prop_type,
+                "line": odds_patch["line"],
+                "home_team": entry.home_team,
+                "away_team": entry.away_team,
+                "game_date": game_date,
+                "odds_over": odds_patch["odds_over"],
+                "odds_under": odds_patch["odds_under"],
+                "player_context": entry.player_context or {},
+                "game_context": entry.game_context or {},
+                "n_iterations": entry.n_iterations,
+                "evidence": entry.evidence,
+            }
+
+        else:  # game
+            game_odds = entry.odds
+            if game_odds is None:
+                try:
+                    res = resolve_odds(kind="game", league=entry.league, home_team=entry.home_team, away_team=entry.away_team)
+                    if res.get("status") == "success" and res.get("request_patch"):
+                        game_odds = res["request_patch"].get("odds") or res["request_patch"]
+                    else:
+                        results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": "odds_unavailable"})
+                        continue
+                except Exception as exc:  # noqa: BLE001
+                    results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": f"odds_resolution_failed: {exc}"})
+                    continue
+
+            request_dict = {
+                "home_team": entry.home_team,
+                "away_team": entry.away_team,
+                "league": entry.league,
+                "home_context": entry.home_context or {},
+                "away_context": entry.away_context or {},
+                "game_context": entry.game_context or {},
+                "odds": game_odds,
+                "n_iterations": entry.n_iterations,
+                "evidence": entry.evidence,
+            }
+
+        # --- Seed derivation ---
+        if entry.seed is not None:
+            request_dict["seed"] = entry.seed
+        else:
+            seed_src = _json.dumps({"entry": request_dict, "session_id": session_id}, sort_keys=True, separators=(",", ":"), default=str).encode()
+            request_dict["seed"] = int.from_bytes(hashlib.sha256(seed_src).digest()[:4], "big")
+
+        # --- Analyze ---
+        try:
+            trace = analyze(request_dict, bankroll=bankroll, session_id=session_id)
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"index": idx, "identifier": identifier, "error": str(exc)})
+            results.append({"index": idx, "status": "error", "identifier": identifier, "error": str(exc)})
+            continue
+
+        trace_id = trace["trace_id"]
+
+        # --- Build export block (OMEGA_COWORK.md §6d format) ---
+        market_context: dict[str, Any] = {}
+        if entry.kind == "prop":
+            market_context = {
+                "player": entry.player_name,
+                "prop_type": resolved_prop_type,
+                "line": odds_patch["line"],
+                "odds_over": odds_patch["odds_over"],
+                "odds_under": odds_patch["odds_under"],
+            }
+        elif game_odds:
+            market_context = {"odds": game_odds}
+
+        export_block = {
+            "trace": trace,
+            "bet_record": None,
+            "reasoning_inputs": {
+                "sources": entry.reasoning_sources,
+                "fields_gathered": list(request_dict.keys()),
+                "missing_fields": [],
+                "market_context": market_context,
+            },
+            "reasoning_downgrade_rationale": None,
+            "reasoning_narrative": entry.reasoning_narrative or f"Batch analysis: {identifier}",
+            "trace_quality": trace.get("trace_quality") or {},
+        }
+
+        # --- Write to inbox ---
+        dest = inbox_dir / f"{trace_id}.json"
+        try:
+            dest.write_text(_json.dumps(export_block, indent=2, default=str), encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"index": idx, "identifier": identifier, "error": f"export_write_failed: {exc}"})
+            results.append({"index": idx, "status": "error", "identifier": identifier, "trace_id": trace_id, "error": str(exc)})
+            continue
+
+        trace_ids.append(trace_id)
+        export_paths.append(str(dest))
+        results.append({"index": idx, "status": "ok", "identifier": identifier, "trace_id": trace_id, "export_path": str(dest)})
+
+    ok_count = sum(1 for r in results if r["status"] == "ok")
+    skipped_count = sum(1 for r in results if r["status"] == "skipped")
+    error_count = sum(1 for r in results if r["status"] == "error")
+    overall = "ok" if error_count == 0 else ("partial" if ok_count > 0 else "error")
+
+    return _ok(
+        "omega_run_batch",
+        status=overall,
+        entries_total=len(entries),
+        entries_ok=ok_count,
+        entries_skipped=skipped_count,
+        entries_error=error_count,
+        trace_ids=trace_ids,
+        export_paths=export_paths,
+        errors=errors,
+        results=results,
+    )
 
 
 def omega_chat_orchestrate(prompt: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -861,6 +1062,7 @@ def build_server():
         omega_analyze_game,
         omega_analyze_prop,
         omega_analyze_slate,
+        omega_run_batch,
         omega_chat_orchestrate,
         omega_replay_bundle,
         omega_trace_get,

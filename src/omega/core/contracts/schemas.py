@@ -10,7 +10,7 @@ These models define the JSON interface between:
 from __future__ import annotations
 
 import warnings
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -219,6 +219,42 @@ class SlateAnalysisRequest(BaseModel):
     games: list[dict[str, Any]] | None = Field(
         default=None, description="Pre-fetched games (home/away/odds); required for analysis"
     )
+
+
+class BatchAnalysisEntry(BaseModel):
+    """One entry in an omega_run_batch call — either a game or a player prop.
+
+    If odds fields are absent the batch tool resolves them via omega_resolve_odds.
+    For props, prop_type may be a list to express a fallback chain (first available
+    market wins).
+    """
+
+    kind: Literal["game", "prop"] = Field(description="'game' or 'prop'")
+    league: str = Field(description="League identifier, e.g. MLB, NBA, NFL")
+    home_team: str = Field(description="Home team name")
+    away_team: str = Field(description="Away team name")
+    game_date: str | None = Field(default=None, description="YYYY-MM-DD; defaults to today")
+    game_context: dict[str, Any] = Field(default_factory=dict, description="Calibration context (is_playoff, rest_days, …)")
+    n_iterations: int = Field(default=10000, ge=100, le=100000)
+    seed: int | None = Field(default=None, description="RNG seed; auto-derived from content hash if None")
+    evidence: list[dict[str, Any]] = Field(default_factory=list, description="EvidenceSignal dicts")
+    reasoning_narrative: str | None = Field(default=None, description="2–4 sentence summary of reasoning")
+    reasoning_sources: list[str] = Field(default_factory=list, description="Sources consulted, e.g. espn.com")
+    # prop-only
+    player_name: str | None = Field(default=None, description="Player name (kind='prop' only)")
+    prop_type: str | list[str] | None = Field(
+        default=None,
+        description="Stat key (kind='prop'). List = fallback chain — first available market wins.",
+    )
+    player_context: dict[str, Any] = Field(default_factory=dict, description="Player stat context")
+    # game-only
+    home_context: dict[str, Any] = Field(default_factory=dict, description="Home team context")
+    away_context: dict[str, Any] = Field(default_factory=dict, description="Away team context")
+    # pre-supplied odds (absent → batch tool resolves via resolve_odds)
+    odds_over: float | None = Field(default=None, description="American odds for Over (prop)")
+    odds_under: float | None = Field(default=None, description="American odds for Under (prop)")
+    line: float | None = Field(default=None, description="Prop line; auto-resolved if absent")
+    odds: dict[str, Any] | None = Field(default=None, description="Game odds dict (kind='game'); auto-resolved if absent")
 
 
 class PlayerPropRequest(BaseModel):

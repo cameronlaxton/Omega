@@ -240,6 +240,47 @@ python -m omega.mcp.server
 
 MCP analyze tools call `omega.core.contracts.service.analyze()` directly. MCP is an adapter over the canonical core service, not a second betting engine.
 
+### 2f. Batch analysis (N > 3 analyses)
+
+When MCP is available, use `omega_run_batch` for any session producing more than 3 traces.
+One tool call handles odds resolution (with prop_type fallback chain), seed derivation,
+formal gate enforcement, and export-block writing to `var/inbox/traces/` — no manual
+looping, no round-trips, no scratch scripts required.
+
+```python
+# Example: 2 props + 1 game in one call
+omega_run_batch(
+    entries=[
+        {"kind": "prop", "league": "MLB", "player_name": "Julio Rodríguez",
+         "prop_type": ["hits", "total_bases"],   # fallback chain
+         "home_team": "Seattle Mariners", "away_team": "New York Mets",
+         "game_date": "2026-06-03", "player_context": {"hits_mean": 1.15, "hits_std": 0.8},
+         "game_context": {"is_playoff": False, "rest_days": 1}},
+        {"kind": "game", "league": "MLB",
+         "home_team": "New York Yankees", "away_team": "Cleveland Guardians",
+         "game_date": "2026-06-03",
+         "home_context": {"off_rating": 5.15, "def_rating": 3.60, "starter_era": 0.71},
+         "away_context": {"off_rating": 4.16, "def_rating": 4.06, "starter_era": 3.07},
+         "game_context": {"is_playoff": False, "rest_days": 1}},
+    ],
+    bankroll=1000.0,
+    session_id="sess-20260603-mlb1",
+)
+```
+
+When MCP is unavailable and a CLI loop is impractical (N > 5), a batch Python script is
+an authorized fallback. Every such script **must**:
+
+1. Call `cowork_preflight.run_formal_output_gate()` at the top — abort if gate fails.
+2. Derive every seed deterministically: `sha256(prompt + date)[:4]` — never `random`.
+3. Include at least one `EvidenceSignal` per trace, or set `reasoning_downgrade_rationale`
+   explaining why evidence is empty.
+4. Not hardcode `trace_quality.aggregate_quality`; omit it or compute from input quality.
+5. Not mutate shared state as a side effect (e.g., deleting the entire odds cache).
+
+Scripts violating these rules produce uncalibrated traces and may contaminate the
+calibration loop with incorrect quality scores.
+
 If the client cannot expose MCP tools, use the sanctioned direct-engine CLI for
 repeatable one-off or batch calls instead of creating scratch Python under
 `src/omega/ops/`:
