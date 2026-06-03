@@ -50,6 +50,7 @@ from omega.strategy.distribution_metrics import (  # noqa: E402
 )
 from omega.strategy.distribution_metrics import crps_from_distribution_row  # noqa: E402
 from omega.trace.clv import compute_clv  # noqa: E402
+from omega.trace.db import require_sqlite_backend  # noqa: E402
 from omega.trace.report_header import header_for_store  # noqa: E402
 from omega.trace.session_sidecar import load_sidecar_safe  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
@@ -724,6 +725,7 @@ def main() -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    require_sqlite_backend("report_calibration.py")
 
     out_path: Path = args.out or (_REPO_ROOT / "reports" / "latest.md")
     try:
@@ -800,7 +802,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

@@ -44,6 +44,7 @@ from omega.trace.bet_settlement import (  # noqa: E402
     ExtractResult,
     extract_recommended_bet,
 )
+from omega.trace.db import require_sqlite_backend  # noqa: E402
 from omega.trace.ledger_bet import (  # noqa: E402
     DEFAULT_BANKROLL,
     DEFAULT_STAKE_AMOUNT,
@@ -274,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    require_sqlite_backend("backfill_bets.py")
 
     apply = bool(args.apply) and not args.dry_run
 

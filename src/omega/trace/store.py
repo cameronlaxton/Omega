@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 from omega.paths import default_trace_db_path
 from omega.trace.bet_record import BetRecord
 from omega.trace.bet_settlement import compute_pnl, extract_recommended_bet
+from omega.trace.db import resolve_backend
 from omega.trace.ledger_bet import (
     DEFAULT_BANKROLL,
     BetProvenance,
@@ -471,9 +472,26 @@ class TraceStore:
         *,
         read_only: bool = False,
     ) -> None:
-        effective_path, source = _resolve_db_path(db_path)
         if journal_mode is not None and journal_mode.upper() not in {"WAL", "DELETE", "AUTO"}:
             raise ValueError("journal_mode must be 'WAL', 'DELETE', 'AUTO', or None")
+        self._repo: Any | None = None
+        backend = resolve_backend(db_path)
+        if backend.backend == "postgres":
+            if journal_mode is not None:
+                raise ValueError("journal_mode is sqlite-only when DATABASE_URL routes to Postgres")
+            from omega.trace.repository import PostgresRepository
+
+            self._db_path = backend.target or ""
+            self._db_path_source = "database_url"
+            self._read_only = bool(read_only)
+            self._empty_history_mode = False
+            self._conn: sqlite3.Connection | None = None
+            self._journal_mode: str | None = None
+            self._requested_journal_mode = "AUTO"
+            self._repo = PostgresRepository(self._db_path, read_only=self._read_only)
+            return
+
+        effective_path, source = _resolve_db_path(backend.target)
         self._db_path = effective_path
         self._db_path_source = source
         self._read_only = bool(read_only)
@@ -509,6 +527,11 @@ class TraceStore:
 
     @property
     def conn(self) -> sqlite3.Connection:
+        if self._repo is not None:
+            raise RuntimeError(
+                "Raw sqlite3 connection is unavailable for Postgres TraceStore; "
+                "use public TraceStore APIs."
+            )
         if self._conn is None:
             if self._read_only:
                 # Build a read-only URI that survives Windows paths with spaces
@@ -763,6 +786,8 @@ class TraceStore:
         Raises:
             ValueError: if required fields are missing.
         """
+        if self._repo is not None:
+            return self._repo.persist(trace)
         if hasattr(trace, "to_store_record"):
             trace = trace.to_store_record()
         elif hasattr(trace, "model_dump"):
@@ -898,6 +923,8 @@ class TraceStore:
 
     def get_simulation_distributions(self, trace_id: str) -> list[dict[str, Any]]:
         """Return V10 simulation distribution rows attached to one trace."""
+        if self._repo is not None:
+            return self._repo.get_simulation_distributions(trace_id)
         rows = self.conn.execute(
             """SELECT distribution_id, trace_id, kind, league, target, market,
                       stat_key, distribution_type, distribution_params,
@@ -982,6 +1009,8 @@ class TraceStore:
 
     def get_evidence_signals(self, trace_id: str) -> list[dict[str, Any]]:
         """Return all evidence signal rows attached to a trace (may be empty)."""
+        if self._repo is not None:
+            return self._repo.get_evidence_signals(trace_id)
         rows = self.conn.execute(
             """SELECT id, trace_id, signal_type, category, plane, source,
                       confidence, obs_window, direction, stat_key, league,
@@ -1010,6 +1039,10 @@ class TraceStore:
         flag lives in trace_quality.calibration_eligible inside the full_trace
         blob and is reconciled separately. The trace row must already exist (FK).
         """
+        if self._repo is not None:
+            return self._repo.write_qa_verdict(
+                trace_id, verdict, session_id=session_id, ran_at=ran_at
+            )
         self.conn.execute(
             """INSERT INTO trace_qa_verdicts
                    (trace_id, session_id, verdict, scope, gate_name, reason,
@@ -1040,6 +1073,8 @@ class TraceStore:
 
     def get_qa_verdict(self, trace_id: str) -> dict[str, Any] | None:
         """Return the trace-scoped QA verdict audit row, or None."""
+        if self._repo is not None:
+            return self._repo.get_qa_verdict(trace_id)
         row = self.conn.execute(
             "SELECT * FROM trace_qa_verdicts WHERE trace_id = ?",
             (trace_id,),
@@ -1064,6 +1099,8 @@ class TraceStore:
 
         Returns the number of rows written.
         """
+        if self._repo is not None:
+            return self._repo.upsert_signal_performance(rows, dataset_hash)
         scored_at = datetime.now(UTC).isoformat()
         payload = [
             (
@@ -1104,6 +1141,8 @@ class TraceStore:
         "Most recent" is the latest ``scored_at`` (optionally scoped to a
         league). Older runs stay in the table for history but are not returned.
         """
+        if self._repo is not None:
+            return self._repo.get_signal_performance(league=league, limit=limit)
         latest = self.conn.execute(
             "SELECT scored_at FROM signal_performance "
             + ("WHERE league = ? " if league else "")
@@ -1157,6 +1196,13 @@ class TraceStore:
         Raises:
             ValueError: if trace_id does not exist.
         """
+        if self._repo is not None:
+            return self._repo.attach_outcome(
+                trace_id=trace_id,
+                home_score=home_score,
+                away_score=away_score,
+                source=source,
+            )
         # Verify trace exists
         row = self.conn.execute(
             "SELECT trace_id FROM traces WHERE trace_id = ?", (trace_id,)
@@ -1189,6 +1235,18 @@ class TraceStore:
         )
         self.conn.commit()
         return outcome_id
+
+    def get_outcome(self, trace_id: str) -> dict[str, Any] | None:
+        """Return the game outcome attached to a trace, or None."""
+        if self._repo is not None:
+            return self._repo.get_outcome(trace_id)
+        row = self.conn.execute(
+            """SELECT outcome_id, trace_id, home_score, away_score, result,
+                      attached_at, source
+               FROM outcomes WHERE trace_id = ? ORDER BY attached_at LIMIT 1""",
+            (trace_id,),
+        ).fetchone()
+        return dict(row) if row else None
 
     # ------------------------------------------------------------------
     # Prop outcome attachment (Phase 6h — player-prop grading)
@@ -1225,6 +1283,16 @@ class TraceStore:
         Raises:
             ValueError: if trace_id does not exist or side is not over/under.
         """
+        if self._repo is not None:
+            return self._repo.attach_prop_outcome(
+                trace_id=trace_id,
+                player_name=player_name,
+                stat_type=stat_type,
+                stat_value=stat_value,
+                line=line,
+                side=side,
+                source=source,
+            )
         side_norm = side.lower().strip()
         if side_norm not in ("over", "under"):
             raise ValueError(f"side must be 'over' or 'under', got {side!r}")
@@ -1275,6 +1343,8 @@ class TraceStore:
 
     def get_prop_outcomes(self, trace_id: str) -> list[dict[str, Any]]:
         """Return all prop outcomes attached to a trace (may be empty)."""
+        if self._repo is not None:
+            return self._repo.get_prop_outcomes(trace_id)
         rows = self.conn.execute(
             """SELECT prop_outcome_id, trace_id, player_name, stat_type,
                       stat_value, line, side, result, source, attached_at
@@ -1301,6 +1371,8 @@ class TraceStore:
         Raises:
             ValueError: if the referenced trace does not exist.
         """
+        if self._repo is not None:
+            return self._repo.record_bet(bet)
         stake = round((bet.stake_units or 0.0) * (DEFAULT_BANKROLL / 100.0), 2) or 25.0
         ts = bet.decision_timestamp or ""
         ledger = LedgerBet(
@@ -1330,6 +1402,8 @@ class TraceStore:
         """Return user-confirmed wagers for a trace in the legacy bet_records
         shape (bet_id/book/odds_taken/line_taken/stake_units), read from
         bet_ledger where provenance='user_confirmed'. May be empty."""
+        if self._repo is not None:
+            return self._repo.get_bet_records(trace_id)
         rows = self.conn.execute(
             """SELECT ledger_id, trace_id, bookmaker, market, selection,
                       selection_descriptor, line, odds, stake_amount,
@@ -1383,6 +1457,10 @@ class TraceStore:
         consistent. Returns full trace dicts; callers are expected to call
         the same _prop_fields()/grading path as analysis-trace candidates.
         """
+        if self._repo is not None:
+            return self._repo.query_ungraded_prop_bet_traces(
+                league=league, start=start, end=end, limit=limit
+            )
         clauses = [
             "b.status = 'pending'",
             "b.market LIKE 'player_prop:%'",
@@ -1414,6 +1492,8 @@ class TraceStore:
 
     def update_bet_status(self, bet_id: str, status: str) -> None:
         """Mark a bet won/lost/void/push after outcome resolves (bet_ledger)."""
+        if self._repo is not None:
+            return self._repo.update_bet_status(bet_id, status)
         self.conn.execute(
             "UPDATE bet_ledger SET status = ? WHERE ledger_id = ?",
             (status, bet_id),
@@ -1455,6 +1535,8 @@ class TraceStore:
         Raises:
             ValueError: if the referenced trace does not exist.
         """
+        if self._repo is not None:
+            return self._repo.record_ledger_bet(bet)
         row = self.conn.execute(
             "SELECT trace_id FROM traces WHERE trace_id = ?", (bet.trace_id,)
         ).fetchone()
@@ -1522,6 +1604,10 @@ class TraceStore:
         net_pnl: float | None,
     ) -> None:
         """Settle a ledger bet: write status + money + graded_at."""
+        if self._repo is not None:
+            return self._repo.grade_ledger_bet(
+                ledger_id, status, payout_amount, net_pnl
+            )
         status_val = status.value if isinstance(status, LedgerStatus) else str(status)
         self.conn.execute(
             """UPDATE bet_ledger
@@ -1540,6 +1626,8 @@ class TraceStore:
 
     def get_ledger_bets(self, trace_id: str) -> list[dict[str, Any]]:
         """Return all ledger bets attached to a trace (may be empty)."""
+        if self._repo is not None:
+            return self._repo.get_ledger_bets(trace_id)
         rows = self.conn.execute(
             f"SELECT {self._LEDGER_COLUMNS} FROM bet_ledger "
             "WHERE trace_id = ? ORDER BY created_at",
@@ -1558,6 +1646,16 @@ class TraceStore:
         limit: int = 10000,
     ) -> list[dict[str, Any]]:
         """Return ledger bets matching filters, newest first (for dashboard/export)."""
+        if self._repo is not None:
+            return self._repo.query_ledger(
+                league=league,
+                sport=sport,
+                status=status,
+                provenance=provenance,
+                start=start,
+                end=end,
+                limit=limit,
+            )
         clauses: list[str] = []
         params: list[Any] = []
         if league:
@@ -1620,6 +1718,16 @@ class TraceStore:
         Returns:
             closing_id of the row (existing or newly inserted).
         """
+        if self._repo is not None:
+            return self._repo.attach_closing_line(
+                trace_id=trace_id,
+                market=market,
+                selection_descriptor=selection_descriptor,
+                closing_odds=closing_odds,
+                closing_line=closing_line,
+                closing_timestamp=closing_timestamp,
+                source=source,
+            )
         row = self.conn.execute(
             "SELECT trace_id FROM traces WHERE trace_id = ?", (trace_id,)
         ).fetchone()
@@ -1656,6 +1764,8 @@ class TraceStore:
 
     def get_closing_lines(self, trace_id: str) -> list[dict[str, Any]]:
         """Return all closing-line snapshots attached to a trace."""
+        if self._repo is not None:
+            return self._repo.get_closing_lines(trace_id)
         rows = self.conn.execute(
             """SELECT closing_id, trace_id, market, selection_descriptor,
                       closing_line, closing_odds, closing_timestamp, source, captured_at
@@ -1681,6 +1791,8 @@ class TraceStore:
 
         Returns the early_id of the row (existing or newly inserted).
         """
+        if self._repo is not None:
+            return self._repo.record_early_market_snapshot(snapshot)
         early_id = snapshot.stable_id()
         self.conn.execute(
             """INSERT OR IGNORE INTO early_market_snapshots
@@ -1705,6 +1817,8 @@ class TraceStore:
 
     def get_early_market_snapshots(self, trace_id: str) -> list[dict[str, Any]]:
         """Return all early-market snapshots captured for a trace."""
+        if self._repo is not None:
+            return self._repo.get_early_market_snapshots(trace_id)
         rows = self.conn.execute(
             """SELECT early_id, trace_id, league, market, selection_descriptor,
                       early_line, early_odds, liquidity_profile, captured_at,
@@ -1720,6 +1834,8 @@ class TraceStore:
 
     def record_market_snapshot(self, snapshot: MarketSnapshot) -> str:
         """Persist one provider market observation idempotently."""
+        if self._repo is not None:
+            return self._repo.record_market_snapshot(snapshot)
         snapshot_id = snapshot.stable_id()
         self.conn.execute(
             """INSERT OR IGNORE INTO market_snapshots
@@ -1759,6 +1875,13 @@ class TraceStore:
         selection: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return provider market observations for movement analysis."""
+        if self._repo is not None:
+            return self._repo.get_market_snapshots(
+                provider_event_id=provider_event_id,
+                market=market,
+                bookmaker=bookmaker,
+                selection=selection,
+            )
         clauses = ["provider_event_id = ?"]
         params: list[Any] = [provider_event_id]
         if market:
@@ -1790,6 +1913,13 @@ class TraceStore:
         bookmaker: str,
     ) -> dict[str, Any] | None:
         """Compute simple first-to-last line movement for an exact market row."""
+        if self._repo is not None:
+            return self._repo.compute_market_movement(
+                provider_event_id=provider_event_id,
+                market=market,
+                selection=selection,
+                bookmaker=bookmaker,
+            )
         rows = self.get_market_snapshots(
             provider_event_id=provider_event_id,
             market=market,
@@ -1824,6 +1954,8 @@ class TraceStore:
 
     def get_trace(self, trace_id: str) -> dict[str, Any] | None:
         """Retrieve the full trace dict by ID."""
+        if self._repo is not None:
+            return self._repo.get_trace(trace_id)
         row = self.conn.execute(
             "SELECT full_trace FROM traces WHERE trace_id = ?", (trace_id,)
         ).fetchone()
@@ -1854,6 +1986,16 @@ class TraceStore:
         Returns:
             List of trace dicts.
         """
+        if self._repo is not None:
+            return self._repo.query_traces(
+                league=league,
+                start=start,
+                end=end,
+                has_outcome=has_outcome,
+                execution_mode=execution_mode,
+                limit=limit,
+                calibration_eligible_only=calibration_eligible_only,
+            )
         clauses: list[str] = []
         params: list[Any] = []
 
@@ -1941,6 +2083,8 @@ class TraceStore:
         pre-6h legacy traces that have outcomes attached but no probability to fit.
         Each returned dict has a '_outcome' key with the attached outcome.
         """
+        if self._repo is not None:
+            return self._repo.get_graded_traces(league=league, limit=limit)
         return self.query_traces(
             league=league,
             has_outcome=True,
@@ -1954,6 +2098,8 @@ class TraceStore:
         Used by the session audit renderer. Numeric/quant fields shown in the
         audit must come from these rows, not from sidecar prose.
         """
+        if self._repo is not None:
+            return self._repo.query_by_session(session_id)
         rows = self.conn.execute(
             """SELECT t.trace_id, t.timestamp, t.league, t.matchup,
                       t.execution_mode, t.aggregate_quality, t.full_trace,
@@ -1999,6 +2145,8 @@ class TraceStore:
 
         Used by report_calibration.py to surface per-session metrics.
         """
+        if self._repo is not None:
+            return self._repo.get_session_summary(league=league, limit=limit)
         clauses = ["t.session_id IS NOT NULL"]
         params: list[Any] = []
         if league:
@@ -2041,16 +2189,22 @@ class TraceStore:
 
     def schema_version(self) -> int:
         """Return the current schema version."""
+        if self._repo is not None:
+            return self._repo.schema_version()
         row = self.conn.execute("SELECT MAX(version) as v FROM schema_versions").fetchone()
         return row["v"] if row and row["v"] else 0
 
     def count(self) -> int:
         """Return total number of persisted traces."""
+        if self._repo is not None:
+            return self._repo.count()
         row = self.conn.execute("SELECT COUNT(*) as n FROM traces").fetchone()
         return row["n"]
 
     def close(self) -> None:
         """Close the database connection."""
+        if self._repo is not None:
+            return self._repo.close()
         if self._conn:
             self._conn.close()
             self._conn = None

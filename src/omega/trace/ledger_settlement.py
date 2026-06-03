@@ -39,11 +39,7 @@ def grade_ledger_fields(
 ) -> tuple[LedgerStatus, float | None, float | None] | None:
     """Grade one ledger selection against an already-attached outcome."""
     if market.startswith("player_prop:"):
-        row = store.conn.execute(
-            "SELECT side, result FROM prop_outcomes WHERE trace_id = ? "
-            "ORDER BY attached_at LIMIT 1",
-            (trace_id,),
-        ).fetchone()
+        row = next(iter(store.get_prop_outcomes(trace_id)), None)
         if row is None:
             return None
         rec_side = (
@@ -57,11 +53,7 @@ def grade_ledger_fields(
             return None
         status = settle_prop_bet(rec_side, row["result"], row["side"])
     else:
-        row = store.conn.execute(
-            "SELECT home_score, away_score FROM outcomes WHERE trace_id = ? "
-            "ORDER BY attached_at LIMIT 1",
-            (trace_id,),
-        ).fetchone()
+        row = store.get_outcome(trace_id)
         if row is None:
             return None
         side = selection_descriptor.split("_", 1)[0]
@@ -98,31 +90,15 @@ def _pending_rows(
     end: str | None,
     limit: int,
 ) -> list[dict[str, Any]]:
-    clauses = ["status = 'pending'"]
-    params: list[Any] = []
-    if league:
-        clauses.append("league = ?")
-        params.append(league)
-    if sport:
-        clauses.append("sport = ?")
-        params.append(sport)
-    if provenance:
-        clauses.append("provenance = ?")
-        params.append(provenance)
-    if start:
-        clauses.append("decision_timestamp >= ?")
-        params.append(start)
-    if end:
-        clauses.append("decision_timestamp <= ?")
-        params.append(end)
-    params.append(limit)
-    rows = store.conn.execute(
-        f"SELECT {store._LEDGER_COLUMNS} FROM bet_ledger "
-        f"WHERE {' AND '.join(clauses)} "
-        "ORDER BY decision_timestamp DESC LIMIT ?",
-        params,
-    ).fetchall()
-    return [dict(row) for row in rows]
+    return store.query_ledger(
+        league=league,
+        sport=sport,
+        status="pending",
+        provenance=provenance,
+        start=start,
+        end=end,
+        limit=limit,
+    )
 
 
 def settle_pending_ledger(

@@ -67,6 +67,7 @@ from omega.integrations.odds_api import (  # noqa: E402
     sport_key_for,
 )
 from omega.integrations.odds_resolver import provider_market_for_prop  # noqa: E402
+from omega.trace.db import require_sqlite_backend  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 logger = logging.getLogger("fetch_closing_lines")
@@ -401,6 +402,7 @@ def main() -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    require_sqlite_backend("fetch_closing_lines.py")
 
     store = TraceStore(db_path=args.db)
     pending = _pending_bets_needing_close(store, league_filter=args.league)
@@ -451,7 +453,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

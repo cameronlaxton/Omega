@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from omega.core.betting.odds import american_to_decimal
 from omega.trace.ledger_bet import DEFAULT_BANKROLL
 
 # Statuses that count as settled (money realized) vs. still-open.
@@ -28,6 +29,23 @@ def _f(value: Any) -> float:
         return float(value) if value is not None else 0.0
     except (TypeError, ValueError):
         return 0.0
+
+
+def _active_ledger(row: dict[str, Any]) -> dict[str, Any]:
+    stake = round(_f(row.get("stake_amount")), 2)
+    odds = _f(row.get("odds"))
+    potential_payout = round(stake * american_to_decimal(odds), 2) if odds else 0.0
+    last_updated = row.get("graded_at") or row.get("decision_timestamp") or row.get("created_at")
+    return {
+        "ledger_id": row.get("ledger_id"),
+        "league": row.get("league"),
+        "market_type": row.get("market"),
+        "status": str(row.get("status") or "pending").lower(),
+        "stake": stake,
+        "potential_payout": potential_payout,
+        "pnl": round(_f(row.get("net_pnl")), 2),
+        "last_updated": last_updated,
+    }
 
 
 def summarize_ledger(
@@ -51,6 +69,7 @@ def summarize_ledger(
     pending_stake = 0.0
     total_staked = 0.0  # graded only
     net_pnl = 0.0  # graded only
+    active_ledgers: list[dict[str, Any]] = []
 
     for row in rows:
         total_bets += 1
@@ -63,6 +82,7 @@ def summarize_ledger(
         else:
             pending_count += 1
             pending_stake += stake
+            active_ledgers.append(_active_ledger(row))
 
     wins = status_counts.get("won", 0)
     losses = status_counts.get("lost", 0)
@@ -75,11 +95,16 @@ def summarize_ledger(
         "base_bankroll": round(base_bankroll, 2),
         "current_bankroll": round(base_bankroll + net_pnl, 2),
         "net_pnl": round(net_pnl, 2),
+        "realized_pnl": round(net_pnl, 2),
+        "unrealized_pnl": 0.0,
         "total_staked": round(total_staked, 2),
         "roi_pct": round(roi_pct, 2),
         "total_bets": total_bets,
         "pending_count": pending_count,
         "pending_stake": round(pending_stake, 2),
+        "pending_exposure": round(pending_stake, 2),
+        "open_positions_count": pending_count,
+        "active_ledgers": active_ledgers,
         "won": wins,
         "lost": losses,
         "push": status_counts.get("push", 0),

@@ -65,6 +65,7 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from omega.trace.db import require_sqlite_backend  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 logger = logging.getLogger("ingest_closing_lines")
@@ -195,6 +196,7 @@ def main() -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    require_sqlite_backend("ingest_closing_lines.py")
 
     inbox: Path = args.inbox
     if not inbox.exists():
@@ -242,7 +244,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from omega.paths import default_trace_db_path
+from omega.trace.db import require_sqlite_backend
 
 UTC = timezone.utc
 
@@ -121,6 +122,7 @@ class AnchorBetTracker:
     """SQLite-backed anchor bet persistence and retrieval."""
 
     def __init__(self, db_path: str | None = None) -> None:
+        require_sqlite_backend("strategy/anchor/tracker.py")
         if db_path is None:
             db_path = str(default_trace_db_path())
         self._db_path = db_path

@@ -8,6 +8,8 @@ logic.
 
 from __future__ import annotations
 
+import os
+import sys
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -784,6 +786,7 @@ def omega_get_portfolio_summary(
         summary = summarize_ledger(rows, base_bankroll=req.base_bankroll)
         return _ok(
             "omega_get_portfolio_summary",
+            as_of=datetime.now(timezone.utc).isoformat(),
             summary=summary,
             filters={
                 "league": req.league,
@@ -984,7 +987,27 @@ def _read_repo_file(path: str) -> str:
     return target.read_text(encoding="utf-8")
 
 
+def _insulate_stdio_backend() -> None:
+    """Keep the Antigravity stdio server on SQLite unless explicitly opted in.
+
+    The stdio server is spawned by ``.mcp.json`` and inherits the parent shell's
+    environment. A developer who exported ``DATABASE_URL`` for Postgres work would
+    otherwise silently flip Antigravity's stdio server to Postgres. We require a
+    positive opt-in (``OMEGA_MCP_ALLOW_DB_BACKEND=1``) for the stdio entrypoint;
+    the HTTP server, CLI tools, migration tool, and tests still honor DATABASE_URL.
+    """
+    if os.environ.get("OMEGA_MCP_ALLOW_DB_BACKEND") == "1":
+        return
+    if os.environ.pop("DATABASE_URL", None):
+        print(
+            "omega.mcp.server: ignoring inherited DATABASE_URL for the stdio "
+            "server (set OMEGA_MCP_ALLOW_DB_BACKEND=1 to honor it).",
+            file=sys.stderr,
+        )
+
+
 def main() -> None:
+    _insulate_stdio_backend()
     build_server().run()
 
 

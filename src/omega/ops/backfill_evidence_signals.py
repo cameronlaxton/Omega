@@ -46,6 +46,7 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from omega.trace.db import require_sqlite_backend  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("backfill_evidence_signals")
@@ -204,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    require_sqlite_backend("backfill_evidence_signals.py")
 
     # Default to dry-run; --apply is required to write. --dry-run always wins.
     apply = bool(args.apply) and not args.dry_run
@@ -223,7 +225,6 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

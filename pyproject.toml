@@ -53,6 +53,7 @@ omega-validate-docs = "omega.ops.validate_docs:main"
 omega-validate-repo-state = "omega.ops.validate_repo_state:main"
 omega-validate-session-sidecars = "omega.ops.validate_session_sidecars:main"
 omega-validate-trace-export = "omega.ops.validate_trace_export:main"
+omega-mcp-http = "omega.mcp.http:main"
 
 [project.optional-dependencies]
 dev = [
@@ -63,6 +64,13 @@ dev = [
 ]
 mcp = [
     "mcp[cli]>=1.27",
+    "fastapi>=0.100",
+    "uvicorn>=0.31.1",
+]
+postgres = [
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
 ]
 
 [build-system]

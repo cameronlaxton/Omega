@@ -14,9 +14,8 @@ Background:
     trace's `result` + `input_snapshot` and merges it back into `trace_quality`.
 
 Policy reuse (no drift):
-    Eligibility and identity are derived via the SAME functions the live engine
-    uses â€” `omega.core.contracts.service.derive_calibration_eligibility` and
-    `identity_status_for_fields`. This script never reimplements the rules.
+    Eligibility reasons are derived via the SAME policy function the live engine
+    uses: `omega.trace.eligibility.calibration_exclusion_reasons`.
 
 Provenance:
     Recomputed blocks are stamped `trace_quality.eligibility_source =
@@ -54,9 +53,9 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from omega.core.contracts.service import (  # noqa: E402
-    derive_calibration_eligibility,
-    identity_status_for_fields,
+from omega.trace.db import require_sqlite_backend  # noqa: E402
+from omega.trace.eligibility import (  # noqa: E402
+    calibration_exclusion_reasons as compute_calibration_exclusion_reasons,
 )
 from omega.trace.store import TraceStore  # noqa: E402
 
@@ -75,6 +74,19 @@ def _downgrades_for_status(status: str | None) -> list[str]:
     return []
 
 
+def _identity_status_for_snapshot(kind: str, snap: dict) -> str:
+    if kind == "prop":
+        missing = [
+            field
+            for field in ("player_name", "home_team", "away_team", "game_date", "line")
+            if not snap.get(field)
+        ]
+        return "missing" if missing else "complete"
+    if kind == "game":
+        return "complete" if snap.get("home_team") and snap.get("away_team") else "missing"
+    return "complete"
+
+
 def _recompute_trace_quality(full_trace: dict) -> dict:
     """Return a new trace_quality block recomputed from the trace's own data.
 
@@ -89,15 +101,15 @@ def _recompute_trace_quality(full_trace: dict) -> dict:
     status = result.get("status")
     context_source = result.get("context_source")
     baseline_used = bool(result.get("baseline_used"))
-    identity_status = identity_status_for_fields(kind, snap)
+    identity_status = _identity_status_for_snapshot(kind, snap)
     downgrades = _downgrades_for_status(status)
 
-    eligibility = derive_calibration_eligibility(
-        status=status,
+    exclusion_reasons = compute_calibration_exclusion_reasons(
+        result_status=status,
         context_source=context_source,
         baseline_used=baseline_used,
         identity_status=identity_status,
-        downgrades=downgrades,
+        result_downgrades=downgrades,
     )
 
     return {
@@ -105,7 +117,11 @@ def _recompute_trace_quality(full_trace: dict) -> dict:
         "downgrades": downgrades,
         "passed": len(downgrades) == 0,
         "evidence_status": "present" if snap.get("evidence") else "empty",
-        **eligibility,
+        "identity_status": identity_status,
+        "context_source": context_source,
+        "baseline_used": baseline_used,
+        "calibration_eligible": not exclusion_reasons,
+        "calibration_exclusion_reasons": exclusion_reasons,
         "eligibility_source": _ELIGIBILITY_SOURCE,
     }
 
@@ -183,14 +199,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.verbose:
         logging.getLogger("backfill_trace_quality").setLevel(logging.DEBUG)
+    require_sqlite_backend("backfill_trace_quality.py")
     run(db=args.db, league=args.league, dry_run=args.dry_run)
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-
 
 
