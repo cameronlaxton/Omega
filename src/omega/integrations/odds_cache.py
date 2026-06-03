@@ -282,4 +282,23 @@ class OddsCache:
                         if player_name or player_id:
                             quotes = data.get("quotes") or []
                             has_match = False
- 
+                            for q in quotes:
+                                q_player_name = q.get("player")
+                                q_player_id = q.get("player_id")
+                                if target_id_norm and q_player_id and str(q_player_id).strip().lower() == target_id_norm:
+                                    has_match = True
+                                    break
+                                if target_name_norm and q_player_name and normalize_player_name(q_player_name) == target_name_norm:
+                                    has_match = True
+                                    break
+                            if not has_match:
+                                continue
+
+                        if "metadata" not in data:
+                            data["metadata"] = []
+                        if "source: local_cache" not in data["metadata"]:
+                            data["metadata"].append("source: local_cache")
+                        return data
+                except (json.JSONDecodeError, KeyError):
+                    continue
+        return None

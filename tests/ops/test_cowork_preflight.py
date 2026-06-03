@@ -483,4 +483,22 @@ def test_formal_output_gate_blocked_while_taint_present(monkeypatch, tmp_path):
 
     assert len(failures) == 1
     assert "TAINT_CLEARED" in failures[0]
-    # Taint file should be removed
+    # Taint file should be removed after the gate processes it.
+    assert not taint_path.exists(), "Taint file should be cleared after gate processes it"
+
+
+def test_formal_output_gate_clean_after_taint_cleared(monkeypatch, tmp_path):
+    """After taint is cleared (prior run), the gate passes cleanly."""
+    smoke_called = []
+    monkeypatch.setattr(cowork_preflight, "run_checks", lambda **_kwargs: [])
+    monkeypatch.setattr(cowork_preflight, "_tracked_python_files", lambda _repo: ([], []))
+    monkeypatch.setattr(cowork_preflight, "_diverged_tracked_files", lambda _repo, _files: [])
+    monkeypatch.setattr(
+        cowork_preflight, "check_formal_output_smoke", lambda: smoke_called.append(True) or []
+    )
+
+    # No taint file â€” should pass cleanly.
+    failures = cowork_preflight.run_formal_output_gate(repo_root=tmp_path, require_mcp=False)
+
+    assert failures == []
+    assert smoke_called == [True]

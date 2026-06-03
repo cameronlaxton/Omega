@@ -666,4 +666,14 @@ All paths are relative to the repo root.
 | `src/omega/ops/render_session_audits.py` | Renders `var/reports/run_audits/<session_id>.audit.md` from sidecar + ledger |
 | `omega/trace/audit_renderer.py` | Library entry point for the audit renderer |
 | `omega/trace/session_sidecar.py` | Sidecar contract + `append_audit_events` atomic writer |
-| `omega/trace/_atomic.
+| `omega/trace/_atomic.py` | Atomic text-file write helper used by sidecar and renderer |
+| `var/reports/run_audits/` | Rendered session audit markdown (output of `render_audit`) |
+
+## 10. Human Judgment Required
+
+Surface these to the user instead of automating around them:
+
+- Calibration promotion with manual override.
+- Team/player alias table extension.
+- API key setup and rotation.
+- Stake-unit confirmation for recorded bets.

@@ -746,4 +746,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     if failures:
         print("cowork_preflight_failed:")
         for failure in failures:
-          
+            print(f"- {failure}")
+        print("- Do not emit formal Omega numeric outputs until preflight passes.")
+        return 1
+
+    # Banner: if any tracked files diverge from HEAD after all checks passed,
+    # the divergences are either non-critical core edits (warned above, not
+    # blocked) or test-tier edits.  Both are safe for engine execution â€”
+    # critical-file corruption and import failures were already blocked above.
+    # Emit cowork_preflight_core_ready so automated runs can distinguish this
+    # state from a hard failure.
+    tracked_files, git_failures = _tracked_python_files(repo_root)
+    if not git_failures:
+        diverged = _diverged_tracked_files(repo_root, tracked_files)
+        core_diverged, test_diverged = _split_tiers(diverged)
+        if core_diverged or test_diverged:
+            dirty_parts = []
+            if core_diverged:
+                dirty_parts.append(f"core_dirty={len(core_diverged)}")
+            if test_diverged:
+                dirty_parts.append(f"test_tier_diverged={len(test_diverged)}")
+            print(
+                "cowork_preflight_core_ready: python="
+                f"{_version_text(tuple(sys.version_info[:3]))} "
+                f"({'  '.join(dirty_parts)})"
+            )
+            return 0
+
+    print(f"cowork_preflight_ready: python={_version_text(tuple(sys.version_info[:3]))}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+# EOF: cowork_preflight_completed

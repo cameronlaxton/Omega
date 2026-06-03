@@ -164,3 +164,76 @@ class TestDbStatus:
         st = db_status(None)
         assert st["divergence"] is not None
         assert st["divergence"]["source_trace_count"] == 5
+        assert st["divergence"]["runtime_trace_count"] == 2
+
+    def test_query_traces_prints_identity_header(self, tmp_path, capsys):
+        source = tmp_path / "traces.db"
+        _make_db(source, 2)
+
+        code = db_status_cli.main(
+            ["--db", str(source), "--query-traces", "--limit", "5"]
+        )
+
+        assert code == 0
+        first = capsys.readouterr().out.splitlines()[0]
+        assert first.startswith("TraceStore DB Path: ")
+        assert str(source.resolve()) in first
+
+    def test_query_traces_json_has_identity_metadata(self, tmp_path, capsys):
+        source = tmp_path / "traces.db"
+        _make_db(source, 1)
+
+        code = db_status_cli.main(
+            ["--db", str(source), "--query-traces", "--limit", "5", "--format", "json"]
+        )
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["trace_store_db_path"] == str(source.resolve())
+        assert payload["trace_store_db_source"] == "requested"
+        assert payload["workspace_identity"]
+        assert len(payload["traces"]) == 1
+
+    def test_view_ledger_reads_existing_rows(self, tmp_path, capsys):
+        source = tmp_path / "ledger.db"
+        _make_db(source, 1)
+        store = TraceStore(db_path=str(source))
+        try:
+            store.conn.execute(
+                """INSERT INTO bet_ledger (
+                    ledger_id, trace_id, bet_date, league, sport, matchup,
+                    market, bookmaker, selection, selection_descriptor, line,
+                    odds, stake_amount, status, provenance, decision_timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "ledger-1",
+                    "sandbox-seed-0",
+                    "2026-06-02",
+                    "NBA",
+                    "basketball",
+                    "A @ B",
+                    "moneyline",
+                    "betmgm",
+                    "home",
+                    "home",
+                    None,
+                    -110,
+                    25.0,
+                    "pending",
+                    "user_confirmed",
+                    "2026-06-02T00:00:00Z",
+                ),
+            )
+            store.conn.commit()
+        finally:
+            store.close()
+
+        code = db_status_cli.main(
+            ["--db", str(source), "--view-ledger", "--limit", "5", "--format", "json"]
+        )
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["query"] == "ledger"
+        assert payload["count"] == 1
+        assert payload["ledger"][0]["ledger_id"] == "ledger-1"

@@ -699,4 +699,14 @@ def parse_historical_events(payload: Any) -> list[HistoricalEvent]:
     if not isinstance(data, list):
         return []
     events: list[HistoricalEvent] = []
-    
+    for evt in data:
+        events.append(
+            HistoricalEvent(
+                event_id=str(evt.get("id", "")),
+                sport_key=evt.get("sport_key", ""),
+                commence_time=evt.get("commence_time", ""),
+                home_team=evt.get("home_team", ""),
+                away_team=evt.get("away_team", ""),
+            )
+        )
+    return events

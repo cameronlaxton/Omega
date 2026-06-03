@@ -327,4 +327,21 @@ class TestPropCacheIdentity:
 
         # Retrieval using different name casing / spacing / accents Normalization
         key_original = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="Luka Dončić")
-        key_normalized = cache.compute_cache_key("NBA", "pts", "lakers"
+        key_normalized = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="luka doncic  ")
+
+        assert key_original == key_normalized
+
+    def test_legacy_playerless_prop_entry_misses_for_player_specific_lookup(self, temp_db_path: Path):
+        cache = OddsCache(db_path=temp_db_path)
+
+        # Legacy entry has no player_name/id in its cache key, and no quotes with the player inside
+        key_legacy = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16")
+        payload_legacy = {
+            "status": "success",
+            "quotes": []  # empty/no player info
+        }
+        cache.set(key_legacy, "NBA", "pts", payload_legacy)
+
+        # Querying with a specific player should miss when using find_by_teams on the legacy record
+        res = cache.find_by_teams("NBA", "pts", "lakers", "celtics", player_name="LeBron James")
+        assert res is None

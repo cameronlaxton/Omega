@@ -52,4 +52,12 @@ For an MCP client that supports command-based local servers:
 {
   "mcpServers": {
     "omega": {
-      "command": "python"
+      "command": "python",
+      "args": ["-m", "omega.mcp.server"],
+      "cwd": "C:\\repos\\Omega"
+    }
+  }
+}
+```
+
+The optional MCP SDK is loaded only by `build_server()`. Direct imports and unit tests for the domain tool functions do not require the optional dependency.

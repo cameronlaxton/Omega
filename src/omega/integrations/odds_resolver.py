@@ -707,4 +707,164 @@ def resolve_odds(
         "status": "success",
         "kind": kind,
         "league": league.upper(),
-        
+        "event_id": event.event_id,
+        "home_team": event.home_team,
+        "away_team": event.away_team,
+        "commence_time": event.commence_time,
+        "default_bookmaker": bookmaker,
+        "line_shopping": line_shopping,
+        "all_books": all_books,
+        "request_patch": request_patch,
+        "quotes": output_quotes,
+        "skipped_reasons": skipped,
+        "quota": dict(client.last_quota_headers),
+        "metadata": [],
+    }
+
+    # Advisory line-shopping output: when more than one book was fetched, surface
+    # the best available price per selection with the book that offers it. This
+    # is informational only — request_patch (the engine's OddsInput) stays
+    # anchored to a single book so de-vig/CLV semantics are not mixed across books.
+    if line_shopping or all_books:
+        result_payload["best_prices"] = best_price_quotes(output_quotes)
+
+    # 3. Store freshly fetched result in cache
+    actual_home = event.home_team or home_team or ""
+    actual_away = event.away_team or away_team or ""
+    actual_date = (event.commence_time or "").split("T")[0] if event.commence_time else game_date
+
+    precise_key = cache.compute_cache_key(
+        league=league,
+        market=market,
+        home_team=actual_home,
+        away_team=actual_away,
+        game_date=actual_date,
+        player_name=player_name,
+        player_id=player_id
+    )
+    cache.set(precise_key, league, market, result_payload)
+
+    return result_payload
+
+
+def _unavailable(
+    kind: str,
+    league: str,
+    bookmaker: str,
+    skipped: list[str],
+    client: OddsApiClient,
+    *,
+    quotes: list[dict[str, Any]] | None = None,
+    event: EventOdds | None = None,
+) -> dict[str, Any]:
+    return {
+        "status": "unavailable",
+        "kind": kind,
+        "league": league.upper(),
+        "event_id": event.event_id if event else None,
+        "home_team": event.home_team if event else None,
+        "away_team": event.away_team if event else None,
+        "default_bookmaker": bookmaker,
+        "request_patch": None,
+        "quotes": quotes or [],
+        "skipped_reasons": skipped,
+        "quota": dict(client.last_quota_headers),
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--list-prop-types",
+        action="store_true",
+        help="Print valid prop stat keys for --league (or all leagues) and exit. No API call is made.",
+    )
+    parser.add_argument(
+        "--list-events",
+        action="store_true",
+        help="List active event IDs and team strings for --league with a 5-minute local cache.",
+    )
+    parser.add_argument("--kind", choices=["game", "prop"])
+    parser.add_argument("--league")
+    parser.add_argument("--home-team")
+    parser.add_argument("--away-team")
+    parser.add_argument("--player-name")
+    parser.add_argument("--prop-type")
+    parser.add_argument("--line", type=float)
+    parser.add_argument("--event-id")
+    parser.add_argument("--commence-time-from")
+    parser.add_argument("--commence-time-to")
+    parser.add_argument("--bookmaker", default=DEFAULT_BOOKMAKER)
+    parser.add_argument("--line-shopping", action="store_true")
+    parser.add_argument("--all-books", action="store_true")
+    parser.add_argument("--format", choices=["summary", "json", "jsonl"], default=None)
+    args = parser.parse_args()
+
+    if args.list_prop_types:
+        league_filter = args.league.upper() if args.league else None
+        leagues = [league_filter] if league_filter else sorted(PROP_MARKET_MAP)
+        out: dict[str, Any] = {}
+        for lg in leagues:
+            keys = PROP_MARKET_MAP.get(lg)
+            if keys:
+                out[lg] = sorted(keys)
+        print(json.dumps(out, indent=2))
+        return 0
+
+    if args.list_events:
+        if not args.league:
+            parser.error("--league is required with --list-events")
+        client = OddsApiClient()
+        try:
+            result = list_events(
+                league=args.league,
+                commence_time_from=args.commence_time_from,
+                commence_time_to=args.commence_time_to,
+                client=client,
+            )
+        except OddsApiBudgetExceeded as exc:
+            print(format_budget_exhausted_error(exc, client), file=sys.stderr)
+            return 1
+        output_format = args.format or "summary"
+        if output_format == "json":
+            print(json.dumps(result, indent=2, sort_keys=True))
+        elif output_format == "jsonl":
+            print(json.dumps({k: v for k, v in result.items() if k != "events"}, sort_keys=True))
+            for row in result.get("events") or []:
+                print(json.dumps(row, sort_keys=True))
+        else:
+            print(_render_event_summary(result))
+        return 0 if result["status"] in {"success", "empty"} else 2
+
+    if not args.kind:
+        parser.error("--kind is required unless --list-prop-types or --list-events is specified")
+    if not args.league:
+        parser.error("--league is required unless --list-prop-types is specified")
+
+    client = OddsApiClient()
+    try:
+        result = resolve_odds(
+            kind=args.kind,
+            league=args.league,
+            home_team=args.home_team,
+            away_team=args.away_team,
+            player_name=args.player_name,
+            prop_type=args.prop_type,
+            line=args.line,
+            event_id=args.event_id,
+            commence_time_from=args.commence_time_from,
+            commence_time_to=args.commence_time_to,
+            bookmaker=args.bookmaker,
+            line_shopping=args.line_shopping,
+            all_books=args.all_books,
+            client=client,
+        )
+    except OddsApiBudgetExceeded as exc:
+        print(format_budget_exhausted_error(exc, client), file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if result["status"] == "success" else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

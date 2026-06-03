@@ -336,3 +336,95 @@ def test_list_events_budget_exhausted_cli_stops(monkeypatch, capsys):
 
 def test_resolve_game_line_shopping_does_not_force_betmgm():
     client = FakeOddsClient()
+    result = resolve_odds(
+        kind="game",
+        league="NBA",
+        home_team="Los Angeles Lakers",
+        away_team="Boston Celtics",
+        line_shopping=True,
+        client=client,
+    )
+
+    assert result["status"] == "success"
+    assert client.event_odds_bookmakers == [None]
+    assert result["line_shopping"] is True
+    # Multi-book mode surfaces advisory best prices, each tagged with its book.
+    best = result["best_prices"]
+    assert best, "expected a best_prices block in line-shopping mode"
+    assert all("bookmaker" in row and "decimal_payout" in row for row in best)
+
+
+def test_resolve_prop_returns_exact_betmgm_patch():
+    result = resolve_odds(
+        kind="prop",
+        league="NBA",
+        home_team="Los Angeles Lakers",
+        away_team="Boston Celtics",
+        player_name="Jayson Tatum",
+        prop_type="pts",
+        line=27.5,
+        client=FakeOddsClient(),
+    )
+
+    assert result["status"] == "success"
+    # Single-book mode stamps the source book onto the prop patch for ledger
+    # provenance; the over/under prices are unchanged.
+    assert result["request_patch"] == {
+        "line": 27.5, "odds_over": -115, "odds_under": -105, "bookmaker": "betmgm",
+    }
+
+
+def test_resolve_wnba_points_prop_uses_standard_ou_market():
+    result = resolve_odds(
+        kind="prop",
+        league="WNBA",
+        home_team="Los Angeles Lakers",
+        away_team="Boston Celtics",
+        player_name="Jayson Tatum",
+        prop_type="pts",
+        line=27.5,
+        client=FakeOddsClient(),
+    )
+
+    assert result["status"] == "success"
+    assert result["request_patch"] == {
+        "line": 27.5, "odds_over": -115, "odds_under": -105, "bookmaker": "betmgm",
+    }
+    assert {q["provider_market_key"] for q in result["quotes"]} == {"player_points"}
+
+
+def test_resolve_prop_does_not_fallback_when_betmgm_market_missing():
+    result = resolve_odds(
+        kind="prop",
+        league="NBA",
+        home_team="Los Angeles Lakers",
+        away_team="Boston Celtics",
+        player_name="Jayson Tatum",
+        prop_type="pts",
+        all_books=False,
+        client=FakeOddsClient(market_available=False),
+    )
+
+    assert result["status"] == "unavailable"
+    assert "betmgm does not list market" in result["skipped_reasons"][0]
+
+
+def test_resolve_prop_line_shopping_omits_book_provenance():
+    # Under line shopping the over/under sides can come from different books, so
+    # no single book is stamped — the ledger records 'consensus' and best_prices
+    # carries the per-side shopping detail.
+    result = resolve_odds(
+        kind="prop",
+        league="NBA",
+        home_team="Los Angeles Lakers",
+        away_team="Boston Celtics",
+        player_name="Jayson Tatum",
+        prop_type="pts",
+        line=27.5,
+        line_shopping=True,
+        client=FakeOddsClient(),
+    )
+
+    assert result["status"] == "success"
+    assert "bookmaker" not in result["request_patch"]
+    assert "best_prices" in result

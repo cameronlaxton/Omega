@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Omega Snapshot · 2026-06-02</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #0f172a; font-size: 13px; }
+
+/* Header */
+.header { background: #1e293b; color: #f8fafc; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
+.header-left { display: flex; align-items: center; gap: 10px; }
+.logo { font-size: 16px; font-weight: 800; letter-spacing: 1px; }
+.tag { font-size: 10px; background: #334155; color: #94a3b8; padding: 2px 8px; border-radius: 10px; }
+.snap-time { font-size: 11px; color: #64748b; }
+
+/* KPI bar */
+.kpi-bar { display: flex; gap: 1px; background: #e2e8f0; border-bottom: 2px solid #e2e8f0; }
+.kpi { flex: 1; background: #fff; padding: 10px 18px; }
+.kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #64748b; margin-bottom: 2px; }
+.kpi-val { font-size: 22px; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+.kpi-val.pos { color: #059669; }
+.kpi-val.neg { color: #dc2626; }
+.kpi-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+/* Layout */
+.content { padding: 16px 24px; max-width: 1200px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.full  { margin-bottom: 14px; }
+
+/* Cards */
+.card { background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; padding: 14px 16px; }
+.card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #475569; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.pill { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 700; text-transform: none; letter-spacing: 0; }
+.pill-gray { background: #f1f5f9; color: #64748b; }
+.pill-warn { background: #fef3c7; color: #b45309; }
+.pill-ok   { background: #d1fae5; color: #065f46; }
+.pill-err  { background: #fee2e2; color: #991b1b; }
+.pill-mlb  { background: #ede9fe; color: #5b21b6; }
+.pill-nba  { background: #dbeafe; color: #1d4ed8; }
+
+/* Donut chart (SVG) */
+.donut-wrap { display: flex; align-items: center; gap: 20px; }
+.donut-legend { display: flex; flex-direction: column; gap: 6px; }
+.leg-item { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.leg-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+/* League table */
+.dt { width: 100%; border-collapse: collapse; }
+.dt th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #94a3b8; padding: 4px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; }
+.dt td { padding: 6px 8px; border-bottom: 1px solid #f8fafc; font-size: 12px; }
+.dt tr:last-child td { border-bottom: none; }
+.dt .divider td { border-top: 2px solid #e2e8f0; font-weight: 700; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pos { color: #059669; font-weight: 600; }
+.neg { color: #dc2626; font-weight: 600; }
+
+/* Status rows */
+.srow { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+.srow:last-child { border-bottom: none; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; flex-shrink: 0; }
+.dot-green { background: #10b981; } .dot-amber { background: #f59e0b; }
+.dot-red   { background: #ef4444; } .dot-gray  { background: #94a3b8; }
+
+/* Warning box */
+.warn-box { margin-top: 10px; padding: 7px 10px; background: #fef9c3; border-radius: 5px; font-size: 11px; color: #854d0e; border-left: 3px solid #f59e0b; }
+
+/* Audit big numbers */
+.aud-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+.aud-row:last-child { border-bottom: none; }
+.aud-label { font-size: 12px; font-weight: 600; }
+.aud-sub   { font-size: 11px; color: #94a3b8; }
+.aud-num   { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; color: #f59e0b; }
+.aud-num.ok  { color: #10b981; }
+.aud-num.err { color: #dc2626; }
+
+/* Trace table */
+.trace-table { width: 100%; border-collapse: collapse; }
+.trace-table th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #94a3b8; padding: 5px 8px; border-bottom: 2px solid #f1f5f9; text-align: left; cursor: pointer; user-select: none; white-space: nowrap; }
+.trace-table th:hover { color: #475569; }
+.trace-table td { padding: 5px 8px; border-bottom: 1px solid #f8fafc; font-size: 12px; white-space: nowrap; }
+.trace-table tr:last-child td { border-bottom: none; }
+.trace-table tbody tr:hover { background: #f8fafc; }
+
+/* Rec/tier badges */
+.r-over  { background: #d1fae5; color: #065f46; padding: 1px 6px; border-radius: 3px; font-weight: 700; font-size: 11px; }
+.r-under { background: #dbeafe; color: #1e40af; padding: 1px 6px; border-radius: 3px; font-weight: 700; font-size: 11px; }
+.r-pass  { background: #f1f5f9; color: #64748b;  padding: 1px 6px; border-radius: 3px; font-weight: 700; font-size: 11px; }
+.t-a     { background: #fef3c7; color: #92400e; padding: 1px 6px; border-radius: 3px; font-weight: 800; font-size: 11px; }
+.t-b     { background: #e0e7ff; color: #3730a3; padding: 1px 6px; border-radius: 3px; font-weight: 800; font-size: 11px; }
+.ev-shadow { background: #fef3c7; color: #b45309; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+.ev-live   { background: #d1fae5; color: #065f46; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+
+/* Footer */
+.footer { text-align: center; padding: 20px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="logo">Ω OMEGA</span>
+    <span class="tag">omega-core-phase6h</span>
+    <span class="tag">snapshot</span>
+  </div>
+  <span class="snap-time">Generated: 2026-06-02 · live pull</span>
+</div>
+
+<!-- KPI Bar -->
+<div class="kpi-bar">
+  <div class="kpi">
+    <div class="kpi-label">Bankroll</div>
+    <div class="kpi-val neg">$969.10</div>
+    <div class="kpi-sub">base $1,000</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Net P&amp;L</div>
+    <div class="kpi-val neg">−$30.90</div>
+    <div class="kpi-sub">ROI −0.85%</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Win Rate</div>
+    <div class="kpi-val neg">48.2%</div>
+    <div class="kpi-sub">67W – 72L – 1P – 7V</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Decided</div>
+    <div class="kpi-val">139</div>
+    <div class="kpi-sub">of 195 total</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Pending</div>
+    <div class="kpi-val">48</div>
+    <div class="kpi-sub">$1,185 staked</div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- Row 1: Donut + League breakdown -->
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">Outcome Distribution <span class="pill pill-gray">139 decided</span></div>
+      <div class="donut-wrap">
+        <!-- SVG donut: Won 67, Lost 72, Push 1, Void 7, Pending 48 -->
+        <svg width="130" height="130" viewBox="0 0 130 130">
+          <g transform="translate(65,65)">
+            <!-- Total = 195. Angles in degrees from top (-90) -->
+            <!-- Won: 67/195 = 123.5° -->
+            <path d="M 0 -52 A 52 52 0 0 1 45.07 -27.5 L 28.6 -17.47 A 33 33 0 0 0 0 -33 Z" fill="#10b981"/>
+            <!-- Lost: 72/195 = 132.9° -->
+            <path d="M 45.07 -27.5 A 52 52 0 0 1 13.23 50.27 L 8.4 31.9 A 33 33 0 0 0 28.6 -17.47 Z" fill="#ef4444"/>
+            <!-- Push: 1/195 = 1.8° -->
+            <path d="M 13.23 50.27 A 52 52 0 0 1 11.41 51.52 L 7.25 32.74 A 33 33 0 0 0 8.4 31.9 Z" fill="#94a3b8"/>
+            <!-- Void: 7/195 = 12.9° -->
+            <path d="M 11.41 51.52 A 52 52 0 0 1 -0.91 51.99 L -0.58 33.0 A 33 33 0 0 0 7.25 32.74 Z" fill="#cbd5e1"/>
+            <!-- Pending: 48/195 = 88.6° -->
+            <path d="M -0.91 51.99 A 52 52 0 0 1 0 -52 L 0 -33 A 33 33 0 0 0 -0.58 33.0 Z" fill="#f59e0b"/>
+            <circle cx="0" cy="0" r="24" fill="white"/>
+            <text x="0" y="4" text-anchor="middle" font-size="11" font-weight="800" fill="#0f172a">195</text>
+            <text x="0" y="15" text-anchor="middle" font-size="8" fill="#94a3b8">bets</text>
+          </g>
+        </svg>
+        <div class="donut-legend">
+          <div class="leg-item"><div class="leg-dot" style="background:#10b981"></div>Won: <strong>67</strong></div>
+          <div class="leg-item"><div class="leg-dot" style="background:#ef4444"></div>Lost: <strong>72</strong></div>
+          <div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Push: <strong>1</strong></div>
+          <div class="leg-item"><div class="leg-dot" style="background:#cbd5e1"></div>Void: <strong>7</strong></div>
+          <div class="leg-item"><div class="leg-dot" style="background:#f59e0b"></div>Pending: <strong>48</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Performance by League</div>
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>League</th>
+            <th class="num">Bets</th>
+            <th class="num">W–L</th>
+            <th class="num">Win%</th>
+            <th class="num">P&amp;L</th>
+            <th class="num">ROI</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="pill pill-mlb">MLB</span></td>
+            <td class="num">40</td>
+            <td class="num">14–9</td>
+            <td class="num pos">60.9%</td>
+            <td class="num pos">+$138.16</td>
+            <td class="num pos">+24.0%</td>
+          </tr>
+          <tr>
+            <td><span class="pill pill-nba">NBA</span></td>
+            <td class="num">87</td>
+            <td class="num">43–44</td>
+            <td class="num neg">49.4%</td>
+            <td class="num neg">−$153.49</td>
+            <td class="num neg">−7.1%</td>
+          </tr>
+          <tr class="divider">
+            <td><strong>ALL</strong></td>
+            <td class="num">195</td>
+            <td class="num">67–72</td>
+            <td class="num neg">48.2%</td>
+            <td class="num neg">−$30.90</td>
+            <td class="num neg">−0.85%</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:10px;padding:7px 10px;background:#f0fdf4;border-radius:5px;font-size:11px;color:#166534;border-left:3px solid #10b981">
+        ▲ MLB is profitable (+24% ROI). NBA drag is offsetting — 0 NBA bets pending, season likely closed.
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Evidence + Calibration + Audit -->
+  <div class="grid3">
+    <div class="card">
+      <div class="card-title">Evidence Signals <span class="pill pill-warn">ALL SHADOW</span></div>
+      <div class="srow"><span><span class="dot dot-amber"></span>Shadow mode traces</span><strong>25 / 25</strong></div>
+      <div class="srow"><span><span class="dot dot-green"></span>Live mode traces</span><strong>0</strong></div>
+      <div class="srow"><span><span class="dot dot-red"></span>Signals applied</span><strong>0</strong></div>
+      <div class="srow"><span><span class="dot dot-amber"></span>Signals suppressed</span><strong>25+</strong></div>
+      <div class="srow"><span><span class="dot dot-gray"></span>Signal types seen</span><strong>recent_form</strong></div>
+      <div class="warn-box">⚠ All signals in shadow mode. Adjustments are logged but NOT applied to simulation inputs.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Calibration <span class="pill pill-warn">static only</span></div>
+      <div class="srow"><span><span class="dot dot-gray"></span>Fitted profile hits</span><strong>0</strong></div>
+      <div class="srow"><span><span class="dot dot-amber"></span>Static identity path</span><strong>25 / 25</strong></div>
+      <div class="srow"><span><span class="dot dot-gray"></span>Leagues in traces</span><strong>MLB, WORLD_CUP</strong></div>
+      <div class="srow"><span><span class="dot dot-gray"></span>Planes observed</span><strong>prop, game</strong></div>
+      <div class="warn-box">⚠ No calibration profiles fitted. All probabilities use <code style="background:#fef3c7;padding:1px 3px;border-radius:2px;font-size:10px">static_identity</code>. Run cal fit after outcomes ingest.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Ingest / Outcome Audit</div>
+      <div class="aud-row">
+        <div><div class="aud-label">Pending bets</div><div class="aud-sub">open in ledger</div></div>
+        <div class="aud-num">48</div>
+      </div>
+      <div class="aud-row">
+        <div><div class="aud-label">Traces missing outcomes</div><div class="aud-sub">no result attached</div></div>
+        <div class="aud-num err">50</div>
+      </div>
+      <div class="aud-row">
+        <div><div class="aud-label">Cal-eligible, no outcome</div><div class="aud-sub">blocking cal fit</div></div>
+        <div class="aud-num err">37</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: Trace log -->
+  <div class="card full">
+    <div class="card-title">
+      Recent Traces
+      <span class="pill pill-gray">30 shown</span>
+      <span class="pill pill-warn" style="margin-left:4px">WORLD_CUP detected</span>
+    </div>
+    <div style="overflow-x:auto">
+    <table class="trace-table" id="traces">
+      <thead>
+        <tr>
+          <th onclick="sortTable(0)">Date ↕</th>
+          <th onclick="sortTable(1)">League ↕</th>
+          <th onclick="sortTable(2)">Player / Matchup ↕</th>
+          <th onclick="sortTable(3)">Prop</th>
+          <th onclick="sortTable(4)">Line</th>
+          <th onclick="sortTable(5)">Rec ↕</th>
+          <th onclick="sortTable(6)">Edge ↕</th>
+          <th onclick="sortTable(7)">Tier ↕</th>
+          <th onclick="sortTable(8)">Units</th>
+          <th onclick="sortTable(9)">Odds</th>
+          <th>Ev Mode</th>
+          <th onclick="sortTable(11)">Quality ↕</th>
+        </tr>
+      </thead>
+      <tbody id="trace-body">
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<div class="footer">Omega Snapshot · Generated 2026-06-02 · omega-core-phase6h · Evidence: shadow · Calibration: static_identity</div>
+
+<script>
+const traces = [{"trace_id":"e5494-8e51","date":"2026-06-02","league":"WORLD_CUP","player":"Croatia @ England","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":null,"cal_eligible":true},{"trace_id":"0fb31-5749","date":"2026-06-02","league":"WORLD_CUP","player":"DR Congo @ Portugal","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":null,"cal_eligible":true},{"trace_id":"d5412-99d3","date":"2026-06-02","league":"WORLD_CUP","player":"Jordan @ Austria","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":null,"cal_eligible":true},{"trace_id":"4cee4-09e9","date":"2026-06-02","league":"WORLD_CUP","player":"Algeria @ Argentina","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":null,"cal_eligible":true},{"trace_id":"dd718-3b1c","date":"2026-06-02","league":"WORLD_CUP","player":"Norway @ Iraq","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":null,"cal_eligible":true},{"trace_id":"bc602-3ff4","date":"2026-06-02","league":"WORLD_CUP","player":"Senegal @ France","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":null,"cal_eligible":true},{"trace_id":"63ebc-0e13","date":"2026-06-02","league":"WORLD_CUP","player":"New Zealand @ Iran","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":null,"cal_eligible":true},{"trace_id":"9626b-76ec","date":"2026-06-02","league":"WORLD_CUP","player":"Uruguay @ Saudi Arabia","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":null,"cal_eligible":true},{"trace_id":"a16c6-ef1d","date":"2026-06-02","league":"WORLD_CUP","player":"Egypt @ Belgium","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":null,"cal_eligible":true},{"trace_id":"f084d-0e29","date":"2026-06-02","league":"WORLD_CUP","player":"Cape Verde @ Spain","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":null,"cal_eligible":true},{"trace_id":"cd28f-862b","date":"2026-06-02","league":"MLB","player":"Aaron Judge","prop":"hits","line":0.5,"rec":"over","edge":7.3,"tier":"A","units":5,"odds":-185,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"08587-825d","date":"2026-06-02","league":"MLB","player":"Vladimir Guerrero Jr.","prop":"hits","line":1.5,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"76fb9-2064","date":"2026-06-02","league":"MLB","player":"Bryce Harper","prop":"hits","line":0.5,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"64e04-ab89","date":"2026-06-02","league":"MLB","player":"Kyle Harrison","prop":"strikeouts_pitched","line":6.5,"rec":"over","edge":9.6,"tier":"A","units":5,"odds":115,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"f8f6a-abca","date":"2026-06-02","league":"MLB","player":"Nathan Eovaldi","prop":"strikeouts_pitched","line":5.5,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"d7af1-c3a8","date":"2026-06-02","league":"MLB","player":"Andrew Abbott","prop":"strikeouts_pitched","line":4.5,"rec":"over","edge":7.2,"tier":"A","units":5,"odds":105,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"a51c7-5309","date":"2026-06-02","league":"MLB","player":"Kevin Gausman","prop":"strikeouts_pitched","line":5.5,"rec":"over","edge":5.3,"tier":"A","units":5,"odds":-115,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"ae4ca-cabe","date":"2026-06-02","league":"MLB","player":"Steven Matz","prop":"strikeouts_pitched","line":4.5,"rec":"over","edge":5.2,"tier":"A","units":5,"odds":105,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"f77ca-80a6","date":"2026-06-02","league":"MLB","player":"Jack Flaherty","prop":"strikeouts_pitched","line":5.5,"rec":"over","edge":9.6,"tier":"A","units":5,"odds":110,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"34773-8280","date":"2026-06-02","league":"MLB","player":"Aaron Nola","prop":"strikeouts_pitched","line":5.5,"rec":"over","edge":3.0,"tier":"A","units":3.04,"odds":100,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"fa1ad-2546","date":"2026-06-02","league":"MLB","player":"Texas Rangers @ St. Louis Cardinals","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"cc5a9-7105","date":"2026-06-02","league":"MLB","player":"San Francisco Giants @ Milwaukee Brewers","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"a60ba-b771","date":"2026-06-02","league":"MLB","player":"Chicago White Sox @ Minnesota Twins","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"02a60-3468","date":"2026-06-02","league":"MLB","player":"Toronto Blue Jays @ Atlanta Braves","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true},{"trace_id":"c10a4-69ca","date":"2026-06-02","league":"MLB","player":"Kansas City Royals @ Cincinnati Reds","prop":"","line":null,"rec":"pass","edge":null,"tier":null,"units":null,"odds":null,"ev_mode":"shadow","ev_applied":false,"cal_path":"static_identity","quality":0.85,"cal_eligible":true}];
+
+function recBadge(r) {
+  if (r==='over')  return '<span class="r-over">OVER</span>';
+  if (r==='under') return '<span class="r-under">UNDER</span>';
+  return '<span class="r-pass">PASS</span>';
+}
+function tierBadge(t) {
+  if (!t) return '<span style="color:#cbd5e1">—</span>';
+  if (t==='A') return '<span class="t-a">A</span>';
+  if (t==='B') return '<span class="t-b">B</span>';
+  return t;
+}
+function fmtOdds(v) { if (!v && v!==0) return '—'; return v>0 ? '+'+v : ''+v; }
+function leaguePill(l) {
+  if (l==='MLB') return '<span class="pill pill-mlb">MLB</span>';
+  if (l==='NBA') return '<span class="pill pill-nba">NBA</span>';
+  if (l==='WORLD_CUP') return '<span class="pill" style="background:#fce7f3;color:#9d174d">WC</span>';
+  return l;
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById('trace-body');
+  tbody.innerHTML = data.map(t => `<tr>
+    <td>${t.date}</td>
+    <td>${leaguePill(t.league)}</td>
+    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${t.player}</td>
+    <td style="color:#64748b">${t.prop || '—'}</td>
+    <td class="num">${t.line != null ? t.line : '—'}</td>
+    <td>${recBadge(t.rec)}</td>
+    <td class="num ${t.edge != null ? (t.edge>0?'pos':'neg') : ''}">${t.edge != null ? t.edge+'%' : '—'}</td>
+    <td>${tierBadge(t.tier)}</td>
+    <td class="num">${t.units != null ? t.units+'u' : '—'}</td>
+    <td class="num">${fmtOdds(t.odds)}</td>
+    <td><span class="${t.ev_mode==='live'?'ev-live':'ev-shadow'}">${t.ev_mode}</span></td>
+    <td class="num">${t.quality != null ? (t.quality*100).toFixed(0)+'%' : '—'}</td>
+  </tr>`).join('');
+}
+
+let sortCol = -1, sortAsc = true;
+function sortTable(col) {
+  if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = true; }
+  const keys = ['date','league','player','prop','line','rec','edge','tier','units','odds','ev_mode','quality'];
+  const sorted = [...traces].sort((a,b) => {
+    const k = keys[col];
+    const va = a[k], vb = b[k];
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1; if (vb == null) return -1;
+    const r = va < vb ? -1 : va > vb ? 1 : 0;
+    return sortAsc ? r : -r;
+  });
+  renderTable(sorted);
+}
+
+renderTable(traces);
+</script>
+</body>
+</html>
