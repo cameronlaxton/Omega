@@ -1261,11 +1261,16 @@ class TraceStore:
         line: float,
         side: str,
         source: str = "manual",
+        void: bool = False,
     ) -> str:
         """Attach a graded player-prop outcome to a persisted trace.
 
         Idempotent on (trace_id, player_name, stat_type): re-attaching returns the
         existing row's id, mirroring closing_lines semantics.
+
+        When ``void=True`` (DNP / no-action: player absent from the box score),
+        the win/loss/push math is skipped and ``result`` is recorded as ``void``
+        so settlement returns VOID (stake returned). ``stat_value`` is ignored.
 
         Args:
             trace_id: Must reference an existing trace.
@@ -1292,6 +1297,7 @@ class TraceStore:
                 line=line,
                 side=side,
                 source=source,
+                void=void,
             )
         side_norm = side.lower().strip()
         if side_norm not in ("over", "under"):
@@ -1311,7 +1317,9 @@ class TraceStore:
         if existing:
             return existing["prop_outcome_id"]
 
-        if stat_value == line:
+        if void:
+            result = "void"
+        elif stat_value == line:
             result = "push"
         elif (side_norm == "over" and stat_value > line) or (
             side_norm == "under" and stat_value < line

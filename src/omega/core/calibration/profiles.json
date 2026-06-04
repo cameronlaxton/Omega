@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "profile_id": "iso_mlb_v1_554de933f7eef812",
+      "schema_version": 1,
+      "version": 1,
+      "method": "isotonic",
+      "league": "MLB",
+      "context_slice": null,
+      "market": "game",
+      "status": "candidate",
+      "params": {
+        "calibration_map": {
+          "0.05": 0.0,
+          "0.15": 0.0,
+          "0.25": 0.0,
+          "0.35": 0.461538,
+          "0.45": 0.461538,
+          "0.55": 0.461538,
+          "0.65": 0.461538,
+          "0.75": 0.666667,
+          "0.85": 1.0,
+          "0.95": 1.0
+        }
+      },
+      "training_window": "fitted_2026-06-04",
+      "sample_size": 31,
+      "dataset_hash": "554de933f7eef812",
+      "metrics": {
+        "brier_score": 0.30059,
+        "calibration_error": 0.325788,
+        "log_loss": 1.170784,
+        "n_eval": 7
+      },
+      "created_at": "2026-06-04T12:48:16.625340+00:00",
+      "promoted_at": null,
+      "rejected_at": null,
+      "reject_reason": null,
+      "incumbent_id": null
+    },
+    {
+      "profile_id": "shrink_mlb_v1_554de933f7eef812",
+      "schema_version": 1,
+      "version": 1,
+      "method": "shrinkage",
+      "league": "MLB",
+      "context_slice": null,
+      "market": "game",
+      "status": "production",
+      "params": {
+        "shrink_factor": 0.7999999999999999
+      },
+      "training_window": "fitted_2026-06-04",
+      "sample_size": 31,
+      "dataset_hash": "554de933f7eef812",
+      "metrics": {
+        "brier_score": 0.255803,
+        "calibration_error": 0.215429,
+        "log_loss": 0.710782,
+        "n_eval": 7
+      },
+      "created_at": "2026-06-04T12:48:16.628458+00:00",
+      "promoted_at": "2026-06-04T12:48:31.556233+00:00",
+      "rejected_at": null,
+      "reject_reason": null,
+      "incumbent_id": null
+    },
+    {
+      "profile_id": "iso_mlb_v2_59fd4bf524421e09",
+      "schema_version": 1,
+      "version": 2,
+      "method": "isotonic",
+      "league": "MLB",
+      "context_slice": null,
+      "market": "game",
+      "status": "candidate",
+      "params": {
+        "calibration_map": {
+          "0.05": 0.5,
+          "0.15": 0.5,
+          "0.25": 0.5,
+          "0.35": 0.5,
+          "0.45": 0.5,
+          "0.55": 0.5,
+          "0.65": 0.785714,
+          "0.75": 0.785714,
+          "0.85": 0.785714,
+          "0.95": 0.785714
+        }
+      },
+      "training_window": "fitted_2026-06-04",
+      "sample_size": 30,
+      "dataset_hash": "59fd4bf524421e09",
+      "metrics": {
+        "brier_score": 0.269466,
+        "calibration_error": 0.126081,
+        "log_loss": 0.747108,
+        "n_eval": 7
+      },
+      "created_at": "2026-06-04T12:48:16.659556+00:00",
+      "promoted_at": null,
+      "rejected_at": null,
+      "reject_reason": null,
+      "incumbent_id": null
+    },
+    {
+      "profile_id": "shrink_mlb_v2_59fd4bf524421e09",
+      "schema_version": 1,
+      "version": 2,
+      "method": "shrinkage",
+      "league": "MLB",
+      "context_slice": null,
+      "market": "game",
+      "status": "candidate",
+      "params": {
+        "shrink_factor": 1.0
+      },
+      "training_window": "fitted_2026-06-04",
+      "sample_size": 30,
+      "dataset_hash": "59fd4bf524421e09",
+      "metrics": {
+        "brier_score": 0.229507,
+        "calibration_error": 0.2491,
+        "log_loss": 0.648924,
+        "n_eval": 7
+      },
+      "created_at": "2026-06-04T12:48:16.684246+00:00",
+      "promoted_at": null,
+      "rejected_at": null,
+      "reject_reason": null,
+      "incumbent_id": null
+    },
+    {
+      "profile_id": "iso_nba_v1_7c8018680da72efe",
+      "schema_version": 1,
+      "version": 1,
+      "method": "isotonic",
+      "league": "NBA",
+      "context_slice": null,
+      "market": "game",
+      "status": "production",
+      "params": {
+        "calibration_map": {
+          "0.05": 0.5,
+          "0.15": 0.5,
+          "0.25": 0.5,
+          "0.35": 0.5,
+          "0.45": 0.5,
+          "0.55": 0.5,
+          "0.65": 0.615385,
+          "0.75": 0.8,
+          "0.85": 0.8,
+          "0.95": 0.8
+        }
+      },
+      "training_window": "fitted_2026-06-04",
+      "sample_size": 48,
+      "dataset_hash": "7c8018680da72efe",
+      "metrics": {
+        "brier_score": 0.283701,
+        "calibration_error": 0.287589,
+        "log_loss": 0.760862,
+        "n_eval": 12
+      },
+      "created_at": "2026-06-04T12:48:16.711374+00:00",
+      "promoted_at": "2026-06-04T12:48:38.511524+00:00",
+      "rejected_at": null,
+      "reject_reason": null,
+      "incumbent_id": null
+    },
+    {
+      "profile_id": "shrink_nba_v1_7c8018680da72efe",
+      "schema_version": 1,
+      "version": 1,
+      "method": "shrinkage",
+      "league": "NBA",
+      "context_slice": null,
+      "market": "game",
+      "status": "candidate",
+      "params": {
+        "shrink_factor": 1.0
+      },
+      "training_window": "fitted_2026-06-04",
+      "sample_size": 48,
+      "dataset_hash": "7c8018680da72efe",
+      "metrics": {
+        "brier_score": 0.293713,
+        "calibration_error": 0.306658,
+        "log_loss": 0.783494,
+        "n_eval": 12
+      },
+      "created_at": "2026-06-04T12:48:16.732893+00:00",
+      "promoted_at": null,
+      "rejected_at": null,
+      "reject_reason": null,
+      "incumbent_id": null
+    }
+  ]
+}

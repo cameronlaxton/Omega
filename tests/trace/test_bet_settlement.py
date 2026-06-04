@@ -67,6 +67,13 @@ class TestSettlePropBet:
         assert settle_prop_bet("over", "loss", "under") == LedgerStatus.WON
         assert settle_prop_bet("over", "win", "under") == LedgerStatus.LOST
 
+    def test_void_dnp_is_void_not_loss(self):
+        # A DNP / no-action void must map to VOID regardless of side, never fall
+        # through the win/loss branch (which would mis-grade it as a LOSS).
+        assert settle_prop_bet("over", "void", "over") == LedgerStatus.VOID
+        assert settle_prop_bet("over", "void", "under") == LedgerStatus.VOID
+        assert settle_prop_bet("under", "void", "over") == LedgerStatus.VOID
+
 
 class TestComputePnl:
     def test_won_minus_110(self):

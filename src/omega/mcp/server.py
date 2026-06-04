@@ -20,13 +20,16 @@ from omega.mcp.schemas import (
     MCP_SCHEMA_VERSION,
     CalibrationFitPreviewRequest,
     EvidenceRetrieveRequest,
+    FetchOutcomesRequest,
     FlatBetRequest,
     GameContextRequest,
     PortfolioSummaryRequest,
     ReplayBundle,
     ReplayToolRequest,
+    SettleBetsRequest,
     TraceAttachOutcomeRequest,
     TraceQueryRequest,
+    TraceVoidPropRequest,
 )
 from omega.paths import repo_root
 
@@ -40,6 +43,9 @@ TOOL_NAMES = (
     "omega_trace_get",
     "omega_trace_query",
     "omega_trace_attach_outcome",
+    "omega_trace_void_prop",
+    "omega_fetch_outcomes",
+    "omega_settle_bets",
     "omega_calibration_fit_preview",
     "omega_evidence_retrieve",
     "omega_resolve_odds",
@@ -684,6 +690,172 @@ def omega_trace_attach_outcome(
         store.close()
 
 
+def omega_trace_void_prop(
+    trace_id: str,
+    player_name: str,
+    stat_type: str,
+    side: str = "over",
+    reason: str = "dnp",
+    source: str = "mcp",
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Record a DNP / no-action void for a player prop absent from the box score.
+
+    Use when the player did not play (injury, scratch, ejection) so the prop has
+    no gradeable stat line. Records a ``void`` prop outcome so settlement returns
+    VOID (stake returned, net 0) rather than leaving the bet pending or grading
+    it as a loss. Post-decision, like outcome attachment — computes no protected
+    betting output.
+    """
+    from omega.trace.store import TraceStore
+
+    try:
+        req = TraceVoidPropRequest(
+            trace_id=trace_id,
+            player_name=player_name,
+            stat_type=stat_type,
+            side=side,
+            reason=reason,
+            source=source,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_trace_void_prop", "invalid_request", exc.errors())
+
+    store = TraceStore(db_path=req.db_path)
+    try:
+        prop_outcome_id = store.attach_prop_outcome(
+            trace_id=req.trace_id,
+            player_name=req.player_name,
+            stat_type=req.stat_type,
+            stat_value=0.0,
+            line=0.0,
+            side=req.side,
+            source=f"{req.source}:void:{req.reason}",
+            void=True,
+        )
+        return _ok(
+            "omega_trace_void_prop",
+            prop_outcome_id=prop_outcome_id,
+            result="void",
+            reason=req.reason,
+        )
+    except ValueError as exc:
+        return _error("omega_trace_void_prop", "trace_not_found", str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_trace_void_prop", "void_failed", str(exc))
+    finally:
+        store.close()
+
+
+def omega_fetch_outcomes(
+    leagues: list[str] | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    dry_run: bool = False,
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Batch-gather outcomes across leagues (wraps fetch_outcomes_all).
+
+    Dispatches the idempotent per-league outcome fetchers and returns per-league
+    status. Defaults to all leagues; to exclude soccer (future-dated fixtures),
+    pass ``leagues`` without ``"soccer"``. ``dry_run=True`` reports what would run
+    without attaching anything. Delegates entirely to the deterministic ops layer
+    — computes no protected betting output.
+    """
+    try:
+        req = FetchOutcomesRequest(
+            leagues=leagues,
+            since=since,
+            until=until,
+            dry_run=dry_run,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_fetch_outcomes", "invalid_request", exc.errors())
+
+    try:
+        from omega.ops.fetch_outcomes_all import run_fetch_outcomes
+
+        outcome = run_fetch_outcomes(
+            leagues=req.leagues,
+            db=req.db_path,
+            since=req.since,
+            until=req.until,
+            dry_run=req.dry_run,
+            capture_output=True,
+        )
+        return _ok("omega_fetch_outcomes", **outcome)
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_fetch_outcomes", "fetch_outcomes_failed", str(exc))
+
+
+def omega_settle_bets(
+    apply: bool = False,
+    league: str | None = None,
+    sport: str | None = None,
+    provenance: str = "user_confirmed",
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 100000,
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Settle pending bet_ledger rows with attached outcomes (wraps settle_bets).
+
+    ``apply=False`` (default) is a dry run that scans and reports counts/PnL
+    without writing. Delegates to the deterministic settlement op — owns no
+    grading math itself.
+    """
+    from omega.trace.ledger_settlement import settle_pending_ledger
+    from omega.trace.store import TraceStore
+
+    try:
+        req = SettleBetsRequest(
+            apply=apply,
+            league=league,
+            sport=sport,
+            provenance=provenance,
+            start=start,
+            end=end,
+            limit=limit,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_settle_bets", "invalid_request", exc.errors())
+
+    provenance_filter = None if req.provenance == "all" else req.provenance
+    store = TraceStore(db_path=req.db_path)
+    try:
+        summary = settle_pending_ledger(
+            store,
+            apply=req.apply,
+            league=req.league,
+            sport=req.sport,
+            provenance=provenance_filter,
+            start=req.start,
+            end=req.end,
+            limit=req.limit,
+        )
+        staked = summary.total_staked
+        roi = (summary.total_net / staked * 100.0) if staked else 0.0
+        return _ok(
+            "omega_settle_bets",
+            applied=req.apply,
+            provenance=req.provenance,
+            pending_scanned=summary.pending_scanned,
+            settled=dict(summary.settled),
+            settled_total=sum(summary.settled.values()),
+            ungradeable=summary.ungradeable,
+            total_staked=round(staked, 2),
+            total_net=round(summary.total_net, 2),
+            roi_pct=round(roi, 2),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_settle_bets", "settle_failed", str(exc))
+    finally:
+        store.close()
+
+
 def omega_calibration_fit_preview(
     db_path: str | None = None,
     league: str | None = None,
@@ -1068,6 +1240,9 @@ def build_server():
         omega_trace_get,
         omega_trace_query,
         omega_trace_attach_outcome,
+        omega_trace_void_prop,
+        omega_fetch_outcomes,
+        omega_settle_bets,
         omega_calibration_fit_preview,
         omega_evidence_retrieve,
         omega_resolve_odds,
