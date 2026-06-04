@@ -163,8 +163,8 @@ class CalibrationFitter:
         For each prop_outcome row attached to a trace, the prediction is the
         trace's ``over_prob`` (when side='over') or ``under_prob`` (when
         side='under'). The outcome is 1 for ``result='win'``, 0 for
-        ``result='loss'``. Pushes are excluded (they carry no calibration
-        signal).
+        ``result='loss'``. Pushes and voids (DNP / no-action) are excluded —
+        both are no-action results that carry no calibration signal.
 
         Game traces are skipped silently.
 
@@ -190,7 +190,7 @@ class CalibrationFitter:
             for row in prop_outcomes:
                 side = (row.get("side") or "").lower()
                 result = row.get("result")
-                if result == "push":
+                if result in ("push", "void"):
                     continue
                 if side == "over" and over_p is not None:
                     prob = float(over_p)

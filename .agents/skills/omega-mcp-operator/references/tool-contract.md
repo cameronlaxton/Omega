@@ -8,6 +8,7 @@ importable even when the optional MCP package is not installed.
 - `omega_analyze_game(request, bankroll, session_id)`
 - `omega_analyze_prop(request, bankroll, session_id)`
 - `omega_analyze_slate(request, bankroll, session_id)`
+- `omega_run_batch(entries, bankroll, session_id)` — batch game/prop analysis; resolves odds, runs analyze(), writes export blocks to `var/inbox/traces/`; use for N > 3 analyses
 - `omega_chat_orchestrate(prompt, context=None)`
 - `omega_replay_bundle(bundle, strict=False)`
 - `omega_trace_get(trace_id, db_path=None)`

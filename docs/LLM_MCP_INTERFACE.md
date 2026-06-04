@@ -13,11 +13,15 @@ The deterministic Omega engine owns simulation, probability calibration, fair-pr
 - `omega_analyze_game`: validates a single-game request and delegates to `omega.core.contracts.service.analyze`.
 - `omega_analyze_prop`: validates a player-prop request and delegates to `omega.core.contracts.service.analyze`.
 - `omega_analyze_slate`: validates a slate request and delegates to `omega.core.contracts.service.analyze`.
+- `omega_run_batch`: accepts a list of `BatchAnalysisEntry` dicts (mixed game/prop), resolves odds per-entry via `omega_resolve_odds` (with prop_type fallback chain if a list is supplied), calls `analyze()` per entry, and writes each export block to `var/inbox/traces/<trace_id>.json`. Use for sessions producing more than 3 analyses — replaces the need for manual looping or scratch scripts. Returns a summary with per-entry status (ok/skipped/error), all trace_ids, and export paths.
 - `omega_chat_orchestrate`: returns an explicit unsupported response until a real chat orchestrator exists.
 - `omega_replay_bundle`: performs replay-plane audit over a frozen `ReplayBundle`; live fetching is disabled.
 - `omega_trace_get`: retrieves a persisted trace through `TraceStore`.
 - `omega_trace_query`: queries persisted traces through `TraceStore`.
-- `omega_trace_attach_outcome`: attaches outcomes after initial trace persistence.
+- `omega_trace_attach_outcome`: attaches game outcomes after initial trace persistence.
+- `omega_trace_void_prop`: records a DNP / no-action void for a player prop absent from the box score (player did not play), so settlement returns VOID (stake returned) instead of leaving the bet pending or grading it as a loss.
+- `omega_fetch_outcomes`: batch-gathers outcomes across leagues (wraps `omega.ops.fetch_outcomes_all`). Defaults to all leagues; pass `leagues` without `"soccer"` to exclude future-dated fixtures. `dry_run=True` reports what would run. Returns per-league status — use this instead of shelling out to `omega-fetch-outcomes`.
+- `omega_settle_bets`: settles pending `bet_ledger` rows with attached outcomes (wraps `omega.ops.settle_bets`). `apply=False` (default) is a dry run. Returns settled counts, staked, net PnL, ROI — use this instead of shelling out to `settle_bets`.
 - `omega_calibration_fit_preview`: previews calibration fitting without writing profiles or promoting candidates.
 - `omega_evidence_retrieve`: returns a no-live-fetch skipped response in this adapter.
 - `omega_resolve_odds`: resolves current Odds API markets into engine-ready input fields and provenance. For terminal slate discovery before a specific matchup is known, use `omega-resolve-odds --list-events --league <LEAGUE>`; repeated identical event-list calls are locally cached for 5 minutes, and Odds API budget exhaustion is a hard-stop CLI error.

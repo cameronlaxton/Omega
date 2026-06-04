@@ -80,3 +80,7 @@ Current odds:
 - Use line-shopping or all-books mode only when explicitly requested.
 - The odds resolver prepares inputs and provenance only; it does not compute protected Omega outputs.
 
+Batch analysis (N > 3 analyses):
+- MCP available: use `omega_run_batch`. One call resolves odds (with prop_type fallback chain), derives seeds, enforces the formal gate, runs analyze() per entry, and writes all export blocks to `var/inbox/traces/`. Do not loop individual analyze tools and do not write a Python script.
+- MCP unavailable: a batch Python script is authorized. It must call `cowork_preflight.run_formal_output_gate()` before any `analyze()`, derive every seed via `sha256(prompt + date)`, include at least one `EvidenceSignal` per trace (or document why evidence is empty), and must not hardcode `trace_quality.aggregate_quality` or mutate shared state (e.g. clearing the odds cache) as a side effect. Scripts violating these rules contaminate the calibration loop.
+

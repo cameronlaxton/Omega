@@ -405,11 +405,18 @@ def _calibrate_audited(
     market: str = "home",
 ) -> tuple[float, CalibrationAudit]:
     """Like _calibrate() but also returns a CalibrationAudit recording the path taken."""
-    # Map the bet-side label to the calibration market plane. Only the 3-way
-    # draw has its own plane today; every other side calibrates on the "game"
-    # plane (and a "draw" lookup falls back to the game profile when no draw
-    # profile is registered), so this preserves prior numeric behaviour.
-    cal_market = "draw" if market == "draw" else "game"
+    # Derive the calibration market from the *plane*, not the bet-side label, so
+    # a player prop is calibrated by a prop profile (market="prop") and a game
+    # side by the game profile (market="game"). The 3-way draw keeps its own
+    # plane. A missing prop/draw profile falls back to the game profile, then to
+    # the static policy (see registry.get_production), so this is safe before
+    # prop profiles exist.
+    if plane == "prop":
+        cal_market = "prop"
+    elif market == "draw":
+        cal_market = "draw"
+    else:
+        cal_market = "game"
     calibrated, d = apply_calibration_audited(
         raw_prob, league=league, context_hints=context_hints, market=cal_market
     )

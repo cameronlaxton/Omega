@@ -446,6 +446,7 @@ class PostgresRepository:
         line: float,
         side: str,
         source: str = "manual",
+        void: bool = False,
     ) -> str:
         self._ensure_writeable()
         side_norm = side.lower().strip()
@@ -468,7 +469,9 @@ class PostgresRepository:
                 if existing:
                     return existing
 
-                if stat_value == line:
+                if void:
+                    result = "void"
+                elif stat_value == line:
                     result = "push"
                 elif (side_norm == "over" and stat_value > line) or (
                     side_norm == "under" and stat_value < line

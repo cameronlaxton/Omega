@@ -130,6 +130,85 @@ class PortfolioSummaryRequest(BaseModel):
     db_path: str | None = None
 
 
+_VALID_LEAGUES = {"nba", "wnba", "mlb", "soccer", "props"}
+
+
+class FetchOutcomesRequest(BaseModel):
+    """Batch outcome gathering across leagues (wraps fetch_outcomes_all).
+
+    Defaults to every league. To exclude soccer (commonly future-dated
+    fixtures), pass ``leagues`` without ``"soccer"`` — there is no implicit
+    exclusion. ``dry_run`` lists what would run without attaching outcomes.
+    """
+
+    leagues: list[str] | None = Field(
+        default=None,
+        description="Subset of: nba, wnba, mlb, soccer, props. None = all.",
+    )
+    since: str | None = Field(default=None, description="Start date YYYY-MM-DD")
+    until: str | None = Field(default=None, description="End date YYYY-MM-DD")
+    dry_run: bool = Field(default=False, description="Print commands without attaching")
+    db_path: str | None = None
+
+    @model_validator(mode="after")
+    def _check_leagues(self) -> FetchOutcomesRequest:
+        if self.leagues is not None:
+            bad = [lg for lg in self.leagues if lg.lower() not in _VALID_LEAGUES]
+            if bad:
+                raise ValueError(
+                    f"Unknown league(s): {', '.join(bad)}. "
+                    f"Valid: {', '.join(sorted(_VALID_LEAGUES))}"
+                )
+            self.leagues = [lg.lower() for lg in self.leagues]
+        return self
+
+
+class SettleBetsRequest(BaseModel):
+    """Settle pending bet_ledger rows with attached outcomes (wraps settle_bets).
+
+    ``apply=False`` (default) is a dry run that scans and reports without
+    writing. Mirrors the settle_bets CLI provenance gate.
+    """
+
+    apply: bool = Field(default=False, description="Write settled rows; default is dry-run")
+    league: str | None = None
+    sport: str | None = None
+    provenance: str = Field(
+        default="user_confirmed",
+        pattern="^(user_confirmed|engine_auto|backfill|all)$",
+        description="Ledger provenance to settle",
+    )
+    start: str | None = None
+    end: str | None = None
+    limit: int = Field(default=100000, ge=1)
+    db_path: str | None = None
+
+
+class TraceVoidPropRequest(BaseModel):
+    """Record a DNP / no-action void for a player prop absent from the box score.
+
+    Use when a player did not play (injury, scratch, ejection before qualifying)
+    so the prop has no gradeable stat line. Records a ``void`` prop outcome so
+    settlement returns VOID (stake returned, net 0) instead of leaving the bet
+    pending forever or mis-grading it as a loss.
+    """
+
+    trace_id: str
+    player_name: str
+    stat_type: str = Field(description="Stat key, e.g. points, hits, strikeouts")
+    side: str = Field(default="over", description="Recorded side; void result is side-agnostic")
+    reason: str = Field(default="dnp", description="Why the prop is void, e.g. dnp, scratched")
+    source: str = "mcp"
+    db_path: str | None = None
+
+    @model_validator(mode="after")
+    def _check_side(self) -> TraceVoidPropRequest:
+        if self.side.strip().lower() not in {"over", "under"}:
+            raise ValueError("side must be 'over' or 'under'")
+        self.side = self.side.strip().lower()
+        return self
+
+
 class GameContextRequest(BaseModel):
     """Resolve the situational context pack for one matchup."""
 

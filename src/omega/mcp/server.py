@@ -20,13 +20,16 @@ from omega.mcp.schemas import (
     MCP_SCHEMA_VERSION,
     CalibrationFitPreviewRequest,
     EvidenceRetrieveRequest,
+    FetchOutcomesRequest,
     FlatBetRequest,
     GameContextRequest,
     PortfolioSummaryRequest,
     ReplayBundle,
     ReplayToolRequest,
+    SettleBetsRequest,
     TraceAttachOutcomeRequest,
     TraceQueryRequest,
+    TraceVoidPropRequest,
 )
 from omega.paths import repo_root
 
@@ -34,11 +37,15 @@ TOOL_NAMES = (
     "omega_analyze_game",
     "omega_analyze_prop",
     "omega_analyze_slate",
+    "omega_run_batch",
     "omega_chat_orchestrate",
     "omega_replay_bundle",
     "omega_trace_get",
     "omega_trace_query",
     "omega_trace_attach_outcome",
+    "omega_trace_void_prop",
+    "omega_fetch_outcomes",
+    "omega_settle_bets",
     "omega_calibration_fit_preview",
     "omega_evidence_retrieve",
     "omega_resolve_odds",
@@ -301,6 +308,206 @@ def omega_analyze_slate(
         return _error("omega_analyze_slate", "analysis_failed", str(exc))
 
 
+def omega_run_batch(
+    entries: list[dict[str, Any]],
+    bankroll: float,
+    session_id: str,
+) -> dict[str, Any]:
+    """Run N game/prop analyses in one call: resolve odds, analyze, write export blocks.
+
+    Each entry is a BatchAnalysisEntry dict.  If odds fields are absent the tool
+    resolves them via omega_resolve_odds before calling analyze().  For props,
+    prop_type may be a list — the first market that resolves successfully is used.
+
+    Export blocks are written to ``var/inbox/traces/<trace_id>.json`` in the
+    standard shape required by ``omega-ingest-traces``.
+
+    Returns a summary envelope with per-entry status (ok/skipped/error) and the
+    list of trace_ids and export paths for successfully completed entries.
+    """
+    import hashlib
+    import json as _json
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from omega.core.contracts.schemas import BatchAnalysisEntry
+    from omega.core.contracts.service import analyze
+    from omega.integrations.odds_resolver import resolve_odds
+    from omega.paths import repo_root
+
+    # Gate check runs once for the entire batch.
+    gate_failures = _formal_output_gate_failures()
+    if gate_failures:
+        return _formal_output_blocked("omega_run_batch", gate_failures)
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    inbox_dir = repo_root() / "var" / "inbox" / "traces"
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+
+    results: list[dict[str, Any]] = []
+    trace_ids: list[str] = []
+    export_paths: list[str] = []
+    errors: list[dict[str, Any]] = []
+
+    for idx, raw in enumerate(entries):
+        try:
+            entry = BatchAnalysisEntry(**raw)
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"index": idx, "identifier": str(raw.get("player_name") or raw.get("home_team") or idx), "error": str(exc)})
+            results.append({"index": idx, "status": "error", "error": str(exc)})
+            continue
+
+        game_date = entry.game_date or today
+        identifier = entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
+
+        # --- Odds resolution ---
+        if entry.kind == "prop":
+            prop_types = entry.prop_type if isinstance(entry.prop_type, list) else ([entry.prop_type] if entry.prop_type else [])
+            odds_patch: dict[str, Any] | None = None
+            resolved_prop_type: str | None = None
+            if entry.odds_over is not None and entry.odds_under is not None and entry.line is not None:
+                # Pre-supplied
+                odds_patch = {"line": entry.line, "odds_over": entry.odds_over, "odds_under": entry.odds_under}
+                resolved_prop_type = prop_types[0] if prop_types else None
+            else:
+                for pt in prop_types:
+                    try:
+                        res = resolve_odds(
+                            kind="prop",
+                            league=entry.league,
+                            player_name=entry.player_name,
+                            prop_type=pt,
+                            home_team=entry.home_team,
+                            away_team=entry.away_team,
+                        )
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if res.get("status") == "success" and res.get("request_patch"):
+                        odds_patch = res["request_patch"]
+                        resolved_prop_type = pt
+                        break
+            if odds_patch is None:
+                results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": "odds_unavailable"})
+                continue
+
+            request_dict: dict[str, Any] = {
+                "player_name": entry.player_name,
+                "league": entry.league,
+                "prop_type": resolved_prop_type,
+                "line": odds_patch["line"],
+                "home_team": entry.home_team,
+                "away_team": entry.away_team,
+                "game_date": game_date,
+                "odds_over": odds_patch["odds_over"],
+                "odds_under": odds_patch["odds_under"],
+                "player_context": entry.player_context or {},
+                "game_context": entry.game_context or {},
+                "n_iterations": entry.n_iterations,
+                "evidence": entry.evidence,
+            }
+
+        else:  # game
+            game_odds = entry.odds
+            if game_odds is None:
+                try:
+                    res = resolve_odds(kind="game", league=entry.league, home_team=entry.home_team, away_team=entry.away_team)
+                    if res.get("status") == "success" and res.get("request_patch"):
+                        game_odds = res["request_patch"].get("odds") or res["request_patch"]
+                    else:
+                        results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": "odds_unavailable"})
+                        continue
+                except Exception as exc:  # noqa: BLE001
+                    results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": f"odds_resolution_failed: {exc}"})
+                    continue
+
+            request_dict = {
+                "home_team": entry.home_team,
+                "away_team": entry.away_team,
+                "league": entry.league,
+                "home_context": entry.home_context or {},
+                "away_context": entry.away_context or {},
+                "game_context": entry.game_context or {},
+                "odds": game_odds,
+                "n_iterations": entry.n_iterations,
+                "evidence": entry.evidence,
+            }
+
+        # --- Seed derivation ---
+        if entry.seed is not None:
+            request_dict["seed"] = entry.seed
+        else:
+            seed_src = _json.dumps({"entry": request_dict, "session_id": session_id}, sort_keys=True, separators=(",", ":"), default=str).encode()
+            request_dict["seed"] = int.from_bytes(hashlib.sha256(seed_src).digest()[:4], "big")
+
+        # --- Analyze ---
+        try:
+            trace = analyze(request_dict, bankroll=bankroll, session_id=session_id)
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"index": idx, "identifier": identifier, "error": str(exc)})
+            results.append({"index": idx, "status": "error", "identifier": identifier, "error": str(exc)})
+            continue
+
+        trace_id = trace["trace_id"]
+
+        # --- Build export block (OMEGA_COWORK.md §6d format) ---
+        market_context: dict[str, Any] = {}
+        if entry.kind == "prop":
+            market_context = {
+                "player": entry.player_name,
+                "prop_type": resolved_prop_type,
+                "line": odds_patch["line"],
+                "odds_over": odds_patch["odds_over"],
+                "odds_under": odds_patch["odds_under"],
+            }
+        elif game_odds:
+            market_context = {"odds": game_odds}
+
+        export_block = {
+            "trace": trace,
+            "bet_record": None,
+            "reasoning_inputs": {
+                "sources": entry.reasoning_sources,
+                "fields_gathered": list(request_dict.keys()),
+                "missing_fields": [],
+                "market_context": market_context,
+            },
+            "reasoning_downgrade_rationale": None,
+            "reasoning_narrative": entry.reasoning_narrative or f"Batch analysis: {identifier}",
+            "trace_quality": trace.get("trace_quality") or {},
+        }
+
+        # --- Write to inbox ---
+        dest = inbox_dir / f"{trace_id}.json"
+        try:
+            dest.write_text(_json.dumps(export_block, indent=2, default=str), encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"index": idx, "identifier": identifier, "error": f"export_write_failed: {exc}"})
+            results.append({"index": idx, "status": "error", "identifier": identifier, "trace_id": trace_id, "error": str(exc)})
+            continue
+
+        trace_ids.append(trace_id)
+        export_paths.append(str(dest))
+        results.append({"index": idx, "status": "ok", "identifier": identifier, "trace_id": trace_id, "export_path": str(dest)})
+
+    ok_count = sum(1 for r in results if r["status"] == "ok")
+    skipped_count = sum(1 for r in results if r["status"] == "skipped")
+    error_count = sum(1 for r in results if r["status"] == "error")
+    overall = "ok" if error_count == 0 else ("partial" if ok_count > 0 else "error")
+
+    return _ok(
+        "omega_run_batch",
+        status=overall,
+        entries_total=len(entries),
+        entries_ok=ok_count,
+        entries_skipped=skipped_count,
+        entries_error=error_count,
+        trace_ids=trace_ids,
+        export_paths=export_paths,
+        errors=errors,
+        results=results,
+    )
+
+
 def omega_chat_orchestrate(prompt: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return a safe orchestration boundary response.
 
@@ -479,6 +686,201 @@ def omega_trace_attach_outcome(
         return _ok("omega_trace_attach_outcome", outcome_id=outcome_id)
     except Exception as exc:
         return _error("omega_trace_attach_outcome", "outcome_attach_failed", str(exc))
+    finally:
+        store.close()
+
+
+def omega_trace_void_prop(
+    trace_id: str,
+    player_name: str,
+    stat_type: str,
+    side: str = "over",
+    reason: str = "dnp",
+    source: str = "mcp",
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Record a DNP / no-action void for a player prop absent from the box score.
+
+    Use when the player did not play (injury, scratch, ejection) so the prop has
+    no gradeable stat line. Records a ``void`` prop outcome so settlement returns
+    VOID (stake returned, net 0) rather than leaving the bet pending or grading
+    it as a loss. Post-decision, like outcome attachment — computes no protected
+    betting output.
+    """
+    from omega.trace.store import TraceStore
+
+    try:
+        req = TraceVoidPropRequest(
+            trace_id=trace_id,
+            player_name=player_name,
+            stat_type=stat_type,
+            side=side,
+            reason=reason,
+            source=source,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_trace_void_prop", "invalid_request", exc.errors())
+
+    store = TraceStore(db_path=req.db_path)
+    try:
+        # attach_prop_outcome is idempotent on (trace_id, player_name, stat_type):
+        # if a row already exists it returns that row's id WITHOUT changing its
+        # result. Detect a pre-existing non-void outcome first so we never report
+        # a "void" that did not actually take effect (which would mislead the
+        # caller into thinking a graded loss/win was converted to a no-action).
+        existing = next(
+            (
+                r
+                for r in store.get_prop_outcomes(req.trace_id)
+                if r.get("player_name") == req.player_name
+                and r.get("stat_type") == req.stat_type
+            ),
+            None,
+        )
+        if existing is not None and existing.get("result") != "void":
+            return _error(
+                "omega_trace_void_prop",
+                "outcome_exists",
+                {
+                    "message": (
+                        "A non-void prop outcome is already attached; refusing to "
+                        "silently overwrite it. Detach/correct it first if the "
+                        "player truly did not play."
+                    ),
+                    "existing_result": existing.get("result"),
+                    "prop_outcome_id": existing.get("prop_outcome_id"),
+                },
+            )
+
+        prop_outcome_id = store.attach_prop_outcome(
+            trace_id=req.trace_id,
+            player_name=req.player_name,
+            stat_type=req.stat_type,
+            stat_value=0.0,
+            line=0.0,
+            side=req.side,
+            source=f"{req.source}:void:{req.reason}",
+            void=True,
+        )
+        return _ok(
+            "omega_trace_void_prop",
+            prop_outcome_id=prop_outcome_id,
+            result="void",
+            reason=req.reason,
+        )
+    except ValueError as exc:
+        return _error("omega_trace_void_prop", "trace_not_found", str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_trace_void_prop", "void_failed", str(exc))
+    finally:
+        store.close()
+
+
+def omega_fetch_outcomes(
+    leagues: list[str] | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    dry_run: bool = False,
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Batch-gather outcomes across leagues (wraps fetch_outcomes_all).
+
+    Dispatches the idempotent per-league outcome fetchers and returns per-league
+    status. Defaults to all leagues; to exclude soccer (future-dated fixtures),
+    pass ``leagues`` without ``"soccer"``. ``dry_run=True`` reports what would run
+    without attaching anything. Delegates entirely to the deterministic ops layer
+    — computes no protected betting output.
+    """
+    try:
+        req = FetchOutcomesRequest(
+            leagues=leagues,
+            since=since,
+            until=until,
+            dry_run=dry_run,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_fetch_outcomes", "invalid_request", exc.errors())
+
+    try:
+        from omega.ops.fetch_outcomes_all import run_fetch_outcomes
+
+        outcome = run_fetch_outcomes(
+            leagues=req.leagues,
+            db=req.db_path,
+            since=req.since,
+            until=req.until,
+            dry_run=req.dry_run,
+            capture_output=True,
+        )
+        return _ok("omega_fetch_outcomes", **outcome)
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_fetch_outcomes", "fetch_outcomes_failed", str(exc))
+
+
+def omega_settle_bets(
+    apply: bool = False,
+    league: str | None = None,
+    sport: str | None = None,
+    provenance: str = "user_confirmed",
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 100000,
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Settle pending bet_ledger rows with attached outcomes (wraps settle_bets).
+
+    ``apply=False`` (default) is a dry run that scans and reports counts/PnL
+    without writing. Delegates to the deterministic settlement op — owns no
+    grading math itself.
+    """
+    from omega.trace.ledger_settlement import settle_pending_ledger
+    from omega.trace.store import TraceStore
+
+    try:
+        req = SettleBetsRequest(
+            apply=apply,
+            league=league,
+            sport=sport,
+            provenance=provenance,
+            start=start,
+            end=end,
+            limit=limit,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_settle_bets", "invalid_request", exc.errors())
+
+    provenance_filter = None if req.provenance == "all" else req.provenance
+    store = TraceStore(db_path=req.db_path)
+    try:
+        summary = settle_pending_ledger(
+            store,
+            apply=req.apply,
+            league=req.league,
+            sport=req.sport,
+            provenance=provenance_filter,
+            start=req.start,
+            end=req.end,
+            limit=req.limit,
+        )
+        staked = summary.total_staked
+        roi = (summary.total_net / staked * 100.0) if staked else 0.0
+        return _ok(
+            "omega_settle_bets",
+            applied=req.apply,
+            provenance=req.provenance,
+            pending_scanned=summary.pending_scanned,
+            settled=dict(summary.settled),
+            settled_total=sum(summary.settled.values()),
+            ungradeable=summary.ungradeable,
+            total_staked=round(staked, 2),
+            total_net=round(summary.total_net, 2),
+            roi_pct=round(roi, 2),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_settle_bets", "settle_failed", str(exc))
     finally:
         store.close()
 
@@ -861,11 +1263,15 @@ def build_server():
         omega_analyze_game,
         omega_analyze_prop,
         omega_analyze_slate,
+        omega_run_batch,
         omega_chat_orchestrate,
         omega_replay_bundle,
         omega_trace_get,
         omega_trace_query,
         omega_trace_attach_outcome,
+        omega_trace_void_prop,
+        omega_fetch_outcomes,
+        omega_settle_bets,
         omega_calibration_fit_preview,
         omega_evidence_retrieve,
         omega_resolve_odds,

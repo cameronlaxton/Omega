@@ -65,6 +65,35 @@ git cat-file -p HEAD:omega/core/contracts/service.py > /tmp/_service.py \
 
 ---
 
+## Step 2.5 — MCP Tool Discovery (do not skip)
+
+**The omega MCP tools are not in the base tool list. They are deferred and must be
+loaded before they can be called.** If you look once and see no `omega_*` tools, that
+does NOT mean they are unavailable — it means you have not loaded them yet.
+
+- The stdio server (`python -m omega.mcp.server`) **boots slowly on the FUSE/Windows
+  mount** (cold Python process importing `numpy`/`pydantic`/`mcp`). At session start it
+  may report as **"still connecting"**; its tools appear a few seconds later.
+- Load the tools with **`ToolSearch`** before declaring them missing:
+  - `ToolSearch` query `"omega"` (keyword) to list the whole omega tool surface, or
+  - `ToolSearch` query `"select:omega_trace_query,omega_get_portfolio_summary,..."` to
+    load specific tool schemas.
+- If a server is shown as "still connecting," **wait and re-run `ToolSearch`** rather than
+  concluding the tools were never declared. Do not fall back to hand-rolled SQL/Python on
+  the assumption that MCP is unavailable.
+- If tools still never appear, the likely cause is a crash-on-boot: confirm
+  `python -m pip install -e .[mcp]` succeeded (preflight checks `import mcp.server.fastmcp`).
+
+**Prefer the typed MCP tools over hand-rolled DB access.** They encapsulate the real
+schema and return shapes:
+
+- Use `omega_trace_query` instead of raw SQL. The `traces` table has **no `kind` column**
+  (`kind` lives inside the `full_trace` JSON blob and in `simulation_distributions`).
+- Use `omega_get_portfolio_summary` instead of calling `summarize_ledger` by hand. Its
+  result key is **`active_ledgers`**, not `bets`.
+
+---
+
 ## Step 3 — SQLite / TraceStore Workaround
 
 Use the repo default DB path for normal local runs. If running in Cowork,
