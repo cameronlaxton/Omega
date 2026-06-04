@@ -199,6 +199,26 @@ def test_fetch_outcomes_reports_subprocess_failure(monkeypatch):
     assert result["results"][0]["returncode"] == 1
 
 
+def test_fetch_outcomes_reports_timeout_as_payload_failure(monkeypatch):
+    def _timeout(cmd, *args, **kwargs):
+        raise subprocess.TimeoutExpired(
+            cmd,
+            timeout=kwargs["timeout"],
+            output="partial out",
+            stderr="hung",
+        )
+
+    monkeypatch.setattr("omega.ops.fetch_outcomes_all.subprocess.run", _timeout)
+
+    result = omega_fetch_outcomes(leagues=["mlb"])
+
+    assert result["status"] == "success"
+    assert result["ok"] is False
+    assert result["failures"] == 1
+    assert result["results"][0]["timed_out"] is True
+    assert result["results"][0]["returncode"] is None
+
+
 def test_fetch_outcomes_rejects_unknown_league():
     result = omega_fetch_outcomes(leagues=["nba", "cricket"])
     assert result["status"] == "error"

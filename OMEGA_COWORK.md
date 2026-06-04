@@ -272,7 +272,7 @@ When MCP is unavailable and a CLI loop is impractical (N > 5), a batch Python sc
 an authorized fallback. Every such script **must**:
 
 1. Call `cowork_preflight.run_formal_output_gate()` at the top — abort if gate fails.
-2. Derive every seed deterministically: `sha256(prompt + date)[:4]` — never `random`.
+2. Derive every seed deterministically as `int.from_bytes(hashlib.sha256(f"{prompt}|{date}".encode("utf-8")).digest()[:4], "big")` — never `random`.
 3. Include at least one `EvidenceSignal` per trace, or set `reasoning_downgrade_rationale`
    explaining why evidence is empty.
 4. Not hardcode `trace_quality.aggregate_quality`; omit it or compute from input quality.
@@ -331,7 +331,7 @@ assert smoke["bankroll"] == 1000.0
 print("engine_ready:", smoke["trace_id"])
 ```
 
-For every live `analyze()` call, the agent must generate a deterministic integer seed from `sha256(prompt + date)` and pass it in the request. `session_id` and `bankroll` are required runtime inputs. If no bankroll is configured, ask before producing a Bet Card.
+For every live `analyze()` call, the agent must generate a deterministic integer seed as `int.from_bytes(hashlib.sha256(f"{prompt}|{date}".encode("utf-8")).digest()[:4], "big")` and pass it in the request. `session_id` and `bankroll` are required runtime inputs. If no bankroll is configured, ask before producing a Bet Card.
 
 ## 3. Downgrade Discipline
 

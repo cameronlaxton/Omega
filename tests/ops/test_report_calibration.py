@@ -13,6 +13,8 @@ if str(_SCRIPTS) not in sys.path:
 
 import report_calibration  # type: ignore  # noqa: E402
 
+from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus  # noqa: E402
+from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 
@@ -74,3 +76,35 @@ def test_report_calibration_writes_derived_header(tmp_path, monkeypatch):
     assert f"source_db_path: {str(db)!r}" in text
     assert "trace_count_at_generation:" in text
 
+
+def test_report_lists_prop_production_profiles(tmp_path):
+    registry = CalibrationRegistry(path=str(tmp_path / "profiles.json"))
+    registry.register(
+        CalibrationProfile(
+            profile_id="iso_nba_prop_v1",
+            version=1,
+            method="isotonic",
+            league="NBA",
+            market="prop",
+            status=ProfileStatus.PRODUCTION,
+            training_window="2026-01-01/2026-06-01",
+            sample_size=120,
+            dataset_hash="abc123",
+            metrics={"brier_score": 0.21, "calibration_error": 0.03, "log_loss": 0.62},
+            promoted_at="2026-06-03T00:00:00+00:00",
+        )
+    )
+
+    rows = report_calibration._section_production_profiles(registry, "NBA")
+
+    assert rows == [
+        {
+            "profile_id": "iso_nba_prop_v1",
+            "market": "prop",
+            "context_slice": None,
+            "method": "isotonic",
+            "sample_size": 120,
+            "metrics": {"brier_score": 0.21, "calibration_error": 0.03, "log_loss": 0.62},
+            "promoted_at": "2026-06-03T00:00:00+00:00",
+        }
+    ]

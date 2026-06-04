@@ -426,10 +426,29 @@ def _section_pending_candidates(registry: CalibrationRegistry, league: str) -> l
         out.append(
             {
                 "profile_id": p.profile_id,
+                "market": p.market or "game",
                 "method": p.method,
                 "sample_size": p.sample_size,
                 "metrics": p.metrics,
                 "created_at": p.created_at,
+            }
+        )
+    return out
+
+
+def _section_production_profiles(registry: CalibrationRegistry, league: str) -> list[dict[str, Any]]:
+    profiles = registry.list_profiles(league=league, status=ProfileStatus.PRODUCTION.value)
+    out = []
+    for p in sorted(profiles, key=lambda item: (item.market or "game", item.context_slice or "")):
+        out.append(
+            {
+                "profile_id": p.profile_id,
+                "market": p.market or "game",
+                "context_slice": p.context_slice,
+                "method": p.method,
+                "sample_size": p.sample_size,
+                "metrics": p.metrics,
+                "promoted_at": p.promoted_at,
             }
         )
     return out
@@ -472,6 +491,7 @@ def _render(
     clv: dict[str, Any],
     sessions: list[dict[str, Any]],
     production_profile_id: str | None,
+    production_profiles: list[dict[str, Any]],
     candidates: list[dict[str, Any]],
     signal_perf: list[dict[str, Any]],
     output_mode: OutputMode,
@@ -546,10 +566,23 @@ def _render(
 
     lines.append("## 2. Production calibration profile")
     lines.append("")
-    if production_profile_id:
-        lines.append(f"Active: `{production_profile_id}`")
-    else:
+    if not production_profiles:
         lines.append("**None** â€” calibration is using the static fallback policy.")
+    else:
+        lines.append("| market | context_slice | profile_id | method | n | brier | ece | promoted |")
+        lines.append("|---|---|---|---|---:|---:|---:|---|")
+        for p in production_profiles:
+            m = p["metrics"]
+            promoted = (p.get("promoted_at") or "?")[:10]
+            lines.append(
+                f"| {p['market']} | {p.get('context_slice') or 'base'} | `{p['profile_id']}` | "
+                f"{p['method']} | {p['sample_size']} | "
+                f"{m.get('brier_score', float('nan')):.4f} | "
+                f"{m.get('calibration_error', float('nan')):.4f} | {promoted} |"
+            )
+        if production_profile_id:
+            lines.append("")
+            lines.append(f"Output-mode primary (game market): `{production_profile_id}`")
     lines.append("")
 
     lines.append("## 3. Realized metrics â€” game plane (graded game traces in window)")
@@ -652,12 +685,12 @@ def _render(
     if not candidates:
         lines.append("_No pending candidates._")
     else:
-        lines.append("| profile_id | method | n | brier | ece | log_loss | created |")
-        lines.append("|---|---|---|---|---|---|---|")
+        lines.append("| market | profile_id | method | n | brier | ece | log_loss | created |")
+        lines.append("|---|---|---|---|---|---|---|---|")
         for c in candidates:
             m = c["metrics"]
             lines.append(
-                f"| `{c['profile_id']}` | {c['method']} | {c['sample_size']} | "
+                f"| {c['market']} | `{c['profile_id']}` | {c['method']} | {c['sample_size']} | "
                 f"{m.get('brier_score', float('nan')):.4f} | "
                 f"{m.get('calibration_error', float('nan')):.4f} | "
                 f"{m.get('log_loss', float('nan')):.4f} | {c['created_at'][:10]} |"
@@ -747,7 +780,8 @@ def main() -> int:
     clv = _section_clv(store, args.league, cutoff)
     sessions = _section_sessions(store, sidecars, args.league)
 
-    prod = registry.get_production(args.league)
+    prod = registry.get_production(args.league, market="game")
+    production_profiles = _section_production_profiles(registry, args.league)
     candidates = _section_pending_candidates(registry, args.league)
     signal_perf = _section_signal_performance(store, args.league)
 
@@ -783,6 +817,7 @@ def main() -> int:
         clv=clv,
         sessions=sessions,
         production_profile_id=production_profile_id,
+        production_profiles=production_profiles,
         candidates=candidates,
         signal_perf=signal_perf,
         output_mode=output_mode,
@@ -802,6 +837,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 

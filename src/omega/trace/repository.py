@@ -40,6 +40,7 @@ from omega.trace.models import (
     TraceQaVerdictRow,
     TraceRow,
 )
+from omega.trace.prop_outcome import derive_prop_outcome_result, normalize_prop_side
 from omega.trace.schema import CURRENT_VERSION
 
 UTC = timezone.utc
@@ -449,9 +450,7 @@ class PostgresRepository:
         void: bool = False,
     ) -> str:
         self._ensure_writeable()
-        side_norm = side.lower().strip()
-        if side_norm not in ("over", "under"):
-            raise ValueError(f"side must be 'over' or 'under', got {side!r}")
+        side_norm = normalize_prop_side(side)
 
         with self.Session() as session:
             with session.begin():
@@ -469,16 +468,12 @@ class PostgresRepository:
                 if existing:
                     return existing
 
-                if void:
-                    result = "void"
-                elif stat_value == line:
-                    result = "push"
-                elif (side_norm == "over" and stat_value > line) or (
-                    side_norm == "under" and stat_value < line
-                ):
-                    result = "win"
-                else:
-                    result = "loss"
+                result, side_norm = derive_prop_outcome_result(
+                    stat_value=stat_value,
+                    line=line,
+                    side=side_norm,
+                    void=void,
+                )
 
                 prop_outcome_id = uuid.uuid4().hex[:12]
                 session.execute(

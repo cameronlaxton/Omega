@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from pydantic import ValidationError
@@ -68,6 +68,13 @@ PROMPT_NAMES = (
 )
 
 _MCP_EXPLORATORY_DOWNGRADE = "mcp_exploratory_iterations"
+
+
+def _commence_window_for_game_date(game_date: str) -> tuple[str, str]:
+    """Return the UTC day window Odds API expects for a YYYY-MM-DD slate date."""
+    day = datetime.strptime(game_date[:10], "%Y-%m-%d").date()
+    next_day = day + timedelta(days=1)
+    return f"{day.isoformat()}T00:00:00Z", f"{next_day.isoformat()}T00:00:00Z"
 
 
 def _request_with_mcp_defaults(
@@ -325,12 +332,11 @@ def omega_run_batch(
     Returns a summary envelope with per-entry status (ok/skipped/error) and the
     list of trace_ids and export paths for successfully completed entries.
     """
-    import hashlib
     import json as _json
     from datetime import datetime, timezone
-    from pathlib import Path
 
     from omega.core.contracts.schemas import BatchAnalysisEntry
+    from omega.core.contracts.seeding import derive_seed_from_request
     from omega.core.contracts.service import analyze
     from omega.integrations.odds_resolver import resolve_odds
     from omega.paths import repo_root
@@ -358,6 +364,15 @@ def omega_run_batch(
             continue
 
         game_date = entry.game_date or today
+        try:
+            commence_time_from, commence_time_to = _commence_window_for_game_date(game_date)
+        except ValueError as exc:
+            identifier = entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
+            errors.append({"index": idx, "identifier": identifier, "error": str(exc)})
+            results.append(
+                {"index": idx, "status": "error", "identifier": identifier, "error": str(exc)}
+            )
+            continue
         identifier = entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
 
         # --- Odds resolution ---
@@ -379,6 +394,8 @@ def omega_run_batch(
                             prop_type=pt,
                             home_team=entry.home_team,
                             away_team=entry.away_team,
+                            commence_time_from=commence_time_from,
+                            commence_time_to=commence_time_to,
                         )
                     except Exception:  # noqa: BLE001
                         continue
@@ -410,7 +427,14 @@ def omega_run_batch(
             game_odds = entry.odds
             if game_odds is None:
                 try:
-                    res = resolve_odds(kind="game", league=entry.league, home_team=entry.home_team, away_team=entry.away_team)
+                    res = resolve_odds(
+                        kind="game",
+                        league=entry.league,
+                        home_team=entry.home_team,
+                        away_team=entry.away_team,
+                        commence_time_from=commence_time_from,
+                        commence_time_to=commence_time_to,
+                    )
                     if res.get("status") == "success" and res.get("request_patch"):
                         game_odds = res["request_patch"].get("odds") or res["request_patch"]
                     else:
@@ -436,8 +460,7 @@ def omega_run_batch(
         if entry.seed is not None:
             request_dict["seed"] = entry.seed
         else:
-            seed_src = _json.dumps({"entry": request_dict, "session_id": session_id}, sort_keys=True, separators=(",", ":"), default=str).encode()
-            request_dict["seed"] = int.from_bytes(hashlib.sha256(seed_src).digest()[:4], "big")
+            request_dict["seed"] = derive_seed_from_request(request_dict, date=game_date)
 
         # --- Analyze ---
         try:
@@ -894,6 +917,7 @@ def omega_calibration_fit_preview(
 ) -> dict[str, Any]:
     """Dry-run a calibration fit from graded traces without writing profiles."""
     from omega.core.calibration.fitter import CalibrationFitter
+    from omega.core.calibration.market import calibration_market_for_plane
     from omega.core.calibration.registry import CalibrationRegistry
     from omega.trace.store import TraceStore
 
@@ -915,9 +939,11 @@ def omega_calibration_fit_preview(
         if req.plane == "prop":
             predictions, outcomes = fitter.extract_prop_pairs(graded)
             pair_label = "prop probability/outcome"
+            calibration_market = calibration_market_for_plane(req.plane)
         else:
             predictions, outcomes = fitter.extract_pairs(graded)
             pair_label = "home_win_prob/outcome"
+            calibration_market = calibration_market_for_plane(req.plane)
         if len(predictions) < 30:
             return _ok(
                 "omega_calibration_fit_preview",
@@ -929,6 +955,7 @@ def omega_calibration_fit_preview(
                     "minimum_samples": 30,
                     "league": req.league,
                     "plane": req.plane,
+                    "market": calibration_market,
                     "pair_type": pair_label,
                     "method": req.method,
                 },
@@ -936,14 +963,23 @@ def omega_calibration_fit_preview(
 
         fit_league = (req.league or "UNIVERSAL").upper()
         candidate = (
-            fitter.fit_isotonic(predictions, outcomes, league=fit_league)
+            fitter.fit_isotonic(predictions, outcomes, league=fit_league, market=calibration_market)
             if req.method == "isotonic"
-            else fitter.fit_shrinkage(predictions, outcomes, league=fit_league, eligible_sample_size=len(predictions))
+            else fitter.fit_shrinkage(
+                predictions,
+                outcomes,
+                league=fit_league,
+                market=calibration_market,
+                eligible_sample_size=len(predictions),
+            )
         )
         metrics = fitter.evaluate(candidate, predictions, outcomes)
         candidate.metrics = metrics
 
-        incumbent = CalibrationRegistry().get_production(fit_league)
+        incumbent = CalibrationRegistry().get_production(
+            fit_league,
+            market=calibration_market,
+        )
         comparison = (
             fitter.compare(candidate, incumbent, predictions, outcomes)
             if incumbent is not None
@@ -956,6 +992,7 @@ def omega_calibration_fit_preview(
                 "dry_run": True,
                 "sample_size": len(predictions),
                 "plane": req.plane,
+                "market": calibration_market,
                 "pair_type": pair_label,
                 "candidate": candidate.model_dump(mode="json"),
                 "metrics": metrics,

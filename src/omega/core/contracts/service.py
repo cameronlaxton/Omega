@@ -7,8 +7,6 @@ no data fetching, no config loading, no network calls.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -25,6 +23,7 @@ from omega.core.calibration.adjustment_policy import (
     AdjustmentPolicy,
     AdjustmentPolicyRegistry,
 )
+from omega.core.calibration.market import calibration_market_for_plane
 from omega.core.calibration.probability import apply_calibration, apply_calibration_audited
 from omega.core.config.leagues import get_league_config
 from omega.core.contracts.schemas import (
@@ -42,6 +41,7 @@ from omega.core.contracts.schemas import (
     SlateAnalysisRequest,
     SlateAnalysisResponse,
 )
+from omega.core.contracts.seeding import stable_analysis_hash
 from omega.core.simulation.archetypes import get_archetype_name
 from omega.core.simulation.backends import (
     GameSimulationBackend,
@@ -76,16 +76,6 @@ logger = logging.getLogger("omega.service")
 
 _engine = OmegaSimulationEngine()
 MODEL_VERSION = "omega-core-phase6h"
-_TRACE_HASH_EXCLUDE = {
-    "odds",
-    "odds_over",
-    "odds_under",
-    "markets",
-    "odds_snapshot",
-    "market_snapshots",
-    "closing_line",
-    "closing_lines",
-}
 
 
 @dataclass(frozen=True)
@@ -103,27 +93,10 @@ class EvidenceExecutionPlan:
     evidence_application: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _sanitize_for_trace_hash(value: Any) -> Any:
-    """Drop volatile market fields before deriving trace hash identity."""
-    if hasattr(value, "model_dump"):
-        value = value.model_dump(mode="json")
-    if isinstance(value, dict):
-        return {
-            str(k): _sanitize_for_trace_hash(v)
-            for k, v in value.items()
-            if str(k) not in _TRACE_HASH_EXCLUDE
-        }
-    if isinstance(value, list):
-        return [_sanitize_for_trace_hash(item) for item in value]
-    return value
-
-
 def _stable_input_hash(request: Any) -> str | None:
     """Stable 8-char content hash, excluding volatile odds and close snapshots."""
     try:
-        payload = _sanitize_for_trace_hash(request)
-        encoded = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
-        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:8]
+        return stable_analysis_hash(request)
     except (TypeError, ValueError) as exc:
         logger.debug("Failed to derive stable input hash: %s", exc)
         return None
@@ -405,18 +378,8 @@ def _calibrate_audited(
     market: str = "home",
 ) -> tuple[float, CalibrationAudit]:
     """Like _calibrate() but also returns a CalibrationAudit recording the path taken."""
-    # Derive the calibration market from the *plane*, not the bet-side label, so
-    # a player prop is calibrated by a prop profile (market="prop") and a game
-    # side by the game profile (market="game"). The 3-way draw keeps its own
-    # plane. A missing prop/draw profile falls back to the game profile, then to
-    # the static policy (see registry.get_production), so this is safe before
-    # prop profiles exist.
-    if plane == "prop":
-        cal_market = "prop"
-    elif market == "draw":
-        cal_market = "draw"
-    else:
-        cal_market = "game"
+    # Derive the calibration profile market from the plane in one shared policy.
+    cal_market = calibration_market_for_plane(plane, market=market)
     calibrated, d = apply_calibration_audited(
         raw_prob, league=league, context_hints=context_hints, market=cal_market
     )
