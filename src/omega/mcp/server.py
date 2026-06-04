@@ -11,11 +11,13 @@ from __future__ import annotations
 import os
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 
+from omega.core.config.leagues import get_league_config
 from omega.mcp.schemas import (
     MCP_SCHEMA_VERSION,
     CalibrationFitPreviewRequest,
@@ -62,6 +64,35 @@ PROMPT_NAMES = (
 )
 
 _MCP_EXPLORATORY_DOWNGRADE = "mcp_exploratory_iterations"
+
+
+def _commence_window_for_game_date(game_date: str, league: str | None = None) -> tuple[str, str]:
+    """Return the UTC window for a YYYY-MM-DD slate date, adjusted for the league's timezone.
+
+    When game_date is in a local timezone (e.g., EST), this expands the window to capture
+    games that start late in that timezone, whose commence_time falls after midnight UTC
+    on the following calendar day. Default timezone is America/New_York (EST/EDT).
+    """
+    league_tz = "America/New_York"  # Default to EST
+    if league:
+        config = get_league_config(league)
+        league_tz = config.get("timezone", "America/New_York")
+
+    day = datetime.strptime(game_date[:10], "%Y-%m-%d").date()
+
+    # Get midnight on this day in the league's local timezone
+    local_tz = ZoneInfo(league_tz)
+    local_midnight = datetime.combine(day, datetime.min.time()).replace(tzinfo=local_tz)
+    local_next_midnight = local_midnight + timedelta(days=1)
+
+    # Convert to UTC
+    start_utc = local_midnight.astimezone(timezone.utc)
+    end_utc = local_next_midnight.astimezone(timezone.utc)
+
+    # Format as ISO string with Z suffix for UTC
+    start_str = start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_str = end_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return start_str, end_str
 
 
 def _request_with_mcp_defaults(
@@ -352,6 +383,15 @@ def omega_run_batch(
             continue
 
         game_date = entry.game_date or today
+        try:
+            commence_time_from, commence_time_to = _commence_window_for_game_date(game_date, league=entry.league)
+        except ValueError as exc:
+            identifier = entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
+            errors.append({"index": idx, "identifier": identifier, "error": str(exc)})
+            results.append(
+                {"index": idx, "status": "error", "identifier": identifier, "error": str(exc)}
+            )
+            continue
         identifier = entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
 
         # --- Odds resolution ---
@@ -373,6 +413,8 @@ def omega_run_batch(
                             prop_type=pt,
                             home_team=entry.home_team,
                             away_team=entry.away_team,
+                            commence_time_from=commence_time_from,
+                            commence_time_to=commence_time_to,
                         )
                     except Exception:  # noqa: BLE001
                         continue
@@ -404,7 +446,14 @@ def omega_run_batch(
             game_odds = entry.odds
             if game_odds is None:
                 try:
-                    res = resolve_odds(kind="game", league=entry.league, home_team=entry.home_team, away_team=entry.away_team)
+                    res = resolve_odds(
+                        kind="game",
+                        league=entry.league,
+                        home_team=entry.home_team,
+                        away_team=entry.away_team,
+                        commence_time_from=commence_time_from,
+                        commence_time_to=commence_time_to,
+                    )
                     if res.get("status") == "success" and res.get("request_patch"):
                         game_odds = res["request_patch"].get("odds") or res["request_patch"]
                     else:

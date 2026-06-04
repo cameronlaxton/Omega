@@ -24,6 +24,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "normal",
         "home_advantage": 3.0,
         "std": 12.0,
+        "timezone": "America/New_York",  # EST/EDT
     },
     "WNBA": {
         "sport": "basketball",
@@ -39,6 +40,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "default_game_backend": "markov_state_wnba",
         "default_prop_backend": "prop_distribution_router",
         "liquidity_profile": "low",    # triggers early-morning line capture
+        "timezone": "America/New_York",  # EST/EDT
     },
     "NCAAB": {
         "sport": "basketball",
@@ -88,6 +90,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "normal",
         "home_advantage": 2.5,
         "std": 10.0,
+        "timezone": "America/New_York",  # EST/EDT
     },
     "NCAAF": {
         "sport": "football",
@@ -100,6 +103,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "normal",
         "home_advantage": 3.0,
         "std": 12.0,
+        "timezone": "America/New_York",  # EST/EDT
     },
     "CFL": {
         "sport": "football",
@@ -135,6 +139,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "distribution": "poisson",
         "home_advantage": 0.3,
         "std": 3.0,
+        "timezone": "America/New_York",  # EST/EDT
     },
     "NPB": {
         "sport": "baseball",
@@ -168,6 +173,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "home_advantage": 0.2,
         "std": 2.0,
         "has_regulation_draw": True,
+        "timezone": "America/New_York",  # EST/EDT
     },
     "KHL": {
         "sport": "hockey",
@@ -194,6 +200,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         "dixon_coles": True,
         "rho": -0.13,
+        "timezone": "America/New_York",  # EST/EDT
     },
     "EPL": {
         "sport": "soccer",
@@ -207,6 +214,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         "dixon_coles": True,
         "rho": -0.13,
+        "timezone": "Europe/London",
     },
     "PREMIER_LEAGUE": {
         "sport": "soccer",
@@ -259,6 +267,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.4,
         "dixon_coles": True,
         "rho": -0.13,
+        "timezone": "Europe/Berlin",
     },
     "SERIE_A": {
         "sport": "soccer",
@@ -272,6 +281,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         "dixon_coles": True,
         "rho": -0.13,
+        "timezone": "Europe/Rome",
     },
     "LIGUE_1": {
         "sport": "soccer",
@@ -285,6 +295,7 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.2,
         "dixon_coles": True,
         "rho": -0.13,
+        "timezone": "Europe/Paris",
     },
     "CHAMPIONS_LEAGUE": {
         "sport": "soccer",
