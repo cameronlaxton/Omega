@@ -298,6 +298,21 @@ class TestCalibrationFitter:
         assert preds == []
         assert outs == []
 
+    def test_extract_prop_pairs_skips_void(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        # A DNP / no-action void carries no calibration signal and must not be
+        # counted (it would otherwise fall through and be scored as a loss).
+        traces = [
+            {
+                "predictions": {"over_prob": 0.5, "under_prob": 0.5},
+                "_prop_outcomes": [{"side": "over", "result": "void"}],
+            }
+        ]
+        preds, outs = CalibrationFitter.extract_prop_pairs(traces)
+        assert preds == []
+        assert outs == []
+
     def test_extract_prop_pairs_multiple_props_per_trace(self):
         """One trace can have many prop outcomes (e.g. pts, reb, ast)."""
         from omega.core.calibration.fitter import CalibrationFitter
