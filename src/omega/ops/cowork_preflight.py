@@ -349,14 +349,19 @@ def _diverged_tracked_files(repo_root: Path, tracked_files: list[str]) -> list[s
     normalization the previous hash comparison did, so content-equality results
     match.
     """
-    result = _git(repo_root, ["diff", "--name-only", "HEAD"])
+    # -z gives NUL-separated, raw (unquoted) paths -- matching how tracked_files
+    # is extracted from `git ls-tree -r -z`. Without -z, `git diff --name-only`
+    # C-escapes/quotes non-ASCII or whitespace paths (core.quotePath defaults on),
+    # so they would never match the raw tracked entries and a diverged file with
+    # such a path would be silently missed.
+    result = _git(repo_root, ["diff", "--name-only", "-z", "HEAD"])
     if result.returncode != 0:
         # check_git_health() already verified git is functional before this runs;
         # treat an unexpected failure here as "no divergence detected" (the prior
         # per-file implementation also degraded to empty on git errors).
         return []
 
-    changed = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    changed = {path for path in result.stdout.split("\x00") if path}
     diverged: list[str] = []
     for rel_path in tracked_files:
         if rel_path not in changed:

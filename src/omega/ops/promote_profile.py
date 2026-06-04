@@ -132,14 +132,29 @@ def _exact_production_incumbent(
 
     Unlike registry.get_production(), this does not fall a prop/draw market back
     to the game profile, so a prop candidate is compared only against a prop
-    incumbent (or None), never against the game profile.
+    incumbent, never against the game profile. It DOES mirror selection's
+    slice -> base fallback within the market: a context-sliced candidate (e.g.
+    'playoff') is gated against the base (slice=None) profile it would shadow at
+    selection time, so a worse slice profile cannot auto-pass the no-incumbent
+    gates and then shadow a better base profile.
     """
     market = candidate.market or "game"
-    for p in registry.list_profiles(
-        league=candidate.league, status=ProfileStatus.PRODUCTION.value
-    ):
-        if (p.market or "game") == market and p.context_slice == candidate.context_slice:
+    same_market = [
+        p
+        for p in registry.list_profiles(
+            league=candidate.league, status=ProfileStatus.PRODUCTION.value
+        )
+        if (p.market or "game") == market
+    ]
+    # Exact (market, context_slice) match first.
+    for p in same_market:
+        if p.context_slice == candidate.context_slice:
             return p
+    # A sliced candidate falls back to the base profile it would shadow.
+    if candidate.context_slice is not None:
+        for p in same_market:
+            if p.context_slice is None:
+                return p
     return None
 
 

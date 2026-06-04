@@ -103,6 +103,32 @@ def test_void_prop_then_settle_as_void(db_path):
     assert row["net_pnl"] == 0.0
 
 
+def test_void_prop_refuses_to_overwrite_existing_outcome(db_path):
+    """If a non-void prop outcome is already attached, void must NOT silently
+    no-op and report success -- it returns outcome_exists with the real result."""
+    store = TraceStore(db_path=db_path)
+    _persist_prop_trace(store, "graded-trace")
+    store.attach_prop_outcome(
+        "graded-trace",
+        player_name="Aaron Judge",
+        stat_type="hits",
+        stat_value=2.0,
+        line=0.5,
+        side="over",
+    )  # real graded WIN
+    store.close()
+
+    result = omega_trace_void_prop(
+        "graded-trace",
+        player_name="Aaron Judge",
+        stat_type="hits",
+        db_path=db_path,
+    )
+    assert result["status"] == "error"
+    assert result["error_code"] == "outcome_exists"
+    assert result["detail"]["existing_result"] == "win"
+
+
 def test_void_prop_unknown_trace_errors(db_path):
     result = omega_trace_void_prop(
         "missing",

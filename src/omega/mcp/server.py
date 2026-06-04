@@ -724,6 +724,35 @@ def omega_trace_void_prop(
 
     store = TraceStore(db_path=req.db_path)
     try:
+        # attach_prop_outcome is idempotent on (trace_id, player_name, stat_type):
+        # if a row already exists it returns that row's id WITHOUT changing its
+        # result. Detect a pre-existing non-void outcome first so we never report
+        # a "void" that did not actually take effect (which would mislead the
+        # caller into thinking a graded loss/win was converted to a no-action).
+        existing = next(
+            (
+                r
+                for r in store.get_prop_outcomes(req.trace_id)
+                if r.get("player_name") == req.player_name
+                and r.get("stat_type") == req.stat_type
+            ),
+            None,
+        )
+        if existing is not None and existing.get("result") != "void":
+            return _error(
+                "omega_trace_void_prop",
+                "outcome_exists",
+                {
+                    "message": (
+                        "A non-void prop outcome is already attached; refusing to "
+                        "silently overwrite it. Detach/correct it first if the "
+                        "player truly did not play."
+                    ),
+                    "existing_result": existing.get("result"),
+                    "prop_outcome_id": existing.get("prop_outcome_id"),
+                },
+            )
+
         prop_outcome_id = store.attach_prop_outcome(
             trace_id=req.trace_id,
             player_name=req.player_name,
