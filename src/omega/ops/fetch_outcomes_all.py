@@ -43,6 +43,110 @@ _MODULES: dict[str, str] = {
 }
 
 _DEFAULT_LEAGUES = ("nba", "wnba", "mlb", "soccer", "props")
+_FETCH_OUTCOMES_TIMEOUT_SECONDS = 20 * 60
+
+
+def _build_cmd(
+    league: str,
+    *,
+    db: str | None,
+    since: str | None,
+    until: str | None,
+    dry_run: bool,
+) -> list[str]:
+    cmd = [sys.executable, "-m", _MODULES[league]]
+    if db:
+        cmd += ["--db", db]
+    if since:
+        cmd += ["--since", since]
+    if until:
+        cmd += ["--until", until]
+    if dry_run:
+        cmd.append("--dry-run")
+    return cmd
+
+
+def run_fetch_outcomes(
+    *,
+    leagues: list[str] | tuple[str, ...] | None = None,
+    db: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    dry_run: bool = False,
+    capture_output: bool = False,
+    timeout_seconds: int = _FETCH_OUTCOMES_TIMEOUT_SECONDS,
+) -> dict[str, object]:
+    """Dispatch per-league outcome fetchers and return a structured result.
+
+    Shared entrypoint for both the CLI ``main()`` and the ``omega_fetch_outcomes``
+    MCP tool. Each league is an idempotent subprocess; ``capture_output=True``
+    captures stdout/stderr (tail only) per league instead of streaming, which the
+    MCP tool needs to return a JSON-friendly payload.
+
+    To exclude soccer (future-dated fixtures), pass an explicit ``leagues`` list
+    without ``"soccer"``.
+    """
+    selected = list(leagues) if leagues is not None else list(_DEFAULT_LEAGUES)
+    unknown = [lg for lg in selected if lg not in _MODULES]
+    if unknown:
+        raise ValueError(
+            f"Unknown league(s): {', '.join(unknown)}. "
+            f"Valid: {', '.join(sorted(_MODULES))}"
+        )
+
+    results: list[dict[str, object]] = []
+    for league in selected:
+        cmd = _build_cmd(league, db=db, since=since, until=until, dry_run=dry_run)
+        logger.info("Running %s: %s", league, " ".join(cmd))
+        try:
+            if capture_output:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=_REPO_ROOT,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_seconds,
+                )
+                tail = (proc.stdout or "")[-2000:] + (proc.stderr or "")[-2000:]
+            else:
+                proc = subprocess.run(cmd, cwd=_REPO_ROOT, timeout=timeout_seconds)
+                tail = ""
+        except subprocess.TimeoutExpired as exc:
+            output = exc.output.decode(errors="replace") if isinstance(exc.output, bytes) else (exc.output or "")
+            stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+            tail = (output or "")[-2000:] + (stderr or "")[-2000:]
+            results.append(
+                {
+                    "league": league,
+                    "returncode": None,
+                    "ok": False,
+                    "timed_out": True,
+                    "timeout_seconds": timeout_seconds,
+                    "output_tail": tail,
+                }
+            )
+            logger.error("%s FAILED (timeout=%ss)", league, timeout_seconds)
+            continue
+        ok = proc.returncode == 0
+        results.append(
+            {
+                "league": league,
+                "returncode": proc.returncode,
+                "ok": ok,
+                "timed_out": False,
+                "output_tail": tail,
+            }
+        )
+        logger.info("%s %s", league, "OK" if ok else f"FAILED (exit={proc.returncode})")
+
+    failures = sum(1 for r in results if not r["ok"])
+    return {
+        "ok": failures == 0,
+        "failures": failures,
+        "dry_run": dry_run,
+        "leagues": selected,
+        "results": results,
+    }
 
 
 def main() -> int:
@@ -68,29 +172,16 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    failures = 0
-    for league in args.leagues:
-        module = _MODULES[league]
-        cmd = [sys.executable, "-m", module]
-        if args.db:
-            cmd += ["--db", args.db]
-        if args.since:
-            cmd += ["--since", args.since]
-        if args.until:
-            cmd += ["--until", args.until]
-        if args.dry_run:
-            cmd.append("--dry-run")
+    outcome = run_fetch_outcomes(
+        leagues=args.leagues,
+        db=args.db,
+        since=args.since,
+        until=args.until,
+        dry_run=args.dry_run,
+    )
 
-        logger.info("Running %s: %s", league, " ".join(cmd))
-        result = subprocess.run(cmd, cwd=_REPO_ROOT)
-        if result.returncode != 0:
-            failures += 1
-            logger.error("%s FAILED (exit=%d)", league, result.returncode)
-        else:
-            logger.info("%s OK", league)
-
-    if failures:
-        logger.error("%d sub-script(s) failed.", failures)
+    if not outcome["ok"]:
+        logger.error("%d sub-script(s) failed.", outcome["failures"])
         return 1
     logger.info("All outcome scripts completed successfully.")
     return 0
@@ -98,7 +189,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

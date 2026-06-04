@@ -424,11 +424,17 @@ def settle_prop_bet(
 ) -> LedgerStatus:
     """Map a prop_outcomes row (result relative to outcome_side) to a status.
 
-    prop_outcomes.result is win|loss|push for `outcome_side`. If the recommended
-    side matches the graded side, map directly; if it's the opposite side, invert
-    win/loss (push stays push).
+    prop_outcomes.result is win|loss|push|void for `outcome_side`. If the
+    recommended side matches the graded side, map directly; if it's the opposite
+    side, invert win/loss (push/void stay as-is).
+
+    ``void`` is recorded for DNP / no-action props (player absent from the box
+    score). It must be handled explicitly: otherwise it falls through the
+    win/loss branch and mis-grades as a LOSS.
     """
     res = (outcome_result or "").strip().lower()
+    if res == "void":
+        return LedgerStatus.VOID
     if res == "push":
         return LedgerStatus.PUSH
     rec = (recommended_side or "").strip().lower()

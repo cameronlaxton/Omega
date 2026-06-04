@@ -14,6 +14,7 @@ if str(_SCRIPTS) not in sys.path:
 import fit_calibration  # type: ignore  # noqa: E402
 
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
+from omega.core.calibration.market import calibration_market_for_plane  # noqa: E402
 
 
 def test_extract_plane_pairs_routes_game_and_prop_separately():
@@ -56,7 +57,32 @@ def test_extract_plane_pairs_routes_draw():
 
 
 def test_plane_market_mapping():
-    assert fit_calibration._plane_market("draw") == "draw"
-    assert fit_calibration._plane_market("game") == "game"
-    assert fit_calibration._plane_market("prop") == "game"
+    # Each plane maps to its own market so a profile is only applied to the
+    # plane it was fit on (prop no longer collapses onto the game market).
+    assert calibration_market_for_plane("draw") == "draw"
+    assert calibration_market_for_plane("game") == "game"
+    assert calibration_market_for_plane("prop") == "prop"
 
+
+def test_fit_and_register_prop_candidate_carries_prop_market(tmp_path):
+    # A prop-plane fit must produce a market="prop" candidate (and a prop-tagged
+    # id) so it never competes with / overwrites the game-market profile.
+    from omega.core.calibration.registry import CalibrationRegistry
+
+    fitter = CalibrationFitter()
+    registry = CalibrationRegistry(path=str(tmp_path / "profiles.json"))
+    # >= _MIN_SAMPLES (30) train pairs where higher prob correlates with a hit.
+    train_p = [round(0.2 + (i % 7) * 0.1, 2) for i in range(40)]
+    train_o = [1 if p >= 0.5 else 0 for p in train_p]
+    hold_p = [0.35, 0.6, 0.5, 0.7, 0.45]
+    hold_o = [0, 1, 1, 1, 0]
+
+    profile = fit_calibration.fit_and_register(
+        fitter, registry, "MLB", "isotonic",
+        train_p, train_o, hold_p, hold_o, dry_run=False, market="prop",
+    )
+
+    assert profile.market == "prop"
+    assert "prop_" in profile.profile_id
+    # It registered under the prop market, leaving the game slot untouched.
+    assert registry.get_production("MLB", market="game") is None

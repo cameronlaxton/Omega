@@ -338,17 +338,39 @@ def _tracked_python_files(repo_root: Path) -> tuple[list[str], list[str]]:
 
 
 def _diverged_tracked_files(repo_root: Path, tracked_files: list[str]) -> list[str]:
+    """Return tracked .py files whose working-tree content differs from git HEAD.
+
+    Uses a single ``git diff --name-only HEAD`` instead of two subprocesses
+    (``rev-parse HEAD:<path>`` + ``hash-object``) per file. On the FUSE/Windows
+    mount, per-file subprocess spawning dominated preflight latency; one diff is
+    O(1) process calls regardless of repo size. Semantics are preserved: only
+    paths in ``tracked_files`` that still exist in the working tree are reported,
+    in input order. ``git diff`` applies the same gitattributes/autocrlf
+    normalization the previous hash comparison did, so content-equality results
+    match.
+    """
+    # -z gives NUL-separated, raw (unquoted) paths -- matching how tracked_files
+    # is extracted from `git ls-tree -r -z`. Without -z, `git diff --name-only`
+    # C-escapes/quotes non-ASCII or whitespace paths (core.quotePath defaults on),
+    # so they would never match the raw tracked entries and a diverged file with
+    # such a path would be silently missed.
+    result = _git(repo_root, ["diff", "--name-only", "-z", "HEAD"])
+    if result.returncode != 0:
+        # check_git_health() already verified git is functional before this runs;
+        # treat an unexpected failure here as "no divergence detected" (the prior
+        # per-file implementation also degraded to empty on git errors).
+        return []
+
+    changed = {path for path in result.stdout.split("\x00") if path}
     diverged: list[str] = []
     for rel_path in tracked_files:
-        abs_path = repo_root / rel_path
-        if not abs_path.exists():
+        if rel_path not in changed:
             continue
-        index_hash = _git(repo_root, ["rev-parse", f"HEAD:{rel_path}"]).stdout.strip()
-        if not index_hash:
+        # Skip files deleted from the working tree (HEAD blob exists but no WT
+        # content to compare) to match the previous abs_path.exists() guard.
+        if not (repo_root / rel_path).exists():
             continue
-        wt_hash = _git(repo_root, ["hash-object", "--", str(abs_path)]).stdout.strip()
-        if wt_hash and wt_hash != index_hash:
-            diverged.append(rel_path)
+        diverged.append(rel_path)
     return diverged
 
 

@@ -149,6 +149,40 @@ def test_prop_and_push_settlement(store):
     assert row["net_pnl"] == 0.0
 
 
+def test_dnp_void_prop_settles_as_void(store):
+    """A DNP void prop outcome settles the ledger bet as VOID (stake returned,
+    net 0) instead of mis-grading as a loss or remaining ungradeable."""
+    _persist_trace(store, "dnp")
+    store.record_ledger_bet(
+        _bet(
+            "dnp",
+            ledger_id="dnp1",
+            market="player_prop:hits",
+            descriptor="aaron_judge_over_0.5_hits",
+            line=0.5,
+            odds=-150,
+        )
+    )
+    store.attach_prop_outcome(
+        "dnp",
+        player_name="Aaron Judge",
+        stat_type="hits",
+        stat_value=0.0,
+        line=0.0,
+        side="over",
+        void=True,
+    )
+
+    summary = settle_pending_ledger(store, apply=True)
+
+    assert summary.settled["void"] == 1
+    assert summary.ungradeable == 0
+    row = store.get_ledger_bets("dnp")[0]
+    assert row["status"] == "void"
+    assert row["net_pnl"] == 0.0
+    assert row["payout_amount"] == 25.0  # default stake returned
+
+
 def test_ungradeable_rows_remain_pending(store):
     _persist_trace(store, "bad")
     store.record_ledger_bet(_bet("bad", ledger_id="bad1", descriptor="best_bet"))

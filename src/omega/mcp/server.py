@@ -22,13 +22,16 @@ from omega.mcp.schemas import (
     MCP_SCHEMA_VERSION,
     CalibrationFitPreviewRequest,
     EvidenceRetrieveRequest,
+    FetchOutcomesRequest,
     FlatBetRequest,
     GameContextRequest,
     PortfolioSummaryRequest,
     ReplayBundle,
     ReplayToolRequest,
+    SettleBetsRequest,
     TraceAttachOutcomeRequest,
     TraceQueryRequest,
+    TraceVoidPropRequest,
 )
 from omega.paths import repo_root
 
@@ -42,6 +45,9 @@ TOOL_NAMES = (
     "omega_trace_get",
     "omega_trace_query",
     "omega_trace_attach_outcome",
+    "omega_trace_void_prop",
+    "omega_fetch_outcomes",
+    "omega_settle_bets",
     "omega_calibration_fit_preview",
     "omega_evidence_retrieve",
     "omega_resolve_odds",
@@ -80,19 +86,15 @@ def _commence_window_for_game_date(game_date: str, league: str | None = None) ->
 
     day = datetime.strptime(game_date[:10], "%Y-%m-%d").date()
 
-    # Get midnight on this day in the league's local timezone
+    # Midnight on this day in the league's local timezone, to the next local midnight.
     local_tz = ZoneInfo(league_tz)
     local_midnight = datetime.combine(day, datetime.min.time()).replace(tzinfo=local_tz)
     local_next_midnight = local_midnight + timedelta(days=1)
 
-    # Convert to UTC
+    # Convert the local-day window to UTC so late local games (post-00:00Z next day) are kept.
     start_utc = local_midnight.astimezone(timezone.utc)
     end_utc = local_next_midnight.astimezone(timezone.utc)
-
-    # Format as ISO string with Z suffix for UTC
-    start_str = start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-    end_str = end_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return start_str, end_str
+    return start_utc.strftime("%Y-%m-%dT%H:%M:%SZ"), end_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _request_with_mcp_defaults(
@@ -350,12 +352,11 @@ def omega_run_batch(
     Returns a summary envelope with per-entry status (ok/skipped/error) and the
     list of trace_ids and export paths for successfully completed entries.
     """
-    import hashlib
     import json as _json
     from datetime import datetime, timezone
-    from pathlib import Path
 
     from omega.core.contracts.schemas import BatchAnalysisEntry
+    from omega.core.contracts.seeding import derive_seed_from_request
     from omega.core.contracts.service import analyze
     from omega.integrations.odds_resolver import resolve_odds
     from omega.paths import repo_root
@@ -384,7 +385,9 @@ def omega_run_batch(
 
         game_date = entry.game_date or today
         try:
-            commence_time_from, commence_time_to = _commence_window_for_game_date(game_date, league=entry.league)
+            commence_time_from, commence_time_to = _commence_window_for_game_date(
+                game_date, league=entry.league
+            )
         except ValueError as exc:
             identifier = entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
             errors.append({"index": idx, "identifier": identifier, "error": str(exc)})
@@ -479,8 +482,7 @@ def omega_run_batch(
         if entry.seed is not None:
             request_dict["seed"] = entry.seed
         else:
-            seed_src = _json.dumps({"entry": request_dict, "session_id": session_id}, sort_keys=True, separators=(",", ":"), default=str).encode()
-            request_dict["seed"] = int.from_bytes(hashlib.sha256(seed_src).digest()[:4], "big")
+            request_dict["seed"] = derive_seed_from_request(request_dict, date=game_date)
 
         # --- Analyze ---
         try:
@@ -733,6 +735,201 @@ def omega_trace_attach_outcome(
         store.close()
 
 
+def omega_trace_void_prop(
+    trace_id: str,
+    player_name: str,
+    stat_type: str,
+    side: str = "over",
+    reason: str = "dnp",
+    source: str = "mcp",
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Record a DNP / no-action void for a player prop absent from the box score.
+
+    Use when the player did not play (injury, scratch, ejection) so the prop has
+    no gradeable stat line. Records a ``void`` prop outcome so settlement returns
+    VOID (stake returned, net 0) rather than leaving the bet pending or grading
+    it as a loss. Post-decision, like outcome attachment — computes no protected
+    betting output.
+    """
+    from omega.trace.store import TraceStore
+
+    try:
+        req = TraceVoidPropRequest(
+            trace_id=trace_id,
+            player_name=player_name,
+            stat_type=stat_type,
+            side=side,
+            reason=reason,
+            source=source,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_trace_void_prop", "invalid_request", exc.errors())
+
+    store = TraceStore(db_path=req.db_path)
+    try:
+        # attach_prop_outcome is idempotent on (trace_id, player_name, stat_type):
+        # if a row already exists it returns that row's id WITHOUT changing its
+        # result. Detect a pre-existing non-void outcome first so we never report
+        # a "void" that did not actually take effect (which would mislead the
+        # caller into thinking a graded loss/win was converted to a no-action).
+        existing = next(
+            (
+                r
+                for r in store.get_prop_outcomes(req.trace_id)
+                if r.get("player_name") == req.player_name
+                and r.get("stat_type") == req.stat_type
+            ),
+            None,
+        )
+        if existing is not None and existing.get("result") != "void":
+            return _error(
+                "omega_trace_void_prop",
+                "outcome_exists",
+                {
+                    "message": (
+                        "A non-void prop outcome is already attached; refusing to "
+                        "silently overwrite it. Detach/correct it first if the "
+                        "player truly did not play."
+                    ),
+                    "existing_result": existing.get("result"),
+                    "prop_outcome_id": existing.get("prop_outcome_id"),
+                },
+            )
+
+        prop_outcome_id = store.attach_prop_outcome(
+            trace_id=req.trace_id,
+            player_name=req.player_name,
+            stat_type=req.stat_type,
+            stat_value=0.0,
+            line=0.0,
+            side=req.side,
+            source=f"{req.source}:void:{req.reason}",
+            void=True,
+        )
+        return _ok(
+            "omega_trace_void_prop",
+            prop_outcome_id=prop_outcome_id,
+            result="void",
+            reason=req.reason,
+        )
+    except ValueError as exc:
+        return _error("omega_trace_void_prop", "trace_not_found", str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_trace_void_prop", "void_failed", str(exc))
+    finally:
+        store.close()
+
+
+def omega_fetch_outcomes(
+    leagues: list[str] | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    dry_run: bool = False,
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Batch-gather outcomes across leagues (wraps fetch_outcomes_all).
+
+    Dispatches the idempotent per-league outcome fetchers and returns per-league
+    status. Defaults to all leagues; to exclude soccer (future-dated fixtures),
+    pass ``leagues`` without ``"soccer"``. ``dry_run=True`` reports what would run
+    without attaching anything. Delegates entirely to the deterministic ops layer
+    — computes no protected betting output.
+    """
+    try:
+        req = FetchOutcomesRequest(
+            leagues=leagues,
+            since=since,
+            until=until,
+            dry_run=dry_run,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_fetch_outcomes", "invalid_request", exc.errors())
+
+    try:
+        from omega.ops.fetch_outcomes_all import run_fetch_outcomes
+
+        outcome = run_fetch_outcomes(
+            leagues=req.leagues,
+            db=req.db_path,
+            since=req.since,
+            until=req.until,
+            dry_run=req.dry_run,
+            capture_output=True,
+        )
+        return _ok("omega_fetch_outcomes", **outcome)
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_fetch_outcomes", "fetch_outcomes_failed", str(exc))
+
+
+def omega_settle_bets(
+    apply: bool = False,
+    league: str | None = None,
+    sport: str | None = None,
+    provenance: str = "user_confirmed",
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 100000,
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Settle pending bet_ledger rows with attached outcomes (wraps settle_bets).
+
+    ``apply=False`` (default) is a dry run that scans and reports counts/PnL
+    without writing. Delegates to the deterministic settlement op — owns no
+    grading math itself.
+    """
+    from omega.trace.ledger_settlement import settle_pending_ledger
+    from omega.trace.store import TraceStore
+
+    try:
+        req = SettleBetsRequest(
+            apply=apply,
+            league=league,
+            sport=sport,
+            provenance=provenance,
+            start=start,
+            end=end,
+            limit=limit,
+            db_path=db_path,
+        )
+    except ValidationError as exc:
+        return _error("omega_settle_bets", "invalid_request", exc.errors())
+
+    provenance_filter = None if req.provenance == "all" else req.provenance
+    store = TraceStore(db_path=req.db_path)
+    try:
+        summary = settle_pending_ledger(
+            store,
+            apply=req.apply,
+            league=req.league,
+            sport=req.sport,
+            provenance=provenance_filter,
+            start=req.start,
+            end=req.end,
+            limit=req.limit,
+        )
+        staked = summary.total_staked
+        roi = (summary.total_net / staked * 100.0) if staked else 0.0
+        return _ok(
+            "omega_settle_bets",
+            applied=req.apply,
+            provenance=req.provenance,
+            pending_scanned=summary.pending_scanned,
+            settled=dict(summary.settled),
+            settled_total=sum(summary.settled.values()),
+            ungradeable=summary.ungradeable,
+            total_staked=round(staked, 2),
+            total_net=round(summary.total_net, 2),
+            roi_pct=round(roi, 2),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_settle_bets", "settle_failed", str(exc))
+    finally:
+        store.close()
+
+
 def omega_calibration_fit_preview(
     db_path: str | None = None,
     league: str | None = None,
@@ -742,6 +939,7 @@ def omega_calibration_fit_preview(
 ) -> dict[str, Any]:
     """Dry-run a calibration fit from graded traces without writing profiles."""
     from omega.core.calibration.fitter import CalibrationFitter
+    from omega.core.calibration.market import calibration_market_for_plane
     from omega.core.calibration.registry import CalibrationRegistry
     from omega.trace.store import TraceStore
 
@@ -763,9 +961,11 @@ def omega_calibration_fit_preview(
         if req.plane == "prop":
             predictions, outcomes = fitter.extract_prop_pairs(graded)
             pair_label = "prop probability/outcome"
+            calibration_market = calibration_market_for_plane(req.plane)
         else:
             predictions, outcomes = fitter.extract_pairs(graded)
             pair_label = "home_win_prob/outcome"
+            calibration_market = calibration_market_for_plane(req.plane)
         if len(predictions) < 30:
             return _ok(
                 "omega_calibration_fit_preview",
@@ -777,6 +977,7 @@ def omega_calibration_fit_preview(
                     "minimum_samples": 30,
                     "league": req.league,
                     "plane": req.plane,
+                    "market": calibration_market,
                     "pair_type": pair_label,
                     "method": req.method,
                 },
@@ -784,14 +985,23 @@ def omega_calibration_fit_preview(
 
         fit_league = (req.league or "UNIVERSAL").upper()
         candidate = (
-            fitter.fit_isotonic(predictions, outcomes, league=fit_league)
+            fitter.fit_isotonic(predictions, outcomes, league=fit_league, market=calibration_market)
             if req.method == "isotonic"
-            else fitter.fit_shrinkage(predictions, outcomes, league=fit_league, eligible_sample_size=len(predictions))
+            else fitter.fit_shrinkage(
+                predictions,
+                outcomes,
+                league=fit_league,
+                market=calibration_market,
+                eligible_sample_size=len(predictions),
+            )
         )
         metrics = fitter.evaluate(candidate, predictions, outcomes)
         candidate.metrics = metrics
 
-        incumbent = CalibrationRegistry().get_production(fit_league)
+        incumbent = CalibrationRegistry().get_production(
+            fit_league,
+            market=calibration_market,
+        )
         comparison = (
             fitter.compare(candidate, incumbent, predictions, outcomes)
             if incumbent is not None
@@ -804,6 +1014,7 @@ def omega_calibration_fit_preview(
                 "dry_run": True,
                 "sample_size": len(predictions),
                 "plane": req.plane,
+                "market": calibration_market,
                 "pair_type": pair_label,
                 "candidate": candidate.model_dump(mode="json"),
                 "metrics": metrics,
@@ -1117,6 +1328,9 @@ def build_server():
         omega_trace_get,
         omega_trace_query,
         omega_trace_attach_outcome,
+        omega_trace_void_prop,
+        omega_fetch_outcomes,
+        omega_settle_bets,
         omega_calibration_fit_preview,
         omega_evidence_retrieve,
         omega_resolve_odds,

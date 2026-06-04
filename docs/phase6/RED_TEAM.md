@@ -64,7 +64,7 @@ The orchestrator gathers odds from live providers and normalizes them. The backt
 
 ### Blind spot 4: Seed derivation differences
 
-The orchestrator derives seeds from `sha256(prompt + date)`. The backtest engine uses whatever seed is in the strategy params or no explicit seed. These are different derivation paths.
+The orchestrator derives seeds as `int.from_bytes(hashlib.sha256(f"{prompt}|{date}".encode("utf-8")).digest()[:4], "big")`. The backtest engine uses whatever seed is in the strategy params or no explicit seed. These are different derivation paths.
 
 **Mitigation:** Phase 6 frozen artifacts must include the exact seed used. The backtest must use that seed, not derive a new one.
 

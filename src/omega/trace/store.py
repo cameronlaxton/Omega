@@ -37,6 +37,7 @@ from omega.trace.market_snapshot import (
     MarketMovement,
     MarketSnapshot,
 )
+from omega.trace.prop_outcome import derive_prop_outcome_result, normalize_prop_side
 from omega.trace.schema import (
     CURRENT_VERSION,
     SCHEMA_V1,
@@ -1261,11 +1262,16 @@ class TraceStore:
         line: float,
         side: str,
         source: str = "manual",
+        void: bool = False,
     ) -> str:
         """Attach a graded player-prop outcome to a persisted trace.
 
         Idempotent on (trace_id, player_name, stat_type): re-attaching returns the
         existing row's id, mirroring closing_lines semantics.
+
+        When ``void=True`` (DNP / no-action: player absent from the box score),
+        the win/loss/push math is skipped and ``result`` is recorded as ``void``
+        so settlement returns VOID (stake returned). ``stat_value`` is ignored.
 
         Args:
             trace_id: Must reference an existing trace.
@@ -1292,10 +1298,9 @@ class TraceStore:
                 line=line,
                 side=side,
                 source=source,
+                void=void,
             )
-        side_norm = side.lower().strip()
-        if side_norm not in ("over", "under"):
-            raise ValueError(f"side must be 'over' or 'under', got {side!r}")
+        side_norm = normalize_prop_side(side)
 
         row = self.conn.execute(
             "SELECT trace_id FROM traces WHERE trace_id = ?", (trace_id,)
@@ -1311,14 +1316,12 @@ class TraceStore:
         if existing:
             return existing["prop_outcome_id"]
 
-        if stat_value == line:
-            result = "push"
-        elif (side_norm == "over" and stat_value > line) or (
-            side_norm == "under" and stat_value < line
-        ):
-            result = "win"
-        else:
-            result = "loss"
+        result, side_norm = derive_prop_outcome_result(
+            stat_value=stat_value,
+            line=line,
+            side=side_norm,
+            void=void,
+        )
 
         prop_outcome_id = uuid.uuid4().hex[:12]
         self.conn.execute(

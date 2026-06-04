@@ -40,6 +40,7 @@ if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
+from omega.core.calibration.market import calibration_market_for_plane  # noqa: E402
 from omega.core.calibration.profiles import CalibrationProfile  # noqa: E402
 from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
@@ -141,14 +142,6 @@ def fit_and_register(
         registry.register(profile)
 
     return profile
-
-
-def _plane_market(plane: str) -> str:
-    """Map a fitting plane to its calibration market.
-
-    'draw' is its own market plane (3-way draw probabilities). 'game' and
-    'prop' both calibrate on the 'game' market (current behaviour)."""
-    return "draw" if plane == "draw" else "game"
 
 
 def _extract_plane_pairs(
@@ -263,7 +256,7 @@ def main() -> int:
     )
 
     methods = ["isotonic", "shrinkage"] if args.method == "both" else [args.method]
-    market = _plane_market(args.plane)
+    market = calibration_market_for_plane(args.plane)
     registry = CalibrationRegistry()
     registered = []
 
@@ -308,7 +301,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

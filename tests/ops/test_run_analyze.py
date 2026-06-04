@@ -56,6 +56,28 @@ def test_run_analyze_injects_deterministic_seed_and_writes_trace(tmp_path):
     assert written["result"]["status"] == "success"
 
 
+def test_run_analyze_seed_does_not_depend_on_session_id(tmp_path):
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_game_request()), encoding="utf-8")
+
+    first = run_analyze.run(
+        kind="game",
+        request_json=request_path,
+        session_id="sess-one",
+        bankroll=1000.0,
+    )
+    second = run_analyze.run(
+        kind="game",
+        request_json=request_path,
+        session_id="sess-two",
+        bankroll=1000.0,
+    )
+
+    assert first["input_snapshot"]["seed"] == second["input_snapshot"]["seed"]
+    assert first["session_id"] == "sess-one"
+    assert second["session_id"] == "sess-two"
+
+
 def test_run_analyze_explicit_seed_wins(tmp_path):
     request_path = tmp_path / "request.json"
     request_path.write_text(json.dumps(_game_request()), encoding="utf-8")
@@ -84,4 +106,3 @@ def test_run_analyze_accepts_utf8_bom_request_json(tmp_path):
 
     assert trace["kind"] == "game"
     assert trace["result"]["status"] == "success"
-

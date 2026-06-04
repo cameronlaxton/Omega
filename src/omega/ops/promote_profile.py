@@ -124,6 +124,40 @@ def _evaluate_gates(
     return results
 
 
+def _exact_production_incumbent(
+    registry: CalibrationRegistry, candidate: CalibrationProfile
+) -> CalibrationProfile | None:
+    """Return the production profile that EXACTLY matches the candidate's
+    (league, context_slice, market) -- the row promote() would archive.
+
+    Unlike registry.get_production(), this does not fall a prop/draw market back
+    to the game profile, so a prop candidate is compared only against a prop
+    incumbent, never against the game profile. It DOES mirror selection's
+    slice -> base fallback within the market: a context-sliced candidate (e.g.
+    'playoff') is gated against the base (slice=None) profile it would shadow at
+    selection time, so a worse slice profile cannot auto-pass the no-incumbent
+    gates and then shadow a better base profile.
+    """
+    market = candidate.market or "game"
+    same_market = [
+        p
+        for p in registry.list_profiles(
+            league=candidate.league, status=ProfileStatus.PRODUCTION.value
+        )
+        if (p.market or "game") == market
+    ]
+    # Exact (market, context_slice) match first.
+    for p in same_market:
+        if p.context_slice == candidate.context_slice:
+            return p
+    # A sliced candidate falls back to the base profile it would shadow.
+    if candidate.context_slice is not None:
+        for p in same_market:
+            if p.context_slice is None:
+                return p
+    return None
+
+
 def _print_gates(results: list[tuple[str, bool, str]]) -> None:
     for name, passed, msg in results:
         flag = "PASS" if passed else "FAIL"
@@ -139,9 +173,10 @@ def _list_candidates(registry: CalibrationRegistry, league: str | None) -> int:
     for p in candidates:
         m = p.metrics
         logger.info(
-            "  %s  league=%s  method=%s  n=%d  brier=%.4f  ece=%.4f  log_loss=%.4f",
+            "  %s  league=%s  market=%s  method=%s  n=%d  brier=%.4f  ece=%.4f  log_loss=%.4f",
             p.profile_id,
             p.league,
+            p.market or "game",
             p.method,
             p.sample_size,
             m.get("brier_score", float("nan")),
@@ -203,17 +238,32 @@ def main() -> int:
         )
         return 2
 
-    incumbent = registry.get_production(candidate.league)
+    # Compare against the incumbent for the SAME market and context slice, so a
+    # prop candidate is never gated against a game incumbent (or vice-versa).
+    # NOTE: registry.get_production() applies a prop/draw -> game fallback, which
+    # would wrongly resolve a game incumbent for a prop candidate. We need the
+    # exact-market production (mirroring what promote() will actually archive).
+    incumbent = _exact_production_incumbent(registry, candidate)
     logger.info(
-        "Candidate: %s (league=%s, method=%s)",
+        "Candidate: %s (league=%s, market=%s, method=%s)",
         candidate.profile_id,
         candidate.league,
+        candidate.market or "game",
         candidate.method,
     )
     if incumbent is not None:
-        logger.info("Incumbent: %s (method=%s)", incumbent.profile_id, incumbent.method)
+        logger.info(
+            "Incumbent: %s (market=%s, method=%s)",
+            incumbent.profile_id,
+            incumbent.market or "game",
+            incumbent.method,
+        )
     else:
-        logger.info("Incumbent: NONE for league=%s", candidate.league)
+        logger.info(
+            "Incumbent: NONE for league=%s market=%s",
+            candidate.league,
+            candidate.market or "game",
+        )
 
     gates = _evaluate_gates(
         candidate=candidate,

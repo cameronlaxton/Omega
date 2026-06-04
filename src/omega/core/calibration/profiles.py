@@ -59,9 +59,12 @@ class CalibrationProfile(BaseModel):
         description=(
             "Calibration market plane this profile applies to. "
             "'game' = moneyline/spread/total win probabilities (default, "
-            "covers legacy profiles). 'draw' = 3-way draw probabilities "
-            "(soccer, hockey regulation). Selection falls back from a "
-            "market-specific profile to the 'game' profile when absent."
+            "covers legacy profiles). 'prop' = player-prop over/under "
+            "probabilities (fit on the prop plane, applied only to props). "
+            "'draw' = 3-way draw probabilities (soccer, hockey regulation). "
+            "A profile is only applied to the plane it was fit on; selection "
+            "falls back from a prop/draw market to the 'game' profile, then to "
+            "the static policy, when the specific market is absent."
         ),
     )
     status: ProfileStatus = ProfileStatus.CANDIDATE
