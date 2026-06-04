@@ -33,7 +33,7 @@
         "log_loss": 1.170784,
         "n_eval": 7
       },
-      "created_at": "2026-06-04T12:48:16.625340+00:00",
+      "created_at": "2026-06-04T13:30:04.153011+00:00",
       "promoted_at": null,
       "rejected_at": null,
       "reject_reason": null,
@@ -47,7 +47,7 @@
       "league": "MLB",
       "context_slice": null,
       "market": "game",
-      "status": "production",
+      "status": "candidate",
       "params": {
         "shrink_factor": 0.7999999999999999
       },
@@ -60,20 +60,20 @@
         "log_loss": 0.710782,
         "n_eval": 7
       },
-      "created_at": "2026-06-04T12:48:16.628458+00:00",
-      "promoted_at": "2026-06-04T12:48:31.556233+00:00",
+      "created_at": "2026-06-04T13:30:04.156712+00:00",
+      "promoted_at": null,
       "rejected_at": null,
       "reject_reason": null,
       "incumbent_id": null
     },
     {
-      "profile_id": "iso_mlb_v2_59fd4bf524421e09",
+      "profile_id": "iso_mlb_prop_v1_59fd4bf524421e09",
       "schema_version": 1,
-      "version": 2,
+      "version": 1,
       "method": "isotonic",
       "league": "MLB",
       "context_slice": null,
-      "market": "game",
+      "market": "prop",
       "status": "candidate",
       "params": {
         "calibration_map": {
@@ -98,20 +98,20 @@
         "log_loss": 0.747108,
         "n_eval": 7
       },
-      "created_at": "2026-06-04T12:48:16.659556+00:00",
+      "created_at": "2026-06-04T13:30:04.832942+00:00",
       "promoted_at": null,
       "rejected_at": null,
       "reject_reason": null,
       "incumbent_id": null
     },
     {
-      "profile_id": "shrink_mlb_v2_59fd4bf524421e09",
+      "profile_id": "shrink_mlb_prop_v1_59fd4bf524421e09",
       "schema_version": 1,
-      "version": 2,
+      "version": 1,
       "method": "shrinkage",
       "league": "MLB",
       "context_slice": null,
-      "market": "game",
+      "market": "prop",
       "status": "candidate",
       "params": {
         "shrink_factor": 1.0
@@ -125,20 +125,20 @@
         "log_loss": 0.648924,
         "n_eval": 7
       },
-      "created_at": "2026-06-04T12:48:16.684246+00:00",
+      "created_at": "2026-06-04T13:30:04.837476+00:00",
       "promoted_at": null,
       "rejected_at": null,
       "reject_reason": null,
       "incumbent_id": null
     },
     {
-      "profile_id": "iso_nba_v1_7c8018680da72efe",
+      "profile_id": "iso_nba_prop_v1_7c8018680da72efe",
       "schema_version": 1,
       "version": 1,
       "method": "isotonic",
       "league": "NBA",
       "context_slice": null,
-      "market": "game",
+      "market": "prop",
       "status": "production",
       "params": {
         "calibration_map": {
@@ -163,20 +163,20 @@
         "log_loss": 0.760862,
         "n_eval": 12
       },
-      "created_at": "2026-06-04T12:48:16.711374+00:00",
-      "promoted_at": "2026-06-04T12:48:38.511524+00:00",
+      "created_at": "2026-06-04T13:30:05.434115+00:00",
+      "promoted_at": "2026-06-04T13:30:17.856568+00:00",
       "rejected_at": null,
       "reject_reason": null,
       "incumbent_id": null
     },
     {
-      "profile_id": "shrink_nba_v1_7c8018680da72efe",
+      "profile_id": "shrink_nba_prop_v1_7c8018680da72efe",
       "schema_version": 1,
       "version": 1,
       "method": "shrinkage",
       "league": "NBA",
       "context_slice": null,
-      "market": "game",
+      "market": "prop",
       "status": "candidate",
       "params": {
         "shrink_factor": 1.0
@@ -190,7 +190,7 @@
         "log_loss": 0.783494,
         "n_eval": 12
       },
-      "created_at": "2026-06-04T12:48:16.732893+00:00",
+      "created_at": "2026-06-04T13:30:05.438711+00:00",
       "promoted_at": null,
       "rejected_at": null,
       "reject_reason": null,
