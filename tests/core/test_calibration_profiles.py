@@ -170,6 +170,48 @@ class TestCalibrationRegistry:
             if os.path.exists(path):
                 os.unlink(path)
 
+    def test_game_and_prop_production_coexist(self):
+        """A prop profile and a game profile can both be PRODUCTION for one
+        league at once -- promoting one market must not archive the other."""
+        from omega.core.calibration.profiles import ProfileStatus
+        from omega.core.calibration.registry import CalibrationRegistry
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            os.unlink(path)
+            reg = CalibrationRegistry(path=path)
+            reg.register(_make_profile(profile_id="nba_game_v1", market="game"))
+            reg.register(_make_profile(profile_id="nba_prop_v1", market="prop"))
+            reg.promote("nba_game_v1")
+            reg.promote("nba_prop_v1")
+
+            assert reg.get_production("NBA", market="game").profile_id == "nba_game_v1"
+            assert reg.get_production("NBA", market="prop").profile_id == "nba_prop_v1"
+            assert reg.get_profile("nba_game_v1").status == ProfileStatus.PRODUCTION
+            assert reg.get_profile("nba_prop_v1").status == ProfileStatus.PRODUCTION
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_prop_lookup_falls_back_to_game_when_no_prop_profile(self):
+        """With no prop profile, a prop lookup falls back to the game profile
+        (then static) -- this is the safe transitional state."""
+        from omega.core.calibration.registry import CalibrationRegistry
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            os.unlink(path)
+            reg = CalibrationRegistry(path=path)
+            reg.register(_make_profile(profile_id="nba_game_v1", market="game"))
+            reg.promote("nba_game_v1")
+            resolved = reg.get_production("NBA", market="prop")
+            assert resolved is not None and resolved.profile_id == "nba_game_v1"
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
     def test_reject(self):
         from omega.core.calibration.profiles import ProfileStatus
         from omega.core.calibration.registry import CalibrationRegistry

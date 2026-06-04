@@ -146,9 +146,18 @@ def fit_and_register(
 def _plane_market(plane: str) -> str:
     """Map a fitting plane to its calibration market.
 
-    'draw' is its own market plane (3-way draw probabilities). 'game' and
-    'prop' both calibrate on the 'game' market (current behaviour)."""
-    return "draw" if plane == "draw" else "game"
+    Each plane calibrates its own market so a profile is only ever applied to
+    the plane it was fit on: ``game`` -> ``game`` (home_win_prob), ``prop`` ->
+    ``prop`` (player-prop over/under), ``draw`` -> ``draw`` (3-way draw probs).
+    Prop and game were previously both collapsed onto the ``game`` market, which
+    let a game-fit profile calibrate props and vice-versa -- the cross-plane skew
+    this separation removes. ``registry.get_production`` still falls a missing
+    prop/draw market back to the game profile, then to the static policy."""
+    if plane == "draw":
+        return "draw"
+    if plane == "prop":
+        return "prop"
+    return "game"
 
 
 def _extract_plane_pairs(

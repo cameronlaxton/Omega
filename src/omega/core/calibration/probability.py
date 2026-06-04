@@ -207,9 +207,11 @@ def apply_calibration(
         context_hints: Optional dict with context signals used to derive a
             context_slice. Recognised keys: is_playoff (bool),
             rest_days (int; 0=B2B).
-        market: Calibration market plane — "game" (default) or "draw" for
-            3-way draw probabilities. A "draw" lookup falls back to the
-            league's "game" profile when no draw profile is registered.
+        market: Calibration market plane — "game" (default), "prop" for
+            player-prop over/under probabilities, or "draw" for 3-way draw
+            probabilities. A "prop"/"draw" lookup falls back to the league's
+            "game" profile when no market-specific profile is registered, then
+            to the static policy.
 
     Returns:
         Calibrated probability as a float.
