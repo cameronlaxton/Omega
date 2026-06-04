@@ -40,6 +40,7 @@ if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
+from omega.core.calibration.market import calibration_market_for_plane  # noqa: E402
 from omega.core.calibration.profiles import CalibrationProfile  # noqa: E402
 from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
@@ -141,23 +142,6 @@ def fit_and_register(
         registry.register(profile)
 
     return profile
-
-
-def _plane_market(plane: str) -> str:
-    """Map a fitting plane to its calibration market.
-
-    Each plane calibrates its own market so a profile is only ever applied to
-    the plane it was fit on: ``game`` -> ``game`` (home_win_prob), ``prop`` ->
-    ``prop`` (player-prop over/under), ``draw`` -> ``draw`` (3-way draw probs).
-    Prop and game were previously both collapsed onto the ``game`` market, which
-    let a game-fit profile calibrate props and vice-versa -- the cross-plane skew
-    this separation removes. ``registry.get_production`` still falls a missing
-    prop/draw market back to the game profile, then to the static policy."""
-    if plane == "draw":
-        return "draw"
-    if plane == "prop":
-        return "prop"
-    return "game"
 
 
 def _extract_plane_pairs(
@@ -272,7 +256,7 @@ def main() -> int:
     )
 
     methods = ["isotonic", "shrinkage"] if args.method == "both" else [args.method]
-    market = _plane_market(args.plane)
+    market = calibration_market_for_plane(args.plane)
     registry = CalibrationRegistry()
     registered = []
 
@@ -317,7 +301,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

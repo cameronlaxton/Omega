@@ -14,6 +14,7 @@ if str(_SCRIPTS) not in sys.path:
 import fit_calibration  # type: ignore  # noqa: E402
 
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
+from omega.core.calibration.market import calibration_market_for_plane  # noqa: E402
 
 
 def test_extract_plane_pairs_routes_game_and_prop_separately():
@@ -58,9 +59,9 @@ def test_extract_plane_pairs_routes_draw():
 def test_plane_market_mapping():
     # Each plane maps to its own market so a profile is only applied to the
     # plane it was fit on (prop no longer collapses onto the game market).
-    assert fit_calibration._plane_market("draw") == "draw"
-    assert fit_calibration._plane_market("game") == "game"
-    assert fit_calibration._plane_market("prop") == "prop"
+    assert calibration_market_for_plane("draw") == "draw"
+    assert calibration_market_for_plane("game") == "game"
+    assert calibration_market_for_plane("prop") == "prop"
 
 
 def test_fit_and_register_prop_candidate_carries_prop_market(tmp_path):
@@ -85,4 +86,3 @@ def test_fit_and_register_prop_candidate_carries_prop_market(tmp_path):
     assert "prop_" in profile.profile_id
     # It registered under the prop market, leaving the game slot untouched.
     assert registry.get_production("MLB", market="game") is None
-

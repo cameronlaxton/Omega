@@ -133,7 +133,7 @@ Path:
 When a session requires more than 3 analyses (daily slates, prop sweeps, etc.):
 
 - **MCP available:** use `omega_run_batch` — one call handles odds resolution (with prop_type fallback chain), seed derivation, gate enforcement, and export-block writing to `var/inbox/traces/`. Do not loop individual `omega_analyze_prop` / `omega_analyze_game` calls and do not write a Python script.
-- **MCP unavailable:** a batch Python script is the authorized fallback. It **must** call `cowork_preflight.run_formal_output_gate()` before any `analyze()` call, derive every seed deterministically via `sha256(prompt + date)`, include at least one `EvidenceSignal` per trace (or document why evidence is empty), and must not hardcode `trace_quality.aggregate_quality` or mutate shared state (e.g. deleting the odds cache) as a side effect.
+- **MCP unavailable:** a batch Python script is the authorized fallback. It **must** call `cowork_preflight.run_formal_output_gate()` before any `analyze()` call, derive every seed deterministically as `int.from_bytes(hashlib.sha256(f"{prompt}|{date}".encode("utf-8")).digest()[:4], "big")`, include at least one `EvidenceSignal` per trace (or document why evidence is empty), and must not hardcode `trace_quality.aggregate_quality` or mutate shared state (e.g. deleting the odds cache) as a side effect.
 
 Scripts that bypass the gate or hardcode quality scores produce uncalibrated traces and contaminate the calibration loop.
 

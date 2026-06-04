@@ -5,5 +5,8 @@ description: Audit Omega replay, trace persistence, and calibration dry-run boun
 
 # Omega Replay QA
 
-Replay is sampled audit only, not the quant benchmark path. For the full
-checklist, read `.agents/skills/omega-replay-qa/SKILL.md`.
+Canonical source: `.agents/skills/omega-replay-qa/SKILL.md`.
+
+This plugin-packaged skill is intentionally a thin pointer. Keep operational
+instructions in the canonical repo skill and run `omega-validate-docs` to catch
+accidental mirror copies.

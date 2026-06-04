@@ -75,25 +75,19 @@ For each pending bet:
        NO  → Outcome missing. Re-run fetch_outcomes (Section 0 override path).
               If still unmatched after re-run → flag as UNRESOLVED (not VOID). STOP.
 
-  3. VOID settlement:
-       a. omega settle --apply support --force-void?          NO — not implemented
-       b. Any MCP tool exposes a VOID mutation?               NO
-       c. settle_bets.py handle VOID via outcome attachment?  NO — requires outcome record
-       d. → Direct DB write is the ONLY path.
+  3. VOID settlement for DNP / no-action player props:
+       a. Use the MCP tool:
+            omega_trace_void_prop(
+              trace_id="<trace_id>",
+              player_name="<player>",
+              stat_type="<prop_type>",
+              reason="dnp"
+            )
+       b. Then run omega_settle_bets(apply=true, league="MLB") or `omega settle --apply`.
+       c. Verify immediately with omega_get_portfolio_summary or `omega-db-status --view-ledger`.
+          Expected: status='void', payout_amount=<stake>, net_pnl=0.0
 
-          REQUIRED before writing:
-            - Obtain explicit user authorization in chat:
-              "I authorize the direct VOID write for ledger_id <X>"
-            - Append sidecar event:
-              event_type="command", notes="User authorized direct VOID: ledger_id=<X>"
-
-       e. Execute:
-            store.grade_ledger_bet(ledger_id, "void", stake_amount, 0.0)
-            (payout = stake returned, net_pnl = 0)
-
-       f. Verify immediately:
-            SELECT status, payout_amount, net_pnl FROM bet_ledger WHERE ledger_id = '<X>'
-            Expected: status='void', payout_amount=<stake>, net_pnl=0.0
+       Do not perform direct `store.grade_ledger_bet()` writes for DNP/no-action prop voids.
 ```
 
 ---
@@ -204,7 +198,7 @@ Commands run:
 
 Checks executed:
   - Pending bet inventory: N bets in scope (see Section 1 table)
-  - Public API audit: [all via omega settle / VOID direct write for ledger_id X — user authorized]
+  - Public API audit: [all via omega settle / omega_trace_void_prop for DNP/no-action prop voids]
   - Portfolio schema: pass / fail
   - Unresolved items: N (see Section 5)
 
@@ -249,10 +243,10 @@ Does omega-fetch-outcomes-mlb match this trace to a game?
 ### DT-3: VOID Settlement
 
 See Section 2 step 3. Summary:
-- No public CLI or MCP tool handles VOID
-- Direct `store.grade_ledger_bet()` write is the only path
-- User authorization required in chat before every direct VOID write
-- Verify DB state after write; document in Section 2 and Section 7
+- Use `omega_trace_void_prop` for DNP / no-action player-prop voids
+- Run settlement after the void outcome is attached
+- Direct `store.grade_ledger_bet()` writes are not the documented path for DNP/no-action prop voids
+- Verify ledger state after settlement; document in Section 2 and Section 7
 
 ### DT-4: Stale Data Thresholds
 

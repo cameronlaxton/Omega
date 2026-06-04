@@ -35,6 +35,13 @@ _CANONICAL_REFS = [
     "prompts/reference/markov_evidence_vocab.md",
 ]
 
+_PLUGIN_SKILL_POINTERS = {
+    "omega-mcp-operator": ".agents/skills/omega-mcp-operator/SKILL.md",
+    "omega-replay-qa": ".agents/skills/omega-replay-qa/SKILL.md",
+    "omega-session-bootstrap": ".agents/skills/omega-session-bootstrap/SKILL.md",
+    "omega-trace-qa": ".agents/skills/omega-trace-qa/SKILL.md",
+}
+
 
 def check_canonical_refs_exist() -> bool:
     print("Checking canonical reference files exist...")
@@ -162,6 +169,34 @@ def check_no_duplicate_definitions() -> bool:
     return success
 
 
+def check_plugin_skill_pointers() -> bool:
+    print("Checking plugin skill files are thin pointers to .agents canonical skills...")
+    success = True
+    for skill, canonical in _PLUGIN_SKILL_POINTERS.items():
+        canonical_path = _REPO_ROOT / canonical
+        plugin_path = _REPO_ROOT / "plugins" / "omega-llm-interface" / "skills" / skill / "SKILL.md"
+        if not canonical_path.is_file():
+            print(f"  [FAIL] Canonical skill missing: {canonical}")
+            success = False
+            continue
+        if not plugin_path.is_file():
+            print(f"  [FAIL] Plugin skill pointer missing: {plugin_path.relative_to(_REPO_ROOT)}")
+            success = False
+            continue
+        content = plugin_path.read_text(encoding="utf-8")
+        if f"Canonical source: `{canonical}`" not in content:
+            print(
+                f"  [FAIL] Plugin skill {skill} does not point to canonical source {canonical}"
+            )
+            success = False
+        elif plugin_path.read_bytes() == canonical_path.read_bytes():
+            print(f"  [FAIL] Plugin skill {skill} is a byte-for-byte mirror, not a pointer")
+            success = False
+        else:
+            print(f"  [PASS] Plugin skill {skill} points to {canonical}.")
+    return success
+
+
 def main() -> int:
     checks = [
         check_canonical_refs_exist(),
@@ -169,6 +204,7 @@ def main() -> int:
         check_daily_prompts_preflight(),
         check_relative_links(),
         check_no_duplicate_definitions(),
+        check_plugin_skill_pointers(),
     ]
 
     if not all(checks):
@@ -181,5 +217,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 

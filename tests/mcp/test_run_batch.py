@@ -3,9 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from omega.mcp.server import TOOL_NAMES, omega_run_batch
 
@@ -122,6 +120,52 @@ def test_happy_path_game_writes_export_block(tmp_path: Path) -> None:
 
     assert result["entries_ok"] == 1
     assert "sandbox-game-001" in result["trace_ids"]
+
+
+def test_seed_derivation_is_independent_of_session_id(tmp_path: Path) -> None:
+    seen_requests: list[dict[str, Any]] = []
+
+    def _analyze(request: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        seen_requests.append(dict(request))
+        return _make_trace(f"sandbox-seed-{len(seen_requests)}")
+
+    entry = _prop_entry(line=0.5, odds_over=-115, odds_under=-105)
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.core.contracts.service.analyze", side_effect=_analyze),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        first = omega_run_batch(entries=[entry], bankroll=1000.0, session_id="sess-one")
+        second = omega_run_batch(entries=[entry], bankroll=1000.0, session_id="sess-two")
+
+    assert first["entries_ok"] == 1
+    assert second["entries_ok"] == 1
+    assert seen_requests[0]["seed"] == seen_requests[1]["seed"]
+
+
+def test_resolve_odds_uses_entry_game_date_window(tmp_path: Path) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def _resolve(kind: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append({"kind": kind, **kwargs})
+        return _mock_resolve_odds_ok(kind, **kwargs)
+
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.integrations.odds_resolver.resolve_odds", side_effect=_resolve),
+        patch("omega.core.contracts.service.analyze", return_value=_make_trace("sandbox-date-001")),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[_prop_entry(game_date="2026-06-07")],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["entries_ok"] == 1
+    assert calls
+    assert calls[0]["commence_time_from"] == "2026-06-07T00:00:00Z"
+    assert calls[0]["commence_time_to"] == "2026-06-08T00:00:00Z"
 
 
 # --- Odds unavailable ---

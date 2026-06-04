@@ -43,6 +43,7 @@ _MODULES: dict[str, str] = {
 }
 
 _DEFAULT_LEAGUES = ("nba", "wnba", "mlb", "soccer", "props")
+_FETCH_OUTCOMES_TIMEOUT_SECONDS = 20 * 60
 
 
 def _build_cmd(
@@ -73,6 +74,7 @@ def run_fetch_outcomes(
     until: str | None = None,
     dry_run: bool = False,
     capture_output: bool = False,
+    timeout_seconds: int = _FETCH_OUTCOMES_TIMEOUT_SECONDS,
 ) -> dict[str, object]:
     """Dispatch per-league outcome fetchers and return a structured result.
 
@@ -96,18 +98,42 @@ def run_fetch_outcomes(
     for league in selected:
         cmd = _build_cmd(league, db=db, since=since, until=until, dry_run=dry_run)
         logger.info("Running %s: %s", league, " ".join(cmd))
-        if capture_output:
-            proc = subprocess.run(cmd, cwd=_REPO_ROOT, capture_output=True, text=True)
-            tail = (proc.stdout or "")[-2000:] + (proc.stderr or "")[-2000:]
-        else:
-            proc = subprocess.run(cmd, cwd=_REPO_ROOT)
-            tail = ""
+        try:
+            if capture_output:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=_REPO_ROOT,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_seconds,
+                )
+                tail = (proc.stdout or "")[-2000:] + (proc.stderr or "")[-2000:]
+            else:
+                proc = subprocess.run(cmd, cwd=_REPO_ROOT, timeout=timeout_seconds)
+                tail = ""
+        except subprocess.TimeoutExpired as exc:
+            output = exc.output.decode(errors="replace") if isinstance(exc.output, bytes) else (exc.output or "")
+            stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+            tail = (output or "")[-2000:] + (stderr or "")[-2000:]
+            results.append(
+                {
+                    "league": league,
+                    "returncode": None,
+                    "ok": False,
+                    "timed_out": True,
+                    "timeout_seconds": timeout_seconds,
+                    "output_tail": tail,
+                }
+            )
+            logger.error("%s FAILED (timeout=%ss)", league, timeout_seconds)
+            continue
         ok = proc.returncode == 0
         results.append(
             {
                 "league": league,
                 "returncode": proc.returncode,
                 "ok": ok,
+                "timed_out": False,
                 "output_tail": tail,
             }
         )
@@ -163,7 +189,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

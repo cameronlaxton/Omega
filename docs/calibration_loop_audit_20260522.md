@@ -382,7 +382,7 @@ python -c "
 from omega.core.contracts.service import analyze
 import hashlib
 prompt, date = 'Test NBA prop', '2026-05-22'
-seed = int.from_bytes(hashlib.sha256(f'{prompt}|{date}'.encode()).digest()[:4], 'big')
+seed = int.from_bytes(hashlib.sha256(f"{prompt}|{date}".encode("utf-8")).digest()[:4], "big")
 result = analyze({
     'player_name': 'Test Player', 'league': 'NBA', 'prop_type': 'pts',
     'line': 20.0, 'home_team': 'Test Home', 'away_team': 'Test Away',

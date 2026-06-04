@@ -37,6 +37,7 @@ from omega.trace.market_snapshot import (
     MarketMovement,
     MarketSnapshot,
 )
+from omega.trace.prop_outcome import derive_prop_outcome_result, normalize_prop_side
 from omega.trace.schema import (
     CURRENT_VERSION,
     SCHEMA_V1,
@@ -1299,9 +1300,7 @@ class TraceStore:
                 source=source,
                 void=void,
             )
-        side_norm = side.lower().strip()
-        if side_norm not in ("over", "under"):
-            raise ValueError(f"side must be 'over' or 'under', got {side!r}")
+        side_norm = normalize_prop_side(side)
 
         row = self.conn.execute(
             "SELECT trace_id FROM traces WHERE trace_id = ?", (trace_id,)
@@ -1317,16 +1316,12 @@ class TraceStore:
         if existing:
             return existing["prop_outcome_id"]
 
-        if void:
-            result = "void"
-        elif stat_value == line:
-            result = "push"
-        elif (side_norm == "over" and stat_value > line) or (
-            side_norm == "under" and stat_value < line
-        ):
-            result = "win"
-        else:
-            result = "loss"
+        result, side_norm = derive_prop_outcome_result(
+            stat_value=stat_value,
+            line=line,
+            side=side_norm,
+            void=void,
+        )
 
         prop_outcome_id = uuid.uuid4().hex[:12]
         self.conn.execute(

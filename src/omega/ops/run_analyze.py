@@ -9,7 +9,6 @@ omega-ingest-traces.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -21,6 +20,7 @@ if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
 from omega.core.contracts.schemas import GameAnalysisRequest, PlayerPropRequest  # noqa: E402
+from omega.core.contracts.seeding import derive_seed_from_request  # noqa: E402
 from omega.core.contracts.service import analyze  # noqa: E402
 from omega.ops import cowork_preflight  # noqa: E402
 
@@ -57,16 +57,6 @@ def _load_request(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _derive_seed(request: dict[str, Any], session_id: str) -> int:
-    encoded = json.dumps(
-        {"request": request, "session_id": session_id},
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    ).encode("utf-8")
-    return int.from_bytes(hashlib.sha256(encoded).digest()[:4], "big")
-
-
 def _typed_request(kind: str, request: dict[str, Any]) -> GameAnalysisRequest | PlayerPropRequest:
     if kind == "game":
         return GameAnalysisRequest(**request)
@@ -86,7 +76,7 @@ def run(
 ) -> dict[str, Any]:
     request = _load_request(request_json)
     if seed is None:
-        seed = _derive_seed(request, session_id)
+        seed = derive_seed_from_request(request)
     request.setdefault("seed", seed)
     typed = _typed_request(kind, request)
     trace = analyze(typed, session_id=session_id, bankroll=bankroll)
@@ -140,7 +130,6 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
 
 
 
