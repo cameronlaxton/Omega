@@ -65,3 +65,39 @@ For an MCP client that supports command-based local servers:
 ```
 
 The optional MCP SDK is loaded only by `build_server()`. Direct imports and unit tests for the domain tool functions do not require the optional dependency.
+
+## HTTP Transport (browser-facing clients)
+
+The stdio server above is the canonical local entry point. An optional HTTP/SSE
+transport (`python -m omega.mcp.http`, via `omega.mcp.http_app`) exposes the same
+tool registry to browser clients.
+
+**The HTTP transport is loopback-only by default and unauthenticated by design
+on loopback.** It binds `127.0.0.1` unless `OMEGA_MCP_HOST` says otherwise, and
+local usage requires no token.
+
+Because the transport exposes state-mutating tools — `omega_record_flat_bet`,
+`omega_settle_bets`, `omega_trace_attach_outcome`, `omega_trace_void_prop`, and
+`omega_run_batch` — binding it to a routable interface without auth would let any
+client that can reach the port mutate the ledger and trace store. To prevent that:
+
+- Binding a **non-loopback** host (anything outside `127.0.0.0/8` / `::1` /
+  `localhost`, including the `0.0.0.0` wildcard) is **refused at startup** unless
+  the operator explicitly opts in with **both**:
+  - `OMEGA_MCP_ALLOW_REMOTE=1`, and
+  - `OMEGA_MCP_TOKEN=<shared-secret>`.
+- When a non-loopback bind is accepted, a loud `WARNING` is logged naming the
+  exposed state-mutating tools, and a **bearer-token gate** is installed in front
+  of `/mcp` and `/sse`. Clients must send `Authorization: Bearer <OMEGA_MCP_TOKEN>`;
+  `/healthz` and CORS preflight (`OPTIONS`) stay open.
+- Setting `OMEGA_MCP_TOKEN` on a loopback bind is allowed (defense in depth) and
+  enables the same bearer gate, but it is **not required** — loopback stays
+  zero-config.
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `OMEGA_MCP_HOST` | `127.0.0.1` | Bind interface. Non-loopback values require opt-in. |
+| `OMEGA_MCP_PORT` | `8000` | Bind port. |
+| `OMEGA_MCP_ALLOW_REMOTE` | unset | Set to `1` to permit a non-loopback bind. |
+| `OMEGA_MCP_TOKEN` | unset | Shared secret; required for non-loopback, optional on loopback. |
+| `OMEGA_CORS_ORIGINS` | local dev origins | Comma-separated allowlist; `*` is rejected while credentialed CORS is on. |
