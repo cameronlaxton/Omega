@@ -352,7 +352,7 @@ Concretely, `RESEARCH_CANDIDATE` is an **output-authorization** mode, not an exe
 - **User-facing betting numbers are withheld/downgraded** (no Bet Card, edge%, EV%, Kelly, units, confidence tier, or trace_id is shown in the reply).
 - Database trace generation is **never** withheld.
 
-To find the current output mode, check the `output_mode` field in the frontmatter of `var/reports/latest.md` (which is written automatically each time `report_calibration.py` runs).
+To find the current output mode, check the `output_modes` map in the frontmatter of `var/reports/latest.md` — it carries a mode per market (`output_modes.game`, `output_modes.prop`), written automatically each time `report_calibration.py` runs. Authorize each market off its own mode; the scalar `output_mode` is a conservative fallback only.
 
 The DB trace persists with its `sandbox-` trace_id for calibration â€” see [`output_modes.md`](prompts/reference/output_modes.md). Do not skip trace export just because the user-facing output was downgraded.
 

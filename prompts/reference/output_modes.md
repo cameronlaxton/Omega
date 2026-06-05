@@ -40,36 +40,57 @@ skips the engine.
 
 ---
 
-## How `output_mode` is determined
+## How `output_mode` is determined — per market
 
-Computed by `omega.ops.output_modes.classify_output_mode(calibration_profile, trace_count,
-sidecar_valid)`. It returns `RESEARCH_CANDIDATE` if **any** of:
+Output authorization is resolved **independently per market** (`game` and `prop`). Each market is
+classified by `omega.ops.output_modes.classify_market_output_mode(...)` from that market's **own**
+production calibration profile — there is no prop→game fallback for *authorization*, even though
+the runtime calibration path does fall back when applying a profile.
 
-- no fitted production calibration profile (static fallback active), or
-- 0 calibration-eligible traces in window, or
-- the session sidecar is invalid/corrupt.
+A market is `RESEARCH_CANDIDATE` if **any** of:
 
-Otherwise it returns `ACTIONABLE`. Bet records (logged wagers) are **never** a factor — a Bet Card
-is emitted before any wager exists.
+- no fitted production profile **for that market** (static fallback active), or
+- 0 calibration-eligible traces **for that market** in window, or
+- the session sidecar is invalid/corrupt, or
+- the market's production profile fails the **calibration-quality floor**: `sample_size ≥ 100`
+  **and** `calibration_error (ECE) ≤ 0.05`, read from the profile's recorded fit metrics. A
+  force-promoted or under-sampled profile therefore does **not** unlock formal output.
+
+Otherwise that market is `ACTIONABLE`. Bet records (logged wagers) are **never** a factor — a Bet
+Card is emitted before any wager exists.
+
+A trustworthy prop market can be `ACTIONABLE` while the game market is `RESEARCH_CANDIDATE`, and
+vice versa. **Apply suppression per market**: a game Bet Card and a prop Bet Card are authorized
+separately, off their own market's mode.
 
 ### Machine-readable source of truth
 
-`omega-report-calibration` writes the current mode into the **frontmatter** of
+`omega-report-calibration` writes the per-market map into the **frontmatter** of
 `var/reports/latest.md`:
 
 ```yaml
-output_mode: research_candidate        # or: actionable
+output_modes:
+  game: 'research_candidate'
+  prop: 'actionable'
 output_mode_reasons:
-  - No fitted calibration profile — static fallback is active.
+  game:
+    - 'No fitted calibration profile for this market - static fallback active.'
+  prop: []
+output_mode: 'research_candidate'   # backward-compat scalar — see below
 ```
 
-**Read `output_mode` from the frontmatter** as the authoritative machine-readable flag. The prose
-"Agent Directive — Output Mode" block in the report body says the same thing in human form and is
-kept for backward compatibility.
+**Read `output_modes.<market>` from the frontmatter** as the authoritative machine-readable flag
+for that market. The scalar `output_mode` is a conservative aggregate (`actionable` only when
+*every* market is `actionable`) kept for un-updated consumers — never use it to authorize one
+market when the map says that market is `actionable`. The prose "Agent Directive — Output Mode"
+block in the report body restates the per-market modes in human form.
 
 ---
 
 ## `RESEARCH_CANDIDATE` — permitted vs forbidden
+
+These rules apply **per market**: when a market (game or prop) is `RESEARCH_CANDIDATE`, its
+user-facing output is restricted as below, independently of the other market's mode.
 
 **Permitted in the user-facing reply:**
 

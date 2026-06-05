@@ -38,10 +38,12 @@ def render_derived_header(
     so it parses as metadata and renders unobtrusively. It must be the very first
     thing in the file, before any heading.
 
-    ``extra_fields`` adds machine-readable scalars/lists (e.g. ``output_mode``,
-    ``output_mode_reasons``) so consumers read a field instead of parsing report
-    prose. List/tuple values render as a YAML block list; everything else renders
-    via ``repr`` (quoted strings, bare numbers/bools).
+    ``extra_fields`` adds machine-readable scalars/lists/maps (e.g.
+    ``output_mode``, ``output_modes``, ``output_mode_reasons``) so consumers read
+    a field instead of parsing report prose. Mapping values render as a nested
+    YAML block (one level, scalars or block lists); list/tuple values render as a
+    YAML block list; everything else renders via ``repr`` (quoted strings, bare
+    numbers/bools).
     """
     ts = generated_at or datetime.now(UTC).isoformat()
     lines = [
@@ -53,7 +55,16 @@ def render_derived_header(
         f"trace_count_at_generation: {int(trace_count_at_generation)}",
     ]
     for key, value in (extra_fields or {}).items():
-        if isinstance(value, (list, tuple)):
+        if isinstance(value, Mapping):
+            lines.append(f"{key}:")
+            for subkey, subval in value.items():
+                if isinstance(subval, (list, tuple)):
+                    lines.append(f"  {subkey}:")
+                    for item in subval:
+                        lines.append(f"    - {item!r}")
+                else:
+                    lines.append(f"  {subkey}: {subval!r}")
+        elif isinstance(value, (list, tuple)):
             lines.append(f"{key}:")
             for item in value:
                 lines.append(f"  - {item!r}")

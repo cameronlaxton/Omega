@@ -25,9 +25,13 @@ omega-report-calibration --league NBA --window-days 30
 ```
 
 **Mandatory:** read [`prompts/reference/output_modes.md`](../reference/output_modes.md) before
-producing any output, and read the machine-readable `output_mode` field from the
-`var/reports/latest.md` **frontmatter** (`research_candidate` or `actionable`). `RESEARCH_CANDIDATE`
-restricts only what you show the user — it never skips the engine.
+producing any output, and read the machine-readable `output_modes` map from the
+`var/reports/latest.md` **frontmatter** — it carries a mode **per market** (`output_modes.game` and
+`output_modes.prop`, each `research_candidate` or `actionable`). Authorize **per market**: a
+`RESEARCH_CANDIDATE` game market and an `ACTIONABLE` prop market (or vice versa) can coexist, so
+suppress or release Bet Cards for games and props off their own market's mode. `RESEARCH_CANDIDATE`
+restricts only what you show the user for that market — it never skips the engine. (The scalar
+`output_mode` is a conservative fallback only; prefer the per-market map.)
 
 Read `var/reports/latest.md` before analysis:
 - Section 3: game-plane Brier/ECE; flag ECE > 0.05.

@@ -42,9 +42,12 @@ if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
-from omega.core.calibration.profiles import ProfileStatus  # noqa: E402
+from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus  # noqa: E402
 from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
-from omega.ops.output_modes import OutputMode, classify_output_mode  # noqa: E402
+from omega.ops.output_modes import (  # noqa: E402
+    OutputMode,
+    classify_market_output_mode,
+)
 from omega.strategy.distribution_metrics import (  # noqa: E402
     METRIC_VERSION as DISTRIBUTION_METRIC_VERSION,
 )
@@ -133,6 +136,24 @@ def _section_counts(store: TraceStore, league: str, cutoff: str) -> dict[str, in
               AND {_CALIBRATION_ELIGIBLE_SQL}""",
         (league, cutoff),
     ).fetchone()[0]
+    # Per-market coverage feeds per-market output-mode authorization. `kind`
+    # lives in the full_trace JSON (no dedicated column), matching the rest of
+    # the report's market scoping. The classify gate only checks > 0, so a coarse
+    # kind scope is sufficient.
+    n_with_predictions_game = conn.execute(
+        f"""SELECT COUNT(*) FROM traces t
+            WHERE league = ? AND timestamp >= ?
+              AND {_CALIBRATION_ELIGIBLE_SQL}
+              AND json_extract(t.full_trace, '$.kind') = 'game'""",
+        (league, cutoff),
+    ).fetchone()[0]
+    n_with_predictions_prop = conn.execute(
+        f"""SELECT COUNT(*) FROM traces t
+            WHERE league = ? AND timestamp >= ?
+              AND {_CALIBRATION_ELIGIBLE_SQL}
+              AND json_extract(t.full_trace, '$.kind') = 'prop'""",
+        (league, cutoff),
+    ).fetchone()[0]
     n_graded_calibration = conn.execute(
         f"""SELECT COUNT(DISTINCT t.trace_id) FROM traces t
            WHERE t.league = ? AND t.timestamp >= ?
@@ -149,6 +170,8 @@ def _section_counts(store: TraceStore, league: str, cutoff: str) -> dict[str, in
         "with_bet": n_with_bet,
         "with_close": n_with_close,
         "with_predictions": n_with_predictions,
+        "with_predictions_game": n_with_predictions_game,
+        "with_predictions_prop": n_with_predictions_prop,
         "graded_calibration": n_graded_calibration,
     }
 
@@ -454,31 +477,49 @@ def _section_production_profiles(registry: CalibrationRegistry, league: str) -> 
     return out
 
 
-def _resolve_output_mode(
-    production_profile_id: str | None,
-    with_predictions: int,
+_OUTPUT_MODE_MARKETS = ("game", "prop")
+
+
+def _resolve_output_modes(
+    prod_by_market: dict[str, CalibrationProfile | None],
+    coverage_by_market: dict[str, int],
     *,
     sidecar_valid: bool = True,
-) -> tuple[OutputMode, list[str]]:
-    """Classify output mode once and collect human-readable reasons.
+) -> tuple[dict[str, OutputMode], dict[str, list[str]]]:
+    """Classify output mode per market with the calibration-quality floor.
 
-    Single source so the report frontmatter flag and the prose directive block
-    can never disagree.
+    Each market is authorized independently from its own production profile (no
+    prop->game fallback), so a trustworthy prop market can be ACTIONABLE while
+    the game market stays research-only, and vice versa. The single source of the
+    rule is omega.ops.output_modes.classify_market_output_mode; this threads each
+    market's exact-match production profile and scoped coverage count through it.
     """
-    mode = classify_output_mode(
-        calibration_profile=production_profile_id,
-        trace_count=with_predictions,
-        sidecar_valid=sidecar_valid,
-    )
-    reasons: list[str] = []
-    if mode is OutputMode.RESEARCH_CANDIDATE:
-        if production_profile_id is None:
-            reasons.append("No fitted calibration profile â€” static fallback is active.")
-        if with_predictions == 0:
-            reasons.append("0 calibration-eligible traces in window.")
-        if not sidecar_valid:
-            reasons.append("Session sidecar invalid or corrupt.")
-    return mode, reasons
+    modes: dict[str, OutputMode] = {}
+    reasons: dict[str, list[str]] = {}
+    for market in _OUTPUT_MODE_MARKETS:
+        prof = prod_by_market.get(market)
+        metrics = prof.metrics if prof else {}
+        mode, why = classify_market_output_mode(
+            profile_id=prof.profile_id if prof else None,
+            sample_size=prof.sample_size if prof else None,
+            calibration_error=metrics.get("calibration_error"),
+            trace_count=coverage_by_market.get(market, 0),
+            sidecar_valid=sidecar_valid,
+        )
+        modes[market] = mode
+        reasons[market] = why
+    return modes, reasons
+
+
+def _aggregate_scalar_mode(output_modes: dict[str, OutputMode]) -> OutputMode:
+    """Conservative backward-compat scalar: ACTIONABLE only when every market is.
+
+    Un-updated consumers that read only the scalar `output_mode` then behave
+    safely; updated consumers read the per-market `output_modes` map instead.
+    """
+    if output_modes and all(m is OutputMode.ACTIONABLE for m in output_modes.values()):
+        return OutputMode.ACTIONABLE
+    return OutputMode.RESEARCH_CANDIDATE
 
 
 def _render(
@@ -490,12 +531,12 @@ def _render(
     distribution_crps: dict[str, Any] | None,
     clv: dict[str, Any],
     sessions: list[dict[str, Any]],
-    production_profile_id: str | None,
+    prod_by_market: dict[str, CalibrationProfile | None],
     production_profiles: list[dict[str, Any]],
     candidates: list[dict[str, Any]],
     signal_perf: list[dict[str, Any]],
-    output_mode: OutputMode,
-    output_mode_reasons: list[str],
+    output_modes: dict[str, OutputMode],
+    output_mode_reasons: dict[str, list[str]],
 ) -> str:
     now = datetime.now(UTC).isoformat(timespec="seconds")
     lines: list[str] = []
@@ -506,50 +547,49 @@ def _render(
 
     # â”€â”€ Agent Directive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Derived from Coverage + Calibration state.  The consuming LLM reads this
-    # before acting; it governs what formal output is permitted this session.
-    # `output_mode`/`output_mode_reasons` are computed once in main() and also
-    # written to the report frontmatter, so the machine-readable flag and this
-    # prose block can never disagree.
-    lines.append("## Agent Directive â€” Output Mode")
+    # before acting; it governs what formal output is permitted per market this
+    # session. `output_modes`/`output_mode_reasons` are computed once in main()
+    # and also written to the report frontmatter, so the machine-readable map and
+    # this prose block can never disagree.
+    lines.append("## Agent Directive - Output Mode")
     lines.append("")
-    if output_mode is OutputMode.RESEARCH_CANDIDATE:
-        lines.append(
-            "**`RESEARCH_CANDIDATE`** â€” formal output (Bet Cards, edge%, Kelly, "
-            "confidence tiers) is **not authorized** for this league in this window."
-        )
-        lines.append("")
-        # Bet records are wager-tracking metadata only â€” their absence never
-        # downgrades output mode, grading, or calibration eligibility.
-        if output_mode_reasons:
-            lines.append("**Reason(s):**")
-            for r in output_mode_reasons:
-                lines.append(f"- {r}")
-        lines.append("")
-        lines.append(
-            "The engine still runs and the trace still persists â€” only user-facing "
-            "betting numbers are withheld. See `prompts/reference/output_modes.md`."
-        )
-        lines.append(
-            "**Permitted:** qualitative matchup narrative, news synthesis, "
-            "recent form, listed sportsbook lines from a cited source."
-        )
-        lines.append(
-            '**Forbidden language:** â€œbest betâ€, â€œTier Aâ€, '
-            'â€œTier Bâ€, â€œengine-confirmedâ€, '
-            'â€œactionable betâ€. Stake cap: â‰¤ 1u.'
-        )
-    else:
-        lines.append(
-            "**`ACTIONABLE`** â€” engine-backed formal output is authorized. "
-            f"Active calibration profile: `{production_profile_id}`."
-        )
-        lines.append("")
-        lines.append(
-            "Proceed with the standard Bet Card flow per Â§8â€“Â§11 of system_prompt.txt."
-        )
+    lines.append(
+        "Output authorization is **per market**: game and prop are classified "
+        "independently from their own production profiles. The engine still runs "
+        "and the trace still persists in every mode - only the user-facing betting "
+        "numbers for a RESEARCH_CANDIDATE market are withheld. See "
+        "`prompts/reference/output_modes.md`."
+    )
     lines.append("")
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
+    _market_labels = {"game": "Game / spread / total", "prop": "Player props"}
+    for _market in ("game", "prop"):
+        _mode = output_modes.get(_market, OutputMode.RESEARCH_CANDIDATE)
+        _label = _market_labels[_market]
+        if _mode is OutputMode.ACTIONABLE:
+            _prof = prod_by_market.get(_market)
+            _pid = _prof.profile_id if _prof else "?"
+            lines.append(
+                f"- **{_label} - `ACTIONABLE`**: engine-backed formal output "
+                "(Bet Cards, edge%, EV%, Kelly, confidence tiers) is authorized. "
+                f"Active calibration profile: `{_pid}`."
+            )
+        else:
+            lines.append(
+                f"- **{_label} - `RESEARCH_CANDIDATE`**: formal output (Bet Cards, "
+                "edge%, EV%, Kelly, confidence tiers) is **not authorized** for this "
+                "market in this window."
+            )
+            for _r in output_mode_reasons.get(_market, []):
+                lines.append(f"    - {_r}")
+    lines.append("")
+    lines.append(
+        "**Permitted in a RESEARCH_CANDIDATE market:** qualitative matchup "
+        "narrative, news synthesis, recent form, listed sportsbook lines from a "
+        "cited source. **Forbidden language:** \"best bet\", \"Tier A\", "
+        "\"Tier B\", \"engine-confirmed\", \"actionable bet\". Stake cap on a "
+        "research market: <= 1u."
+    )
+    lines.append("")
     lines.append("## 1. Coverage")
     lines.append("")
     lines.append("| Metric | Count |")
@@ -580,9 +620,12 @@ def _render(
                 f"{m.get('brier_score', float('nan')):.4f} | "
                 f"{m.get('calibration_error', float('nan')):.4f} | {promoted} |"
             )
-        if production_profile_id:
-            lines.append("")
-            lines.append(f"Output-mode primary (game market): `{production_profile_id}`")
+        lines.append("")
+        lines.append("Output mode is resolved per market (see Agent Directive above):")
+        for _m in ("game", "prop"):
+            _mode = output_modes.get(_m)
+            if _mode is not None:
+                lines.append(f"- {_m}: `{_mode.value}`")
     lines.append("")
 
     lines.append("## 3. Realized metrics â€” game plane (graded game traces in window)")
@@ -780,19 +823,43 @@ def main() -> int:
     clv = _section_clv(store, args.league, cutoff)
     sessions = _section_sessions(store, sidecars, args.league)
 
-    prod = registry.get_production(args.league, market="game")
+    # Exact-match production profile per market (no prop->game fallback): output
+    # authorization must reflect each market's OWN fitted prior. The runtime
+    # calibration path (registry.get_production) still falls back; this lookup
+    # deliberately does not.
+    prod_profiles_all = registry.list_profiles(
+        league=args.league, status=ProfileStatus.PRODUCTION.value
+    )
+    prod_by_market: dict[str, CalibrationProfile | None] = {
+        market: next(
+            (
+                p
+                for p in prod_profiles_all
+                if (p.market or "game") == market and p.context_slice is None
+            ),
+            None,
+        )
+        for market in _OUTPUT_MODE_MARKETS
+    }
     production_profiles = _section_production_profiles(registry, args.league)
     candidates = _section_pending_candidates(registry, args.league)
     signal_perf = _section_signal_performance(store, args.league)
 
-    # Classify output mode ONCE, here, and feed it to both the machine-readable
+    # Classify output mode PER MARKET, here, and feed both the machine-readable
     # frontmatter and the prose directive block so they cannot disagree. Sidecar
     # validity is a per-session concern; at the aggregate report level we treat it
     # as valid (individual sessions are filtered upstream).
-    production_profile_id = prod.profile_id if prod else None
-    output_mode, output_mode_reasons = _resolve_output_mode(
-        production_profile_id, counts["with_predictions"], sidecar_valid=True
+    coverage_by_market = {
+        "game": counts["with_predictions_game"],
+        "prop": counts["with_predictions_prop"],
+    }
+    output_modes, output_mode_reasons = _resolve_output_modes(
+        prod_by_market, coverage_by_market, sidecar_valid=True
     )
+    # Backward-compat scalar for un-updated consumers: most conservative across
+    # markets (ACTIONABLE only when every market is ACTIONABLE). Updated consumers
+    # read the per-market `output_modes` map instead.
+    scalar_output_mode = _aggregate_scalar_mode(output_modes)
 
     # Build the derived-artifact front-matter BEFORE closing the store: it reads
     # the effective DB path / source / trace count off the live store so the
@@ -801,7 +868,8 @@ def main() -> int:
         store,
         ["var/omega_traces.db", "var/inbox/sessions/*.json (sidecars)", "calibration registry"],
         extra_fields={
-            "output_mode": output_mode.value,
+            "output_mode": scalar_output_mode.value,
+            "output_modes": {m: mode.value for m, mode in output_modes.items()},
             "output_mode_reasons": output_mode_reasons,
         },
     )
@@ -816,11 +884,11 @@ def main() -> int:
         distribution_crps=distribution_crps,
         clv=clv,
         sessions=sessions,
-        production_profile_id=production_profile_id,
+        prod_by_market=prod_by_market,
         production_profiles=production_profiles,
         candidates=candidates,
         signal_perf=signal_perf,
-        output_mode=output_mode,
+        output_modes=output_modes,
         output_mode_reasons=output_mode_reasons,
     )
 

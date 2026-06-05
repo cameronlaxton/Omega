@@ -35,7 +35,7 @@ Markov backend evidence vocabulary:
   same logical signal on both game and player planes.
 
 Output mode vs engine execution (canonical: `prompts/reference/output_modes.md`):
-- `RESEARCH_CANDIDATE` is an output-authorization mode, not an execution mode. Read the `output_mode` field from the `var/reports/latest.md` frontmatter.
+- `RESEARCH_CANDIDATE` is an output-authorization mode, not an execution mode, and is resolved per market. Read the `output_modes` map (`output_modes.game`, `output_modes.prop`) from the `var/reports/latest.md` frontmatter and authorize games and props off their own market's mode; the scalar `output_mode` is a conservative fallback only.
 - Two distinct scenarios â€” do not conflate them:
   - Engine UNAVAILABLE (no Python/MCP path, preflight failed): the engine does not run; output is qualitative-only; no trace, no fabricated trace_id.
   - Engine AVAILABLE but `RESEARCH_CANDIDATE` / quality < 0.7 / no fitted profile: the engine STILL runs, a `sandbox-` trace_id is STILL minted, and the trace STILL persists to var/omega_traces.db. Only the user-facing betting numbers are withheld. Never skip `analyze()` just because output is research-only â€” that starves the calibration loop.

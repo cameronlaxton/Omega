@@ -34,6 +34,19 @@ class OutputMode(str, Enum):
     ACTIONABLE = "actionable"
 
 
+# Calibration-quality floor for per-market ACTIONABLE authorization.
+#
+# A market is only authorized for formal output when its OWN production profile
+# clears these bars. They mirror the standard promotion gate so a force-promoted
+# or under-sampled profile (one that slipped past `--min-samples`/`--force`)
+# cannot unlock Bet Cards / EV% / Kelly for its market. The floor is read from
+# the profile's recorded fit metrics (always present, deterministic) rather than
+# in-window realized metrics, so a quiet window never spuriously downgrades a
+# sound profile.
+MIN_SAMPLES_FOR_ACTIONABLE = 100
+MAX_ECE_FOR_ACTIONABLE = 0.05
+
+
 def classify_output_mode(
     *,
     calibration_profile: str | None,
@@ -59,6 +72,65 @@ def classify_output_mode(
     if calibration_profile is None or trace_count == 0 or not sidecar_valid:
         return OutputMode.RESEARCH_CANDIDATE
     return OutputMode.ACTIONABLE
+
+
+def classify_market_output_mode(
+    *,
+    profile_id: str | None,
+    sample_size: int | None,
+    calibration_error: float | None,
+    trace_count: int,
+    sidecar_valid: bool,
+) -> tuple[OutputMode, list[str]]:
+    """Per-market output authorization, with a calibration-quality floor.
+
+    Extends :func:`classify_output_mode`: on top of requiring a fitted profile,
+    nonzero calibration-eligible coverage, and a valid sidecar, the market's own
+    production profile must clear the quality floor
+    (``sample_size >= MIN_SAMPLES_FOR_ACTIONABLE`` and
+    ``calibration_error <= MAX_ECE_FOR_ACTIONABLE``). This stops a force-promoted
+    or under-sampled profile from unlocking formal output for its market.
+
+    Authorization is per market: game and prop are classified independently from
+    their own production profiles, so a trustworthy prop market can be ACTIONABLE
+    while the game market stays research-only, and vice versa.
+
+    Returns the mode and a list of human-readable downgrade reasons (empty when
+    ACTIONABLE) so callers can render the same reasons in the report frontmatter
+    and the prose directive without them disagreeing.
+    """
+    base = classify_output_mode(
+        calibration_profile=profile_id,
+        trace_count=trace_count,
+        sidecar_valid=sidecar_valid,
+    )
+    reasons: list[str] = []
+    if base is OutputMode.RESEARCH_CANDIDATE:
+        if profile_id is None:
+            reasons.append("No fitted calibration profile for this market - static fallback active.")
+        if trace_count == 0:
+            reasons.append("0 calibration-eligible traces for this market in window.")
+        if not sidecar_valid:
+            reasons.append("Session sidecar invalid or corrupt.")
+        return OutputMode.RESEARCH_CANDIDATE, reasons
+
+    # Base is ACTIONABLE (profile present, coverage > 0, sidecar valid). Apply
+    # the quality floor on the profile's own recorded fit metrics. Missing
+    # metrics are treated as failing the floor: trustworthiness cannot be
+    # confirmed, so the market stays research-only.
+    if sample_size is None or sample_size < MIN_SAMPLES_FOR_ACTIONABLE:
+        reasons.append(
+            f"Profile sample_size {sample_size} < {MIN_SAMPLES_FOR_ACTIONABLE} floor."
+        )
+    if calibration_error is None:
+        reasons.append("Profile calibration_error missing - cannot verify quality floor.")
+    elif calibration_error > MAX_ECE_FOR_ACTIONABLE:
+        reasons.append(
+            f"Profile ECE {calibration_error:.3f} > {MAX_ECE_FOR_ACTIONABLE} floor."
+        )
+    if reasons:
+        return OutputMode.RESEARCH_CANDIDATE, reasons
+    return OutputMode.ACTIONABLE, reasons
 
 
 def cap_stake_for_research(stake_units: float) -> float:
