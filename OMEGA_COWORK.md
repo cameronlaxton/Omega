@@ -558,7 +558,7 @@ Empty `evidence: []` is tagged `evidence_status: "empty"` in the persisted trace
 
 ### 6a. Single-trace policy (required)
 
-When the user confirms a bet, the export block **must reuse the original analysis trace's `trace_id` and `input_snapshot`**. Do **not** call `analyze()` a second time to "mint a confirmation trace"; that creates a second `trace_id` with stripped game identity and breaks automated grading (see [docs/session_bugs_20260519.md](docs/session_bugs_20260519.md), BUG-2/BUG-4).
+When the user confirms a bet, the export block **must reuse the original analysis trace's `trace_id` and `input_snapshot`**. Do **not** call `analyze()` a second time to "mint a confirmation trace"; that creates a second `trace_id` with stripped game identity and breaks automated grading (see BUG-2/BUG-4).
 
 Concretely:
 
