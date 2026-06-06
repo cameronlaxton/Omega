@@ -84,3 +84,4 @@ var/
 /omega_traces.db
 /omega_traces.db-shm
 /omega_traces.db-wal
+/omega_odds_api_budget.json
