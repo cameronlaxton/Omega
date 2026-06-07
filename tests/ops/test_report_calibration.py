@@ -19,7 +19,12 @@ from omega.ops.output_modes import OutputMode  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 
-def _eligible_trace(trace_id: str, kind: str, timestamp: str = "2026-06-04T00:00:00+00:00") -> dict:
+def _eligible_trace(
+    trace_id: str,
+    kind: str,
+    timestamp: str = "2026-06-04T00:00:00+00:00",
+    league: str = "NBA",
+) -> dict:
     """A calibration-eligible trace of the given market `kind` (game | prop)."""
     preds = (
         {"home_win_prob": 0.55, "away_win_prob": 0.45}
@@ -31,7 +36,7 @@ def _eligible_trace(trace_id: str, kind: str, timestamp: str = "2026-06-04T00:00
         "run_id": "run-pm",
         "timestamp": timestamp,
         "prompt": "x",
-        "league": "NBA",
+        "league": league,
         "kind": kind,
         "result": {"status": "success"},
         "predictions": preds,
@@ -141,6 +146,7 @@ def test_report_lists_prop_production_profiles(tmp_path):
     assert rows == [
         {
             "profile_id": "iso_nba_prop_v1",
+            "league": "NBA",
             "market": "prop",
             "context_slice": None,
             "method": "isotonic",
@@ -250,3 +256,65 @@ def test_report_frontmatter_emits_per_market_map(tmp_path, monkeypatch):
     # Per-market prose directive.
     assert "Player props" in text
     assert "ACTIONABLE" in text
+
+
+def test_report_main_is_overall_even_when_league_arg_is_passed(tmp_path, monkeypatch):
+    db = tmp_path / "omega.db"
+    out = tmp_path / "latest.md"
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    profiles = tmp_path / "profiles.json"
+
+    store = TraceStore(db_path=db)
+    store.persist(_eligible_trace("nba-game", "game", league="NBA"))
+    store.persist(_eligible_trace("mlb-game", "game", league="MLB"))
+    store.close()
+
+    registry = CalibrationRegistry(path=str(profiles))
+    registry.register(_prod_profile("game", 150, 0.03, "iso_nba_game"))
+    registry.register(
+        CalibrationProfile(
+            profile_id="iso_mlb_game_candidate",
+            version=1,
+            method="isotonic",
+            league="MLB",
+            market="game",
+            status=ProfileStatus.CANDIDATE,
+            training_window="2026-01-01/2026-06-01",
+            sample_size=80,
+            dataset_hash="h",
+            metrics={"brier_score": 0.22, "calibration_error": 0.06, "log_loss": 0.66},
+            created_at="2026-06-05T00:00:00+00:00",
+        )
+    )
+
+    monkeypatch.setattr(
+        report_calibration,
+        "CalibrationRegistry",
+        lambda: CalibrationRegistry(path=str(profiles)),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "report_calibration.py",
+            "--league",
+            "NBA",
+            "--db",
+            str(db),
+            "--out",
+            str(out),
+            "--sessions-inbox",
+            str(sessions),
+            "--window-days",
+            "3650",
+        ],
+    )
+
+    assert report_calibration.main() == 0
+    text = out.read_text(encoding="utf-8")
+
+    assert "# Omega Health Report - Overall" in text
+    assert "| Traces (all) | 2 |" in text
+    assert "| NBA | game | base | `iso_nba_game` |" in text
+    assert "| MLB | game | `iso_mlb_game_candidate` |" in text

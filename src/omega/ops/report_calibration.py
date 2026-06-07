@@ -15,10 +15,10 @@ Determinism: this script makes no judgments. It tallies what is on disk. The
 LLM is responsible for distinguishing signal from noise per Â§13.
 
 Usage:
-    omega-report-calibration --league NBA
-    omega-report-calibration --league NBA --window-days 30 \\
+    omega-report-calibration
+    omega-report-calibration --window-days 30 \\
         --out var/reports/2026-05-15-nba.md
-    omega-report-calibration --league NBA --sessions-inbox var/inbox/sessions
+    omega-report-calibration --sessions-inbox var/inbox/sessions
 
 Exit codes:
     0 â€” report written
@@ -54,6 +54,7 @@ from omega.strategy.distribution_metrics import (  # noqa: E402
 from omega.strategy.distribution_metrics import crps_from_distribution_row  # noqa: E402
 from omega.trace.clv import compute_clv  # noqa: E402
 from omega.trace.db import require_sqlite_backend  # noqa: E402
+from omega.trace.portfolio import summarize_ledger  # noqa: E402
 from omega.trace.report_header import header_for_store  # noqa: E402
 from omega.trace.session_sidecar import load_sidecar_safe  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
@@ -87,54 +88,69 @@ def _window_cutoff(window_days: int) -> str:
     return (datetime.now(UTC) - timedelta(days=window_days)).isoformat()
 
 
-def _section_counts(store: TraceStore, league: str, cutoff: str) -> dict[str, int]:
+def _league_filter(alias: str | None, league: str | None) -> tuple[str, tuple[str, ...]]:
+    if not league:
+        return "", ()
+    prefix = f"{alias}." if alias else ""
+    return f" AND {prefix}league = ?", (league,)
+
+
+def _section_counts(store: TraceStore, league: str | None, cutoff: str) -> dict[str, int]:
     """Trace / bet / close counts within the window.
 
     "Graded" is the union of game outcomes and prop outcomes â€” a trace counts
     once whether it has a game-score result, one or more prop results, or both.
     """
     conn = store.conn
+    league_filter, league_params = _league_filter(None, league)
+    t_league_filter, t_league_params = _league_filter("t", league)
     n_traces = conn.execute(
-        "SELECT COUNT(*) FROM traces WHERE league = ? AND timestamp >= ?",
-        (league, cutoff),
+        f"SELECT COUNT(*) FROM traces WHERE timestamp >= ?{league_filter}",
+        (cutoff, *league_params),
     ).fetchone()[0]
     n_graded_game = conn.execute(
         """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
            JOIN outcomes o ON t.trace_id = o.trace_id
-           WHERE t.league = ? AND t.timestamp >= ?""",
-        (league, cutoff),
+           WHERE t.timestamp >= ?"""
+        + t_league_filter,
+        (cutoff, *t_league_params),
     ).fetchone()[0]
     n_graded_prop = conn.execute(
         """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
            JOIN prop_outcomes p ON t.trace_id = p.trace_id
-           WHERE t.league = ? AND t.timestamp >= ?""",
-        (league, cutoff),
+           WHERE t.timestamp >= ?"""
+        + t_league_filter,
+        (cutoff, *t_league_params),
     ).fetchone()[0]
     n_graded = conn.execute(
         """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
-           WHERE t.league = ? AND t.timestamp >= ?
+           WHERE t.timestamp >= ?
              AND (EXISTS (SELECT 1 FROM outcomes o WHERE o.trace_id = t.trace_id)
-               OR EXISTS (SELECT 1 FROM prop_outcomes p WHERE p.trace_id = t.trace_id))""",
-        (league, cutoff),
+               OR EXISTS (SELECT 1 FROM prop_outcomes p WHERE p.trace_id = t.trace_id))"""
+        + t_league_filter,
+        (cutoff, *t_league_params),
     ).fetchone()[0]
     n_with_bet = conn.execute(
         """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
            JOIN bet_ledger b ON t.trace_id = b.trace_id
            WHERE b.provenance = 'user_confirmed'
-             AND t.league = ? AND t.timestamp >= ?""",
-        (league, cutoff),
+             AND t.timestamp >= ?"""
+        + t_league_filter,
+        (cutoff, *t_league_params),
     ).fetchone()[0]
     n_with_close = conn.execute(
         """SELECT COUNT(DISTINCT t.trace_id) FROM traces t
            JOIN closing_lines c ON t.trace_id = c.trace_id
-           WHERE t.league = ? AND t.timestamp >= ?""",
-        (league, cutoff),
+           WHERE t.timestamp >= ?"""
+        + t_league_filter,
+        (cutoff, *t_league_params),
     ).fetchone()[0]
     n_with_predictions = conn.execute(
         f"""SELECT COUNT(*) FROM traces t
-            WHERE league = ? AND timestamp >= ?
-              AND {_CALIBRATION_ELIGIBLE_SQL}""",
-        (league, cutoff),
+            WHERE timestamp >= ?
+              AND {_CALIBRATION_ELIGIBLE_SQL}"""
+        + t_league_filter,
+        (cutoff, *t_league_params),
     ).fetchone()[0]
     # Per-market coverage feeds per-market output-mode authorization. `kind`
     # lives in the full_trace JSON (no dedicated column), matching the rest of
@@ -142,25 +158,28 @@ def _section_counts(store: TraceStore, league: str, cutoff: str) -> dict[str, in
     # kind scope is sufficient.
     n_with_predictions_game = conn.execute(
         f"""SELECT COUNT(*) FROM traces t
-            WHERE league = ? AND timestamp >= ?
+            WHERE timestamp >= ?
               AND {_CALIBRATION_ELIGIBLE_SQL}
-              AND json_extract(t.full_trace, '$.kind') = 'game'""",
-        (league, cutoff),
+              AND json_extract(t.full_trace, '$.kind') = 'game'"""
+        + t_league_filter,
+        (cutoff, *t_league_params),
     ).fetchone()[0]
     n_with_predictions_prop = conn.execute(
         f"""SELECT COUNT(*) FROM traces t
-            WHERE league = ? AND timestamp >= ?
+            WHERE timestamp >= ?
               AND {_CALIBRATION_ELIGIBLE_SQL}
-              AND json_extract(t.full_trace, '$.kind') = 'prop'""",
-        (league, cutoff),
+              AND json_extract(t.full_trace, '$.kind') = 'prop'"""
+        + t_league_filter,
+        (cutoff, *t_league_params),
     ).fetchone()[0]
     n_graded_calibration = conn.execute(
         f"""SELECT COUNT(DISTINCT t.trace_id) FROM traces t
-           WHERE t.league = ? AND t.timestamp >= ?
+           WHERE t.timestamp >= ?
              AND {_CALIBRATION_ELIGIBLE_SQL}
              AND (EXISTS (SELECT 1 FROM outcomes o WHERE o.trace_id = t.trace_id)
-               OR EXISTS (SELECT 1 FROM prop_outcomes p WHERE p.trace_id = t.trace_id))""",
-        (league, cutoff),
+               OR EXISTS (SELECT 1 FROM prop_outcomes p WHERE p.trace_id = t.trace_id))"""
+        + t_league_filter,
+        (cutoff, *t_league_params),
     ).fetchone()[0]
     return {
         "traces": n_traces,
@@ -177,7 +196,7 @@ def _section_counts(store: TraceStore, league: str, cutoff: str) -> dict[str, in
 
 
 def _section_realized_metrics(
-    store: TraceStore, league: str, cutoff: str
+    store: TraceStore, league: str | None, cutoff: str
 ) -> dict[str, float] | None:
     """Brier / ECE / log_loss on graded traces in the window. Returns None if too few."""
     rows = store.query_traces(
@@ -236,7 +255,7 @@ def _section_realized_metrics(
 
 
 def _section_prop_realized_metrics(
-    store: TraceStore, league: str, cutoff: str
+    store: TraceStore, league: str | None, cutoff: str
 ) -> dict[str, float] | None:
     """Brier / ECE / log_loss on graded prop traces in the window.
 
@@ -297,22 +316,23 @@ def _section_prop_realized_metrics(
 
 
 def _section_distribution_crps(
-    store: TraceStore, league: str, cutoff: str
+    store: TraceStore, league: str | None, cutoff: str
 ) -> dict[str, Any] | None:
     """Dynamic CRPS over V10 distribution rows joined to realized outcomes.
 
     Metrics are recomputed from ``v_distribution_outcomes`` at report time so a
     future CRPS refinement changes the report code, not historical ledger rows.
     """
+    league_filter, league_params = _league_filter("d", league)
     rows = store.conn.execute(
         f"""SELECT d.*
            FROM v_distribution_outcomes d
            JOIN traces t ON t.trace_id = d.trace_id
-           WHERE d.league = ?
-             AND t.timestamp >= ?
+           WHERE t.timestamp >= ?
              AND {_CALIBRATION_ELIGIBLE_SQL}
-             AND d.stat_value IS NOT NULL""",
-        (league, cutoff),
+             AND d.stat_value IS NOT NULL"""
+        + league_filter,
+        (cutoff, *league_params),
     ).fetchall()
     values: list[float] = []
     by_stat: dict[str, list[float]] = {}
@@ -344,9 +364,10 @@ def _section_distribution_crps(
     }
 
 
-def _section_clv(store: TraceStore, league: str, cutoff: str) -> dict[str, Any]:
+def _section_clv(store: TraceStore, league: str | None, cutoff: str) -> dict[str, Any]:
     """Mean CLV cents and beat-close rate across bets with attached closes in the window."""
     conn = store.conn
+    t_league_filter, t_league_params = _league_filter("t", league)
     rows = conn.execute(
         """SELECT b.market, b.selection, b.line AS line_taken, b.odds AS odds_taken,
                   c.closing_line, c.closing_odds
@@ -356,8 +377,9 @@ def _section_clv(store: TraceStore, league: str, cutoff: str) -> dict[str, Any]:
               AND b.selection_descriptor = c.selection_descriptor
            JOIN traces t ON b.trace_id = t.trace_id
            WHERE b.provenance = 'user_confirmed'
-             AND t.league = ? AND t.timestamp >= ?""",
-        (league, cutoff),
+             AND t.timestamp >= ?"""
+        + t_league_filter,
+        (cutoff, *t_league_params),
     ).fetchall()
 
     if not rows:
@@ -393,8 +415,24 @@ def _section_clv(store: TraceStore, league: str, cutoff: str) -> dict[str, Any]:
     }
 
 
+def _section_portfolio(store: TraceStore, cutoff: str) -> dict[str, Any]:
+    rows = store.query_ledger(start=cutoff, limit=100_000)
+    return summarize_ledger(rows)
+
+
+def _session_leagues(store: TraceStore, session_id: str) -> str:
+    rows = store.conn.execute(
+        """SELECT DISTINCT league FROM traces
+           WHERE session_id = ? AND league IS NOT NULL
+           ORDER BY league""",
+        (session_id,),
+    ).fetchall()
+    leagues = [str(row["league"]) for row in rows if row["league"]]
+    return ", ".join(leagues) if leagues else "?"
+
+
 def _section_sessions(
-    store: TraceStore, sidecars: list[dict[str, Any]], league: str, limit: int = 10
+    store: TraceStore, sidecars: list[dict[str, Any]], league: str | None, limit: int = 10
 ) -> list[dict[str, Any]]:
     """Join trace-level session summary with sidecar exec_stats."""
     summaries = store.get_session_summary(league=league, limit=limit)
@@ -408,6 +446,7 @@ def _section_sessions(
                 "session_id": sid,
                 "trace_count": s["trace_count"],
                 "graded_count": s["graded_count"],
+                "leagues": _session_leagues(store, sid),
                 "first_ts": s["first_ts"],
                 "last_ts": s["last_ts"],
                 "model_version": sidecar.get("model_version"),
@@ -422,7 +461,7 @@ def _section_sessions(
     return out
 
 
-def _section_signal_performance(store: TraceStore, league: str) -> list[dict[str, Any]]:
+def _section_signal_performance(store: TraceStore, league: str | None) -> list[dict[str, Any]]:
     """Most recent retrospective evidence-signal scoring run for the league."""
     return store.get_signal_performance(league=league, limit=200)
 
@@ -442,13 +481,14 @@ def _signal_verdict(sample_size: int, accuracy: float, calibration_gap: float) -
     return verdict
 
 
-def _section_pending_candidates(registry: CalibrationRegistry, league: str) -> list[dict[str, Any]]:
+def _section_pending_candidates(registry: CalibrationRegistry, league: str | None) -> list[dict[str, Any]]:
     candidates = registry.list_profiles(league=league, status=ProfileStatus.CANDIDATE.value)
     out = []
     for p in candidates:
         out.append(
             {
                 "profile_id": p.profile_id,
+                "league": p.league,
                 "market": p.market or "game",
                 "method": p.method,
                 "sample_size": p.sample_size,
@@ -459,13 +499,17 @@ def _section_pending_candidates(registry: CalibrationRegistry, league: str) -> l
     return out
 
 
-def _section_production_profiles(registry: CalibrationRegistry, league: str) -> list[dict[str, Any]]:
+def _section_production_profiles(registry: CalibrationRegistry, league: str | None) -> list[dict[str, Any]]:
     profiles = registry.list_profiles(league=league, status=ProfileStatus.PRODUCTION.value)
     out = []
-    for p in sorted(profiles, key=lambda item: (item.market or "game", item.context_slice or "")):
+    for p in sorted(
+        profiles,
+        key=lambda item: (item.league, item.market or "game", item.context_slice or ""),
+    ):
         out.append(
             {
                 "profile_id": p.profile_id,
+                "league": p.league,
                 "market": p.market or "game",
                 "context_slice": p.context_slice,
                 "method": p.method,
@@ -522,10 +566,41 @@ def _aggregate_scalar_mode(output_modes: dict[str, OutputMode]) -> OutputMode:
     return OutputMode.RESEARCH_CANDIDATE
 
 
+def _select_market_profiles(
+    profiles: list[CalibrationProfile],
+) -> dict[str, CalibrationProfile | None]:
+    """Pick the most conservative representative production profile per market."""
+    def _calibration_error(profile: CalibrationProfile) -> float:
+        try:
+            return float(profile.metrics.get("calibration_error", 1.0))
+        except (TypeError, ValueError):
+            return 1.0
+
+    selected: dict[str, CalibrationProfile | None] = {}
+    for market in _OUTPUT_MODE_MARKETS:
+        market_profiles = [
+            p for p in profiles if (p.market or "game") == market and p.context_slice is None
+        ]
+        if not market_profiles:
+            selected[market] = None
+            continue
+        selected[market] = sorted(
+            market_profiles,
+            key=lambda p: (
+                p.sample_size,
+                -_calibration_error(p),
+                p.league,
+                p.profile_id,
+            ),
+        )[0]
+    return selected
+
+
 def _render(
-    league: str,
+    scope_label: str,
     window_days: int,
     counts: dict[str, int],
+    portfolio: dict[str, Any],
     realized: dict[str, float] | None,
     realized_prop: dict[str, float] | None,
     distribution_crps: dict[str, Any] | None,
@@ -540,7 +615,7 @@ def _render(
 ) -> str:
     now = datetime.now(UTC).isoformat(timespec="seconds")
     lines: list[str] = []
-    lines.append(f"# Omega Calibration Report â€” {league}")
+    lines.append(f"# Omega Health Report - {scope_label}")
     lines.append("")
     lines.append(f"Generated: `{now}` | Window: last {window_days} days")
     lines.append("")
@@ -604,18 +679,48 @@ def _render(
     lines.append(f"| With closing_line _(CLV only â€” not required for grading)_ | {counts['with_close']} |")
     lines.append("")
 
+    lines.append("## 1B. Portfolio summary")
+    lines.append("")
+    lines.append("| Metric | Value |")
+    lines.append("|---|---:|")
+    lines.append(f"| Base bankroll | ${portfolio['base_bankroll']:.2f} |")
+    lines.append(f"| Current bankroll | ${portfolio['current_bankroll']:.2f} |")
+    lines.append(f"| Realized PnL | ${portfolio['realized_pnl']:+.2f} |")
+    lines.append(f"| ROI | {portfolio['roi_pct']:.2f}% |")
+    lines.append(f"| Total bets | {portfolio['total_bets']} |")
+    lines.append(f"| Decided | {portfolio['decided']} |")
+    lines.append(f"| Win rate | {portfolio['win_pct']:.2f}% |")
+    lines.append(f"| Open positions | {portfolio['open_positions_count']} |")
+    lines.append(f"| Pending exposure | ${portfolio['pending_exposure']:.2f} |")
+    lines.append("")
+    if portfolio["active_ledgers"]:
+        lines.append("| ledger_id | league | market | status | stake | potential_payout | last_updated |")
+        lines.append("|---|---|---|---|---:|---:|---|")
+        for row in portfolio["active_ledgers"][:20]:
+            lines.append(
+                f"| `{row.get('ledger_id')}` | {row.get('league') or '?'} | "
+                f"{row.get('market_type') or '?'} | {row.get('status') or '?'} | "
+                f"${row.get('stake', 0.0):.2f} | ${row.get('potential_payout', 0.0):.2f} | "
+                f"{row.get('last_updated') or '?'} |"
+            )
+        if len(portfolio["active_ledgers"]) > 20:
+            lines.append(f"| ... | ... | ... | ... | ... | ... | {len(portfolio['active_ledgers']) - 20} more |")
+    else:
+        lines.append("_No open ledger positions._")
+    lines.append("")
+
     lines.append("## 2. Production calibration profile")
     lines.append("")
     if not production_profiles:
         lines.append("**None** â€” calibration is using the static fallback policy.")
     else:
-        lines.append("| market | context_slice | profile_id | method | n | brier | ece | promoted |")
-        lines.append("|---|---|---|---|---:|---:|---:|---|")
+        lines.append("| league | market | context_slice | profile_id | method | n | brier | ece | promoted |")
+        lines.append("|---|---|---|---|---|---:|---:|---:|---|")
         for p in production_profiles:
             m = p["metrics"]
             promoted = (p.get("promoted_at") or "?")[:10]
             lines.append(
-                f"| {p['market']} | {p.get('context_slice') or 'base'} | `{p['profile_id']}` | "
+                f"| {p['league']} | {p['market']} | {p.get('context_slice') or 'base'} | `{p['profile_id']}` | "
                 f"{p['method']} | {p['sample_size']} | "
                 f"{m.get('brier_score', float('nan')):.4f} | "
                 f"{m.get('calibration_error', float('nan')):.4f} | {promoted} |"
@@ -698,15 +803,15 @@ def _render(
             )
     lines.append("")
 
-    lines.append("## 5. Sessions (most recent)")
+    lines.append("## 5. Sessions (most recent across all leagues)")
     lines.append("")
     if not sessions:
         lines.append("_No session_id-tagged traces yet._")
     else:
         lines.append(
-            "| session_id | traces | graded | model | pipeline | next_action | closes | webfetch_fail | notes |"
+            "| session_id | leagues | traces | graded | model | pipeline | next_action | closes | webfetch_fail | notes |"
         )
-        lines.append("|---|---|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|")
         for s in sessions:
             stats = s["exec_stats"] or {}
             pipeline = s.get("pipeline_status") or {}
@@ -714,7 +819,8 @@ def _render(
             next_action = (s.get("next_required_action") or "?").replace("|", "\\|")
             notes = (s["agent_notes"] or "").replace("|", "\\|").replace("\n", " ")[:80]
             lines.append(
-                f"| `{s['session_id']}` | {s['trace_count']} | {s['graded_count']} | "
+                f"| `{s['session_id']}` | {s.get('leagues') or '?'} | "
+                f"{s['trace_count']} | {s['graded_count']} | "
                 f"{s.get('model_version') or '?'} | "
                 f"{pipeline_label} | "
                 f"{next_action[:80]} | "
@@ -728,12 +834,12 @@ def _render(
     if not candidates:
         lines.append("_No pending candidates._")
     else:
-        lines.append("| market | profile_id | method | n | brier | ece | log_loss | created |")
-        lines.append("|---|---|---|---|---|---|---|---|")
+        lines.append("| league | market | profile_id | method | n | brier | ece | log_loss | created |")
+        lines.append("|---|---|---|---|---|---|---|---|---|")
         for c in candidates:
             m = c["metrics"]
             lines.append(
-                f"| {c['market']} | `{c['profile_id']}` | {c['method']} | {c['sample_size']} | "
+                f"| {c['league']} | {c['market']} | `{c['profile_id']}` | {c['method']} | {c['sample_size']} | "
                 f"{m.get('brier_score', float('nan')):.4f} | "
                 f"{m.get('calibration_error', float('nan')):.4f} | "
                 f"{m.get('log_loss', float('nan')):.4f} | {c['created_at'][:10]} |"
@@ -782,7 +888,14 @@ def _render(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Emit a markdown calibration health report.")
-    parser.add_argument("--league", required=True)
+    parser.add_argument(
+        "--league",
+        default=None,
+        help=(
+            "Deprecated compatibility argument. latest.md is always an overall "
+            "cross-league report."
+        ),
+    )
     parser.add_argument("--window-days", type=int, default=30)
     parser.add_argument(
         "--out", type=Path, default=None, help="Output path (default: var/reports/latest.md)"
@@ -816,34 +929,26 @@ def main() -> int:
     sidecars = _load_session_sidecars(args.sessions_inbox)
     cutoff = _window_cutoff(args.window_days)
 
-    counts = _section_counts(store, args.league, cutoff)
-    realized = _section_realized_metrics(store, args.league, cutoff)
-    realized_prop = _section_prop_realized_metrics(store, args.league, cutoff)
-    distribution_crps = _section_distribution_crps(store, args.league, cutoff)
-    clv = _section_clv(store, args.league, cutoff)
-    sessions = _section_sessions(store, sidecars, args.league)
+    report_league: str | None = None
+    counts = _section_counts(store, report_league, cutoff)
+    portfolio = _section_portfolio(store, cutoff)
+    realized = _section_realized_metrics(store, report_league, cutoff)
+    realized_prop = _section_prop_realized_metrics(store, report_league, cutoff)
+    distribution_crps = _section_distribution_crps(store, report_league, cutoff)
+    clv = _section_clv(store, report_league, cutoff)
+    sessions = _section_sessions(store, sidecars, report_league)
 
     # Exact-match production profile per market (no prop->game fallback): output
     # authorization must reflect each market's OWN fitted prior. The runtime
     # calibration path (registry.get_production) still falls back; this lookup
     # deliberately does not.
     prod_profiles_all = registry.list_profiles(
-        league=args.league, status=ProfileStatus.PRODUCTION.value
+        league=report_league, status=ProfileStatus.PRODUCTION.value
     )
-    prod_by_market: dict[str, CalibrationProfile | None] = {
-        market: next(
-            (
-                p
-                for p in prod_profiles_all
-                if (p.market or "game") == market and p.context_slice is None
-            ),
-            None,
-        )
-        for market in _OUTPUT_MODE_MARKETS
-    }
-    production_profiles = _section_production_profiles(registry, args.league)
-    candidates = _section_pending_candidates(registry, args.league)
-    signal_perf = _section_signal_performance(store, args.league)
+    prod_by_market = _select_market_profiles(prod_profiles_all)
+    production_profiles = _section_production_profiles(registry, report_league)
+    candidates = _section_pending_candidates(registry, report_league)
+    signal_perf = _section_signal_performance(store, report_league)
 
     # Classify output mode PER MARKET, here, and feed both the machine-readable
     # frontmatter and the prose directive block so they cannot disagree. Sidecar
@@ -876,9 +981,10 @@ def main() -> int:
     store.close()
 
     rendered = header + _render(
-        league=args.league,
+        scope_label="Overall",
         window_days=args.window_days,
         counts=counts,
+        portfolio=portfolio,
         realized=realized,
         realized_prop=realized_prop,
         distribution_crps=distribution_crps,
