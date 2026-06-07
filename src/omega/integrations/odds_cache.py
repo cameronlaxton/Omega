@@ -80,6 +80,9 @@ class OddsCache:
         game_date: str,
         player_name: str | None = None,
         player_id: str | None = None,
+        bookmaker: str | None = None,
+        line_shopping: bool = False,
+        all_books: bool = False,
     ) -> str:
         """Derive a deterministic SHA-256 cache key from query parameters."""
         norm_league = league.strip().upper()
@@ -95,7 +98,15 @@ class OddsCache:
             from omega.integrations.espn_boxscore import normalize_player_name
             player_part = f":name:{normalize_player_name(player_name)}"
 
-        raw_str = f"{norm_league}{norm_market}{norm_home}{norm_away}{norm_date}{player_part}"
+        bookmaker_part = ""
+        if line_shopping:
+            bookmaker_part = ":shopping"
+        elif all_books:
+            bookmaker_part = ":all_books"
+        elif bookmaker and bookmaker.strip().lower() != "betmgm":
+            bookmaker_part = f":book:{bookmaker.strip().lower()}"
+
+        raw_str = f"{norm_league}{norm_market}{norm_home}{norm_away}{norm_date}{player_part}{bookmaker_part}"
         return hashlib.sha256(raw_str.encode("utf-8")).hexdigest()
 
     @staticmethod

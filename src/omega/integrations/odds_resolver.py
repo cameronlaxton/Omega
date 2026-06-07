@@ -573,7 +573,10 @@ def resolve_odds(
     if norm_home and norm_away:
         cache_key = cache.compute_cache_key(
             league, market, norm_home, norm_away, game_date,
-            player_name=player_name, player_id=player_id
+            player_name=player_name, player_id=player_id,
+            bookmaker=bookmaker,
+            line_shopping=line_shopping,
+            all_books=all_books,
         )
         negative_key = cache_key
         cached_payload = cache.get(cache_key)
@@ -740,7 +743,10 @@ def resolve_odds(
         away_team=actual_away,
         game_date=actual_date,
         player_name=player_name,
-        player_id=player_id
+        player_id=player_id,
+        bookmaker=bookmaker,
+        line_shopping=line_shopping,
+        all_books=all_books,
     )
     cache.set(precise_key, league, market, result_payload)
 
