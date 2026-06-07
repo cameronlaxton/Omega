@@ -18,6 +18,11 @@ from omega.trace.session_sidecar import SessionSidecar, quarantine_sidecar  # no
 
 logger = logging.getLogger("validate_session_sidecars")
 
+# Canonical session-sidecar inbox. The sidecars live under ``var/`` (see
+# docs/phase6/ARTIFACT_AUTHORITY.md); a default missing the ``var/`` segment
+# silently validates an empty/stale directory and lets bad sidecars through.
+_DEFAULT_SESSIONS_INBOX = _REPO_ROOT / "var" / "inbox" / "sessions"
+
 
 def validate_directory(path: Path, *, quarantine: bool = False) -> tuple[int, int]:
     if not path.exists():
@@ -46,8 +51,8 @@ def main() -> int:
     parser.add_argument(
         "--sessions-inbox",
         type=Path,
-        default=_REPO_ROOT / "inbox" / "sessions",
-        help="Directory containing session sidecar JSON files",
+        default=_DEFAULT_SESSIONS_INBOX,
+        help="Directory containing session sidecar JSON files (default: var/inbox/sessions)",
     )
     parser.add_argument(
         "--quarantine",

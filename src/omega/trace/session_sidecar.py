@@ -532,8 +532,15 @@ def quarantine_sidecar(
 def rebuild_sidecar_from_jsonl(jsonl_path: Path) -> dict[str, Any]:
     """Reconstruct the audit-event stream and session metadata from a JSONL mirror (recovery helper).
 
-    Returns a full dictionary that matches the SessionSidecar schema for clean recovery,
-    while preserving 'event_count' and 'source_jsonl' for diagnostic compatibility.
+    Returns a dictionary that validates cleanly against ``SessionSidecar``
+    (``extra="forbid"``), so the caller can pass it straight to
+    ``SessionSidecar.model_validate`` without stripping keys. Diagnostic values
+    that used to be embedded here — event count and source path — are redundant
+    (``len(payload["audit_events"])`` and ``jsonl_path`` respectively) and were
+    removed because they broke that round-trip.
+
+    Note: ``model_version``/``purpose``/``bankroll`` are reconstruction
+    placeholders, not verified session state — see ``agent_notes``.
     """
     events: list[dict[str, Any]] = []
     if jsonl_path.exists():
@@ -567,8 +574,6 @@ def rebuild_sidecar_from_jsonl(jsonl_path: Path) -> dict[str, Any]:
         "exec_stats": {},
         "agent_notes": "Recovered from mirror JSONL file.",
         "audit_events": events,
-        "event_count": len(events),
-        "source_jsonl": str(jsonl_path),
     }
 
 

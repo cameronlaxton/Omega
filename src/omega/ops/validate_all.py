@@ -39,6 +39,13 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
+# Canonical runtime inboxes live under ``var/`` (docs/phase6/ARTIFACT_AUTHORITY.md).
+# A default missing the ``var/`` segment points at a stale/empty directory, so the
+# path-based checks below SKIP (or validate the wrong files) and the harness reports
+# a false green while the live sidecars/exports go unchecked.
+_DEFAULT_SESSIONS_INBOX = _REPO_ROOT / "var" / "inbox" / "sessions"
+_DEFAULT_TRACES = _REPO_ROOT / "var" / "inbox" / "traces"
+
 _PASS, _FAIL, _SKIP = "PASS", "FAIL", "SKIP"
 
 
@@ -69,13 +76,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--sessions-inbox",
         type=Path,
-        default=_REPO_ROOT / "inbox" / "sessions",
+        default=_DEFAULT_SESSIONS_INBOX,
         help="Session sidecar directory (default: var/inbox/sessions)",
     )
     parser.add_argument(
         "--traces",
         type=Path,
-        default=_REPO_ROOT / "inbox" / "traces",
+        default=_DEFAULT_TRACES,
         help="Exported trace directory (default: var/inbox/traces)",
     )
     args = parser.parse_args(argv)

@@ -7,9 +7,17 @@ files.
 
 from __future__ import annotations
 
+import logging
 import os
 
 from omega.paths import repo_root
+
+# Library convention: attach a NullHandler to the package root logger so that
+# `logger.*` calls in omega.* never hit Python's lastResort handler (which only
+# surfaces WARNING+ unformatted and silently drops INFO/DEBUG) when omega is
+# imported without a CLI calling logging.basicConfig (e.g. the MCP server,
+# tests, notebooks). CLIs still configure their own handlers/levels.
+logging.getLogger("omega").addHandler(logging.NullHandler())
 
 
 def _load_env_file_without_dependency() -> None:

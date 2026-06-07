@@ -24,7 +24,7 @@ DB-path policy in `omega/trace/store.py` (`_resolve_db_path`, `db_status`).
 | `var/reports/latest.md` | calibration health report | **derived** | no | `report_calibration.py` | regenerate; never edit by hand |
 | `var/reports/run_audits/<sid>.audit.md` | human session audit | **derived** (numbers from DB, prose from sidecar) | no | `render_session_audits.py` | regenerate; degraded mode if sidecar absent |
 | `var/inbox/action_plans/*.json` | prescriptive maintenance directive | no (ephemeral) | n/a | re-author | strict allowlist; unknown action → exit 2 |
-| `bet_records` / `closing_lines` tables | optional wager / CLV metadata | optional | no | no | **absence is normal — never gates grading/calibration/output mode** |
+| `bet_ledger` / `closing_lines` tables | optional wager / CLV metadata (`bet_ledger` absorbed the retired `bet_records` table at schema V14) | optional | no | no | **absence is normal — never gates grading/calibration/output mode** |
 
 ## What to trust after a run
 

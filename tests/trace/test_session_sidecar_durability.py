@@ -196,7 +196,10 @@ class TestJsonlMirror:
         assert load_sidecar_safe(path) is None  # summary unreadable
 
         recovered = rebuild_sidecar_from_jsonl(jsonl)
-        assert recovered["event_count"] == 2
+        # Recovery preserved both events, and the rebuilt dict round-trips through
+        # the schema as-is (extra="forbid" — no diagnostic-only keys).
+        assert len(recovered["audit_events"]) == 2
+        SessionSidecar.model_validate(recovered)
         statuses = {e["status"] for e in recovered["audit_events"]}
         assert "fail" in statuses  # the quality_gate fail survived for recovery
 
@@ -228,13 +231,10 @@ class TestNotedBugFixes:
         jsonl = path.with_suffix(".events.jsonl")
         recovered = rebuild_sidecar_from_jsonl(jsonl)
 
-        # Verify it has diagnostic helper keys
-        assert recovered["event_count"] == 2
-        assert recovered["source_jsonl"] == str(jsonl)
-
-        # Verify it validates cleanly against the SessionSidecar schema!
-        recovered_copy = {k: v for k, v in recovered.items() if k not in ("event_count", "source_jsonl")}
-        sidecar = SessionSidecar.model_validate(recovered_copy)
+        # The raw return MUST validate as-is: no stripping. SessionSidecar is
+        # extra="forbid", so any diagnostic-only key would fail here. This pins
+        # the round-trip the recovery path actually relies on.
+        sidecar = SessionSidecar.model_validate(recovered)
         assert sidecar.session_id == "sess-20260530-tst1"
         assert sidecar.opened_at.endswith("Z")
         assert len(sidecar.audit_events) == 2

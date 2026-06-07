@@ -2,7 +2,7 @@
 
 **Version:** Phase 6h
 **Repo:** `C:\repos\Omega`
-**DB:** `var/omega_traces.db` (SQLite V10 - `traces`, `simulation_distributions`, `bet_records`, `closing_lines`, `outcomes`, `market_snapshots`, `prop_outcomes`)
+**DB:** `var/omega_traces.db` (SQLite V14 - `traces`, `outcomes`, `prop_outcomes`, `bet_ledger`, `closing_lines`, `early_market_snapshots`, `market_snapshots`, `simulation_distributions`, `evidence_signals`, `signal_performance`, `trace_qa_verdicts`; `bet_records` was consolidated into `bet_ledger` at V14)
 
 This is the runtime instruction set for an Omega agent running with local repo access. For product doctrine, canonical source-of-truth rules, and artifact authority, please refer to [PROJECT_STATE.md](PROJECT_STATE.md). The local VM model is the standard model. Use the local MCP server first; use direct repo imports only when MCP is unavailable in the current client.
 
@@ -663,8 +663,8 @@ The sidecar has three distinct roles for state, no overlap:
 | `audit_events` | LLM | Structured QA log of observable steps |
 
 **`audit_events` discipline:**
-- Each event has `ts`, `event_type` (one of `preflight`, `data_provenance`, `engine_run`, `candidate_rejected`, `downgrade`, `rationale`, `bug`, `command`, `step`, `note`), `step`, and `status` (`ok` | `warn` | `fail` | `skipped`). Optional: `notes`, `inputs`, `outputs`, `assumptions`, `bugs`, `trace_ids`.
-- **Never** put engine-owned quant values in `inputs`/`outputs`/`notes`: `edge_pct`, `ev_pct`, `kelly_fraction`, `units`, `confidence_tier`, `fair_price`, `no_vig_price`, `model_probability`, `over_prob`, `under_prob`. Those live in `var/omega_traces.db`. The writer raises `ProtectedValueError` and the append is rejected atomically â€” the on-disk file is untouched.
+- Each event has `ts`, `event_type` (one of `preflight`, `data_provenance`, `engine_run`, `candidate_rejected`, `downgrade`, `quality_gate`, `rationale`, `bug`, `command`, `step`, `note`), `step`, and `status` (`ok` | `warn` | `fail` | `skipped`). Optional: `notes`, `inputs`, `outputs`, `assumptions`, `bugs`, `trace_ids`.
+- **Never** put engine-owned quant values anywhere in an audit event: `edge_pct`, `ev_pct`, `kelly_fraction`, `units`, `confidence_tier`, `fair_price`, `no_vig_price`, `model_probability`, `over_prob`, `under_prob`. Those live in `var/omega_traces.db`. The writer **mechanically enforces this for the structured `inputs`/`outputs` maps** — a protected key there raises `ProtectedValueError` and the append is rejected atomically (the on-disk file is untouched). The free-text `notes`/`assumptions`/`bugs` fields are **not** machine-scanned (a key-name scan would false-positive on legitimate NULL-field audits like "Null fields: result.edge_pct"); keeping quant *values* out of prose is agent discipline.
 - Do **not** hand-edit the sidecar JSON. Always go through `append_audit_events(...)`. Writes are temp-file + `os.replace`; readers never observe a partial file.
 
 Do not add inline `outcomes` or trace-level grading summaries to the sidecar.
@@ -688,7 +688,7 @@ All paths are relative to the repo root.
 |---|---|
 | `omega/core/contracts/service.py` | Canonical `analyze(request, session_id, bankroll) -> trace` entry point |
 | `omega/mcp/server.py` | MCP tools over deterministic contracts |
-| `var/omega_traces.db` | SQLite V6 - do not write directly |
+| `var/omega_traces.db` | SQLite V14 - do not write directly |
 | `var/inbox/traces/` | Trace export files -> `ingest_traces.py` |
 | `var/inbox/sessions/` | Session sidecars |
 | `var/inbox/action_plans/` | Action plan JSON -> `run_action_plan.py` |
