@@ -407,23 +407,28 @@ def omega_run_batch(
                 odds_patch = {"line": entry.line, "odds_over": entry.odds_over, "odds_under": entry.odds_under}
                 resolved_prop_type = prop_types[0] if prop_types else None
             else:
+                fallback_books = ["betmgm", "draftkings", "fanduel", "williamhill_us", "espnbet"]
                 for pt in prop_types:
-                    try:
-                        res = resolve_odds(
-                            kind="prop",
-                            league=entry.league,
-                            player_name=entry.player_name,
-                            prop_type=pt,
-                            home_team=entry.home_team,
-                            away_team=entry.away_team,
-                            commence_time_from=commence_time_from,
-                            commence_time_to=commence_time_to,
-                        )
-                    except Exception:  # noqa: BLE001
-                        continue
-                    if res.get("status") == "success" and res.get("request_patch"):
-                        odds_patch = res["request_patch"]
-                        resolved_prop_type = pt
+                    for book in fallback_books:
+                        try:
+                            res = resolve_odds(
+                                kind="prop",
+                                league=entry.league,
+                                player_name=entry.player_name,
+                                prop_type=pt,
+                                home_team=entry.home_team,
+                                away_team=entry.away_team,
+                                commence_time_from=commence_time_from,
+                                commence_time_to=commence_time_to,
+                                bookmaker=book,
+                            )
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if res.get("status") == "success" and res.get("request_patch"):
+                            odds_patch = res["request_patch"]
+                            resolved_prop_type = pt
+                            break
+                    if odds_patch is not None:
                         break
             if odds_patch is None:
                 results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": "odds_unavailable"})
@@ -448,22 +453,25 @@ def omega_run_batch(
         else:  # game
             game_odds = entry.odds
             if game_odds is None:
-                try:
-                    res = resolve_odds(
-                        kind="game",
-                        league=entry.league,
-                        home_team=entry.home_team,
-                        away_team=entry.away_team,
-                        commence_time_from=commence_time_from,
-                        commence_time_to=commence_time_to,
-                    )
-                    if res.get("status") == "success" and res.get("request_patch"):
-                        game_odds = res["request_patch"].get("odds") or res["request_patch"]
-                    else:
-                        results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": "odds_unavailable"})
+                fallback_books = ["betmgm", "draftkings", "fanduel", "williamhill_us", "espnbet"]
+                for book in fallback_books:
+                    try:
+                        res = resolve_odds(
+                            kind="game",
+                            league=entry.league,
+                            home_team=entry.home_team,
+                            away_team=entry.away_team,
+                            commence_time_from=commence_time_from,
+                            commence_time_to=commence_time_to,
+                            bookmaker=book,
+                        )
+                        if res.get("status") == "success" and res.get("request_patch"):
+                            game_odds = res["request_patch"].get("odds") or res["request_patch"]
+                            break
+                    except Exception:  # noqa: BLE001
                         continue
-                except Exception as exc:  # noqa: BLE001
-                    results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": f"odds_resolution_failed: {exc}"})
+                if game_odds is None:
+                    results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": "odds_unavailable"})
                     continue
 
             request_dict = {
