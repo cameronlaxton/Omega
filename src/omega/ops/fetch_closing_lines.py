@@ -123,6 +123,7 @@ def _match_outcome(
     away: str,
     books: list[BookOdds],
     book_preference: str | None,
+    line_taken: float | None = None,
 ) -> BookOdds | None:
     """Find the BookOdds row matching the descriptor.
 
@@ -133,6 +134,11 @@ def _match_outcome(
 
     `book_preference` (e.g. "draftkings") narrows to a single book if available.
     Otherwise the first matching book wins.
+
+    For spread/total bets, the close must match the bet's exact point/line when
+    the provider supplies one: a -3 spread is NOT graded against a -5.5 close,
+    and an Over 47.5 is NOT graded against an Over 45.5. If either side lacks a
+    point, side matching applies as before.
     """
     odds_market = _MARKET_MAP[bet_market]
     candidates = [b for b in books if b.market == odds_market]
@@ -159,8 +165,12 @@ def _match_outcome(
         if spread_target is None:
             return None
         for b in candidates:
-            if b.selection.lower() == spread_target.lower():
-                return b
+            if b.selection.lower() != spread_target.lower():
+                continue
+            # Exact-point match: a -3 bet must not be graded against a -5.5 close.
+            if line_taken is not None and b.point is not None and b.point != float(line_taken):
+                continue
+            return b
         return None
 
     if bet_market == "total":
@@ -171,8 +181,12 @@ def _match_outcome(
         else:
             return None
         for b in candidates:
-            if b.selection == label:
-                return b
+            if b.selection != label:
+                continue
+            # Exact-point match: an Over 47.5 must not be graded against Over 45.5.
+            if line_taken is not None and b.point is not None and b.point != float(line_taken):
+                continue
+            return b
         return None
 
     return None
@@ -336,6 +350,7 @@ def _process_league(
                 away=event.away_team,
                 books=event.books,
                 book_preference=bet["book"],
+                line_taken=bet.get("line_taken"),
             )
         if outcome is None:
             skipped.append(f"{bet['bet_id']} (no book matched market+descriptor)")
@@ -453,7 +468,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

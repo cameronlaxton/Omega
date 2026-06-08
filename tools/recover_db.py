@@ -58,7 +58,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = REPO_ROOT / "var" / "omega_traces.db"
-INBOX = REPO_ROOT / "inbox" / "traces"
+INBOX = REPO_ROOT / "var" / "inbox" / "traces"
 
 _TRACE_JSON_RE = re.compile(r"^(?:var/)?inbox/traces/.*\.json$")
 

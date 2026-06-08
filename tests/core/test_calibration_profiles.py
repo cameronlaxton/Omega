@@ -154,13 +154,13 @@ class TestCalibrationRegistry:
             reg.register(p2)
 
             # Promote p1
-            reg.promote("nba_v1")
+            reg._apply_promotion("nba_v1")
             prod = reg.get_production("NBA")
             assert prod is not None
             assert prod.profile_id == "nba_v1"
 
             # Promote p2 — p1 should be archived
-            reg.promote("nba_v2")
+            reg._apply_promotion("nba_v2")
             prod = reg.get_production("NBA")
             assert prod.profile_id == "nba_v2"
 
@@ -183,8 +183,8 @@ class TestCalibrationRegistry:
             reg = CalibrationRegistry(path=path)
             reg.register(_make_profile(profile_id="nba_game_v1", market="game"))
             reg.register(_make_profile(profile_id="nba_prop_v1", market="prop"))
-            reg.promote("nba_game_v1")
-            reg.promote("nba_prop_v1")
+            reg._apply_promotion("nba_game_v1")
+            reg._apply_promotion("nba_prop_v1")
 
             assert reg.get_production("NBA", market="game").profile_id == "nba_game_v1"
             assert reg.get_production("NBA", market="prop").profile_id == "nba_prop_v1"
@@ -205,7 +205,7 @@ class TestCalibrationRegistry:
             os.unlink(path)
             reg = CalibrationRegistry(path=path)
             reg.register(_make_profile(profile_id="nba_game_v1", market="game"))
-            reg.promote("nba_game_v1")
+            reg._apply_promotion("nba_game_v1")
             resolved = reg.get_production("NBA", market="prop")
             assert resolved is not None and resolved.profile_id == "nba_game_v1"
         finally:
@@ -547,7 +547,7 @@ class TestApplyCalibration:
                 metrics={"brier_score": 0.20},
             )
             reg.register(profile)
-            reg.promote("test_iso_nba")
+            reg._apply_promotion("test_iso_nba")
 
             # Monkeypatch _get_active_profile to use our temp registry
             import omega.core.calibration.probability as prob_mod
@@ -670,7 +670,7 @@ class TestRegistryContextSlice:
             reg = CalibrationRegistry(path=path)
             base = _make_profile(profile_id="iso_nba_base", version=1, league="NBA")
             reg.register(base)
-            reg.promote("iso_nba_base")
+            reg._apply_promotion("iso_nba_base")
 
             # Base lookup
             assert reg.get_production("NBA") is not None
@@ -701,9 +701,9 @@ class TestRegistryContextSlice:
                 context_slice="playoff",
             )
             reg.register(base)
-            reg.promote("iso_nba_base")
+            reg._apply_promotion("iso_nba_base")
             reg.register(playoff)
-            reg.promote("iso_nba_playoff_v1")
+            reg._apply_promotion("iso_nba_playoff_v1")
 
             # Exact slice match
             result = reg.get_production("NBA", context_slice="playoff")
@@ -737,9 +737,9 @@ class TestRegistryContextSlice:
                 context_slice="playoff",
             )
             reg.register(base)
-            reg.promote("iso_nba_base")
+            reg._apply_promotion("iso_nba_base")
             reg.register(playoff)
-            reg.promote("iso_nba_playoff_v1")
+            reg._apply_promotion("iso_nba_playoff_v1")
 
             # Base must still be PRODUCTION
             base_result = reg.get_production("NBA")
@@ -902,7 +902,7 @@ class TestDrawMarketSelection:
         reg = CalibrationRegistry(path=path)
         for p in profiles:
             reg.register(p)
-            reg.promote(p.profile_id)
+            reg._apply_promotion(p.profile_id)
         return reg, path
 
     def test_draw_profile_selected_for_draw_market(self):

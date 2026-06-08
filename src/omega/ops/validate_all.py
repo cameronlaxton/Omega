@@ -37,16 +37,18 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from omega.paths import repo_root, session_inbox_dir, trace_inbox_dir
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # Canonical runtime inboxes live under ``var/`` (docs/phase6/ARTIFACT_AUTHORITY.md).
 # A default missing the ``var/`` segment points at a stale/empty directory, so the
 # path-based checks below SKIP (or validate the wrong files) and the harness reports
 # a false green while the live sidecars/exports go unchecked.
-_DEFAULT_SESSIONS_INBOX = _REPO_ROOT / "var" / "inbox" / "sessions"
-_DEFAULT_TRACES = _REPO_ROOT / "var" / "inbox" / "traces"
+_DEFAULT_SESSIONS_INBOX = session_inbox_dir()
+_DEFAULT_TRACES = trace_inbox_dir()
 
-_PASS, _FAIL, _SKIP = "PASS", "FAIL", "SKIP"
+_PASS, _FAIL, _SKIP, _WARN = "PASS", "FAIL", "SKIP", "WARN"
 
 
 @dataclass
@@ -58,6 +60,11 @@ class StepResult:
 
 def _has_json(directory: Path) -> bool:
     return directory.is_dir() and any(directory.glob("*.json"))
+
+
+def _legacy_runtime_dirs() -> list[Path]:
+    root = repo_root()
+    return [path for path in (root / "inbox", root / "reports") if path.exists()]
 
 
 def _run(name: str, cmd: list[str]) -> StepResult:
@@ -88,6 +95,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     results: list[StepResult] = []
+
+    legacy_dirs = _legacy_runtime_dirs()
+    if legacy_dirs:
+        detail = (
+            "legacy root runtime dir(s) exist; repo root is workspace and var/ is runtime: "
+            + ", ".join(str(path) for path in legacy_dirs)
+        )
+        results.append(StepResult("legacy-runtime-dirs", _WARN, detail))
 
     # 1. Test suite
     if args.skip_tests:
@@ -143,5 +158,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 

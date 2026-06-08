@@ -9,8 +9,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_SRC_ROOT = _REPO_ROOT / "src"
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
+
+from omega.paths import trace_inbox_dir  # noqa: E402
 
 RETIRED_KEYS = {"clv_capture_instructions"}
 
@@ -52,7 +60,7 @@ def main() -> int:
         "root",
         nargs="?",
         type=Path,
-        default=Path("inbox") / "traces",
+        default=trace_inbox_dir(),
         help="Root directory to scan recursively (default: var/inbox/traces)",
     )
     parser.add_argument("--dry-run", action="store_true", help="Report changes without writing")

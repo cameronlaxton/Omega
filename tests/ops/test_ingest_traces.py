@@ -511,6 +511,51 @@ class TestTraceScopedQaIngest:
         assert verdict["scope"] == "trace_id"
         store.close()
 
+    def test_omitted_sidecar_dir_resolves_at_call_time(
+        self, workspace, tmp_path, monkeypatch
+    ):
+        inbox, db_path = workspace
+        session_id = "sess-lazy"
+        sidecar_dir = tmp_path / "lazy" / "sessions"
+        _write_sidecar(
+            sidecar_dir, session_id, qa_failed=True, qa_failed_trace_ids=["sandbox-lazy"]
+        )
+        monkeypatch.setattr(ingest_traces, "session_inbox_dir", lambda: sidecar_dir)
+
+        payload = self._eligible_payload("sandbox-lazy", session_id)
+        path = _write_file(inbox, "lazy.json", payload)
+
+        store = TraceStore(db_path=str(db_path))
+        trace_id, _ = ingest_traces.ingest_file(path, store)
+        trace = store.get_trace(trace_id)
+        assert trace is not None
+        assert trace["trace_quality"]["calibration_eligible"] is False
+        verdict = store.get_qa_verdict(trace_id)
+        assert verdict["verdict"] == "fail"
+        store.close()
+
+    def test_explicit_none_sidecar_dir_still_disables_qa(
+        self, workspace, tmp_path, monkeypatch
+    ):
+        inbox, db_path = workspace
+        session_id = "sess-none"
+        sidecar_dir = tmp_path / "lazy" / "sessions"
+        _write_sidecar(
+            sidecar_dir, session_id, qa_failed=True, qa_failed_trace_ids=["sandbox-none"]
+        )
+        monkeypatch.setattr(ingest_traces, "session_inbox_dir", lambda: sidecar_dir)
+
+        payload = self._eligible_payload("sandbox-none", session_id)
+        path = _write_file(inbox, "none.json", payload)
+
+        store = TraceStore(db_path=str(db_path))
+        trace_id, _ = ingest_traces.ingest_file(path, store, sidecar_dir=None)
+        trace = store.get_trace(trace_id)
+        assert trace is not None
+        assert trace["trace_quality"]["calibration_eligible"] is True
+        assert store.get_qa_verdict(trace_id) is None
+        store.close()
+
     def test_qa_failed_trace_is_not_calibration_eligible(self, workspace, tmp_path):
         inbox, db_path = workspace
         session_id = "sess-qa2"

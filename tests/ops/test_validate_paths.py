@@ -49,3 +49,47 @@ def test_validate_directory_counts_valid_and_invalid(tmp_path):
 
     valid, invalid = validate_session_sidecars.validate_directory(tmp_path)
     assert (valid, invalid) == (1, 1)
+
+
+def test_validate_all_warns_for_root_inbox_even_when_var_paths_are_clean(
+    tmp_path, monkeypatch, capsys
+):
+    root = tmp_path / "repo"
+    (root / "inbox").mkdir(parents=True)
+    sessions = root / "var" / "inbox" / "sessions"
+    traces = root / "var" / "inbox" / "traces"
+    sessions.mkdir(parents=True)
+    traces.mkdir(parents=True)
+
+    monkeypatch.setattr(validate_all, "repo_root", lambda: root)
+    monkeypatch.setattr(validate_all, "_run_module", lambda name, module, *args: validate_all.StepResult(name, "PASS", "stub"))
+
+    code = validate_all.main(["--skip-tests", "--sessions-inbox", str(sessions), "--traces", str(traces)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "WARN  legacy-runtime-dirs" in out
+    assert str(root / "inbox") in out
+    assert "SUCCESS: all executed checks passed." in out
+
+
+def test_validate_all_warns_for_root_reports_even_when_var_paths_are_clean(
+    tmp_path, monkeypatch, capsys
+):
+    root = tmp_path / "repo"
+    (root / "reports").mkdir(parents=True)
+    sessions = root / "var" / "inbox" / "sessions"
+    traces = root / "var" / "inbox" / "traces"
+    sessions.mkdir(parents=True)
+    traces.mkdir(parents=True)
+
+    monkeypatch.setattr(validate_all, "repo_root", lambda: root)
+    monkeypatch.setattr(validate_all, "_run_module", lambda name, module, *args: validate_all.StepResult(name, "PASS", "stub"))
+
+    code = validate_all.main(["--skip-tests", "--sessions-inbox", str(sessions), "--traces", str(traces)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "WARN  legacy-runtime-dirs" in out
+    assert str(root / "reports") in out
+    assert "SUCCESS: all executed checks passed." in out

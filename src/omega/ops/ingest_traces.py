@@ -51,6 +51,7 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from omega.paths import session_inbox_dir, trace_inbox_dir  # noqa: E402
 from omega.trace.bet_record import BetRecord  # noqa: E402
 from omega.trace.eligibility import REASON_QA_FAILED  # noqa: E402
 from omega.trace.export_validator import validate_export_block  # noqa: E402
@@ -62,6 +63,13 @@ from omega.trace.session_sidecar import (  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("ingest_traces")
+
+
+class _ArgSentinel:
+    pass
+
+
+_ARG_SENTINEL = _ArgSentinel()
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +308,7 @@ def ingest_file(
     store: TraceStore,
     dry_run: bool = False,
     *,
-    sidecar_dir: Path | None = _REPO_ROOT / "inbox" / "sessions",
+    sidecar_dir: Path | None | _ArgSentinel = _ARG_SENTINEL,
     force_ingest_qa_failed: bool = False,
     validate: bool = True,
     strict: bool = False,
@@ -329,6 +337,9 @@ def ingest_file(
     hatch â€” it skips the gate, but the inline integrity checks below (BUG-4 prop
     identity, manual-no-predictions) still apply.
     """
+    if isinstance(sidecar_dir, _ArgSentinel):
+        sidecar_dir = session_inbox_dir()
+
     payload = _load_payload(path)
     _merge_top_level_compat_fields(payload)
     analyze_out = payload["trace"]
@@ -482,8 +493,8 @@ def main() -> int:
     parser.add_argument(
         "--inbox",
         type=Path,
-        default=_REPO_ROOT / "inbox" / "traces",
-        help="Directory containing *.json trace exports",
+        default=None,
+        help="Directory containing *.json trace exports (default: var/inbox/traces)",
     )
     parser.add_argument(
         "--db",
@@ -507,8 +518,8 @@ def main() -> int:
     parser.add_argument(
         "--sidecar-dir",
         type=Path,
-        default=_REPO_ROOT / "inbox" / "sessions",
-        help="Directory containing <session_id>.json sidecars for QA gates",
+        default=None,
+        help="Directory containing <session_id>.json sidecars for QA gates (default: var/inbox/sessions)",
     )
     parser.add_argument(
         "--allow-audit-only-qa-failed",
@@ -558,7 +569,8 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    inbox: Path = args.inbox
+    inbox: Path = args.inbox if args.inbox is not None else trace_inbox_dir()
+    sidecar_dir: Path = args.sidecar_dir if args.sidecar_dir is not None else session_inbox_dir()
     if not inbox.exists():
         logger.error("Inbox directory does not exist: %s", inbox)
         return 1
@@ -627,7 +639,7 @@ def main() -> int:
                 path,
                 store,
                 dry_run=dry_run,
-                sidecar_dir=args.sidecar_dir,
+                sidecar_dir=sidecar_dir,
                 force_ingest_qa_failed=args.force_ingest_qa_failed,
                 validate=not args.no_validate,
                 strict=args.strict,
@@ -660,8 +672,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-
 

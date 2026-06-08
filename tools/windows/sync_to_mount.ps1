@@ -1,7 +1,8 @@
 # tools/windows/sync_to_mount.ps1
 #
-# One-way archival sync at the end of a Cowork session. Runs on the Windows
-# host AFTER the Cowork CLI / sandbox has exited.
+# One-way runtime archive sync at the end of a Cowork session. Runs on the
+# Windows host AFTER the Cowork CLI / sandbox has exited; the engine pipeline
+# does not call this script.
 #
 # Direction is always: local workspace -> CIFS mount. The mount is an
 # append-only historical ledger (robocopy /E, never /MIR). The runtime
@@ -9,17 +10,18 @@
 # timestamped snapshot is dropped under <mount>\backups\omega_traces\.
 #
 # Code is pushed to the `backup` remote via `git push backup main --tags`.
-# Trace JSON, session sidecars, and reports are mirrored additively via
-# robocopy /E with explicit excludes for DB sidecars and noise.
+# Runtime trace JSON, session sidecars, and generated reports are mirrored
+# additively from var\inbox and var\reports via robocopy /E with explicit
+# excludes for DB sidecars and noise.
 #
 # Pre-sync gate: omega-cowork-preflight --direct-only and pytest must pass from
 # the local workspace. If either fails, sync is aborted and the failure log
 # is dropped under sync_failures\.
 #
 # Usage:
-#   .\scripts\sync_to_mount.ps1
-#   .\scripts\sync_to_mount.ps1 -MountRoot \\share\Omega
-#   .\scripts\sync_to_mount.ps1 -WhatIf            # dry-run
+#   .\tools\windows\sync_to_mount.ps1
+#   .\tools\windows\sync_to_mount.ps1 -MountRoot \\share\Omega
+#   .\tools\windows\sync_to_mount.ps1 -WhatIf      # dry-run
 
 [CmdletBinding()]
 param(
@@ -97,12 +99,13 @@ if ($WhatIf) {
     Write-Note ($push -join "`n")
 }
 
-# 3. Mirror artifact directories additively (robocopy /E, NOT /MIR). The mount
-# is append-only — files removed locally must persist in the historical
-# ledger.
+# 3. Mirror runtime artifact directories additively (robocopy /E, NOT /MIR).
+# The mount is append-only; files removed locally must persist in the
+# historical ledger. Root inbox/ and reports/ are legacy/stale candidates and
+# are not active runtime sources.
 $artifactPairs = @(
-    @{ Src = (Join-Path $Workspace "inbox");   Dst = (Join-Path $MountRoot "inbox");   ExtraExclude = @("failed") },
-    @{ Src = (Join-Path $Workspace "reports"); Dst = (Join-Path $MountRoot "reports"); ExtraExclude = @() }
+    @{ Src = (Join-Path $Workspace "var\inbox");   Dst = (Join-Path $MountRoot "var\inbox");   ExtraExclude = @("failed") },
+    @{ Src = (Join-Path $Workspace "var\reports"); Dst = (Join-Path $MountRoot "var\reports"); ExtraExclude = @() }
 )
 
 foreach ($pair in $artifactPairs) {
@@ -127,7 +130,7 @@ foreach ($pair in $artifactPairs) {
         $robocopyArgs = @("/L") + $robocopyArgs
     }
     & robocopy @robocopyArgs | Out-Null
-    # robocopy exit codes: 0–7 are success/info, >=8 indicate real failure.
+    # robocopy exit codes: 0-7 are success/info, >=8 indicate real failure.
     if ($LASTEXITCODE -ge 8) {
         Log-Failure ("robocopy-" + [IO.Path]::GetFileName($pair.Src)) "robocopy exit=$LASTEXITCODE"
         exit 1
@@ -136,7 +139,7 @@ foreach ($pair in $artifactPairs) {
 
 # 4. Timestamped var/omega_traces.db snapshot on the mount. Write-once; the live
 # DB never crosses the boundary as a moving target.
-$liveDb = Join-Path $Workspace "var\var/omega_traces.db"
+$liveDb = Join-Path $Workspace "var\omega_traces.db"
 if (Test-Path $liveDb) {
     $backupDir = Join-Path $MountRoot "backups\omega_traces"
     if (-not (Test-Path $backupDir)) {

@@ -30,6 +30,7 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from omega.paths import run_audits_dir, session_inbox_dir  # noqa: E402
 from omega.trace.audit_renderer import render_session_audit  # noqa: E402
 
 logger = logging.getLogger("render_session_audits")
@@ -55,8 +56,8 @@ def main() -> int:
     parser.add_argument(
         "--sidecar-dir",
         type=Path,
-        default=_REPO_ROOT / "inbox" / "sessions",
-        help="Directory containing <session_id>.json sidecars",
+        default=session_inbox_dir(),
+        help="Directory containing <session_id>.json sidecars (default: var/inbox/sessions)",
     )
     parser.add_argument(
         "--db",
@@ -67,8 +68,8 @@ def main() -> int:
     parser.add_argument(
         "--out-dir",
         type=Path,
-        default=_REPO_ROOT / "reports" / "run_audits",
-        help="Output directory for rendered audit markdown",
+        default=run_audits_dir(),
+        help="Output directory for rendered audit markdown (default: var/reports/run_audits)",
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()

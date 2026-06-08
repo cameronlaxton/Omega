@@ -48,6 +48,7 @@ from omega.ops.output_modes import (  # noqa: E402
     OutputMode,
     classify_market_output_mode,
 )
+from omega.paths import latest_report_path, session_inbox_dir  # noqa: E402
 from omega.strategy.distribution_metrics import (  # noqa: E402
     METRIC_VERSION as DISTRIBUTION_METRIC_VERSION,
 )
@@ -904,8 +905,8 @@ def main() -> int:
     parser.add_argument(
         "--sessions-inbox",
         type=Path,
-        default=_REPO_ROOT / "inbox" / "sessions",
-        help="Directory containing session sidecar JSON files",
+        default=session_inbox_dir(),
+        help="Directory containing session sidecar JSON files (default: var/inbox/sessions)",
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
@@ -916,7 +917,7 @@ def main() -> int:
     )
     require_sqlite_backend("report_calibration.py")
 
-    out_path: Path = args.out or (_REPO_ROOT / "reports" / "latest.md")
+    out_path: Path = args.out or latest_report_path()
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
