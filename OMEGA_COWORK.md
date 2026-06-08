@@ -199,9 +199,11 @@ either fails, sync is aborted and a log file is written under
 `%USERPROFILE%\.omega\workspace\sync_failures\`. On success it:
 
 - pushes `main` and tags to the `backup` bare repo via `git push`,
-- mirrors `inbox\` and `reports\` to the mount via `robocopy /E` (append-only,
-  NOT `/MIR`; explicit excludes for `*.db`, `*.db-wal`, `*.db-shm`,
-  `*.db-journal`, `__pycache__`, `.pytest_cache`, `.venv`, `inbox\failed`),
+- mirrors `var\inbox\` and `var\reports\` to the mount under
+  `<mount>\var\inbox\` and `<mount>\var\reports\` via `robocopy /E`
+  (append-only, NOT `/MIR`; explicit excludes for `*.db`, `*.db-wal`,
+  `*.db-shm`, `*.db-journal`, `__pycache__`, `.pytest_cache`, `.venv`,
+  and failed trace-export folders),
 - snapshots `var/omega_traces.db` to a timestamped path under
   `<mount>\backups\omega_traces\YYYYMMDD-HHMM.db` (write-once; never
   overwrites the live DB on the mount).
@@ -211,7 +213,8 @@ not callable from inside the Linux sandbox â€” PowerShell is not present th
 and the scripts intentionally manipulate `%USERPROFILE%`, mapped drives, and
 the CIFS share. The agent's system prompt must not attempt to invoke either
 script. Schedule them via Task Scheduler or run them manually from a host
-PowerShell session.
+PowerShell session. `sync_to_mount.ps1` is archival only; the engine pipeline
+does not call it.
 
 **`OMEGA_TRACE_DB` env var.** For sessions that have not yet migrated to the
 local workspace, you can point `TraceStore` at any writable path with

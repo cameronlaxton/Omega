@@ -191,7 +191,8 @@ def _resolve_db_path(requested: str | None) -> tuple[str, str]:
          per-user runtime DB and log a single WARNING. **No** ``atexit`` sync
          hook is registered; archival back to the mount is owned by
          ``tools/windows/sync_to_mount.ps1`` (see plan §Layer 3).
-      3. The default repo ``var/omega_traces.db``.
+      3. ``omega.paths.trace_db_path()``. This defaults to the repo
+         ``var/omega_traces.db`` and is affected by ``OMEGA_RUNTIME_DIR``.
     """
     env_override = os.environ.get("OMEGA_TRACE_DB")
     if env_override:

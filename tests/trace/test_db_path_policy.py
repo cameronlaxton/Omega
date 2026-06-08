@@ -237,3 +237,57 @@ class TestDbStatus:
         assert payload["query"] == "ledger"
         assert payload["count"] == 1
         assert payload["ledger"][0]["ledger_id"] == "ledger-1"
+
+
+class TestRuntimeDirPrecedence:
+    def test_default_db_path_respects_omega_runtime_dir(self, tmp_path, monkeypatch):
+        from omega.trace import store as store_mod
+
+        runtime = tmp_path / "runtime"
+        monkeypatch.setenv("OMEGA_RUNTIME_DIR", str(runtime))
+        monkeypatch.delenv("OMEGA_TRACE_DB", raising=False)
+        monkeypatch.setattr(store_mod, "_is_network_filesystem", lambda _p: False)
+
+        store = TraceStore(db_path=None)
+        try:
+            assert store.db_path_source == "default"
+            assert Path(store.db_path) == runtime / "omega_traces.db"
+        finally:
+            store.close()
+
+    def test_omega_trace_db_wins_over_omega_runtime_dir(self, tmp_path, monkeypatch):
+        runtime = tmp_path / "runtime"
+        env_db = tmp_path / "env" / "override.db"
+        monkeypatch.setenv("OMEGA_RUNTIME_DIR", str(runtime))
+        monkeypatch.setenv("OMEGA_TRACE_DB", str(env_db))
+
+        store = TraceStore(db_path=None)
+        try:
+            assert store.db_path_source == "env_override"
+            assert Path(store.db_path) == env_db
+        finally:
+            store.close()
+
+    def test_explicit_db_wins_over_omega_runtime_dir(self, tmp_path, monkeypatch):
+        from omega.trace import store as store_mod
+
+        runtime = tmp_path / "runtime"
+        explicit_db = tmp_path / "explicit.db"
+        monkeypatch.setenv("OMEGA_RUNTIME_DIR", str(runtime))
+        monkeypatch.delenv("OMEGA_TRACE_DB", raising=False)
+        monkeypatch.setattr(store_mod, "_is_network_filesystem", lambda _p: False)
+
+        store = TraceStore(db_path=str(explicit_db))
+        try:
+            assert store.db_path_source == "requested"
+            assert Path(store.db_path) == explicit_db
+        finally:
+            store.close()
+
+    def test_default_db_path_still_uses_omega_traces_filename(self, tmp_path, monkeypatch):
+        from omega.paths import trace_db_path
+
+        runtime = tmp_path / "runtime"
+        monkeypatch.setenv("OMEGA_RUNTIME_DIR", str(runtime))
+
+        assert trace_db_path() == runtime / "omega_traces.db"
