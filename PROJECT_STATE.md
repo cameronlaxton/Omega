@@ -82,6 +82,22 @@ Do not loosen `context_source="provided"` to mean "the LLM thought about it." It
 - **Warning-only when:** optional CLV metadata is missing, no bet record exists because no bet was taken, reasoning narrative is missing but structured trace/evidence is present, evidence sample size is thin, identity is metadata-recovered but marked.
 - Warnings become hard failures only when the issue is repairable, the schema/contract is stable, and failing prevents bad picks, calibration, or audit data.
 
+## Calibration Promotion Authority (fail-closed)
+
+Promotion to PRODUCTION is fail-closed. `CalibrationRegistry.promote()` evaluates the
+shared gate in `omega/core/calibration/promotion.py` and raises `PromotionGateError`
+unless every gate passes: `SAMPLE_SIZE >= 100`, `ECE_FLOOR <= 0.05`, Brier improvement and
+log-loss no-regression vs incumbent, plus operator-confirmed `BACKTEST_PARITY` /
+`CLV_NON_REG`. There is no `--force` bypass.
+
+**Expected current state: zero PRODUCTION profiles.** The earlier `iso_nba_prop_v1` and
+`shrink_mlb_prop_v2` profiles were promoted under the retired `--force` path and have been
+demoted to `rejected` (they fail SAMPLE_SIZE and ECE_FLOOR). Until a profile is re-fit on
+>=100 eligible graded pairs and passes the gate, **no market is ACTIONABLE** — every market
+correctly classifies as `RESEARCH_CANDIDATE`. This is the intended, honest state, not a
+regression. Accumulating graded-trace volume to fit a gate-passing profile is the open work
+for Exit Criterion 1.
+
 ## Phase 6h Exit Criteria
 
 1. At least one league/market calibration profile can be fitted from eligible graded traces.
