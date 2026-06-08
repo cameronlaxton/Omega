@@ -214,7 +214,7 @@ class StakingRegistry:
         data = self._load()
         out: list[StakingPolicyEntry] = []
         for e in data["entries"]:
-            if league is not None and e["league"] != league:
+            if league is not None and e["league"].upper() != league.upper():
                 continue
             if market is not None and e["market"] != market:
                 continue
@@ -225,6 +225,9 @@ class StakingRegistry:
 
     def get_production(self, league: str, market: str = "game") -> StakingPolicy:
         """Return the active policy for (league, market) — never None.
+
+        League matching is case-insensitive (mirrors ``CalibrationRegistry``);
+        market is matched exactly (canonically lowercase: game/prop/draw).
 
         Lookup order (first production entry wins):
         1. exact (league, market)
@@ -238,7 +241,7 @@ class StakingRegistry:
 
         def find(lg: str, mk: str) -> StakingPolicy | None:
             for e in prod:
-                if e["league"] == lg and e["market"] == mk:
+                if e["league"].upper() == lg.upper() and e["market"] == mk:
                     return StakingPolicyEntry(**e).to_policy()
             return None
 

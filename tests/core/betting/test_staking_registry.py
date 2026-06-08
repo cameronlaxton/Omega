@@ -164,3 +164,14 @@ def test_persistence_across_instances(registry, tmp_path):
     # a fresh registry reading the same file sees the production entry
     reopened = StakingRegistry(path=str(tmp_path / "staking_policies.json"))
     assert isinstance(reopened.get_production("NBA", "prop"), FlatKelly)
+
+
+def test_league_lookup_is_case_insensitive(registry):
+    # Mirrors CalibrationRegistry: stored "NBA" must match a "nba"/"Nba" query,
+    # else PR5 wiring would silently fall back to the default policy.
+    e = _entry(policy_id="flat_kelly", league="NBA", market="prop")
+    registry.register(e)
+    registry.activate(e.entry_id)
+    for q in ("nba", "NBA", "Nba"):
+        assert isinstance(registry.get_production(q, "prop"), FlatKelly)
+    assert len(registry.list_entries(league="nba")) == 1
