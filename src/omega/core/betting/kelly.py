@@ -9,15 +9,6 @@ from __future__ import annotations
 
 from omega.core.betting.odds import american_to_decimal
 
-# Fraction of full Kelly to use per confidence tier.
-# Full Kelly is mathematically optimal but volatile;
-# fractional Kelly trades expected growth for lower variance.
-_TIER_MULTIPLIERS: dict[str, float] = {
-    "A": 0.50,  # High confidence: half Kelly
-    "B": 0.25,  # Medium confidence: quarter Kelly
-    "C": 0.10,  # Low confidence: tenth Kelly
-}
-
 
 def kelly_fraction(true_prob: float, odds: float) -> float:
     """Compute the raw (full) Kelly fraction for a bet.
@@ -61,15 +52,21 @@ def recommend_stake(
         dict with:
             - "units": Recommended wager in bankroll units (1 unit = 1% of bankroll).
             - "kelly_fraction": The scaled Kelly fraction applied.
+
+    This delegates to the default staking policy
+    (:class:`omega.core.betting.staking_policy.FractionalKellyByTier`) so that all
+    sizing flows through one shared path. The numeric result is unchanged.
     """
-    raw_kelly = kelly_fraction(true_prob, odds)
-    tier_mult = _TIER_MULTIPLIERS.get(confidence_tier.upper(), _TIER_MULTIPLIERS["B"])
-    scaled_kelly = raw_kelly * tier_mult
+    # Imported lazily to avoid an import cycle: staking_policy imports
+    # ``kelly_fraction`` from this module at import time.
+    from omega.core.betting.staking_policy import FractionalKellyByTier, StakingContext
 
-    # Convert to units (1 unit = 1% of bankroll), cap at 5 units
-    units = min(scaled_kelly * 100, 5.0)
-
-    return {
-        "units": round(units, 2),
-        "kelly_fraction": round(scaled_kelly, 4),
-    }
+    decision = FractionalKellyByTier().size(
+        StakingContext(
+            true_prob=true_prob,
+            odds=odds,
+            bankroll=bankroll,
+            confidence_tier=confidence_tier,
+        )
+    )
+    return decision.to_recommend_stake_dict()
