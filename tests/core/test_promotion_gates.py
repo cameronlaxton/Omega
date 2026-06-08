@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 
 from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus
-from omega.core.calibration.promotion import PromotionGateError, evaluate_promotion_gates
+from omega.core.calibration.promotion import (
+    PROMOTION_GATE_REPORT_SCHEMA_VERSION,
+    PromotionGateError,
+    evaluate_promotion_gates,
+)
 from omega.core.calibration.registry import CalibrationRegistry
 
 
@@ -43,6 +47,7 @@ def test_clean_first_promotion_succeeds_and_records_report(tmp_path):
     prof = reg.get_profile("nba_v1")
     assert prof.status == ProfileStatus.PRODUCTION
     assert prof.promotion_gate_report is not None
+    assert prof.promotion_gate_report["schema_version"] == PROMOTION_GATE_REPORT_SCHEMA_VERSION
     assert prof.promotion_gate_report["passed"] is True
     assert prof.promotion_gate_report["confirmations"]["backtest_parity"] is True
 

@@ -164,13 +164,18 @@ def main(argv: list[str] | None = None) -> int:
     root = repo_root().resolve()
     runtime = runtime_root().resolve()
 
-    # Safety: refuse if the runtime root is the repo root itself, which would map
-    # inbox/ -> inbox/ and risk destroying the source while "migrating" it.
-    if runtime == root:
+    # Safety: refuse if the runtime root is the repo root, or nests INSIDE a
+    # legacy source dir (e.g. OMEGA_RUNTIME_DIR=<repo>/inbox/var). Either maps a
+    # source into its own destination subtree, so rglob would re-enumerate
+    # already-moved files and risk destroying data mid-migration.
+    legacy_roots = [root / name for name in _LEGACY_DIRNAMES]
+    if runtime == root or any(runtime.is_relative_to(lr) for lr in legacy_roots):
         logger.error(
-            "Runtime root %s coincides with repo root; nothing to migrate safely. "
-            "Unset OMEGA_RUNTIME_DIR or point it away from the repo root.",
+            "Runtime root %s coincides with or nests under the repo root / a legacy "
+            "runtime dir; nothing to migrate safely. Unset OMEGA_RUNTIME_DIR or point "
+            "it outside %s.",
             runtime,
+            [str(lr) for lr in legacy_roots],
         )
         return 1
 

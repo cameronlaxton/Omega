@@ -135,12 +135,10 @@ def _match_outcome(
     `book_preference` (e.g. "draftkings") narrows to a single book if available.
     Otherwise the first matching book wins.
 
-    For spread/total bets, the close must match the bet's exact point/line, not
-    just the side: a -3 spread is NOT graded against a -5.5 close, and an Over
-    47.5 is NOT graded against an Over 45.5. This mirrors `_match_prop_outcome`,
-    which already enforces exact `book.point` equality. When `line_taken` is None
-    (e.g. moneyline, or a legacy bet with no stored line) the point check is
-    skipped and side matching applies as before.
+    For spread/total bets, the close must match the bet's exact point/line when
+    the provider supplies one: a -3 spread is NOT graded against a -5.5 close,
+    and an Over 47.5 is NOT graded against an Over 45.5. If either side lacks a
+    point, side matching applies as before.
     """
     odds_market = _MARKET_MAP[bet_market]
     candidates = [b for b in books if b.market == odds_market]
@@ -170,7 +168,7 @@ def _match_outcome(
             if b.selection.lower() != spread_target.lower():
                 continue
             # Exact-point match: a -3 bet must not be graded against a -5.5 close.
-            if line_taken is not None and b.point != float(line_taken):
+            if line_taken is not None and b.point is not None and b.point != float(line_taken):
                 continue
             return b
         return None
@@ -186,7 +184,7 @@ def _match_outcome(
             if b.selection != label:
                 continue
             # Exact-point match: an Over 47.5 must not be graded against Over 45.5.
-            if line_taken is not None and b.point != float(line_taken):
+            if line_taken is not None and b.point is not None and b.point != float(line_taken):
                 continue
             return b
         return None
@@ -470,7 +468,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

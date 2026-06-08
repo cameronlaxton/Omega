@@ -45,6 +45,25 @@ def test_spread_matches_exact_point():
     assert m is not None and m.point == -3.0 and m.selection == HOME
 
 
+def test_away_spread_exact_point_sign_consistent():
+    # Away +3 must match an away +3 book, not an away +5.5 book. The bet's
+    # line_taken and the book's away .point share the away-perspective sign, so
+    # exact-point matching must work for away spreads (the highest-stakes path).
+    wrong = [_book("spreads", HOME, -5.5), _book("spreads", AWAY, 5.5)]
+    assert _match_outcome("spread", "away_spread_3", HOME, AWAY, wrong, None, line_taken=3.0) is None
+    exact = [_book("spreads", HOME, -3.0), _book("spreads", AWAY, 3.0)]
+    m = _match_outcome("spread", "away_spread_3", HOME, AWAY, exact, None, line_taken=3.0)
+    assert m is not None and m.selection == AWAY and m.point == 3.0
+
+
+def test_spread_null_book_point_falls_back_to_side_when_line_known():
+    # If the book omits .point (e.g. a suspended market), preserve the legacy
+    # side-only match instead of dropping the close entirely.
+    books = [_book("spreads", HOME, None), _book("spreads", AWAY, None)]
+    m = _match_outcome("spread", "home_spread_-3", HOME, AWAY, books, None, line_taken=-3.0)
+    assert m is not None and m.selection == HOME and m.point is None
+
+
 def test_total_rejects_wrong_point():
     books = [_book("totals", "Over", 45.5), _book("totals", "Under", 45.5)]
     assert (
@@ -57,6 +76,12 @@ def test_total_matches_exact_point():
     books = [_book("totals", "Over", 47.5), _book("totals", "Under", 47.5)]
     m = _match_outcome("total", "over_total_47.5", HOME, AWAY, books, None, line_taken=47.5)
     assert m is not None and m.point == 47.5 and m.selection == "Over"
+
+
+def test_total_null_book_point_falls_back_to_side_when_line_known():
+    books = [_book("totals", "Over", None), _book("totals", "Under", None)]
+    m = _match_outcome("total", "over_total_47.5", HOME, AWAY, books, None, line_taken=47.5)
+    assert m is not None and m.selection == "Over" and m.point is None
 
 
 def test_none_line_falls_back_to_side_only():

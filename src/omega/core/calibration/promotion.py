@@ -34,6 +34,7 @@ DEFAULT_MIN_SAMPLES = 100
 DEFAULT_BRIER_IMPROVEMENT = 0.01
 DEFAULT_LOG_LOSS_TOL = 0.005
 DEFAULT_ECE_FLOOR = 0.05
+PROMOTION_GATE_REPORT_SCHEMA_VERSION = "promotion_gate_report.v1"
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,7 @@ class GateReport:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "schema_version": PROMOTION_GATE_REPORT_SCHEMA_VERSION,
             "passed": self.passed,
             "evaluated_at": self.evaluated_at,
             "incumbent_id": self.incumbent_id,
