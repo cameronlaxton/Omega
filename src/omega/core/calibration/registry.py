@@ -26,6 +26,15 @@ from omega.core.calibration.profiles import (
     CalibrationProfile,
     ProfileStatus,
 )
+from omega.core.calibration.promotion import (
+    DEFAULT_BRIER_IMPROVEMENT,
+    DEFAULT_ECE_FLOOR,
+    DEFAULT_LOG_LOSS_TOL,
+    DEFAULT_MIN_SAMPLES,
+    GateReport,
+    PromotionGateError,
+    evaluate_promotion_gates,
+)
 
 UTC = timezone.utc
 
@@ -148,8 +157,96 @@ class CalibrationRegistry:
                 return CalibrationProfile(**p)
         return None
 
-    def promote(self, profile_id: str) -> None:
-        """Promote a candidate to production. Archives incumbent for same league."""
+    def gating_incumbent(self, candidate: CalibrationProfile) -> CalibrationProfile | None:
+        """The production profile a candidate is gated against.
+
+        The exact ``(league, market, context_slice)`` production profile, else
+        — for a sliced candidate — the base (``context_slice=None``) production
+        it would shadow at selection time. Never crosses markets, so a prop
+        candidate is never compared against the game production. This mirrors the
+        row :meth:`_apply_promotion` would archive (with the slice->base shadow
+        extension used only for gating).
+        """
+        market = candidate.market or "game"
+        same_market = [
+            p
+            for p in self.list_profiles(
+                league=candidate.league, status=ProfileStatus.PRODUCTION.value
+            )
+            if (p.market or "game") == market
+        ]
+        for p in same_market:
+            if p.context_slice == candidate.context_slice:
+                return p
+        if candidate.context_slice is not None:
+            for p in same_market:
+                if p.context_slice is None:
+                    return p
+        return None
+
+    def promote(
+        self,
+        profile_id: str,
+        *,
+        confirm_backtest_parity: bool = False,
+        confirm_clv_non_regression: bool = False,
+        min_samples: int = DEFAULT_MIN_SAMPLES,
+        brier_improvement: float = DEFAULT_BRIER_IMPROVEMENT,
+        log_loss_tol: float = DEFAULT_LOG_LOSS_TOL,
+        ece_floor: float = DEFAULT_ECE_FLOOR,
+    ) -> GateReport:
+        """Promote a CANDIDATE to PRODUCTION — fail-closed on the shared gate service.
+
+        This is the ONLY public promotion path: it always evaluates
+        ``omega.core.calibration.promotion`` gates and raises
+        :class:`PromotionGateError` unless every gate passes. There is no bypass
+        (no ``--force``). The mechanical archival + status transition lives in
+        :meth:`_apply_promotion`; on success the GateReport is recorded on the
+        promoted profile for audit. Returns the passing GateReport.
+        """
+        candidate = self.get_profile(profile_id)
+        if candidate is None:
+            raise ValueError(f"Profile not found: {profile_id}")
+        if candidate.status != ProfileStatus.CANDIDATE:
+            raise ValueError(
+                f"Cannot promote profile with status={candidate.status.value} "
+                f"(must be {ProfileStatus.CANDIDATE.value})"
+            )
+
+        incumbent = self.gating_incumbent(candidate)
+        report = evaluate_promotion_gates(
+            candidate,
+            incumbent,
+            min_samples=min_samples,
+            brier_improvement=brier_improvement,
+            log_loss_tol=log_loss_tol,
+            ece_floor=ece_floor,
+            confirm_backtest_parity=confirm_backtest_parity,
+            confirm_clv_non_regression=confirm_clv_non_regression,
+        )
+        if not report.passed:
+            raise PromotionGateError(report)
+
+        self._apply_promotion(
+            profile_id, incumbent_id=report.incumbent_id, gate_report=report.to_dict()
+        )
+        return report
+
+    def _apply_promotion(
+        self,
+        profile_id: str,
+        *,
+        incumbent_id: str | None = None,
+        gate_report: dict[str, Any] | None = None,
+    ) -> None:
+        """Mechanical archival + status transition for a candidate.
+
+        INTERNAL: this performs no gate evaluation. The fail-closed public entry
+        point is :meth:`promote`. Archives the existing production profile for the
+        same ``(league, context_slice, market)`` and flips the target to
+        PRODUCTION. A playoff profile never archives the base profile, a draw
+        profile never archives the game profile, etc.
+        """
         data = self._load()
         target = None
         for p in data["profiles"]:
@@ -170,9 +267,6 @@ class CalibrationRegistry:
         target_market = target.get("market") or "game"
         now = datetime.now(UTC).isoformat()
 
-        # Archive existing production profile for the same
-        # (league, context_slice, market). A playoff profile never archives the
-        # base profile, a draw profile never archives the game profile, etc.
         for p in data["profiles"]:
             if (
                 p.get("league", "").upper() == league.upper()
@@ -189,9 +283,12 @@ class CalibrationRegistry:
                     target_market,
                 )
 
-        # Promote the target
         target["status"] = ProfileStatus.PRODUCTION.value
         target["promoted_at"] = now
+        if incumbent_id is not None:
+            target["incumbent_id"] = incumbent_id
+        if gate_report is not None:
+            target["promotion_gate_report"] = gate_report
         self._save(data)
         logger.info("Promoted profile %s to production for league %s", profile_id, league)
 

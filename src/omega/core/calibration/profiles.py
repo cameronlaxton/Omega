@@ -97,3 +97,11 @@ class CalibrationProfile(BaseModel):
         default=None,
         description="profile_id of the incumbent this was compared against",
     )
+    promotion_gate_report: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Gate evaluation recorded at promotion time (audit trail): which gates "
+            "passed, the thresholds used, and the operator confirmations. None until "
+            "promoted via the fail-closed CalibrationRegistry.promote()."
+        ),
+    )

@@ -51,6 +51,7 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from omega.paths import session_inbox_dir, trace_inbox_dir  # noqa: E402
 from omega.trace.bet_record import BetRecord  # noqa: E402
 from omega.trace.eligibility import REASON_QA_FAILED  # noqa: E402
 from omega.trace.export_validator import validate_export_block  # noqa: E402
@@ -300,7 +301,7 @@ def ingest_file(
     store: TraceStore,
     dry_run: bool = False,
     *,
-    sidecar_dir: Path | None = _REPO_ROOT / "inbox" / "sessions",
+    sidecar_dir: Path | None = session_inbox_dir(),
     force_ingest_qa_failed: bool = False,
     validate: bool = True,
     strict: bool = False,
@@ -482,8 +483,8 @@ def main() -> int:
     parser.add_argument(
         "--inbox",
         type=Path,
-        default=_REPO_ROOT / "inbox" / "traces",
-        help="Directory containing *.json trace exports",
+        default=trace_inbox_dir(),
+        help="Directory containing *.json trace exports (default: var/inbox/traces)",
     )
     parser.add_argument(
         "--db",
@@ -507,8 +508,8 @@ def main() -> int:
     parser.add_argument(
         "--sidecar-dir",
         type=Path,
-        default=_REPO_ROOT / "inbox" / "sessions",
-        help="Directory containing <session_id>.json sidecars for QA gates",
+        default=session_inbox_dir(),
+        help="Directory containing <session_id>.json sidecars for QA gates (default: var/inbox/sessions)",
     )
     parser.add_argument(
         "--allow-audit-only-qa-failed",

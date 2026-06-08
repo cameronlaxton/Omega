@@ -1,4 +1,4 @@
-"""Tests for omega-promote-profile market awareness."""
+"""Tests for calibration promotion market awareness (gating-incumbent lookup)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import tempfile
 
 from omega.core.calibration.profiles import CalibrationProfile
 from omega.core.calibration.registry import CalibrationRegistry
-from omega.ops import promote_profile
 
 
 def _profile(profile_id: str, market: str, **overrides) -> CalibrationProfile:
@@ -36,13 +35,14 @@ def test_exact_incumbent_does_not_cross_markets():
         os.unlink(path)
         reg = CalibrationRegistry(path=path)
         reg.register(_profile("nba_game_v1", "game"))
-        reg.promote("nba_game_v1")  # game production exists
+        reg._apply_promotion("nba_game_v1")  # game production exists
 
         prop_candidate = _profile("nba_prop_v1", "prop")
         # get_production would fall back to the game profile for market="prop":
         assert reg.get_production("NBA", market="prop").profile_id == "nba_game_v1"
-        # The exact-market incumbent lookup must return None (no prop production).
-        assert promote_profile._exact_production_incumbent(reg, prop_candidate) is None
+        # The gating-incumbent lookup must return None (no prop production), never
+        # crossing markets to the game profile.
+        assert reg.gating_incumbent(prop_candidate) is None
     finally:
         if os.path.exists(path):
             os.unlink(path)
@@ -55,10 +55,10 @@ def test_exact_incumbent_matches_same_market():
         os.unlink(path)
         reg = CalibrationRegistry(path=path)
         reg.register(_profile("nba_prop_v1", "prop"))
-        reg.promote("nba_prop_v1")
+        reg._apply_promotion("nba_prop_v1")
 
         challenger = _profile("nba_prop_v2", "prop", version=2)
-        incumbent = promote_profile._exact_production_incumbent(reg, challenger)
+        incumbent = reg.gating_incumbent(challenger)
         assert incumbent is not None
         assert incumbent.profile_id == "nba_prop_v1"
     finally:

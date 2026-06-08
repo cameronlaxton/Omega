@@ -16,6 +16,7 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from omega.paths import session_inbox_dir  # noqa: E402
 from omega.trace.session_sidecar import SessionSidecar, append_audit_events  # noqa: E402
 
 _DEFAULT_0528_SESSIONS = (
@@ -81,8 +82,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--sessions-dir",
         type=Path,
-        default=_REPO_ROOT / "inbox" / "sessions",
-        help="Directory containing <session_id>.json sidecars.",
+        default=session_inbox_dir(),
+        help="Directory containing <session_id>.json sidecars (default: var/inbox/sessions).",
     )
     parser.add_argument(
         "--reason",
