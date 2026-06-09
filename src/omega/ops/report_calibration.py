@@ -377,7 +377,7 @@ def _section_clv(store: TraceStore, league: str | None, cutoff: str) -> dict[str
               AND b.market = c.market
               AND b.selection_descriptor = c.selection_descriptor
            JOIN traces t ON b.trace_id = t.trace_id
-           WHERE b.provenance = 'user_confirmed'
+           WHERE b.provenance IN ('user_confirmed', 'engine_auto')
              AND t.timestamp >= ?"""
         + t_league_filter,
         (cutoff, *t_league_params),
