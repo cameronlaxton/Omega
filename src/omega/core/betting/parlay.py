@@ -119,6 +119,37 @@ def check_correlation(legs: list[ParlayLeg]) -> list[str]:
     return warnings
 
 
+def correlation_group_key(
+    player: str = "",
+    stat_key: str = "",
+    team: str = "",
+) -> str | None:
+    """Stable key grouping bets that share correlation risk, or None.
+
+    Mirrors the dimensions :func:`check_correlation` keys on, so exposure capping
+    reuses one notion of correlation instead of re-deriving it:
+
+    - **same player** → ``corr:player:<player>``. All of one player's props move
+      together, so for *risk* they share a single correlated-group cap. (This is
+      intentionally broader than ``check_correlation``, which only *warns* on the
+      specific correlated stat pairs in ``_SAME_PLAYER_CORRELATED`` — pricing
+      needs the exact pair; exposure caps the whole player.)
+    - **same team + stat** → ``corr:team:<team>:<stat>`` (pace-driven), used when
+      no player handle is present.
+
+    Returns ``None`` when there is no correlation handle (no player and no
+    team+stat), i.e. the bet shares a correlated-group cap with nothing.
+    """
+    player_n = " ".join(player.split()).lower()
+    team_n = " ".join(team.split()).lower()
+    stat_n = stat_key.strip().lower()
+    if player_n:
+        return f"corr:player:{player_n}"
+    if team_n and stat_n:
+        return f"corr:team:{team_n}:{stat_n}"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Parlay math
 # ---------------------------------------------------------------------------
