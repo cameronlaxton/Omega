@@ -321,6 +321,12 @@ class BetLedgerRow(Base):
     graded_at = mapped_column(Text)
     session_id = mapped_column(Text)
     created_at = mapped_column(Text, nullable=False, server_default=text(SQLITE_NOW_DEFAULT))
+    # Sizing audit (schema V15) — all nullable.
+    staking_policy_id = mapped_column(Text)
+    staking_policy_version = mapped_column(Integer)
+    exposure_limits_version = mapped_column(Integer)
+    sizing_reasons = mapped_column(Text)
+    correlation_group = mapped_column(Text)
 
     __table_args__ = (
         UniqueConstraint(

@@ -53,6 +53,7 @@ from omega.trace.schema import (
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
+    apply_v15_migration,
 )
 
 if TYPE_CHECKING:
@@ -669,6 +670,13 @@ class TraceStore:
         self._record_version(
             14,
             "Consolidate bet_records into bet_ledger (provenance=user_confirmed); drop bet_records",
+        )
+
+        # V15: bet_ledger sizing-audit columns (staking policy / exposure / corr).
+        apply_v15_migration(self.conn)
+        self._record_version(
+            15,
+            "Sizing audit: bet_ledger staking_policy/exposure_limits/sizing_reasons/correlation_group columns",
         )
 
     def _existing_schema_version(self) -> int:
@@ -1512,7 +1520,8 @@ class TraceStore:
         "ledger_id, trace_id, bet_date, league, sport, matchup, market, bookmaker, "
         "selection, selection_descriptor, line, odds, stake_amount, payout_amount, "
         "net_pnl, bankroll_at_open, status, provenance, decision_timestamp, "
-        "graded_at, session_id, created_at"
+        "graded_at, session_id, created_at, staking_policy_id, staking_policy_version, "
+        "exposure_limits_version, sizing_reasons, correlation_group"
     )
 
     def record_ledger_bet(self, bet: LedgerBet) -> str:
@@ -1552,8 +1561,11 @@ class TraceStore:
                (ledger_id, trace_id, bet_date, league, sport, matchup, market,
                 bookmaker, selection, selection_descriptor, line, odds,
                 stake_amount, payout_amount, net_pnl, bankroll_at_open, status,
-                provenance, decision_timestamp, graded_at, session_id)
+                provenance, decision_timestamp, graded_at,
+                staking_policy_id, staking_policy_version, exposure_limits_version,
+                sizing_reasons, correlation_group, session_id)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?,
                        (SELECT session_id FROM traces WHERE trace_id = ?))
                ON CONFLICT(trace_id, market, selection_descriptor) DO UPDATE SET
                    provenance         = excluded.provenance,
@@ -1589,6 +1601,11 @@ class TraceStore:
                 bet.provenance.value,
                 bet.decision_timestamp,
                 bet.graded_at,
+                bet.staking_policy_id,
+                bet.staking_policy_version,
+                bet.exposure_limits_version,
+                json.dumps(bet.sizing_reasons) if bet.sizing_reasons else None,
+                bet.correlation_group,
                 bet.trace_id,
             ),
         )

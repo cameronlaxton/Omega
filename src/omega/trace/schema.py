@@ -124,7 +124,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 14
+CURRENT_VERSION = 15
 
 # ---------------------------------------------------------------------------
 # Version lineage (applied in order by TraceStore._ensure_schema)
@@ -154,6 +154,7 @@ CURRENT_VERSION = 14
 #   V12 SCHEMA_V12           trace_qa_verdicts (trace-scoped QA audit)
 #   V13 SCHEMA_V13           bet_ledger (dollar/PnL bet log; separate from bet_records)
 #   V14 (store-side)         consolidate bet_records -> bet_ledger, then DROP it
+#   V15 apply_v15_migration  bet_ledger sizing-audit columns (staking/exposure/corr)
 #
 # There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
 # apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
@@ -639,3 +640,31 @@ SELECT
         ELSE 'plus_money' END                                    AS odds_bucket
 FROM bet_ledger l;
 """
+
+
+# V15 adds sizing-audit columns to bet_ledger. Like V4/V7 this is a column-add,
+# which cannot use executescript (ALTER ADD COLUMN is non-idempotent in SQLite),
+# so the migration probes PRAGMA table_info first.
+V15_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("staking_policy_id", "TEXT"),
+    ("staking_policy_version", "INTEGER"),
+    ("exposure_limits_version", "INTEGER"),
+    ("sizing_reasons", "TEXT"),  # JSON array of capped_by reasons
+    ("correlation_group", "TEXT"),
+)
+
+
+def apply_v15_migration(conn) -> None:
+    """Idempotently apply V15: add bet_ledger sizing-audit columns.
+
+    Records which staking policy + exposure limits sized a recommended bet, why
+    (the ``capped_by`` reasons as a JSON array), and its correlation group, so a
+    bet's sizing is auditable. All columns are nullable — pre-V15 rows and bets
+    logged without a portfolio sizing decision simply carry NULL. Re-running on a
+    V15 DB is a no-op.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(bet_ledger)").fetchall()}
+    for name, sql_type in V15_COLUMNS:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE bet_ledger ADD COLUMN {name} {sql_type}")
+    conn.commit()

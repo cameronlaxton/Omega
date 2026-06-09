@@ -632,6 +632,11 @@ class PostgresRepository:
             provenance=bet.provenance.value,
             decision_timestamp=bet.decision_timestamp,
             graded_at=bet.graded_at,
+            staking_policy_id=bet.staking_policy_id,
+            staking_policy_version=bet.staking_policy_version,
+            exposure_limits_version=bet.exposure_limits_version,
+            sizing_reasons=(json.dumps(bet.sizing_reasons) if bet.sizing_reasons else None),
+            correlation_group=bet.correlation_group,
             session_id=trace_session_id,
         )
         excluded = stmt.excluded
