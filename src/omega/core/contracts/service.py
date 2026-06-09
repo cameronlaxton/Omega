@@ -8,6 +8,7 @@ no data fetching, no config loading, no network calls.
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -746,11 +747,95 @@ def _build_edge(
     )
 
 
+def _edge_selection_label(edge: EdgeDetail) -> str:
+    """Human-readable selection string for an edge (shared legacy/portfolio)."""
+    if edge.market == "total":
+        return edge.team
+    if edge.market == "spread" and edge.line is not None:
+        return f"{edge.team} {edge.line:+g}"
+    return f"{edge.team} {edge.side}"
+
+
+def _portfolio_selection_enabled() -> bool:
+    """Whether the portfolio-aware selector is active (default: off = legacy)."""
+    return os.environ.get("OMEGA_PORTFOLIO_SELECTION", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _edge_to_candidate(edge: EdgeDetail, *, league: str | None, matchup: str | None):
+    """Build a portfolio BetCandidate from an EdgeDetail + game context."""
+    from omega.core.betting.portfolio_selection import BetCandidate
+    from omega.trace.portfolio_state import entity_keys_for
+
+    descriptor = f"{edge.market}:{edge.side}" + (f":{edge.line:g}" if edge.line is not None else "")
+    entity_keys = entity_keys_for(
+        {
+            "league": league or "",
+            "matchup": matchup or "",
+            "market": edge.market,
+            "selection_descriptor": descriptor,
+        }
+    )
+    return BetCandidate(
+        selection=_edge_selection_label(edge),
+        selection_descriptor=descriptor,
+        market=edge.market,
+        calibrated_prob=edge.calibrated_prob,
+        odds=edge.market_odds,
+        edge_pct=edge.edge_pct,
+        ev_pct=edge.ev_pct,
+        confidence_tier=edge.confidence_tier,
+        entity_keys=entity_keys,
+        league=league,
+    )
+
+
+def _pick_best_bet_via_portfolio(
+    edges: list[EdgeDetail],
+    bankroll: float,
+    *,
+    league: str | None,
+    matchup: str | None,
+) -> BetSlip | None:
+    """Portfolio-aware path: return the top sized bet as a BetSlip."""
+    from omega.core.betting.portfolio_selection import select_portfolio
+
+    candidates = [_edge_to_candidate(e, league=league, matchup=matchup) for e in edges]
+    selection = select_portfolio(candidates, bankroll=bankroll)
+    if not selection.bets:
+        return None
+    top = selection.bets[0]
+    return BetSlip(
+        selection=top.candidate.selection,
+        odds=top.candidate.odds,
+        edge_pct=top.candidate.edge_pct,
+        ev_pct=top.candidate.ev_pct,
+        confidence_tier=top.candidate.confidence_tier,
+        recommended_units=top.units,
+        kelly_fraction=top.kelly_fraction,
+    )
+
+
 def _pick_best_bet(
     edges: list[EdgeDetail],
     bankroll: float,
+    *,
+    league: str | None = None,
+    matchup: str | None = None,
 ) -> BetSlip | None:
-    """Select the strongest edge and build a BetSlip, if any edge qualifies."""
+    """Select the strongest edge and build a BetSlip, if any edge qualifies.
+
+    With ``OMEGA_PORTFOLIO_SELECTION`` enabled, routes through the portfolio-aware
+    selector and returns its top sized bet; otherwise (default) the legacy greedy
+    max-EV pick, bit-for-bit unchanged.
+    """
+    if _portfolio_selection_enabled():
+        return _pick_best_bet_via_portfolio(edges, bankroll, league=league, matchup=matchup)
+
     actionable = [e for e in edges if e.confidence_tier in ("A", "B") and e.ev_pct > 0]
     if not actionable:
         return None
@@ -761,14 +846,8 @@ def _pick_best_bet(
         bankroll=bankroll,
         confidence_tier=best.confidence_tier,
     )
-    if best.market == "total":
-        selection = best.team
-    elif best.market == "spread" and best.line is not None:
-        selection = f"{best.team} {best.line:+g}"
-    else:
-        selection = f"{best.team} {best.side}"
     return BetSlip(
-        selection=selection,
+        selection=_edge_selection_label(best),
         odds=best.market_odds,
         edge_pct=best.edge_pct,
         ev_pct=best.ev_pct,
@@ -1232,7 +1311,11 @@ def analyze_game(
                     )
                 )
 
-    best_bet = _pick_best_bet(edges, bankroll) if edges else None
+    best_bet = (
+        _pick_best_bet(edges, bankroll, league=request.league, matchup=matchup)
+        if edges
+        else None
+    )
 
     return GameAnalysisResponse(
         matchup=matchup,
