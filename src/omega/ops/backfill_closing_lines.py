@@ -68,6 +68,19 @@ def _identity(name: str) -> str | None:
 
 
 def _load_canonicalizer(league: str) -> Callable[[str], str | None]:
+    # Soccer leagues (MLS, EPL, CHAMPIONS_LEAGUE, WORLD_CUP, LIGA_MX, ...) all
+    # share one canonicalizer in espn_soccer rather than a per-league
+    # espn_<league> module. Resolve them there first; otherwise they fall through
+    # to _identity and team names are never normalized against the Odds API
+    # snapshot (e.g. "USA" vs "United States"), so no soccer event ever matches.
+    try:
+        from omega.integrations.espn_soccer import SOCCER_LEAGUE_SLUGS, canonical_team
+
+        if league.upper() in SOCCER_LEAGUE_SLUGS:
+            return canonical_team
+    except ImportError:
+        pass
+
     league_lc = league.lower()
     for mod_path in (
         f"omega.integrations.espn_{league_lc}",
@@ -183,8 +196,7 @@ def _pending_bets_needing_close(
         "   ON c.trace_id = b.trace_id"
         "  AND c.market = b.market"
         "  AND c.selection_descriptor = b.selection_descriptor"
-        " WHERE b.status = 'pending'"
-        "   AND b.provenance = 'user_confirmed'"
+        " WHERE b.provenance IN ('user_confirmed', 'engine_auto', 'backfill')"
         "   AND c.closing_id IS NULL"
     )
     params: list = []
