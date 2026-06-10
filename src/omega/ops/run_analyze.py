@@ -78,6 +78,22 @@ def run(
     if seed is None:
         seed = derive_seed_from_request(request)
     request.setdefault("seed", seed)
+    if kind == "game":
+        # Gatherer seam: merge league dynamic priors (Dixon-Coles rho, ...)
+        # and record provenance when this session has a sidecar. Best-effort —
+        # a backend that requires a missing prior fails closed in the engine.
+        try:
+            from omega.trace.priors import inject_game_priors
+
+            request, prior_event = inject_game_priors(request)
+            if prior_event:
+                sidecar = _REPO_ROOT / "var" / "inbox" / "sessions" / f"{session_id}.json"
+                if sidecar.exists():
+                    from omega.trace.session_sidecar import append_audit_events
+
+                    append_audit_events(sidecar, [prior_event])
+        except Exception:  # noqa: BLE001 - injection must never block analysis
+            pass
     typed = _typed_request(kind, request)
     trace = analyze(typed, session_id=session_id, bankroll=bankroll)
 

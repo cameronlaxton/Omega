@@ -67,6 +67,7 @@ SPORT_KEY_MAP: dict[str, str] = {
     "LIGUE_1": "soccer_france_ligue_one",
     "CHAMPIONS_LEAGUE": "soccer_uefa_champs_league",
     "WORLD_CUP": "soccer_fifa_world_cup",
+    "FIFA_WORLD_CUP_2026": "soccer_fifa_world_cup",
     "UFC": "mma_mixed_martial_arts",
     "MMA": "mma_mixed_martial_arts",
 }

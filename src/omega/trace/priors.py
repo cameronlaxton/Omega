@@ -16,7 +16,8 @@ These helpers only touch ``store.conn``; they add no state to ``TraceStore``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
@@ -204,3 +205,111 @@ def get_xg_prior(
         source=row[6],
         as_of_date=row[7],
     )
+
+
+# ---------------------------------------------------------------------------
+# Gatherer injection: league config -> production prior -> prior_payload
+# ---------------------------------------------------------------------------
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def build_game_prior_payload(
+    league: str,
+    existing_payload: dict[str, Any] | None,
+    store: "TraceStore",
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Merge the league's production dynamic priors into a game prior_payload.
+
+    Returns ``(payload, data_provenance_event_or_None)``. Behavior:
+
+    * league config has no ``rho_fit_profile`` -> payload unchanged, no event;
+    * caller already supplied ``rho`` (recorded/replayed request) -> unchanged,
+      no event — replay must not depend on live table state;
+    * no production profile -> unchanged + ``warn`` event; the backend then
+      fails closed (``missing_requirements=["rho_prior"]``) rather than guess;
+    * production profile found -> merged ``rho``/``rho_profile_id``/
+      ``rho_as_of_date`` + ``ok`` event carrying the provenance.
+    """
+    from omega.core.config.leagues import get_league_config
+
+    profile_id = get_league_config(league.upper()).get("rho_fit_profile")
+    if not profile_id:
+        return existing_payload, None
+    if existing_payload and existing_payload.get("rho") is not None:
+        return existing_payload, None
+
+    prod = get_production_dc_profile(store, str(profile_id))
+    if prod is None:
+        return existing_payload, {
+            "ts": _utc_now_iso(),
+            "event_type": "data_provenance",
+            "step": "dixon_coles_prior:inject",
+            "status": "warn",
+            "notes": (
+                f"no production Dixon-Coles profile {profile_id!r} for league "
+                f"{league.upper()}; engine will fail closed (rho_prior missing). "
+                "Fit and promote via omega-fit-dixon-coles."
+            ),
+        }
+
+    merged = dict(existing_payload or {})
+    merged.update(
+        rho=prod.rho,
+        rho_profile_id=prod.profile_id,
+        rho_as_of_date=prod.as_of_date,
+    )
+    return merged, {
+        "ts": _utc_now_iso(),
+        "event_type": "data_provenance",
+        "step": "dixon_coles_prior:inject",
+        "status": "ok",
+        "notes": f"injected Dixon-Coles rho for {league.upper()} from {prod.profile_id}",
+        "outputs": {
+            "rho": prod.rho,
+            "rho_profile_id": prod.profile_id,
+            "rho_as_of_date": prod.as_of_date,
+        },
+    }
+
+
+def inject_game_priors(
+    payload: dict[str, Any], store: "TraceStore | None" = None
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Config-gated prior injection for a raw game-request dict.
+
+    Opens the default TraceStore only when the league actually carries a
+    ``rho_fit_profile`` (so NBA/MLB/... requests never pay the cost). Returns
+    the (possibly updated) payload plus an optional ``data_provenance`` event
+    for the session sidecar. Injection lives at the gatherer layer — outside
+    ``service.analyze`` — so replaying a recorded request (with its priors
+    embedded) is deterministic regardless of live table state.
+    """
+    league = str(payload.get("league") or "")
+    if not league:
+        return payload, None
+
+    from omega.core.config.leagues import get_league_config
+
+    if not get_league_config(league.upper()).get("rho_fit_profile"):
+        return payload, None
+
+    own_store = store is None
+    if own_store:
+        from omega.trace.store import TraceStore
+
+        store = TraceStore()
+    try:
+        merged, event = build_game_prior_payload(
+            league, payload.get("prior_payload"), store
+        )
+    finally:
+        if own_store:
+            store.close()
+
+    out = dict(payload)
+    if merged is not None:
+        out["prior_payload"] = merged
+    return out, event

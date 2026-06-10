@@ -597,6 +597,7 @@ LEAGUE_TO_ARCHETYPE: dict[str, str] = {
     "CHAMPIONS_LEAGUE": "soccer",
     "EUROPA_LEAGUE": "soccer",
     "WORLD_CUP": "soccer",
+    "FIFA_WORLD_CUP_2026": "soccer",
     "NWSL": "soccer",
     "A_LEAGUE": "soccer",
     "EREDIVISIE": "soccer",

@@ -49,6 +49,7 @@ SOCCER_LEAGUE_SLUGS: dict[str, str] = {
     "CHAMPIONS_LEAGUE": "uefa.champions",
     "LIGA_MX": "mex.1",
     "WORLD_CUP": "fifa.world",
+    "FIFA_WORLD_CUP_2026": "fifa.world",
 }
 
 # Curated alias -> canonical club name. Not exhaustive: unknown clubs fall back
@@ -183,7 +184,7 @@ def fetch_scoreboard(
     query = urllib.parse.urlencode({"dates": date_str})
 
     slugs = [slug]
-    if league.upper() == "WORLD_CUP":
+    if league.upper() in {"WORLD_CUP", "FIFA_WORLD_CUP_2026"}:
         slugs.append("fifa.friendly")
 
     results: list[FinalGame] = []

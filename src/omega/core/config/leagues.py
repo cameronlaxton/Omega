@@ -349,6 +349,27 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "dixon_coles": True,
         "rho": -0.13,
     },
+    # Phase 7 M2: the 2026 World Cup runs the bivariate-Poisson backend. rho is
+    # NOT configured here — rho_fit_profile selects the fitted production row in
+    # priors_dixon_coles, and without one the engine fails closed (skipped).
+    # The static dixon_coles/rho keys on legacy soccer entries feed only the
+    # fast_score path; the new backend never reads them.
+    "FIFA_WORLD_CUP_2026": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 2.7,
+        "distribution": "bivariate_poisson",
+        "home_advantage": 0.0,  # neutral venues
+        "std": 1.3,
+        "supports_draw": True,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "fifa_intl_v1",
+        "timezone": "America/New_York",
+    },
     "COPA_AMERICA": {
         "sport": "soccer",
         "archetype": "soccer",
