@@ -57,10 +57,10 @@ def _make_bet(trace_id: str, descriptor: str) -> BetRecord:
 
 
 class TestSchemaVersionAndLedger:
-    def test_current_version_is_sixteen(self):
+    def test_current_version_is_seventeen(self):
         store = TraceStore(db_path=_tmp_db_path())
-        assert CURRENT_VERSION == 16
-        assert store.schema_version() == 16
+        assert CURRENT_VERSION == 17
+        assert store.schema_version() == 17
         store.close()
 
     def test_bet_records_table_dropped_at_v14(self):

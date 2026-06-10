@@ -41,7 +41,7 @@ def test_fresh_and_reopened_db_have_v16_tables():
             ).fetchall()
         }
         assert {"priors_dixon_coles", "priors_xg"} <= tables
-        assert store.schema_version() == 16
+        assert store.schema_version() == 17
     finally:
         store.close()
     reopened = TraceStore(db_path=path)
@@ -159,6 +159,92 @@ def test_xg_upsert_and_refresh():
         assert got.matches == 15
         n = store.conn.execute("SELECT COUNT(*) FROM priors_xg").fetchone()[0]
         assert n == 1  # upsert, not duplicate
+    finally:
+        store.close()
+
+
+def test_tennis_prior_upsert_and_latest_lookup():
+    from omega.trace.priors import TennisPrior, get_tennis_prior, upsert_tennis_prior
+
+    store = _store()
+    try:
+        for as_of, spw in (("2026-05-01", 0.66), ("2026-06-10", 0.67)):
+            upsert_tennis_prior(
+                store,
+                TennisPrior(
+                    player="Carlos Alcaraz",
+                    tour="atp",
+                    surface="GRASS",
+                    spw_pct=spw,
+                    rpw_pct=0.41,
+                    n_matches=24,
+                    as_of_date=as_of,
+                ),
+            )
+        got = get_tennis_prior(store, "Carlos Alcaraz", "ATP", "grass")
+        assert got is not None
+        assert got.spw_pct == 0.67  # latest as_of wins
+        assert got.tour == "ATP" and got.surface == "grass"  # normalized
+        assert get_tennis_prior(store, "Carlos Alcaraz", "ATP", "clay") is None
+    finally:
+        store.close()
+
+
+def test_pressure_coefficients_lookup_and_fallback_source():
+    from omega.trace.priors import (
+        PRESSURE_SOURCE_GROUP,
+        PRESSURE_SOURCE_PLAYER,
+        TENNIS_PRESSURE_STATES,
+        TennisPressureDelta,
+        get_pressure_coefficients,
+        upsert_pressure_deltas,
+    )
+
+    store = _store()
+    try:
+        upsert_pressure_deltas(
+            store,
+            [
+                TennisPressureDelta(
+                    player="Carlos Alcaraz",
+                    tour="ATP",
+                    surface="grass",
+                    state=state,
+                    delta=-0.01 * (i + 1),
+                    n_points=800,
+                    source=PRESSURE_SOURCE_PLAYER,
+                    as_of_date="2026-06-10",
+                )
+                for i, state in enumerate(TENNIS_PRESSURE_STATES)
+            ],
+        )
+        coeffs, source = get_pressure_coefficients(store, "Carlos Alcaraz", "ATP", "grass")
+        assert source == PRESSURE_SOURCE_PLAYER
+        assert set(coeffs) == set(TENNIS_PRESSURE_STATES)
+        assert coeffs["break_point_against"] == pytest.approx(-0.01)
+
+        # Unknown player -> no rows -> flat IID rollback state.
+        coeffs, source = get_pressure_coefficients(store, "Nobody", "ATP", "grass")
+        assert coeffs == {} and source is None
+
+        # Group-fallback rows carry their source through.
+        upsert_pressure_deltas(
+            store,
+            [
+                TennisPressureDelta(
+                    player="Qualifier X",
+                    tour="ATP",
+                    surface="grass",
+                    state="tiebreak",
+                    delta=-0.008,
+                    n_points=120,
+                    source=PRESSURE_SOURCE_GROUP,
+                    as_of_date="2026-06-10",
+                )
+            ],
+        )
+        _, source = get_pressure_coefficients(store, "Qualifier X", "ATP", "grass")
+        assert source == PRESSURE_SOURCE_GROUP
     finally:
         store.close()
 

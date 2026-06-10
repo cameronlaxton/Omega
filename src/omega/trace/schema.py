@@ -124,7 +124,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 16
+CURRENT_VERSION = 17
 
 # ---------------------------------------------------------------------------
 # Version lineage (applied in order by TraceStore._ensure_schema)
@@ -156,6 +156,7 @@ CURRENT_VERSION = 16
 #   V14 (store-side)         consolidate bet_records -> bet_ledger, then DROP it
 #   V15 apply_v15_migration  bet_ledger sizing-audit columns (staking/exposure/corr)
 #   V16 SCHEMA_V16           priors_xg + priors_dixon_coles (soccer dynamic priors)
+#   V17 SCHEMA_V17           priors_tennis + priors_tennis_pressure (tennis dynamic priors)
 #
 # There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
 # apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
@@ -709,4 +710,47 @@ CREATE TABLE IF NOT EXISTS priors_xg (
 
 CREATE INDEX IF NOT EXISTS idx_priors_xg_competition
     ON priors_xg(competition, season);
+"""
+
+
+# V17: tennis dynamic-prior tables (Phase 7 M3). priors_tennis holds surface-
+# segmented rolling serve/return point-win rates from the Sackmann match CSVs
+# (12-month half-life, computed by omega-refresh-sackmann). priors_tennis_
+# pressure holds per-player additive SPW% deltas for the six pressure states,
+# fit from Match Charting Project point data by
+# omega-fit-tennis-pressure-coefficients; players below the charted-point
+# threshold carry source='group_fallback' rows (tour+surface group means) —
+# never silent 0.0 deltas. Truncating the pressure table rolls tennis back to
+# the flat IID closed-form model (design Part 9).
+SCHEMA_V17 = """
+CREATE TABLE IF NOT EXISTS priors_tennis (
+    player       TEXT NOT NULL,
+    tour         TEXT NOT NULL,
+    surface      TEXT NOT NULL,
+    spw_pct      REAL NOT NULL,
+    rpw_pct      REAL NOT NULL,
+    n_matches    INTEGER NOT NULL,
+    as_of_date   TEXT NOT NULL,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (player, tour, surface, as_of_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_priors_tennis_player
+    ON priors_tennis(player, tour, surface);
+
+CREATE TABLE IF NOT EXISTS priors_tennis_pressure (
+    player       TEXT NOT NULL,
+    tour         TEXT NOT NULL,
+    surface      TEXT NOT NULL,
+    state        TEXT NOT NULL,
+    delta        REAL NOT NULL,
+    n_points     INTEGER NOT NULL,
+    source       TEXT NOT NULL,
+    as_of_date   TEXT NOT NULL,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (player, tour, surface, state, as_of_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_priors_tennis_pressure_player
+    ON priors_tennis_pressure(player, tour, surface);
 """

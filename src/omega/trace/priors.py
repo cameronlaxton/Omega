@@ -28,6 +28,21 @@ DC_STATUS_CANDIDATE = "candidate"
 DC_STATUS_PRODUCTION = "production"
 DC_STATUS_ARCHIVED = "archived"
 
+# The six tennis pressure states whose SPW% deltas are fit by
+# omega-fit-tennis-pressure-coefficients (design decision 7). Missing states
+# default to 0.0 in the backend; missing *players* fall back to tour+surface
+# group means with source='group_fallback' — never silent zeros.
+TENNIS_PRESSURE_STATES = (
+    "break_point_against",
+    "set_point_serving",
+    "match_point_serving",
+    "tiebreak",
+    "serving_for_set",
+    "serving_for_match",
+)
+PRESSURE_SOURCE_PLAYER = "player"
+PRESSURE_SOURCE_GROUP = "group_fallback"
+
 
 class DixonColesProfile(BaseModel):
     """One fitted Dixon-Coles rho row for a competition profile."""
@@ -205,6 +220,139 @@ def get_xg_prior(
         source=row[6],
         as_of_date=row[7],
     )
+
+
+# ---------------------------------------------------------------------------
+# priors_tennis + priors_tennis_pressure
+# ---------------------------------------------------------------------------
+
+
+class TennisPrior(BaseModel):
+    """Surface-segmented rolling serve/return point-win rates for one player."""
+
+    player: str
+    tour: str  # ATP | WTA
+    surface: str  # hard | clay | grass
+    spw_pct: float
+    rpw_pct: float
+    n_matches: int
+    as_of_date: str
+
+
+class TennisPressureDelta(BaseModel):
+    """One pressure-state additive SPW% delta for one player (or group mean)."""
+
+    player: str
+    tour: str
+    surface: str
+    state: str
+    delta: float
+    n_points: int
+    source: str  # player | group_fallback
+    as_of_date: str
+
+
+def upsert_tennis_prior(store: "TraceStore", prior: TennisPrior) -> None:
+    """Insert or refresh one (player, tour, surface, as_of_date) rate row."""
+    store.conn.execute(
+        """INSERT INTO priors_tennis
+               (player, tour, surface, spw_pct, rpw_pct, n_matches, as_of_date,
+                last_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT (player, tour, surface, as_of_date) DO UPDATE SET
+               spw_pct = excluded.spw_pct,
+               rpw_pct = excluded.rpw_pct,
+               n_matches = excluded.n_matches,
+               last_updated = datetime('now')""",
+        (
+            prior.player,
+            prior.tour.upper(),
+            prior.surface.lower(),
+            prior.spw_pct,
+            prior.rpw_pct,
+            prior.n_matches,
+            prior.as_of_date,
+        ),
+    )
+    store.conn.commit()
+
+
+def get_tennis_prior(
+    store: "TraceStore", player: str, tour: str, surface: str
+) -> TennisPrior | None:
+    """Return the most recent rate row for (player, tour, surface), or None."""
+    row = store.conn.execute(
+        """SELECT player, tour, surface, spw_pct, rpw_pct, n_matches, as_of_date
+           FROM priors_tennis
+           WHERE player = ? AND tour = ? AND surface = ?
+           ORDER BY as_of_date DESC LIMIT 1""",
+        (player, tour.upper(), surface.lower()),
+    ).fetchone()
+    if row is None:
+        return None
+    return TennisPrior(
+        player=row[0],
+        tour=row[1],
+        surface=row[2],
+        spw_pct=row[3],
+        rpw_pct=row[4],
+        n_matches=row[5],
+        as_of_date=row[6],
+    )
+
+
+def upsert_pressure_deltas(store: "TraceStore", deltas: list[TennisPressureDelta]) -> None:
+    """Insert or refresh a batch of pressure-state delta rows."""
+    for delta in deltas:
+        store.conn.execute(
+            """INSERT INTO priors_tennis_pressure
+                   (player, tour, surface, state, delta, n_points, source,
+                    as_of_date, last_updated)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT (player, tour, surface, state, as_of_date) DO UPDATE SET
+                   delta = excluded.delta,
+                   n_points = excluded.n_points,
+                   source = excluded.source,
+                   last_updated = datetime('now')""",
+            (
+                delta.player,
+                delta.tour.upper(),
+                delta.surface.lower(),
+                delta.state,
+                delta.delta,
+                delta.n_points,
+                delta.source,
+                delta.as_of_date,
+            ),
+        )
+    store.conn.commit()
+
+
+def get_pressure_coefficients(
+    store: "TraceStore", player: str, tour: str, surface: str
+) -> tuple[dict[str, float], str | None]:
+    """Return ``({state: delta}, source)`` for a player's latest pressure fit.
+
+    ``source`` is ``"player"`` or ``"group_fallback"`` (from the fit rows), or
+    ``None`` when no rows exist — in which case the backend runs flat IID
+    (deltas 0.0), which is the documented rollback state, and the gatherer
+    skips the provenance annotation.
+    """
+    rows = store.conn.execute(
+        """SELECT state, delta, source, as_of_date
+           FROM priors_tennis_pressure
+           WHERE player = ? AND tour = ? AND surface = ?
+             AND as_of_date = (
+                 SELECT MAX(as_of_date) FROM priors_tennis_pressure
+                 WHERE player = ? AND tour = ? AND surface = ?
+             )""",
+        (player, tour.upper(), surface.lower()) * 2,
+    ).fetchall()
+    if not rows:
+        return {}, None
+    coefficients = {row[0]: row[1] for row in rows}
+    source = rows[0][2]
+    return coefficients, source
 
 
 # ---------------------------------------------------------------------------

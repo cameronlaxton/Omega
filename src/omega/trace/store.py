@@ -51,6 +51,7 @@ from omega.trace.schema import (
     SCHEMA_V12,
     SCHEMA_V13,
     SCHEMA_V16,
+    SCHEMA_V17,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
@@ -685,6 +686,13 @@ class TraceStore:
         self._record_version(
             16,
             "Phase 7 M2: priors_dixon_coles + priors_xg tables (soccer dynamic priors)",
+        )
+
+        # V17: tennis dynamic priors (SPW/RPW rolling rates + pressure deltas).
+        self.conn.executescript(SCHEMA_V17)
+        self._record_version(
+            17,
+            "Phase 7 M3: priors_tennis + priors_tennis_pressure tables (tennis dynamic priors)",
         )
 
     def _existing_schema_version(self) -> int:
