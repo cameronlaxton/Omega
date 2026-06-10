@@ -2029,3 +2029,9 @@ from omega.core.simulation.markov_wnba import (  # noqa: E402
 )
 
 register_game_backend("markov_state_wnba", MarkovWNBAGameSimulationBackend())
+
+from omega.core.simulation.soccer_bivariate_poisson import (  # noqa: E402
+    SoccerPoissonBackend,
+)
+
+register_game_backend("soccer_bivariate_poisson_dc", SoccerPoissonBackend())
