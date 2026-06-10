@@ -1280,6 +1280,85 @@ def analyze_game(
                 )
             )
 
+        # Asian handicap + first-half total (soccer derivatives). The backend
+        # emits empirical pmfs (margin_counts / fh_total_counts); the edge
+        # module evaluates the quoted line — quarter-ball split, push and
+        # half-stake semantics included — and bridges the exact EV back into
+        # the binary edge framework via the equivalent win probability.
+        ah_line = getattr(request.odds, "asian_handicap_home", None)
+        margin_counts = sim_result.get("margin_counts")
+        if ah_line is not None and margin_counts:
+            from omega.core.edge.soccer_derivatives import evaluate_asian_handicap
+
+            for ah_side, ah_price, ah_label, ah_signed_line in (
+                ("home", request.odds.ah_home_price, request.home_team, ah_line),
+                ("away", request.odds.ah_away_price, request.away_team, -ah_line),
+            ):
+                if ah_price is None:
+                    continue
+                evaluation = evaluate_asian_handicap(margin_counts, ah_line, ah_side)
+                q_equiv = evaluation.equivalent_win_prob(ah_price)
+                if q_equiv <= 0:
+                    continue
+                cal_q, ah_audit = _calibrate_audited(
+                    q_equiv,
+                    league=request.league,
+                    context_hints=gc,
+                    plane="game",
+                    market="asian_handicap",
+                )
+                edges.append(
+                    _build_edge(
+                        ah_side,
+                        f"{ah_label} {ah_signed_line:+g} (AH)",
+                        q_equiv,
+                        cal_q,
+                        ah_price,
+                        bankroll,
+                        request.n_iterations,
+                        calibration_audit=ah_audit,
+                        market="asian_handicap",
+                        line=ah_signed_line,
+                    )
+                )
+
+        fh_line = getattr(request.odds, "first_half_total", None)
+        fh_counts = sim_result.get("fh_total_counts")
+        if fh_line is not None and fh_counts:
+            from omega.core.edge.soccer_derivatives import evaluate_total
+
+            for fh_side, fh_price in (
+                ("over", request.odds.fh_over_price),
+                ("under", request.odds.fh_under_price),
+            ):
+                if fh_price is None:
+                    continue
+                evaluation = evaluate_total(fh_counts, fh_line, fh_side)
+                q_equiv = evaluation.equivalent_win_prob(fh_price)
+                if q_equiv <= 0:
+                    continue
+                cal_q, fh_audit = _calibrate_audited(
+                    q_equiv,
+                    league=request.league,
+                    context_hints=gc,
+                    plane="game",
+                    market="first_half_total",
+                )
+                edges.append(
+                    _build_edge(
+                        fh_side,
+                        f"1H {fh_side.capitalize()} {fh_line:g}",
+                        q_equiv,
+                        cal_q,
+                        fh_price,
+                        bankroll,
+                        request.n_iterations,
+                        calibration_audit=fh_audit,
+                        market="first_half_total",
+                        line=fh_line,
+                    )
+                )
+
         # Correct score: a map of scoreline -> price.
         cs_probs = sim_result.get("correct_score_probs") or {}
         if request.odds.correct_score and cs_probs:

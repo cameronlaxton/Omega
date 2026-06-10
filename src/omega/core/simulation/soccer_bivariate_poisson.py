@@ -31,6 +31,13 @@ except ImportError:  # pragma: no cover
 _SOCCER_AVG_TOTAL_CEILING = 10.0
 _SOCCER_ARCHETYPE_AVG_TOTAL = 2.5
 
+# First-half goal share for the independent-thinning approximation: each match
+# goal lands in the first half with this probability (empirically ~45% of
+# goals are scored before the break across top competitions; second halves run
+# longer and tire defenses). 1H totals are Binomial(total_goals, share) — an
+# approximation that ignores in-match state, documented per design Part 4.
+_FIRST_HALF_GOAL_SHARE = 0.45
+
 
 class MissingDixonColesPriorError(RuntimeError):
     """No production Dixon-Coles profile available for a competition.
@@ -200,6 +207,13 @@ class SoccerPoissonBackend:
             )
 
         totals = [float(h + a) for h, a in zip(home_scores, away_scores)]
+
+        # First-half totals via independent thinning (drawn after the score
+        # sample on the same seeded rng, so replays stay bit-identical).
+        fh_totals = rng.binomial(
+            [int(t) for t in totals], _FIRST_HALF_GOAL_SHARE
+        ).tolist()
+
         result["simulation_distributions"].extend(
             [
                 _extra_row("total_goals", "game_total", totals),
@@ -218,6 +232,25 @@ class SoccerPoissonBackend:
                     "btts",
                     [1.0 if h > 0 and a > 0 else 0.0 for h, a in zip(home_scores, away_scores)],
                 ),
+                _extra_row(
+                    "first_half_total", "first_half_total", [float(t) for t in fh_totals]
+                ),
             ]
         )
+
+        # Empirical pmfs for downstream derivative-market evaluation (Asian
+        # handicap quarter-lines, 1H totals) by omega/core/edge/
+        # soccer_derivatives.py. String keys keep the trace JSON-safe.
+        def _counts(values: list) -> dict[str, int]:
+            out: dict[str, int] = {}
+            for v in values:
+                key = str(int(v))
+                out[key] = out.get(key, 0) + 1
+            return out
+
+        result["margin_counts"] = _counts(
+            [h - a for h, a in zip(home_scores, away_scores)]
+        )
+        result["total_counts"] = _counts(totals)
+        result["fh_total_counts"] = _counts(fh_totals)
         return result

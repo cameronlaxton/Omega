@@ -10,11 +10,22 @@ These models define the JSON interface between:
 from __future__ import annotations
 
 import warnings
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from omega.core.contracts.evidence import EvidenceSignal
+
+
+class SoccerDerivativeMarket(str, Enum):
+    """Soccer derivative markets evaluated by omega/core/edge/soccer_derivatives.py."""
+
+    asian_handicap = "asian_handicap"
+    total_goals_over_under = "total_goals_over_under"
+    both_teams_to_score = "both_teams_to_score"
+    correct_score = "correct_score"
+    first_half_total = "first_half_total"
 
 # -- Request Models ----------------------------------------------------------
 
@@ -100,6 +111,30 @@ class OddsInput(BaseModel):
     correct_score: dict[str, float] | None = Field(
         default=None,
         description="Correct-score prices keyed by 'home-away' scoreline, e.g. {'1-0': 650}",
+    )
+
+    # Asian handicap + first-half total (soccer derivatives, Phase 7 M2).
+    # Quarter-ball lines (-0.25, +0.75, 2.25, ...) are supported: the stake is
+    # split across the two adjacent half/integer lines with push/half-stake
+    # semantics evaluated in omega/core/edge/soccer_derivatives.py.
+    asian_handicap_home: float | None = Field(
+        default=None,
+        description="Home Asian-handicap line (e.g. -0.75); away line is the negation",
+    )
+    ah_home_price: float | None = Field(
+        default=None, description="Asian-handicap Home price (American odds)"
+    )
+    ah_away_price: float | None = Field(
+        default=None, description="Asian-handicap Away price (American odds)"
+    )
+    first_half_total: float | None = Field(
+        default=None, description="First-half total goals line (e.g. 1.0 or 1.25)"
+    )
+    fh_over_price: float | None = Field(
+        default=None, description="First-half total Over price (American odds)"
+    )
+    fh_under_price: float | None = Field(
+        default=None, description="First-half total Under price (American odds)"
     )
 
     # Normalized market list (preferred path for all new integrations)
