@@ -25,14 +25,14 @@ def _bet_ledger_columns(conn):
     return {row[1] for row in conn.execute("PRAGMA table_info(bet_ledger)").fetchall()}
 
 
-def test_current_version_is_fifteen():
-    assert CURRENT_VERSION == 15
+def test_current_version_is_sixteen():
+    assert CURRENT_VERSION == 16
 
 
 def test_fresh_db_has_v15_columns_and_version():
     store = TraceStore(db_path=_tmp_db())
     try:
-        assert store.schema_version() == 15
+        assert store.schema_version() == 16
         assert _V15_NAMES <= _bet_ledger_columns(store.conn)
     finally:
         store.close()

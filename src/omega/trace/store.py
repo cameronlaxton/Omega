@@ -50,6 +50,7 @@ from omega.trace.schema import (
     SCHEMA_V11,
     SCHEMA_V12,
     SCHEMA_V13,
+    SCHEMA_V16,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
@@ -677,6 +678,13 @@ class TraceStore:
         self._record_version(
             15,
             "Sizing audit: bet_ledger staking_policy/exposure_limits/sizing_reasons/correlation_group columns",
+        )
+
+        # V16: soccer dynamic priors (Dixon-Coles rho profiles + team xG).
+        self.conn.executescript(SCHEMA_V16)
+        self._record_version(
+            16,
+            "Phase 7 M2: priors_dixon_coles + priors_xg tables (soccer dynamic priors)",
         )
 
     def _existing_schema_version(self) -> int:

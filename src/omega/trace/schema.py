@@ -124,7 +124,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 15
+CURRENT_VERSION = 16
 
 # ---------------------------------------------------------------------------
 # Version lineage (applied in order by TraceStore._ensure_schema)
@@ -155,6 +155,7 @@ CURRENT_VERSION = 15
 #   V13 SCHEMA_V13           bet_ledger (dollar/PnL bet log; separate from bet_records)
 #   V14 (store-side)         consolidate bet_records -> bet_ledger, then DROP it
 #   V15 apply_v15_migration  bet_ledger sizing-audit columns (staking/exposure/corr)
+#   V16 SCHEMA_V16           priors_xg + priors_dixon_coles (soccer dynamic priors)
 #
 # There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
 # apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
@@ -668,3 +669,44 @@ def apply_v15_migration(conn) -> None:
         if name not in cols:
             conn.execute(f"ALTER TABLE bet_ledger ADD COLUMN {name} {sql_type}")
     conn.commit()
+
+
+# V16: soccer dynamic-prior tables (Phase 7 M2). priors_dixon_coles holds the
+# per-competition Dixon-Coles rho fits produced by omega-fit-dixon-coles; the
+# gatherer injects the production row's rho into request.prior_payload and the
+# soccer backend fails closed when none exists. priors_xg holds team attack/
+# defense xG aggregates from the StatsBomb/Understat/FBref adapters, keyed by
+# source so redundancy disagreement is auditable. Both are append-friendly
+# upsert targets; flushing them degrades to fail-closed, never to bad numbers.
+SCHEMA_V16 = """
+CREATE TABLE IF NOT EXISTS priors_dixon_coles (
+    profile_id   TEXT NOT NULL,
+    rho          REAL NOT NULL,
+    n_matches    INTEGER NOT NULL,
+    fit_loss     REAL,
+    as_of_date   TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'candidate',
+    source       TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (profile_id, as_of_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_priors_dc_profile_status
+    ON priors_dixon_coles(profile_id, status);
+
+CREATE TABLE IF NOT EXISTS priors_xg (
+    team         TEXT NOT NULL,
+    competition  TEXT NOT NULL,
+    season       TEXT NOT NULL,
+    xg_for       REAL NOT NULL,
+    xg_against   REAL NOT NULL,
+    matches      INTEGER NOT NULL,
+    source       TEXT NOT NULL,
+    as_of_date   TEXT NOT NULL,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (team, competition, season, source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_priors_xg_competition
+    ON priors_xg(competition, season);
+"""
