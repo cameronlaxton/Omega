@@ -179,10 +179,17 @@ def select_profile_competitions(
     competitions: list[dict[str, Any]],
     profile_id: str,
     *,
+    seasons: tuple[str, ...] | None = None,
     source: str = "statsbomb",
     session_path: str | None = None,
 ) -> list[SBCompetition]:
-    """Filter the competitions index to the profile's competition group."""
+    """Filter the competitions index to the profile's competition group.
+
+    ``seasons`` optionally restricts to specific season_name values — used for
+    club fits where open-data mixes full-league seasons with single-team
+    archive seasons (e.g. La Liga's Barcelona-only years) that would bias the
+    competition-level Poisson means.
+    """
     group = profile_group(profile_id)
     names = PROFILE_COMPETITION_NAMES.get(group)
     if names is None:
@@ -193,25 +200,29 @@ def select_profile_competitions(
     validated = validate_records(
         competitions, SBCompetition, source=source, session_path=session_path
     )
-    return [c for c in validated if c.competition_name in names]
+    selected = [c for c in validated if c.competition_name in names]
+    if seasons is not None:
+        selected = [c for c in selected if c.season_name in seasons]
+    return selected
 
 
 def load_profile_matches(
     profile_id: str,
     *,
+    seasons: tuple[str, ...] | None = None,
     cache_root: str | None = None,
     session_path: str | None = None,
     url_opener: Callable[..., Any] = urllib.request.urlopen,
 ) -> list[tuple[int, int]]:
     """Return (home_goals, away_goals) pairs for a competition profile.
 
-    This is the Dixon-Coles fit dataset: every completed match across all
-    open-data seasons of the profile's competitions. Rows validate at the
-    boundary; a missing/renamed score column fails the job loud.
+    This is the Dixon-Coles fit dataset: every completed match across the
+    profile's open-data competitions (optionally restricted to ``seasons``).
+    Rows validate at the boundary; a missing/renamed score column fails loud.
     """
     competitions = fetch_competitions(cache_root=cache_root, url_opener=url_opener)
     selected = select_profile_competitions(
-        competitions, profile_id, session_path=session_path
+        competitions, profile_id, seasons=seasons, session_path=session_path
     )
     pairs: list[tuple[int, int]] = []
     for comp in selected:

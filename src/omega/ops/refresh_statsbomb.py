@@ -50,7 +50,8 @@ logger = logging.getLogger("refresh_statsbomb")
 
 
 def _warm_profile(args: argparse.Namespace) -> int:
-    pairs = load_profile_matches(args.profile, cache_root=args.cache_root)
+    seasons = tuple(s.strip() for s in args.seasons.split(",")) if args.seasons else None
+    pairs = load_profile_matches(args.profile, seasons=seasons, cache_root=args.cache_root)
     if not pairs:
         logger.error("profile %s matched no open-data matches", args.profile)
         return 1
@@ -140,6 +141,9 @@ def main() -> int:
     parser.add_argument("--competition-id", type=int, help="StatsBomb competition_id (for --xg)")
     parser.add_argument("--season-id", type=int, help="StatsBomb season_id (for --xg)")
     parser.add_argument("--as-of", default=None, help="as_of_date stamp (default: today)")
+    parser.add_argument(
+        "--seasons", default=None, help="Comma-separated season_name filter for --profile"
+    )
     parser.add_argument("--max-matches", type=int, default=None, help="Cap matches (testing)")
     parser.add_argument("--cache-root", default=None, help="Override ETL cache root")
     parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")

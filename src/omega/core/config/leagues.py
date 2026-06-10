@@ -202,6 +202,14 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "rho": -0.13,
         "timezone": "America/New_York",  # EST/EDT
     },
+    # Phase 7 M2 PR-S8: promoted club leagues run the bivariate-Poisson
+    # backend with per-competition rho profiles fit from the StatsBomb Big-5
+    # 2015/16 full-league release (EPL/La Liga/Serie A/Ligue 1). The legacy
+    # dixon_coles/rho keys remain for the fast_score path only (rollback =
+    # drop default_game_backend, design Part 9). NOT promoted, pending a
+    # credible fit dataset: CHAMPIONS_LEAGUE (open data has finals only) and
+    # BUNDESLIGA (open data has single-team Leverkusen seasons, 34 matches
+    # each — a biased sub-100 sample is no basis for a competition fit).
     "EPL": {
         "sport": "soccer",
         "archetype": "soccer",
@@ -214,6 +222,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "epl_v1",
         "timezone": "Europe/London",
     },
     "PREMIER_LEAGUE": {
@@ -228,6 +239,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "epl_v1",
     },
     "LA_LIGA": {
         "sport": "soccer",
@@ -241,6 +255,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.2,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "laliga_v1",
     },
     "LALIGA": {
         "sport": "soccer",
@@ -254,6 +271,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.2,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "laliga_v1",
     },
     "BUNDESLIGA": {
         "sport": "soccer",
@@ -281,6 +301,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "seriea_v1",
         "timezone": "Europe/Rome",
     },
     "LIGUE_1": {
@@ -295,6 +318,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.2,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "ligue1_v1",
         "timezone": "Europe/Paris",
     },
     "CHAMPIONS_LEAGUE": {

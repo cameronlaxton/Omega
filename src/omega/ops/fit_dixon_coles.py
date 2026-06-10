@@ -215,6 +215,14 @@ def main() -> int:
         "--promote", action="store_true", help="Promote this fit to production after writing"
     )
     parser.add_argument("--min-matches", type=int, default=_DEFAULT_MIN_MATCHES)
+    parser.add_argument(
+        "--seasons",
+        default=None,
+        help=(
+            "Comma-separated season_name filter (e.g. '2015/2016'). Use for club "
+            "profiles where open-data mixes full-league and single-team seasons."
+        ),
+    )
     parser.add_argument("--cache-root", default=None, help="Override ETL cache root")
     parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument("--dry-run", action="store_true", help="Fit and report; write nothing")
@@ -228,8 +236,11 @@ def main() -> int:
 
     from omega.integrations.statsbomb import load_profile_matches
 
+    seasons = tuple(s.strip() for s in args.seasons.split(",")) if args.seasons else None
     try:
-        pairs = load_profile_matches(args.profile, cache_root=args.cache_root)
+        pairs = load_profile_matches(
+            args.profile, seasons=seasons, cache_root=args.cache_root
+        )
     except Exception as exc:  # noqa: BLE001 - surface ETL failures loudly
         logger.error("could not load fit dataset for %s: %s", args.profile, exc)
         return 1
