@@ -330,12 +330,15 @@ def _process_league(
             if not provider_market:
                 skipped.append(f"{bet['bet_id']} (no provider prop mapping for {stat_key})")
                 continue
+            book_query = str(bet["book"]).lower()
+            if book_query == "consensus":
+                book_query = "betmgm"
             try:
                 event = client.fetch_current_event_odds(
                     league,
                     event.event_id,
                     markets=provider_market,
-                    bookmakers=str(bet["book"]).lower(),
+                    bookmakers=book_query,
                 )
             except Exception as exc:  # noqa: BLE001
                 skipped.append(f"{bet['bet_id']} (prop event odds fetch failed: {exc})")

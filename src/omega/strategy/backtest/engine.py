@@ -43,15 +43,33 @@ def _grade_selection(
     side: str,
     home_score: float,
     away_score: float,
+    line: float | None = None,
 ) -> tuple[bool, bool]:
     """Grade one bet selection against a final score. Returns (won, push).
 
-    Covers moneyline (incl. 3-way draw) and the exotic soccer markets. A draw
-    moneyline wins on a tie (not a push); straight home/away push on a tie;
-    draw-no-bet voids (pushes) on a tie; double chance / BTTS / correct score
-    never push.
+    Covers moneyline (incl. 3-way draw), point spread, game total, and the exotic
+    soccer markets. A draw moneyline wins on a tie (not a push); straight
+    home/away push on a tie; draw-no-bet voids (pushes) on a tie; double chance /
+    BTTS / correct score never push. Spread and total push on the exact number
+    (``line`` is signed the way it was bet — home's spread for side='home',
+    its negation for side='away', the total line for over/under).
     """
     is_tie = home_score == away_score
+
+    if market_type == "spread":
+        if line is None:
+            return False, False
+        margin = (home_score - away_score) if side == "home" else (away_score - home_score)
+        value = margin + line
+        return value > 0, value == 0
+
+    if market_type == "total":
+        if line is None:
+            return False, False
+        total = home_score + away_score
+        if side == "over":
+            return total > line, total == line
+        return total < line, total == line
 
     if market_type == "draw_no_bet":
         if is_tie:
@@ -293,6 +311,11 @@ class BacktestEngine:
         ]:
             return []
 
+        # Spread/total lines, passed to the sim so it computes cover/over
+        # probabilities (the same inputs the production path supplies).
+        spread_line = odds.get("spread_home")
+        total_line = odds.get("over_under")
+
         # Simulate
         sim_result = self._sim.run_fast_game_simulation(
             home_team=home_team,
@@ -302,6 +325,8 @@ class BacktestEngine:
             home_context=home_ctx or None,
             away_context=away_ctx or None,
             seed=artifact.simulation_seed if artifact.simulation_seed is not None else self._seed,
+            spread_home=spread_line,
+            over_under=total_line,
         )
 
         if not sim_result.get("success"):
@@ -430,6 +455,65 @@ class BacktestEngine:
             if bet is not None:
                 bets.append(bet)
 
+        # Point spread. Cover probabilities use the dedicated 'cover' calibration
+        # plane (matching production); the home spread is bet at spread_line, the
+        # away side at its negation.
+        if spread_line is not None and "home_cover_prob" in sim_result:
+            spread_specs = [
+                ("home", home_team, "home_cover_prob", "spread_home_price", spread_line),
+                ("away", away_team, "away_cover_prob", "spread_away_price", -spread_line),
+            ]
+            for side, team, prob_key, price_key, bet_line in spread_specs:
+                price = odds.get(price_key, -110.0)
+                sim_prob = sim_result.get(prob_key)
+                if price is None or sim_prob is None:
+                    continue
+                cal = apply_calibration(
+                    sim_prob / 100.0, league=league, context_hints=game_ctx or None, market="cover"
+                )
+                bet = self._evaluate_side(
+                    side=side,
+                    team=team,
+                    model_prob=cal,
+                    market_odds=price,
+                    strategy=strategy,
+                    outcome=outcome,
+                    closing_odds=closing.get(price_key, price),
+                    market_type="spread",
+                    line=bet_line,
+                )
+                if bet is not None:
+                    bets.append(bet)
+
+        # Game total. Over/under use their own calibration planes (matching
+        # production); both are bet at total_line.
+        if total_line is not None and "over_prob" in sim_result and "under_prob" in sim_result:
+            total_specs = [
+                ("over", f"Over {total_line:g}", "over_prob", "over_price", "over"),
+                ("under", f"Under {total_line:g}", "under_prob", "under_price", "under"),
+            ]
+            for side, team, prob_key, price_key, cal_market in total_specs:
+                price = odds.get(price_key, -110.0)
+                sim_prob = sim_result.get(prob_key)
+                if price is None or sim_prob is None:
+                    continue
+                cal = apply_calibration(
+                    sim_prob / 100.0, league=league, context_hints=game_ctx or None, market=cal_market
+                )
+                bet = self._evaluate_side(
+                    side=side,
+                    team=team,
+                    model_prob=cal,
+                    market_odds=price,
+                    strategy=strategy,
+                    outcome=outcome,
+                    closing_odds=closing.get(price_key, price),
+                    market_type="total",
+                    line=total_line,
+                )
+                if bet is not None:
+                    bets.append(bet)
+
         return bets
 
     def _evaluate_side(
@@ -442,6 +526,7 @@ class BacktestEngine:
         outcome: dict[str, Any],
         closing_odds: float | None,
         market_type: str = "moneyline",
+        line: float | None = None,
     ) -> dict[str, Any] | None:
         """Evaluate a single side for edge, decide bet, grade against outcome."""
         impl_prob = implied_probability(market_odds)
@@ -482,7 +567,7 @@ class BacktestEngine:
 
         # Selection-aware grading across moneyline (incl. 3-way draw) and the
         # exotic soccer markets (double chance, draw-no-bet, BTTS, correct score).
-        won, push = _grade_selection(market_type, side, home_score, away_score)
+        won, push = _grade_selection(market_type, side, home_score, away_score, line)
 
         # Net units
         if push:
@@ -507,6 +592,7 @@ class BacktestEngine:
             "side": side,
             "team": team,
             "market_type": market_type,
+            "line": line,
             "model_prob": round(model_prob, 4),
             "market_odds": market_odds,
             "edge_pct": round(edge, 2),

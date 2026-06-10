@@ -324,13 +324,16 @@ def _process_league(
                 if not provider_market:
                     skipped.append(f"{bet['bet_id']} (no provider prop mapping for {stat_key})")
                     continue
+                book_query = str(bet["book"]).lower()
+                if book_query == "consensus":
+                    book_query = "betmgm"
                 try:
                     prop_snapshot = client.fetch_historical_event_odds(
                         league,
                         event_id=event.event_id,
                         date=ts,
                         markets=provider_market,
-                        bookmakers=str(bet["book"]).lower(),
+                        bookmakers=book_query,
                     )
                     event = prop_snapshot.events[0] if prop_snapshot.events else None
                     if event is None:
