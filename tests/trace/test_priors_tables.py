@@ -46,7 +46,7 @@ def test_fresh_and_reopened_db_have_v16_tables():
         store.close()
     reopened = TraceStore(db_path=path)
     try:
-        assert reopened.schema_version() == 16
+        assert reopened.schema_version() == 17
     finally:
         reopened.close()
 
