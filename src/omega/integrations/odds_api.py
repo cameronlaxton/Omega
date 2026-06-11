@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
@@ -71,6 +72,59 @@ SPORT_KEY_MAP: dict[str, str] = {
     "UFC": "mma_mixed_martial_arts",
     "MMA": "mma_mixed_martial_arts",
 }
+
+# Tennis is intentionally absent from SPORT_KEY_MAP: the provider's tennis
+# keys are per-tournament (tennis_atp_wimbledon, tennis_wta_french_open, ...)
+# and churn through the season, so a static "ATP" -> "tennis_atp" entry would
+# 404. Resolve active keys dynamically via resolve_tennis_sport_keys().
+TENNIS_TOUR_KEY_PREFIXES: dict[str, str] = {
+    "ATP": "tennis_atp",
+    "WTA": "tennis_wta",
+}
+
+_TENNIS_KEYS_CACHE_DIR = Path("data/cache/odds_api")
+_TENNIS_KEYS_TTL_SECONDS = 24 * 3600
+
+
+def resolve_tennis_sport_keys(
+    client: "OddsApiClient",
+    tour: str,
+    *,
+    cache_dir: str | Path | None = None,
+    ttl_seconds: float = _TENNIS_KEYS_TTL_SECONDS,
+) -> list[str]:
+    """Return the active per-tournament sport keys for an ATP/WTA tour.
+
+    Filters the provider's sports index for active ``tennis_<tour>*`` keys,
+    cached on disk for a day. On a fetch failure the last-good cached list is
+    served (Part 8 sport-key-churn mitigation) — only a cold failure raises.
+    """
+    prefix = TENNIS_TOUR_KEY_PREFIXES.get(tour.upper())
+    if prefix is None:
+        raise ValueError(
+            f"tour must be one of {sorted(TENNIS_TOUR_KEY_PREFIXES)}, got {tour!r}"
+        )
+    cache_path = Path(cache_dir or _TENNIS_KEYS_CACHE_DIR) / f"tennis_keys_{tour.lower()}.json"
+    if cache_path.exists() and (time.time() - cache_path.stat().st_mtime) < ttl_seconds:
+        return json.loads(cache_path.read_text(encoding="utf-8"))
+
+    try:
+        sports = client.fetch_sports(all_sports=True)
+    except Exception as exc:  # noqa: BLE001 - stale fallback is the documented path
+        if cache_path.exists():
+            logger.warning(
+                "tennis sport-key refresh failed (%s); serving stale last-good list", exc
+            )
+            return json.loads(cache_path.read_text(encoding="utf-8"))
+        raise
+    keys = sorted(
+        s.key
+        for s in sports
+        if s.active and (s.key == prefix or s.key.startswith(prefix + "_"))
+    )
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(keys), encoding="utf-8")
+    return keys
 
 
 def sport_key_for(league: str) -> str | None:
@@ -153,6 +207,11 @@ class ScoreEvent:
     completed: bool
     home_team: str
     away_team: str
+    # Final per-participant scores from the provider ``scores`` array, as
+    # ((name, score), ...) pairs. Empty for upcoming games and for callers
+    # that predate this field. For tennis the score value is sets won — the
+    # outcome-grading path (omega-fetch-outcomes-tennis) reads it.
+    scores: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -307,14 +366,21 @@ class OddsApiClient:
         payload = self._get_json(f"/sports/{sport_key}/events", params, request_cost=request_cost)
         return parse_events_metadata(payload)
 
-    def fetch_scores(self, league: str, days_from: int = 3) -> list[ScoreEvent]:
+    def fetch_scores(
+        self, league: str, days_from: int = 3, *, sport_key: str | None = None
+    ) -> list[ScoreEvent]:
         """Fetch recent (completed) and upcoming games for a league.
 
         ``days_from`` is the number of days in the past to include completed
         games for; the-odds-api caps it at 3. Used to derive schedule facts
         (e.g. rest days) for leagues without a free ESPN scoreboard.
+
+        ``sport_key`` overrides the static SPORT_KEY_MAP lookup — required for
+        tennis, whose provider keys are per-tournament (see
+        :func:`resolve_tennis_sport_keys`).
         """
-        sport_key = _require_sport_key(league)
+        if sport_key is None:
+            sport_key = _require_sport_key(league)
         params: dict[str, Any] = {"dateFormat": "iso", "daysFrom": int(days_from)}
         payload = self._get_json(f"/sports/{sport_key}/scores", params)
         return parse_scores(payload)
@@ -596,6 +662,12 @@ def parse_scores(payload: Any) -> list[ScoreEvent]:
     for evt in payload:
         if not isinstance(evt, dict):
             continue
+        raw_scores = evt.get("scores") or []
+        score_pairs = tuple(
+            (str(s.get("name", "")), str(s.get("score", "")))
+            for s in raw_scores
+            if isinstance(s, dict)
+        )
         scores.append(
             ScoreEvent(
                 event_id=str(evt.get("id", "")),
@@ -604,6 +676,7 @@ def parse_scores(payload: Any) -> list[ScoreEvent]:
                 completed=bool(evt.get("completed", False)),
                 home_team=str(evt.get("home_team", "")),
                 away_team=str(evt.get("away_team", "")),
+                scores=score_pairs,
             )
         )
     return scores

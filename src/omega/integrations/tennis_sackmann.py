@@ -74,6 +74,7 @@ class SackmannMatchRow(BaseModel):
     surface: str | None
     winner_name: str
     loser_name: str
+    score: str | None
     w_svpt: int | None
     w_1stWon: int | None
     w_2ndWon: int | None
@@ -83,6 +84,7 @@ class SackmannMatchRow(BaseModel):
 
     _coerce_blanks = field_validator(
         "surface",
+        "score",
         "w_svpt",
         "w_1stWon",
         "w_2ndWon",
