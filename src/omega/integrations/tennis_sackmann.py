@@ -279,7 +279,13 @@ class ChartingPointRow(BaseModel):
 
 
 class ChartingMatchRow(BaseModel):
-    """MCP match metadata: players + surface (+ best-of when present)."""
+    """MCP match metadata: players + surface (+ best-of when present).
+
+    ``best_of`` is crowdsourced free text in places ("3", "5", occasionally
+    annotated) — value-lenient parsing keeps the leading digits or falls back
+    to None rather than failing the job on one mistyped cell. Column *absence*
+    still fails loud via the explicit key mapping in parse_charting_matches.
+    """
 
     match_id: str
     player_1: str
@@ -287,7 +293,15 @@ class ChartingMatchRow(BaseModel):
     surface: str | None
     best_of: int | None = None
 
-    _coerce_blanks = field_validator("surface", "best_of", mode="before")(_blank_to_none)
+    _coerce_blanks = field_validator("surface", mode="before")(_blank_to_none)
+
+    @field_validator("best_of", mode="before")
+    @classmethod
+    def _lenient_best_of(cls, value: Any) -> Any:
+        if value is None or isinstance(value, int):
+            return value
+        digits = "".join(ch for ch in str(value) if ch.isdigit())
+        return int(digits) if digits in ("3", "5") else None
 
 
 def fetch_charting_csv(
@@ -317,26 +331,52 @@ def _download_charting_csv(sex: str, kind: str, url_opener: Callable[..., Any]) 
         return resp.read().decode("utf-8", errors="replace")
 
 
+_MCP_MAX_DEFECT_RATE = 0.01
+
+
 def parse_charting_points(
     csv_text: str, *, session_path: str | None = None
 ) -> list[ChartingPointRow]:
+    """Parse MCP point rows, dropping individually defective rows.
+
+    The charting data is crowdsourced: isolated rows carry typos in the
+    integer columns. Those rows are dropped and counted rather than failing
+    the job — but a defect rate above 1% (or a renamed column, which defects
+    every row) still raises ``SourceSchemaDriftError``, preserving the
+    fail-loud drift contract.
+    """
+    from omega.integrations._etl import SourceSchemaDriftError
+
     reader = csv.DictReader(io.StringIO(csv_text))
-    raw = [
-        {
-            "match_id": r.get("match_id"),
-            "Set1": r.get("Set1"),
-            "Set2": r.get("Set2"),
-            "Gm1": r.get("Gm1"),
-            "Gm2": r.get("Gm2"),
-            "Pts": r.get("Pts"),
-            "Svr": r.get("Svr"),
-            "PtWinner": r.get("PtWinner"),
-        }
-        for r in reader
-    ]
-    return validate_records(
-        raw, ChartingPointRow, source="sackmann_mcp", session_path=session_path
-    )
+    rows: list[ChartingPointRow] = []
+    dropped = 0
+    total = 0
+    for r in reader:
+        total += 1
+        try:
+            rows.append(
+                ChartingPointRow(
+                    match_id=r.get("match_id"),
+                    Set1=r.get("Set1"),
+                    Set2=r.get("Set2"),
+                    Gm1=r.get("Gm1"),
+                    Gm2=r.get("Gm2"),
+                    Pts=r.get("Pts"),
+                    Svr=r.get("Svr"),
+                    PtWinner=r.get("PtWinner"),
+                )
+            )
+        except Exception:  # noqa: BLE001 - counted; rate-gated below
+            dropped += 1
+    if total and dropped / total > _MCP_MAX_DEFECT_RATE:
+        raise SourceSchemaDriftError(
+            "sackmann_mcp",
+            f"{dropped}/{total} point rows failed validation — column drift, "
+            "not isolated typos",
+        )
+    if dropped:
+        logger.info("dropped %d/%d defective MCP point rows", dropped, total)
+    return rows
 
 
 def parse_charting_matches(
