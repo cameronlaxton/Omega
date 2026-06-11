@@ -570,6 +570,11 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "rho": -0.13,
     },
     # ── Tennis ─────────────────────────────────────────────────
+    # Phase 7 M3: tennis runs the closed-form Markov backend. Canonical tennis
+    # league codes are ATP / WTA / GRAND_SLAM only (event codes like WIMBLEDON
+    # have archetype mappings but no configs — they would fall to the default
+    # config with no best_of). best_of is overridable per event via
+    # prior_payload["match_format"] ("best_of_5" for ATP slams).
     "ATP": {
         "sport": "tennis",
         "archetype": "tennis",
@@ -577,6 +582,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "best_of": 3,
         "avg_total_games": 22.0,
         "distribution": "bernoulli",
+        "default_game_backend": "tennis_markov_iid",
+        "default_prop_backend": "prop_distribution_router",
     },
     "WTA": {
         "sport": "tennis",
@@ -585,6 +592,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "best_of": 3,
         "avg_total_games": 20.0,
         "distribution": "bernoulli",
+        "default_game_backend": "tennis_markov_iid",
+        "default_prop_backend": "prop_distribution_router",
     },
     "GRAND_SLAM": {
         "sport": "tennis",
@@ -593,6 +602,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "best_of": 5,
         "avg_total_games": 35.0,
         "distribution": "bernoulli",
+        "default_game_backend": "tennis_markov_iid",
+        "default_prop_backend": "prop_distribution_router",
     },
     # ── Golf ───────────────────────────────────────────────────
     "PGA": {
