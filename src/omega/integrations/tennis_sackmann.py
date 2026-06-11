@@ -202,12 +202,17 @@ def build_tennis_priors(
 ) -> tuple[list[TennisPrior], list[str]]:
     """Aggregate validated match rows into ``TennisPrior`` rows.
 
-    Players resolve through the alias table when one is provided; unresolved
-    players are excluded from the write and reported. ``min_matches`` guards
-    against one-tournament noise on a surface.
+    Name handling differs from cross-source adapters: the Sackmann dataset is
+    itself the canonical name authority for these priors (its names are the
+    lookup keys), so a name that does not resolve through the alias table is
+    KEPT verbatim rather than excluded — exclusion is for foreign sources
+    whose unresolved names would create ambiguous keys (ETL standard 3). The
+    alias table still folds known variants (accents, suffixes) onto one key;
+    ``unresolved`` reports them for review. ``min_matches`` guards against
+    one-tournament noise on a surface.
     """
     alias_table = alias_table or {"canonical": [], "aliases": {}}
-    enforce_aliases = bool(alias_table.get("canonical"))
+    has_aliases = bool(alias_table.get("canonical") or alias_table.get("aliases"))
     rates = compute_rolling_rates(rows, as_of_date=as_of_date)
 
     priors: list[TennisPrior] = []
@@ -215,12 +220,13 @@ def build_tennis_priors(
     for (player, surface), bucket in sorted(rates.items()):
         if bucket["matches"] < min_matches or bucket["spw_pts"] <= 0 or bucket["rpw_pts"] <= 0:
             continue
-        canonical = resolve_entity(player, alias_table)
-        if canonical is None:
-            if enforce_aliases:
+        canonical = player
+        if has_aliases:
+            resolved = resolve_entity(player, alias_table)
+            if resolved is None:
                 unresolved.add(player)
-                continue
-            canonical = player
+            else:
+                canonical = resolved
         priors.append(
             TennisPrior(
                 player=canonical,
@@ -233,10 +239,10 @@ def build_tennis_priors(
             )
         )
     if unresolved:
-        logger.warning(
-            "excluded %d unresolved player(s) from priors_tennis write: %s",
+        logger.debug(
+            "%d player name(s) kept verbatim (no alias entry): %s",
             len(unresolved),
-            sorted(unresolved),
+            sorted(unresolved)[:20],
         )
     return priors, sorted(unresolved)
 

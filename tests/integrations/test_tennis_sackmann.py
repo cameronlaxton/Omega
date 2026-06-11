@@ -101,14 +101,26 @@ def test_priors_built_with_min_matches_gate():
     assert by_player["Jannik Sinner"].spw_pct == pytest.approx(53 / 74, abs=1e-3)
 
 
-def test_alias_exclusion_for_unknown_players():
+def test_unknown_players_kept_verbatim_and_aliases_folded():
+    """Sackmann names are source-canonical: unresolved names are kept (and
+    reported), never excluded; alias variants fold onto one key."""
     rows = ts.parse_matches(_csv(_row(winner="Mystery Qualifier")))
-    alias_table = {"canonical": ["Novak Djokovic"], "aliases": {}}
+    alias_table = {
+        "canonical": ["Novak Djokovic"],
+        "aliases": {"Mystery Qualifier": "Known Qualifier"},
+    }
     priors, unresolved = ts.build_tennis_priors(
         rows, tour="atp", as_of_date="2026-06-10", alias_table=alias_table, min_matches=1
     )
-    assert unresolved == ["Mystery Qualifier"]
-    assert [p.player for p in priors] == ["Novak Djokovic"]
+    assert unresolved == []
+    assert {p.player for p in priors} == {"Known Qualifier", "Novak Djokovic"}
+
+    rows = ts.parse_matches(_csv(_row(winner="Total Stranger")))
+    priors, unresolved = ts.build_tennis_priors(
+        rows, tour="atp", as_of_date="2026-06-10", alias_table=alias_table, min_matches=1
+    )
+    assert unresolved == ["Total Stranger"]
+    assert "Total Stranger" in {p.player for p in priors}  # kept, not dropped
 
 
 def test_local_first_read_makes_no_network_call(tmp_path):
