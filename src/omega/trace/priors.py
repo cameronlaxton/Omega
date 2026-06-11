@@ -42,6 +42,10 @@ TENNIS_PRESSURE_STATES = (
 )
 PRESSURE_SOURCE_PLAYER = "player"
 PRESSURE_SOURCE_GROUP = "group_fallback"
+# Reserved player key for tour+surface group-mean pressure rows. A player with
+# no charted rows at all resolves to these at lookup time (source becomes
+# group_fallback) — flat 0.0 deltas are never applied silently.
+PRESSURE_GROUP_PLAYER_KEY = "__group__"
 
 
 class DixonColesProfile(BaseModel):
@@ -328,17 +332,8 @@ def upsert_pressure_deltas(store: "TraceStore", deltas: list[TennisPressureDelta
     store.conn.commit()
 
 
-def get_pressure_coefficients(
-    store: "TraceStore", player: str, tour: str, surface: str
-) -> tuple[dict[str, float], str | None]:
-    """Return ``({state: delta}, source)`` for a player's latest pressure fit.
-
-    ``source`` is ``"player"`` or ``"group_fallback"`` (from the fit rows), or
-    ``None`` when no rows exist — in which case the backend runs flat IID
-    (deltas 0.0), which is the documented rollback state, and the gatherer
-    skips the provenance annotation.
-    """
-    rows = store.conn.execute(
+def _pressure_rows(store: "TraceStore", player: str, tour: str, surface: str):
+    return store.conn.execute(
         """SELECT state, delta, source, as_of_date
            FROM priors_tennis_pressure
            WHERE player = ? AND tour = ? AND surface = ?
@@ -348,11 +343,25 @@ def get_pressure_coefficients(
              )""",
         (player, tour.upper(), surface.lower()) * 2,
     ).fetchall()
-    if not rows:
-        return {}, None
-    coefficients = {row[0]: row[1] for row in rows}
-    source = rows[0][2]
-    return coefficients, source
+
+
+def get_pressure_coefficients(
+    store: "TraceStore", player: str, tour: str, surface: str
+) -> tuple[dict[str, float], str | None]:
+    """Return ``({state: delta}, source)`` for a player's latest pressure fit.
+
+    A player with no rows of their own falls back to the tour+surface group
+    rows (``PRESSURE_GROUP_PLAYER_KEY``) with ``source="group_fallback"`` —
+    never silent zeros. ``(None`` source only when no fit exists at all, in
+    which case the backend runs flat IID, the documented rollback state.)
+    """
+    rows = _pressure_rows(store, player, tour, surface)
+    if rows:
+        return {row[0]: row[1] for row in rows}, rows[0][2]
+    group_rows = _pressure_rows(store, PRESSURE_GROUP_PLAYER_KEY, tour, surface)
+    if group_rows:
+        return {row[0]: row[1] for row in group_rows}, PRESSURE_SOURCE_GROUP
+    return {}, None
 
 
 # ---------------------------------------------------------------------------
@@ -423,15 +432,115 @@ def build_game_prior_payload(
     }
 
 
+def build_tennis_prior_payload(
+    payload: dict[str, Any], store: "TraceStore"
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Tennis gatherer branch: join rates + pressure coefficients per player.
+
+    * fills missing ``serve_win_pct``/``return_win_pct`` in home/away context
+      from ``priors_tennis`` (caller-supplied values always win);
+    * joins each player's latest pressure deltas into
+      ``prior_payload["pressure_coefficients"]`` (``{"home": .., "away": ..}``)
+      with per-side ``pressure_coefficient_source``;
+    * requires a surface (``game_context.surface`` or ``prior_payload.surface``)
+      — without one nothing is joined and a ``warn`` event is emitted (the
+      backend then runs flat IID or skips on missing rates, both honest).
+
+    GRAND_SLAM requests try ATP rows first, then WTA.
+    """
+    league = str(payload.get("league") or "").upper()
+    tours = [league] if league in ("ATP", "WTA") else ["ATP", "WTA"]
+    prior = dict(payload.get("prior_payload") or {})
+    game_ctx = payload.get("game_context") or {}
+    surface = (prior.get("surface") or game_ctx.get("surface") or "").lower()
+
+    out = dict(payload)
+    if not surface:
+        return out, {
+            "ts": _utc_now_iso(),
+            "event_type": "data_provenance",
+            "step": "tennis_prior:inject",
+            "status": "warn",
+            "notes": (
+                f"no surface on {league} request (game_context.surface); tennis "
+                "rate/pressure priors not joined — backend runs flat IID or "
+                "fails closed on missing serve stats"
+            ),
+        }
+
+    if prior.get("pressure_coefficients") is not None:
+        return out, None  # recorded/replayed request: never re-read live tables
+
+    sides = {"home": str(payload.get("home_team") or ""), "away": str(payload.get("away_team") or "")}
+    coefficients: dict[str, dict[str, float]] = {}
+    sources: dict[str, str] = {}
+    filled_rates: list[str] = []
+
+    for side, player in sides.items():
+        if not player:
+            continue
+        for tour in tours:
+            rate = get_tennis_prior(store, player, tour, surface)
+            if rate is not None:
+                ctx_key = f"{side}_context"
+                ctx = dict(out.get(ctx_key) or {})
+                if ctx.get("serve_win_pct") is None:
+                    ctx["serve_win_pct"] = rate.spw_pct
+                    filled_rates.append(f"{side}.serve_win_pct")
+                if ctx.get("return_win_pct") is None:
+                    ctx["return_win_pct"] = rate.rpw_pct
+                    filled_rates.append(f"{side}.return_win_pct")
+                out[ctx_key] = ctx
+                break
+        for tour in tours:
+            coeffs, source = get_pressure_coefficients(store, player, tour, surface)
+            if source is not None:
+                coefficients[side] = coeffs
+                sources[side] = source
+                break
+
+    if not coefficients and not filled_rates:
+        return out, {
+            "ts": _utc_now_iso(),
+            "event_type": "data_provenance",
+            "step": "tennis_prior:inject",
+            "status": "warn",
+            "notes": (
+                f"no priors_tennis/pressure rows for {sides['home']!r} or "
+                f"{sides['away']!r} on {surface}; refresh via omega-refresh-sackmann "
+                "and omega-fit-tennis-pressure-coefficients"
+            ),
+        }
+
+    if coefficients:
+        prior["pressure_coefficients"] = coefficients
+        prior["pressure_coefficient_source"] = sources
+    prior.setdefault("surface", surface)
+    out["prior_payload"] = prior
+    return out, {
+        "ts": _utc_now_iso(),
+        "event_type": "data_provenance",
+        "step": "tennis_prior:inject",
+        "status": "ok",
+        "notes": f"joined tennis priors for {league} on {surface}",
+        "outputs": {
+            "pressure_coefficient_source": sources,
+            "filled_rates": filled_rates,
+            "surface": surface,
+        },
+    }
+
+
 def inject_game_priors(
     payload: dict[str, Any], store: "TraceStore | None" = None
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Config-gated prior injection for a raw game-request dict.
 
-    Opens the default TraceStore only when the league actually carries a
-    ``rho_fit_profile`` (so NBA/MLB/... requests never pay the cost). Returns
-    the (possibly updated) payload plus an optional ``data_provenance`` event
-    for the session sidecar. Injection lives at the gatherer layer — outside
+    Opens the default TraceStore only when the league actually carries dynamic
+    priors (soccer ``rho_fit_profile`` config, or a tennis league), so
+    NBA/MLB/... requests never pay the cost. Returns the (possibly updated)
+    payload plus an optional ``data_provenance`` event for the session
+    sidecar. Injection lives at the gatherer layer — outside
     ``service.analyze`` — so replaying a recorded request (with its priors
     embedded) is deterministic regardless of live table state.
     """
@@ -441,7 +550,10 @@ def inject_game_priors(
 
     from omega.core.config.leagues import get_league_config
 
-    if not get_league_config(league.upper()).get("rho_fit_profile"):
+    config = get_league_config(league.upper())
+    is_soccer_dynamic = bool(config.get("rho_fit_profile"))
+    is_tennis = config.get("sport") == "tennis"
+    if not (is_soccer_dynamic or is_tennis):
         return payload, None
 
     own_store = store is None
@@ -450,6 +562,8 @@ def inject_game_priors(
 
         store = TraceStore()
     try:
+        if is_tennis:
+            return build_tennis_prior_payload(payload, store)
         merged, event = build_game_prior_payload(
             league, payload.get("prior_payload"), store
         )

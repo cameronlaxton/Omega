@@ -239,6 +239,117 @@ def build_tennis_priors(
     return priors, sorted(unresolved)
 
 
+# ---------------------------------------------------------------------------
+# Match Charting Project (point-by-point) — feeds the pressure-coefficient fit
+# ---------------------------------------------------------------------------
+
+_CHARTING_URL_TEMPLATE = (
+    "https://raw.githubusercontent.com/JeffSackmann/tennis_MatchChartingProject/"
+    "master/charting-{sex}-{kind}.csv"
+)
+_CHARTING_TTL_SECONDS = 30 * 24 * 3600  # MCP updates slowly; ~monthly refresh
+
+
+class ChartingPointRow(BaseModel):
+    """The subset of an MCP point row the pressure fit consumes.
+
+    ``Pts`` is the pre-point game score from the server's perspective
+    (e.g. ``30-40`` = break point against the server). ``Svr``/``PtWinner``
+    are 1|2 player indices. Column presence is mandatory (drift fails loud).
+    """
+
+    match_id: str
+    Set1: int
+    Set2: int
+    Gm1: int
+    Gm2: int
+    Pts: str
+    Svr: int
+    PtWinner: int | None
+
+    _coerce_blanks = field_validator("PtWinner", mode="before")(_blank_to_none)
+
+
+class ChartingMatchRow(BaseModel):
+    """MCP match metadata: players + surface (+ best-of when present)."""
+
+    match_id: str
+    player_1: str
+    player_2: str
+    surface: str | None
+    best_of: int | None = None
+
+    _coerce_blanks = field_validator("surface", "best_of", mode="before")(_blank_to_none)
+
+
+def fetch_charting_csv(
+    sex: str,
+    kind: str,
+    *,
+    cache_root: str | None = None,
+    url_opener: Callable[..., Any] = urllib.request.urlopen,
+) -> str:
+    """Fetch one MCP CSV (``kind`` like ``points-2020s`` or ``matches``)."""
+    sex = sex.lower()
+    if sex not in ("m", "w"):
+        raise ValueError(f"sex must be 'm' or 'w', got {sex!r}")
+
+    @cached_fetch("sackmann", ttl_seconds=_CHARTING_TTL_SECONDS, fmt="text", cache_root=cache_root)
+    def _fetch() -> str:
+        return _download_charting_csv(sex, kind, url_opener)
+
+    return _fetch(cache_key=f"charting_{sex}_{kind}")
+
+
+def _download_charting_csv(sex: str, kind: str, url_opener: Callable[..., Any]) -> str:
+    assert_not_replay_mode("match charting project fetch")
+    url = _CHARTING_URL_TEMPLATE.format(sex=sex, kind=kind)
+    logger.info("fetching MCP CSV: %s", url)
+    with url_opener(url, timeout=_REQUEST_TIMEOUT_SECONDS * 4) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def parse_charting_points(
+    csv_text: str, *, session_path: str | None = None
+) -> list[ChartingPointRow]:
+    reader = csv.DictReader(io.StringIO(csv_text))
+    raw = [
+        {
+            "match_id": r.get("match_id"),
+            "Set1": r.get("Set1"),
+            "Set2": r.get("Set2"),
+            "Gm1": r.get("Gm1"),
+            "Gm2": r.get("Gm2"),
+            "Pts": r.get("Pts"),
+            "Svr": r.get("Svr"),
+            "PtWinner": r.get("PtWinner"),
+        }
+        for r in reader
+    ]
+    return validate_records(
+        raw, ChartingPointRow, source="sackmann_mcp", session_path=session_path
+    )
+
+
+def parse_charting_matches(
+    csv_text: str, *, session_path: str | None = None
+) -> list[ChartingMatchRow]:
+    reader = csv.DictReader(io.StringIO(csv_text))
+    raw = [
+        {
+            "match_id": r.get("match_id"),
+            "player_1": r.get("Player 1", r.get("player_1")),
+            "player_2": r.get("Player 2", r.get("player_2")),
+            "surface": r.get("Surface", r.get("surface")),
+            "best_of": r.get("Best of", r.get("best_of")),
+        }
+        for r in reader
+    ]
+    return validate_records(
+        raw, ChartingMatchRow, source="sackmann_mcp", session_path=session_path
+    )
+
+
 def load_tennis_priors(
     tour: str,
     years: list[int],
