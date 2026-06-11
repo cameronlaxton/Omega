@@ -1714,6 +1714,16 @@ def analyze_player_prop(
         prop_backend = resolve_prop_backend("prop_distribution_router")
         notes.append(f"prop backend {backend_name!r} unregistered; using distribution router")
 
+    prior_payload: dict[str, Any] = {
+        "distribution": distribution_override,
+        "dud_prob": float(player_ctx.get("dud_prob", 0.0)),
+    }
+    # Whitelisted sport-specific prop priors travel from player_context into
+    # prior_payload (tennis serve model keys; harmless no-ops elsewhere).
+    for prior_key in ("ace_rate", "serve_win_pct", "match_format", "expected_total_games"):
+        if player_ctx.get(prior_key) is not None:
+            prior_payload[prior_key] = player_ctx[prior_key]
+
     sim_input = PropSimulationInput(
         player_name=request.player_name,
         league=request.league,
@@ -1723,10 +1733,7 @@ def analyze_player_prop(
         n_iter=request.n_iterations,
         seed=request.seed,
         projection_std=std_f,
-        prior_payload={
-            "distribution": distribution_override,
-            "dud_prob": float(player_ctx.get("dud_prob", 0.0)),
-        },
+        prior_payload=prior_payload,
     )
 
     try:

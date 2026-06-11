@@ -112,6 +112,30 @@ def p_hold_chain(p: float, bp_delta: float = 0.0, gp_delta: float = 0.0) -> floa
     return f(0, 0)
 
 
+@lru_cache(maxsize=None)
+def expected_game_points(p: float) -> float:
+    """Expected number of points in a service game at point-win prob ``p``.
+
+    Same finite recursion as :func:`p_hold_chain`, with the deuce cycle solved
+    algebraically: from deuce, each two-point block returns to deuce with
+    probability ``2pq``, so ``E_deuce = 2 / (1 - 2pq)``.
+    """
+    p = _clamp(p)
+    q = 1.0 - p
+    e_deuce = 2.0 / (1.0 - 2.0 * p * q)
+
+    def f(s: int, r: int) -> float:
+        if s == 3 and r == 3:
+            return e_deuce
+        if s == 3:  # server game point: point ends it with prob p
+            return 1.0 + q * f(3, r + 1)
+        if r == 3:  # break point: receiver point ends it with prob q
+            return 1.0 + p * f(s + 1, 3)
+        return 1.0 + p * f(s + 1, r) + q * f(s, r + 1)
+
+    return f(0, 0)
+
+
 # ---------------------------------------------------------------------------
 # Tiebreak level
 # ---------------------------------------------------------------------------

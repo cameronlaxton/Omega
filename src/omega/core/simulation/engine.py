@@ -2039,3 +2039,9 @@ register_game_backend("soccer_bivariate_poisson_dc", SoccerPoissonBackend())
 from omega.core.simulation.tennis_markov import TennisMarkovBackend  # noqa: E402
 
 register_game_backend("tennis_markov_iid", TennisMarkovBackend())
+
+from omega.core.simulation.tennis_prop_serve import (  # noqa: E402
+    TennisServePropBackend,
+)
+
+register_prop_backend("tennis_prop_serve", TennisServePropBackend())
