@@ -241,7 +241,7 @@ def main() -> int:
         logger.error("could not load MCP data for %s: %s", args.tour, exc)
         return 1
 
-    default_best_of = 5 if args.tour == "atp" else 3  # slams dominate charted bo5
+    default_best_of = 3
     acc = accumulate_pressure_stats(points, matches, default_best_of=default_best_of)
     as_of = args.as_of or date.today().isoformat()
     rows = build_pressure_deltas(

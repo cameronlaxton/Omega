@@ -184,7 +184,7 @@ def fetch_scoreboard(
     query = urllib.parse.urlencode({"dates": date_str})
 
     slugs = [slug]
-    if league.upper() in {"WORLD_CUP", "FIFA_WORLD_CUP_2026"}:
+    if league.upper() == "WORLD_CUP":
         slugs.append("fifa.friendly")
 
     results: list[FinalGame] = []

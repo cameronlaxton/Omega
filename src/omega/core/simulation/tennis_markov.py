@@ -44,7 +44,7 @@ Monte Carlo of the same chains. No serve/return defaults exist: missing
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 from typing import Any
 
 from omega.core.simulation.backends import GameSimulationInput
@@ -63,6 +63,15 @@ _STATE_MP = "match_point_serving"
 _STATE_TB = "tiebreak"
 _STATE_SFS = "serving_for_set"
 _STATE_SFM = "serving_for_match"
+_PRESSURE_CAP = 0.15
+_SUPPORTED_PRESSURE_STATES = {
+    _STATE_BP,
+    _STATE_SP,
+    _STATE_MP,
+    _STATE_TB,
+    _STATE_SFS,
+    _STATE_SFM,
+}
 
 
 def _clamp(p: float) -> float:
@@ -83,7 +92,7 @@ def p_hold_closed_form(p: float) -> float:
     return direct + deuce_reach * deuce_win
 
 
-@lru_cache(maxsize=None)
+@cache
 def p_hold_chain(p: float, bp_delta: float = 0.0, gp_delta: float = 0.0) -> float:
     """Exact hold probability with per-state deltas at game/break points.
 
@@ -112,7 +121,7 @@ def p_hold_chain(p: float, bp_delta: float = 0.0, gp_delta: float = 0.0) -> floa
     return f(0, 0)
 
 
-@lru_cache(maxsize=None)
+@cache
 def expected_game_points(p: float) -> float:
     """Expected number of points in a service game at point-win prob ``p``.
 
@@ -141,7 +150,14 @@ def expected_game_points(p: float) -> float:
 # ---------------------------------------------------------------------------
 
 
-def p_tiebreak(pa: float, pb: float, tb_delta_a: float = 0.0, tb_delta_b: float = 0.0) -> float:
+def p_tiebreak(
+    pa: float,
+    pb: float,
+    tb_delta_a: float = 0.0,
+    tb_delta_b: float = 0.0,
+    *,
+    first_server_a: bool = True,
+) -> float:
     """P(player A wins a tiebreak); exact with the real serve rotation."""
     pa_eff = _clamp(pa + tb_delta_a)  # A wins a point on A's serve
     pb_eff = _clamp(pb + tb_delta_b)  # B wins a point on B's serve
@@ -161,8 +177,9 @@ def p_tiebreak(pa: float, pb: float, tb_delta_a: float = 0.0, tb_delta_b: float 
             return deadlock
         key = (a, b)
         if key not in cache:
-            n = a + b + 1  # 1-indexed point number; A serves when n % 4 in {0, 1}
-            a_serving = n % 4 in (0, 1)
+            n = a + b + 1  # 1-indexed point number; first server has n % 4 in {0, 1}
+            first_server_serving = n % 4 in (0, 1)
+            a_serving = first_server_serving if first_server_a else not first_server_serving
             p_point = pa_eff if a_serving else 1.0 - pb_eff
             cache[key] = p_point * f(a + 1, b) + (1.0 - p_point) * f(a, b + 1)
         return cache[key]
@@ -212,7 +229,14 @@ def p_set(
     first_server_a: bool = True,
 ) -> float:
     """P(player A wins the set); exact recursion over game scores."""
-    tb = p_tiebreak(pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB))
+    tb_a = p_tiebreak(
+        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB),
+        first_server_a=True
+    )
+    tb_b = p_tiebreak(
+        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB),
+        first_server_a=False
+    )
     cache: dict[tuple[int, int, bool], float] = {}
 
     def f(ga: int, gb: int, a_serving: bool) -> float:
@@ -225,7 +249,7 @@ def p_set(
         if gb == 7:
             return 0.0
         if ga == 6 and gb == 6:
-            return tb
+            return tb_a if a_serving else tb_b
         key = (ga, gb, a_serving)
         if key not in cache:
             if a_serving:
@@ -293,7 +317,14 @@ def match_set_score_distribution(
 
 def _simulate_match(rng, pa, pb, coeffs_a, coeffs_b, sets_to_win):
     """One match at game level. Returns (sets_a, sets_b, games, set1_games, set1_a_won)."""
-    tb_a = p_tiebreak(pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB))
+    tb_a = p_tiebreak(
+        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB),
+        first_server_a=True
+    )
+    tb_b = p_tiebreak(
+        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB),
+        first_server_a=False
+    )
     sets_a = sets_b = total_games = 0
     set1_games = 0
     set1_a_won = False
@@ -306,7 +337,7 @@ def _simulate_match(rng, pa, pb, coeffs_a, coeffs_b, sets_to_win):
         ga = gb = 0
         while True:
             if ga == 6 and gb == 6:
-                a_won_game = rng.random() < tb_a
+                a_won_game = rng.random() < (tb_a if a_serves else tb_b)
                 total_games += 1
                 ga, gb = (7, 6) if a_won_game else (6, 7)
                 a_serves = not a_serves
@@ -364,8 +395,23 @@ def _side_coeffs(prior: dict[str, Any], side: str) -> dict[str, float] | None:
         return None
     if "home" in pc or "away" in pc:
         side_pc = pc.get(side)
-        return dict(side_pc) if isinstance(side_pc, dict) else None
-    return dict(pc)  # flat dict applies to both players
+        return _sanitize_pressure_coeffs(side_pc) if isinstance(side_pc, dict) else None
+    return _sanitize_pressure_coeffs(pc)  # flat dict applies to both players
+
+
+def _sanitize_pressure_coeffs(raw: dict[str, Any]) -> dict[str, float] | None:
+    coeffs: dict[str, float] = {}
+    for state, value in raw.items():
+        if state not in _SUPPORTED_PRESSURE_STATES:
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not np.isfinite(numeric):
+            continue
+        coeffs[state] = max(-_PRESSURE_CAP, min(_PRESSURE_CAP, numeric))
+    return coeffs or None
 
 
 class TennisMarkovBackend:

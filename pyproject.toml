@@ -27,6 +27,7 @@ omega-fetch-outcomes-props = "omega.ops.fetch_outcomes_props:main"
 omega-fetch-outcomes-soccer = "omega.ops.fetch_outcomes_soccer:main"
 omega-fetch-outcomes-tennis = "omega.ops.fetch_outcomes_tennis:main"
 omega-fetch-outcomes-wnba = "omega.ops.fetch_outcomes_wnba:main"
+omega-export-llm-training = "omega.ops.export_llm_training:main"
 omega-fit-adjustment-policy = "omega.ops.fit_adjustment_policy:main"
 omega-fit-calibration = "omega.ops.fit_calibration:main"
 omega-fit-dixon-coles = "omega.ops.fit_dixon_coles:main"
@@ -116,3 +117,6 @@ pythonpath = ["src"]
 where = ["src"]
 include = ["omega*"]
 exclude = ["tests*", "docs*", "inbox*", "reports*", "config*"]
+
+[tool.setuptools.package-data]
+omega = ["data/aliases/*.json"]

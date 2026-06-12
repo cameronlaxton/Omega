@@ -13,6 +13,7 @@ Design gates (docs/phase7/MULTI_SPORT_EXPANSION.md Milestone 2):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 from pathlib import Path
@@ -96,7 +97,7 @@ def _promote_profile(store, profile_id="fifa_intl_v1", rho=-0.11, as_of="2026-06
 def test_replay_is_bit_identical_with_nonzero_draw_prob(
     league, home, away, hxg, hxga, axg, axga
 ):
-    seed = abs(hash((home, away))) % 100_000
+    seed = int.from_bytes(hashlib.sha256(f"{home}|{away}".encode()).digest()[:4], "big") % 100_000
     req = _request(league, home, away, hxg, hxga, axg, axga, seed=seed)
     first = analyze_game(req)
     second = analyze_game(req)

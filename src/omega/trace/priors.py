@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from omega.trace.store import TraceStore
@@ -78,7 +78,7 @@ class XgPrior(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def upsert_dixon_coles_profile(store: "TraceStore", profile: DixonColesProfile) -> None:
+def upsert_dixon_coles_profile(store: TraceStore, profile: DixonColesProfile) -> None:
     """Insert or replace one (profile_id, as_of_date) fit row."""
     store.conn.execute(
         """INSERT INTO priors_dixon_coles
@@ -104,7 +104,7 @@ def upsert_dixon_coles_profile(store: "TraceStore", profile: DixonColesProfile) 
 
 
 def get_production_dc_profile(
-    store: "TraceStore", profile_id: str
+    store: TraceStore, profile_id: str
 ) -> DixonColesProfile | None:
     """Return the production rho fit for *profile_id*, or None (fail closed)."""
     row = store.conn.execute(
@@ -128,7 +128,7 @@ def get_production_dc_profile(
 
 
 def promote_dixon_coles_profile(
-    store: "TraceStore", profile_id: str, as_of_date: str
+    store: TraceStore, profile_id: str, as_of_date: str
 ) -> DixonColesProfile:
     """Promote one (profile_id, as_of_date) fit to production.
 
@@ -164,7 +164,7 @@ def promote_dixon_coles_profile(
 # ---------------------------------------------------------------------------
 
 
-def upsert_xg_prior(store: "TraceStore", prior: XgPrior) -> None:
+def upsert_xg_prior(store: TraceStore, prior: XgPrior) -> None:
     """Insert or refresh one (team, competition, season, source) xG row."""
     store.conn.execute(
         """INSERT INTO priors_xg
@@ -192,7 +192,7 @@ def upsert_xg_prior(store: "TraceStore", prior: XgPrior) -> None:
 
 
 def get_xg_prior(
-    store: "TraceStore",
+    store: TraceStore,
     team: str,
     competition: str,
     season: str,
@@ -255,8 +255,17 @@ class TennisPressureDelta(BaseModel):
     source: str  # player | group_fallback
     as_of_date: str
 
+    @field_validator("state")
+    @classmethod
+    def _validate_state(cls, value: str) -> str:
+        if value not in TENNIS_PRESSURE_STATES:
+            raise ValueError(
+                f"state must be one of {', '.join(TENNIS_PRESSURE_STATES)}"
+            )
+        return value
 
-def upsert_tennis_prior(store: "TraceStore", prior: TennisPrior) -> None:
+
+def upsert_tennis_prior(store: TraceStore, prior: TennisPrior) -> None:
     """Insert or refresh one (player, tour, surface, as_of_date) rate row."""
     store.conn.execute(
         """INSERT INTO priors_tennis
@@ -282,7 +291,7 @@ def upsert_tennis_prior(store: "TraceStore", prior: TennisPrior) -> None:
 
 
 def get_tennis_prior(
-    store: "TraceStore", player: str, tour: str, surface: str
+    store: TraceStore, player: str, tour: str, surface: str
 ) -> TennisPrior | None:
     """Return the most recent rate row for (player, tour, surface), or None."""
     row = store.conn.execute(
@@ -305,7 +314,7 @@ def get_tennis_prior(
     )
 
 
-def upsert_pressure_deltas(store: "TraceStore", deltas: list[TennisPressureDelta]) -> None:
+def upsert_pressure_deltas(store: TraceStore, deltas: list[TennisPressureDelta]) -> None:
     """Insert or refresh a batch of pressure-state delta rows."""
     for delta in deltas:
         store.conn.execute(
@@ -332,7 +341,7 @@ def upsert_pressure_deltas(store: "TraceStore", deltas: list[TennisPressureDelta
     store.conn.commit()
 
 
-def _pressure_rows(store: "TraceStore", player: str, tour: str, surface: str):
+def _pressure_rows(store: TraceStore, player: str, tour: str, surface: str):
     return store.conn.execute(
         """SELECT state, delta, source, as_of_date
            FROM priors_tennis_pressure
@@ -346,7 +355,7 @@ def _pressure_rows(store: "TraceStore", player: str, tour: str, surface: str):
 
 
 def get_pressure_coefficients(
-    store: "TraceStore", player: str, tour: str, surface: str
+    store: TraceStore, player: str, tour: str, surface: str
 ) -> tuple[dict[str, float], str | None]:
     """Return ``({state: delta}, source)`` for a player's latest pressure fit.
 
@@ -376,7 +385,7 @@ def _utc_now_iso() -> str:
 def build_game_prior_payload(
     league: str,
     existing_payload: dict[str, Any] | None,
-    store: "TraceStore",
+    store: TraceStore,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Merge the league's production dynamic priors into a game prior_payload.
 
@@ -433,7 +442,7 @@ def build_game_prior_payload(
 
 
 def build_tennis_prior_payload(
-    payload: dict[str, Any], store: "TraceStore"
+    payload: dict[str, Any], store: TraceStore
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Tennis gatherer branch: join rates + pressure coefficients per player.
 
@@ -532,7 +541,7 @@ def build_tennis_prior_payload(
 
 
 def inject_game_priors(
-    payload: dict[str, Any], store: "TraceStore | None" = None
+    payload: dict[str, Any], store: TraceStore | None = None
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Config-gated prior injection for a raw game-request dict.
 

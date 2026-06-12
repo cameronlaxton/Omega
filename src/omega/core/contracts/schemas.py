@@ -229,14 +229,13 @@ class GameAnalysisRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _warn_missing_game_context_keys(self) -> GameAnalysisRequest:
+    def _enforce_missing_game_context_keys(self) -> "GameAnalysisRequest":
         gc = self.game_context or {}
         missing = [k for k in ("is_playoff", "rest_days") if k not in gc]
         if missing:
-            warnings.warn(
+            raise ValueError(
                 f"GameAnalysisRequest missing game_context keys: {missing}. "
-                "Context-slice calibration fitting will be unavailable for this trace.",
-                stacklevel=3,
+                "Context-slice calibration fitting requires is_playoff and rest_days."
             )
         return self
 
@@ -339,14 +338,13 @@ class PlayerPropRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _warn_missing_game_context_keys(self) -> PlayerPropRequest:
+    def _enforce_missing_game_context_keys(self) -> "PlayerPropRequest":
         gc = self.game_context or {}
         missing = [k for k in ("is_playoff", "rest_days") if k not in gc]
         if missing:
-            warnings.warn(
+            raise ValueError(
                 f"PlayerPropRequest missing game_context keys: {missing}. "
-                "Context-slice calibration fitting will be unavailable for this trace.",
-                stacklevel=3,
+                "Context-slice calibration fitting requires is_playoff and rest_days."
             )
         return self
 

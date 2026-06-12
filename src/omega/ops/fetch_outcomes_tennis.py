@@ -68,14 +68,14 @@ def parse_sets_from_score(score: str | None) -> tuple[int, int] | None:
         m = _SET_TOKEN_RE.match(token)
         if m is None:
             continue  # "RET" markers and bracket junk
-        w, l = int(m.group(1)), int(m.group(2))
+        winner_games, loser_games = int(m.group(1)), int(m.group(2))
         # Only completed sets count: 6+ with a 2-game margin, or 7-6/7-5
         # (super-tiebreak scores like 10-8 pass the first condition). A
         # mid-set retirement score like 4-1 is not a won set.
-        hi, lo = max(w, l), min(w, l)
+        hi, lo = max(winner_games, loser_games), min(winner_games, loser_games)
         if not ((hi >= 6 and hi - lo >= 2) or (hi == 7 and lo in (5, 6))):
             continue
-        if w > l:
+        if winner_games > loser_games:
             winner_sets += 1
         else:
             loser_sets += 1
@@ -112,8 +112,11 @@ def _trace_players(trace: dict) -> tuple[str, str] | None:
 
 
 # ---------------------------------------------------------------------------
-# Sources -> {frozenset({playerA, playerB}): (player_sets map)}
+# Sources -> {(frozenset({playerA, playerB}), played_date): (player_sets map)}
 # ---------------------------------------------------------------------------
+
+
+MatchKey = tuple[frozenset[str], date]
 
 
 def collect_sackmann_results(
@@ -124,13 +127,13 @@ def collect_sackmann_results(
     *,
     local_root: str | None = None,
     cache_root: str | None = None,
-) -> dict[frozenset, dict[str, int]]:
+) -> dict[MatchKey, dict[str, int]]:
     """Completed-match sets-won maps from the Sackmann CSVs in a date window."""
     from omega.integrations.tennis_sackmann import fetch_matches_csv, parse_matches
 
     lookback = start - timedelta(days=_TOURNEY_DATE_LOOKBACK_DAYS)
     years = sorted({start.year, end.year, lookback.year})
-    results: dict[frozenset, dict[str, int]] = {}
+    results: dict[MatchKey, dict[str, int]] = {}
     for tour in tours:
         for year in years:
             try:
@@ -149,7 +152,7 @@ def collect_sackmann_results(
                     continue
                 winner = _canonical_player(row.winner_name, alias_table)
                 loser = _canonical_player(row.loser_name, alias_table)
-                results[frozenset((winner, loser))] = {
+                results[(frozenset((winner, loser)), played)] = {
                     winner: sets[0],
                     loser: sets[1],
                 }
@@ -162,12 +165,12 @@ def collect_odds_api_results(
     *,
     days_from: int = 3,
     client=None,
-) -> dict[frozenset, dict[str, int]]:
+) -> dict[MatchKey, dict[str, int]]:
     """Completed-match sets-won maps from The Odds API /scores endpoint."""
     from omega.integrations.odds_api import OddsApiClient, resolve_tennis_sport_keys
 
     client = client or OddsApiClient()
-    results: dict[frozenset, dict[str, int]] = {}
+    results: dict[MatchKey, dict[str, int]] = {}
     for tour in tours:
         try:
             sport_keys = resolve_tennis_sport_keys(client, tour)
@@ -191,7 +194,10 @@ def collect_odds_api_results(
                 except ValueError:
                     continue  # non-numeric score payload
                 if len(sets_by_player) == 2:
-                    results[frozenset(sets_by_player)] = sets_by_player
+                    played = datetime.fromisoformat(
+                        event.commence_time.replace("Z", "+00:00")
+                    ).date()
+                    results[(frozenset(sets_by_player), played)] = sets_by_player
     return results
 
 
@@ -283,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 home_key = _canonical_player(players[0], alias_table)
                 away_key = _canonical_player(players[1], alias_table)
-                match = results.get(frozenset((home_key, away_key)))
+                match = results.get((frozenset((home_key, away_key)), d))
                 if match is None:
                     unmatched.append(f"{tid} [{league}] ({players[1]} @ {players[0]})")
                     continue

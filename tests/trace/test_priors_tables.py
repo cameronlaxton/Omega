@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import tempfile
 
+import pytest
+
 from omega.trace.priors import (
     DC_STATUS_ARCHIVED,
     DC_STATUS_PRODUCTION,
@@ -16,8 +18,6 @@ from omega.trace.priors import (
     upsert_xg_prior,
 )
 from omega.trace.store import TraceStore
-
-import pytest
 
 
 def _tmp_db() -> str:
@@ -40,7 +40,12 @@ def test_fresh_and_reopened_db_have_v16_tables():
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-        assert {"priors_dixon_coles", "priors_xg"} <= tables
+        assert {
+            "priors_dixon_coles",
+            "priors_xg",
+            "priors_tennis",
+            "priors_tennis_pressure",
+        } <= tables
         assert store.schema_version() == 17
     finally:
         store.close()
@@ -232,7 +237,7 @@ def test_pressure_coefficients_lookup_and_fallback_source():
             store,
             [
                 TennisPressureDelta(
-                    player="Qualifier X",
+                    player="__group__",
                     tour="ATP",
                     surface="grass",
                     state="tiebreak",

@@ -318,13 +318,14 @@ def _process_league(
                 skipped.append(f"{bet['bet_id']} ({away} @ {home}: not in snapshot at {actual_ts})")
                 continue
 
+            persisted_book = str(bet["book"]).lower()
             if bet["market"].startswith("player_prop:"):
                 stat_key = bet["market"].split(":", 1)[1]
                 provider_market = provider_market_for_prop(league, stat_key)
                 if not provider_market:
                     skipped.append(f"{bet['bet_id']} (no provider prop mapping for {stat_key})")
                     continue
-                book_query = str(bet["book"]).lower()
+                book_query = persisted_book
                 if book_query == "consensus":
                     book_query = "betmgm"
                 try:
@@ -383,7 +384,7 @@ def _process_league(
                 closing_odds=outcome.price,
                 closing_line=outcome.point,
                 closing_timestamp=actual_ts,
-                source=f"the-odds-api-historical:{outcome.bookmaker}",
+                source=f"the-odds-api-historical:{persisted_book}",
             )
             attached += 1
             logger.info(
@@ -511,7 +512,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
 
 

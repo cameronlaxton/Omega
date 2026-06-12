@@ -464,7 +464,7 @@ class BacktestEngine:
                 ("away", away_team, "away_cover_prob", "spread_away_price", -spread_line),
             ]
             for side, team, prob_key, price_key, bet_line in spread_specs:
-                price = odds.get(price_key, -110.0)
+                price = odds.get(price_key) if price_key in odds else None
                 sim_prob = sim_result.get(prob_key)
                 if price is None or sim_prob is None:
                     continue
@@ -489,11 +489,11 @@ class BacktestEngine:
         # production); both are bet at total_line.
         if total_line is not None and "over_prob" in sim_result and "under_prob" in sim_result:
             total_specs = [
-                ("over", f"Over {total_line:g}", "over_prob", "over_price", "over"),
-                ("under", f"Under {total_line:g}", "under_prob", "under_price", "under"),
+                ("over", f"Over {total_line:g}", "over_prob", "total_over_price", "over"),
+                ("under", f"Under {total_line:g}", "under_prob", "total_under_price", "under"),
             ]
             for side, team, prob_key, price_key, cal_market in total_specs:
-                price = odds.get(price_key, -110.0)
+                price = odds.get(price_key) if price_key in odds else None
                 sim_prob = sim_result.get(prob_key)
                 if price is None or sim_prob is None:
                     continue

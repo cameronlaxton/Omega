@@ -7,6 +7,8 @@ draw_prob == 0.0 and the tennis Markov backend on every match.
 
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
 from omega.core.contracts.schemas import GameAnalysisRequest
@@ -73,7 +75,10 @@ def _request(league, a, b, surface, spw_a, rpw_a, spw_b, rpw_b, *, seed):
 )
 def test_tennis_replay_is_bit_identical(fixture):
     league, a, b, surface, spw_a, rpw_a, spw_b, rpw_b = fixture
-    seed = abs(hash((a, b, surface))) % 100_000
+    seed = (
+        int.from_bytes(hashlib.sha256(repr((a, b, surface)).encode()).digest()[:4], "big")
+        % 100_000
+    )
     req = _request(league, a, b, surface, spw_a, rpw_a, spw_b, rpw_b, seed=seed)
 
     first = analyze_game(req)

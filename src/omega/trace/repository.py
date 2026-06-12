@@ -81,6 +81,11 @@ class PostgresRepository:
         "graded_at",
         "session_id",
         "created_at",
+        "staking_policy_id",
+        "staking_policy_version",
+        "exposure_limits_version",
+        "sizing_reasons",
+        "correlation_group",
     )
 
     def __init__(self, url: str, *, read_only: bool = False) -> None:
@@ -635,7 +640,9 @@ class PostgresRepository:
             staking_policy_id=bet.staking_policy_id,
             staking_policy_version=bet.staking_policy_version,
             exposure_limits_version=bet.exposure_limits_version,
-            sizing_reasons=(json.dumps(bet.sizing_reasons) if bet.sizing_reasons else None),
+            sizing_reasons=(
+                json.dumps(bet.sizing_reasons) if bet.sizing_reasons is not None else None
+            ),
             correlation_group=bet.correlation_group,
             session_id=trace_session_id,
         )
@@ -653,6 +660,11 @@ class PostgresRepository:
                     "bankroll_at_open": excluded.bankroll_at_open,
                     "bet_date": excluded.bet_date,
                     "decision_timestamp": excluded.decision_timestamp,
+                    "staking_policy_id": excluded.staking_policy_id,
+                    "staking_policy_version": excluded.staking_policy_version,
+                    "exposure_limits_version": excluded.exposure_limits_version,
+                    "sizing_reasons": excluded.sizing_reasons,
+                    "correlation_group": excluded.correlation_group,
                 },
                 where=and_(
                     excluded.provenance == "user_confirmed",
@@ -706,7 +718,7 @@ class PostgresRepository:
                 .where(table.c.trace_id == trace_id)
                 .order_by(table.c.created_at)
             ).mappings()
-            return [dict(row) for row in rows]
+            return [self._decode_ledger_row(row) for row in rows]
 
     def query_ledger(
         self,
@@ -738,7 +750,14 @@ class PostgresRepository:
         stmt = stmt.order_by(table.c.decision_timestamp.desc()).limit(limit)
         with self.Session() as session:
             rows = session.execute(stmt).mappings()
-            return [dict(row) for row in rows]
+            return [self._decode_ledger_row(row) for row in rows]
+
+    @staticmethod
+    def _decode_ledger_row(row: Any) -> dict[str, Any]:
+        data = dict(row)
+        if data.get("sizing_reasons") is not None and isinstance(data["sizing_reasons"], str):
+            data["sizing_reasons"] = json.loads(data["sizing_reasons"])
+        return data
 
     def attach_closing_line(
         self,

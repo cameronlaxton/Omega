@@ -17,6 +17,7 @@ the backend fails closed with a skip result (``missing_requirements=
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from omega.core.simulation.backends import GameSimulationInput
@@ -48,6 +49,14 @@ class MissingDixonColesPriorError(RuntimeError):
     """
 
 
+def _valid_dixon_coles_rho(home_lambda: float, away_lambda: float, rho: float) -> bool:
+    if not math.isfinite(rho):
+        return False
+    lower = max(-1.0 / home_lambda, -1.0 / away_lambda)
+    upper = min(1.0 / (home_lambda * away_lambda), 1.0)
+    return lower <= rho <= upper
+
+
 def _missing_soccer_inputs(context: dict[str, Any] | None, side: str) -> list[str]:
     """Missing-requirement strings for one side's attack/defense inputs.
 
@@ -77,6 +86,7 @@ class SoccerPoissonBackend:
     def run(self, request: GameSimulationInput) -> dict[str, Any]:
         # Lazy imports avoid an import cycle: engine.py imports this module at
         # the bottom to register the backend (markov_wnba reference pattern).
+        from omega.core.config.leagues import get_league_config
         from omega.core.simulation.engine import (
             _build_team_score_result,
             _context_hash,
@@ -85,7 +95,6 @@ class SoccerPoissonBackend:
             _expected_against_allowed_rate,
             _skip_result,
         )
-        from omega.core.config.leagues import get_league_config
 
         league = request.league.upper()
 
@@ -150,6 +159,18 @@ class SoccerPoissonBackend:
         # 0-0 rates (see _sim_soccer).
         home_lambda = max(0.5, home_lambda)
         away_lambda = max(0.5, away_lambda)
+
+        if not _valid_dixon_coles_rho(home_lambda, away_lambda, rho):
+            return _skip_result(
+                request.home_team,
+                request.away_team,
+                league,
+                skip_reason=(
+                    "Dixon-Coles rho prior is outside admissible bounds for "
+                    f"home_lambda={home_lambda:.4f}, away_lambda={away_lambda:.4f}"
+                ),
+                missing_requirements=["valid_rho_prior"],
+            )
 
         rng = np.random.default_rng(request.seed)
         home_scores, away_scores = _dixon_coles_scores(

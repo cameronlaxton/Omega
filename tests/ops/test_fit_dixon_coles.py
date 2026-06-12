@@ -6,8 +6,6 @@ refusal, and the minimum-matches gate.
 
 from __future__ import annotations
 
-import tempfile
-
 import numpy as np
 import pytest
 
@@ -21,10 +19,13 @@ from omega.trace.priors import get_production_dc_profile
 from omega.trace.store import TraceStore
 
 
-def _store() -> TraceStore:
-    f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    f.close()
-    return TraceStore(db_path=f.name)
+@pytest.fixture
+def store(tmp_path) -> TraceStore:
+    db = TraceStore(db_path=tmp_path / "traces.db")
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def _synthetic_pairs(rho: float, n: int = 30_000, seed: int = 7) -> list[tuple[int, int]]:
@@ -55,10 +56,43 @@ def test_min_matches_gate():
         fit_rho(_synthetic_pairs(-0.1, n=50))
 
 
-def test_run_fit_writes_candidate_then_promotes():
-    store = _store()
-    try:
-        pairs = _synthetic_pairs(-0.12, n=5_000)
+def test_run_fit_writes_candidate_then_promotes(store):
+    pairs = _synthetic_pairs(-0.12, n=5_000)
+    run_fit(
+        store,
+        "fifa_intl_v1",
+        pairs,
+        as_of_date="2026-06-10",
+        min_matches=1_000,
+    )
+    # Candidate only: production lookup still fails closed.
+    assert get_production_dc_profile(store, "fifa_intl_v1") is None
+
+    run_fit(
+        store,
+        "fifa_intl_v1",
+        pairs,
+        as_of_date="2026-06-11",
+        promote=True,
+        min_matches=1_000,
+    )
+    prod = get_production_dc_profile(store, "fifa_intl_v1")
+    assert prod is not None
+    assert prod.as_of_date == "2026-06-11"
+    assert prod.source == "statsbomb_open_data"
+
+
+def test_refit_over_frozen_production_row_is_refused(store):
+    pairs = _synthetic_pairs(-0.12, n=5_000)
+    run_fit(
+        store,
+        "fifa_intl_v1",
+        pairs,
+        as_of_date="2026-06-10",
+        promote=True,
+        min_matches=1_000,
+    )
+    with pytest.raises(FrozenProductionFitError, match="frozen production row"):
         run_fit(
             store,
             "fifa_intl_v1",
@@ -66,49 +100,8 @@ def test_run_fit_writes_candidate_then_promotes():
             as_of_date="2026-06-10",
             min_matches=1_000,
         )
-        # Candidate only — production lookup still fails closed.
-        assert get_production_dc_profile(store, "fifa_intl_v1") is None
-
-        run_fit(
-            store,
-            "fifa_intl_v1",
-            pairs,
-            as_of_date="2026-06-11",
-            promote=True,
-            min_matches=1_000,
-        )
-        prod = get_production_dc_profile(store, "fifa_intl_v1")
-        assert prod is not None
-        assert prod.as_of_date == "2026-06-11"
-        assert prod.source == "statsbomb_open_data"
-    finally:
-        store.close()
-
-
-def test_refit_over_frozen_production_row_is_refused():
-    store = _store()
-    try:
-        pairs = _synthetic_pairs(-0.12, n=5_000)
-        run_fit(
-            store,
-            "fifa_intl_v1",
-            pairs,
-            as_of_date="2026-06-10",
-            promote=True,
-            min_matches=1_000,
-        )
-        with pytest.raises(FrozenProductionFitError, match="frozen production row"):
-            run_fit(
-                store,
-                "fifa_intl_v1",
-                pairs,
-                as_of_date="2026-06-10",
-                min_matches=1_000,
-            )
-        # A new as_of is the sanctioned path; the frozen row stays production
-        # until the new fit is explicitly promoted.
-        run_fit(store, "fifa_intl_v1", pairs, as_of_date="2026-09-01", min_matches=1_000)
-        prod = get_production_dc_profile(store, "fifa_intl_v1")
-        assert prod is not None and prod.as_of_date == "2026-06-10"
-    finally:
-        store.close()
+    # A new as_of is the sanctioned path; the frozen row stays production
+    # until the new fit is explicitly promoted.
+    run_fit(store, "fifa_intl_v1", pairs, as_of_date="2026-09-01", min_matches=1_000)
+    prod = get_production_dc_profile(store, "fifa_intl_v1")
+    assert prod is not None and prod.as_of_date == "2026-06-10"

@@ -8,6 +8,7 @@ logic.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import uuid
@@ -34,6 +35,8 @@ from omega.mcp.schemas import (
     TraceVoidPropRequest,
 )
 from omega.paths import repo_root
+
+logger = logging.getLogger(__name__)
 
 TOOL_NAMES = (
     "omega_analyze_game",
@@ -144,8 +147,28 @@ def _maybe_inject_game_priors(
                 from omega.trace.session_sidecar import append_audit_events
 
                 append_audit_events(sidecar, [event])
-    except Exception:  # noqa: BLE001 - injection must never block analysis
-        pass
+    except Exception as exc:  # noqa: BLE001 - injection must never block analysis
+        logger.warning("prior injection failed for session_id=%s: %s", session_id, exc)
+        if session_id:
+            sidecar = repo_root() / "var" / "inbox" / "sessions" / f"{session_id}.json"
+            if sidecar.exists():
+                try:
+                    from omega.trace.session_sidecar import append_audit_events
+
+                    append_audit_events(sidecar, [{
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "event_type": "data_provenance",
+                        "step": "mcp:prior_injection",
+                        "status": "skipped",
+                        "notes": f"prior_injection_failed: {exc}",
+                        "trace_ids": [],
+                    }])
+                except Exception as audit_exc:  # noqa: BLE001
+                    logger.warning(
+                        "prior injection audit event failed for session_id=%s: %s",
+                        session_id,
+                        audit_exc,
+                    )
     return payload
 
 

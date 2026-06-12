@@ -15,12 +15,12 @@ import pytest
 
 from omega.core.contracts.schemas import GameAnalysisRequest
 from omega.core.contracts.service import analyze_game
+from omega.core.simulation import tennis_markov as tm
 from omega.core.simulation.backends import (
     GameSimulationInput,
     enforce_game_backend_contract,
     resolve_game_backend,
 )
-from omega.core.simulation import tennis_markov as tm
 
 _HOME_CTX = {"serve_win_pct": 0.67, "return_win_pct": 0.40}
 _AWAY_CTX = {"serve_win_pct": 0.63, "return_win_pct": 0.36}
@@ -49,6 +49,16 @@ def test_break_point_delta_lowers_hold_and_game_point_delta_raises_it():
 def test_tiebreak_symmetry_and_edge():
     assert tm.p_tiebreak(0.62, 0.62) == pytest.approx(0.5, abs=1e-9)
     assert tm.p_tiebreak(0.66, 0.60) > 0.5
+
+
+def test_set_tiebreak_uses_current_server(monkeypatch):
+    def fake_tiebreak(pa, pb, tb_delta_a=0.0, tb_delta_b=0.0, *, first_server_a=True):
+        return 0.9 if first_server_a else 0.1
+
+    monkeypatch.setattr(tm, "p_tiebreak", fake_tiebreak)
+    a_serves_tiebreak = tm.p_set(0.5, 0.5, None, None, first_server_a=True)
+    b_serves_tiebreak = tm.p_set(0.5, 0.5, None, None, first_server_a=False)
+    assert a_serves_tiebreak > b_serves_tiebreak
 
 
 def test_set_probability_monotone_in_serve_strength():

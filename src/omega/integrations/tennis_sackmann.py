@@ -25,7 +25,6 @@ from __future__ import annotations
 import csv
 import io
 import logging
-import math
 import urllib.request
 from collections.abc import Callable
 from datetime import date, datetime
@@ -170,6 +169,9 @@ def compute_rolling_rates(
         stats = (row.w_svpt, row.w_1stWon, row.w_2ndWon, row.l_svpt, row.l_1stWon, row.l_2ndWon)
         if any(s is None for s in stats) or row.w_svpt <= 0 or row.l_svpt <= 0:
             continue
+        played = datetime.strptime(str(row.tourney_date), "%Y%m%d").date()
+        if played > as_of:
+            continue
         weight = _decay_weight(row.tourney_date, as_of)
         surface = row.surface.lower()
 
@@ -214,12 +216,9 @@ def build_tennis_priors(
     alias_table = alias_table or {"canonical": [], "aliases": {}}
     has_aliases = bool(alias_table.get("canonical") or alias_table.get("aliases"))
     rates = compute_rolling_rates(rows, as_of_date=as_of_date)
-
-    priors: list[TennisPrior] = []
+    merged_rates: dict[tuple[str, str], dict[str, float]] = {}
     unresolved: set[str] = set()
-    for (player, surface), bucket in sorted(rates.items()):
-        if bucket["matches"] < min_matches or bucket["spw_pts"] <= 0 or bucket["rpw_pts"] <= 0:
-            continue
+    for (player, surface), bucket in rates.items():
         canonical = player
         if has_aliases:
             resolved = resolve_entity(player, alias_table)
@@ -227,9 +226,20 @@ def build_tennis_priors(
                 unresolved.add(player)
             else:
                 canonical = resolved
+        merged = merged_rates.setdefault(
+            (canonical, surface),
+            {"spw_won": 0.0, "spw_pts": 0.0, "rpw_won": 0.0, "rpw_pts": 0.0, "matches": 0},
+        )
+        for key in ("spw_won", "spw_pts", "rpw_won", "rpw_pts", "matches"):
+            merged[key] += bucket[key]
+
+    priors: list[TennisPrior] = []
+    for (player, surface), bucket in sorted(merged_rates.items()):
+        if bucket["matches"] < min_matches or bucket["spw_pts"] <= 0 or bucket["rpw_pts"] <= 0:
+            continue
         priors.append(
             TennisPrior(
-                player=canonical,
+                player=player,
                 tour=tour.upper(),
                 surface=surface,
                 spw_pct=round(bucket["spw_won"] / bucket["spw_pts"], 4),

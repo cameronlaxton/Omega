@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import tempfile
-
-import pytest
 
 from omega.trace.ledger_bet import BetProvenance, LedgerBet
 from omega.trace.schema import CURRENT_VERSION, V15_COLUMNS, apply_v15_migration
@@ -104,7 +101,7 @@ def test_sizing_audit_round_trips():
         assert row["staking_policy_id"] == "fractional_kelly_by_tier"
         assert row["staking_policy_version"] == 1
         assert row["exposure_limits_version"] == 1
-        assert json.loads(row["sizing_reasons"]) == ["unit_cap", "exposure_headroom"]
+        assert row["sizing_reasons"] == ["unit_cap", "exposure_headroom"]
         assert row["correlation_group"] == "corr:player:lebron james"
     finally:
         store.close()
@@ -127,5 +124,25 @@ def test_audit_columns_default_null_when_absent():
         assert row["staking_policy_id"] is None
         assert row["sizing_reasons"] is None
         assert row["correlation_group"] is None
+    finally:
+        store.close()
+
+
+def test_empty_sizing_reasons_round_trips_as_empty_list():
+    store = TraceStore(db_path=_tmp_db())
+    try:
+        store.persist({
+            "trace_id": "t-empty", "run_id": "r", "timestamp": "2026-06-01T00:00:00Z",
+            "prompt": "p", "league": "NBA", "matchup": "A @ B",
+            "execution_mode": "native_sim", "kind": "game", "result": {"status": "success"},
+        })
+        store.record_ledger_bet(LedgerBet(
+            ledger_id="lb-empty", trace_id="t-empty", market="moneyline", selection="B",
+            selection_descriptor="home_moneyline", odds=-110,
+            provenance=BetProvenance.BACKFILL, decision_timestamp="2026-06-01T00:00:00+00:00",
+            sizing_reasons=[],
+        ))
+        row = store.get_ledger_bets("t-empty")[0]
+        assert row["sizing_reasons"] == []
     finally:
         store.close()

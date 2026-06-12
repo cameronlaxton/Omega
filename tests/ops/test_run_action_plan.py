@@ -44,7 +44,7 @@ def test_new_deterministic_actions_validate_to_expected_commands():
             },
             {
                 "type": "fit_calibration",
-                "args": {"league": "nba", "plane": "prop", "method": "both"},
+                "args": {"league": "nba", "plane": "prop", "method": "both", "dry_run": True},
             },
             {
                 "type": "settle_bets",
@@ -67,6 +67,7 @@ def test_new_deterministic_actions_validate_to_expected_commands():
     assert _script_name(cmds["fit_calibration"]) == "omega.ops.fit_calibration"
     assert "--plane" in cmds["fit_calibration"]
     assert "prop" in cmds["fit_calibration"]
+    assert "--dry-run" in cmds["fit_calibration"]
     assert _script_name(cmds["settle_bets"]) == "omega.ops.settle_bets"
     assert cmds["settle_bets"][-5:] == [
         "--provenance",

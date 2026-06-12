@@ -1361,7 +1361,15 @@ class FastScoreSimulationBackend:
         baseline_used = False
         context_source = "provided"
         if home_context is None or away_context is None:
-            if not request.allow_baseline:
+            defaults = _archetype_league_defaults(league)
+            if defaults:
+                baseline_used = True
+                context_source = "league_default"
+                if home_context is None:
+                    home_context = dict(defaults)
+                if away_context is None:
+                    away_context = dict(defaults)
+            else:
                 missing = []
                 if home_context is None:
                     missing.extend(f"home_context.{k}" for k in archetype.required_team_keys)
@@ -1371,20 +1379,9 @@ class FastScoreSimulationBackend:
                     request.home_team,
                     request.away_team,
                     league,
-                    skip_reason=(
-                        "Missing home_context or away_context; league-average "
-                        "baseline requires allow_baseline=True"
-                    ),
+                    skip_reason="Missing home_context or away_context and no baseline defaults available",
                     missing_requirements=missing,
                 )
-            defaults = _archetype_league_defaults(league)
-            if defaults:
-                baseline_used = True
-                context_source = "league_default"
-                if home_context is None:
-                    home_context = dict(defaults)
-                if away_context is None:
-                    away_context = dict(defaults)
 
         required = archetype.required_team_keys
         home_missing = _validate_required_keys(home_context, "home", required, league)
@@ -1484,23 +1481,32 @@ def run_markov_game_simulation(
             missing_requirements=["team_score_archetype"],
         )
 
-    if request.home_context is None or request.away_context is None:
-        return _skip_result(
-            request.home_team,
-            request.away_team,
-            league,
-            skip_reason="Missing home_context or away_context for Markov backend",
-            missing_requirements=["home_context", "away_context"],
-        )
+    home_context = request.home_context
+    away_context = request.away_context
+    if home_context is None or away_context is None:
+        defaults = _archetype_league_defaults(league)
+        if defaults:
+            if home_context is None:
+                home_context = dict(defaults)
+            if away_context is None:
+                away_context = dict(defaults)
+        else:
+            return _skip_result(
+                request.home_team,
+                request.away_team,
+                league,
+                skip_reason="Missing home_context or away_context for Markov backend",
+                missing_requirements=["home_context", "away_context"],
+            )
 
     home_missing = _validate_required_keys(
-        request.home_context,
+        home_context,
         "home",
         archetype.required_team_keys,
         league,
     )
     away_missing = _validate_required_keys(
-        request.away_context,
+        away_context,
         "away",
         archetype.required_team_keys,
         league,
@@ -1662,13 +1668,20 @@ class OmegaSimulationEngine:
         Architecture fix: callers must supply all context. No network calls.
         """
         if home_context is None or away_context is None:
-            return _skip_result(
-                home_team,
-                away_team,
-                league,
-                skip_reason="Missing home_context or away_context (caller must supply)",
-                missing_requirements=["home_context", "away_context"],
-            )
+            defaults = _archetype_league_defaults(league)
+            if defaults:
+                if home_context is None:
+                    home_context = dict(defaults)
+                if away_context is None:
+                    away_context = dict(defaults)
+            else:
+                return _skip_result(
+                    home_team,
+                    away_team,
+                    league,
+                    skip_reason="Missing home_context or away_context (caller must supply)",
+                    missing_requirements=["home_context", "away_context"],
+                )
 
         try:
             import importlib
@@ -2019,6 +2032,9 @@ class PropDistributionRouterBackend:
 register_game_backend("fast_score", FastScoreSimulationBackend())
 register_game_backend("markov_state", MarkovGameSimulationBackend())
 register_prop_backend("prop_distribution_router", PropDistributionRouterBackend())
+
+from omega.core.simulation.prop_neg_binom import NegBinomPropBackend  # noqa: E402
+register_prop_backend("prop_neg_binom", NegBinomPropBackend())
 
 # Phase 7 sport backends. Imported here (after run_markov_game_simulation is
 # defined) so registration happens whenever the engine module loads. Each new

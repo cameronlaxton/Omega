@@ -1592,7 +1592,12 @@ class TraceStore:
                    stake_amount       = excluded.stake_amount,
                    bankroll_at_open   = excluded.bankroll_at_open,
                    bet_date           = excluded.bet_date,
-                   decision_timestamp = excluded.decision_timestamp
+                   decision_timestamp = excluded.decision_timestamp,
+                   staking_policy_id = excluded.staking_policy_id,
+                   staking_policy_version = excluded.staking_policy_version,
+                   exposure_limits_version = excluded.exposure_limits_version,
+                   sizing_reasons = excluded.sizing_reasons,
+                   correlation_group = excluded.correlation_group
                WHERE excluded.provenance = 'user_confirmed'
                  AND bet_ledger.provenance != 'user_confirmed'
                  AND bet_ledger.status = 'pending'""",
@@ -1620,7 +1625,7 @@ class TraceStore:
                 bet.staking_policy_id,
                 bet.staking_policy_version,
                 bet.exposure_limits_version,
-                json.dumps(bet.sizing_reasons) if bet.sizing_reasons else None,
+                json.dumps(bet.sizing_reasons) if bet.sizing_reasons is not None else None,
                 bet.correlation_group,
                 bet.trace_id,
             ),
@@ -1670,7 +1675,7 @@ class TraceStore:
             "WHERE trace_id = ? ORDER BY created_at",
             (trace_id,),
         ).fetchall()
-        return [dict(row) for row in rows]
+        return [self._decode_ledger_row(row) for row in rows]
 
     def query_ledger(
         self,
@@ -1720,7 +1725,14 @@ class TraceStore:
             "ORDER BY decision_timestamp DESC LIMIT ?",
             params,
         ).fetchall()
-        return [dict(row) for row in rows]
+        return [self._decode_ledger_row(row) for row in rows]
+
+    @staticmethod
+    def _decode_ledger_row(row: Any) -> dict[str, Any]:
+        data = dict(row)
+        if data.get("sizing_reasons") is not None:
+            data["sizing_reasons"] = json.loads(data["sizing_reasons"])
+        return data
 
     # ------------------------------------------------------------------
     # Closing lines (Phase 6e — CLV resolution)

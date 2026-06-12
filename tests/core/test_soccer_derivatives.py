@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from omega.core.contracts.schemas import GameAnalysisRequest, SoccerDerivativeMarket
+from omega.core.contracts.schemas import GameAnalysisRequest, MarketQuote, SoccerDerivativeMarket
 from omega.core.contracts.service import analyze_game
 from omega.core.edge.soccer_derivatives import (
     evaluate_asian_handicap,
@@ -176,8 +176,40 @@ def test_service_builds_ah_and_first_half_edges():
     assert ah_away.line == pytest.approx(0.25)
 
 
+def test_service_derivative_edges_read_normalized_markets():
+    req = GameAnalysisRequest(
+        home_team="Arsenal",
+        away_team="Chelsea",
+        league="EPL",
+        n_iterations=4000,
+        seed=7,
+        simulation_backend="soccer_bivariate_poisson_dc",
+        home_context={"xg_for": 1.5, "xg_against": 1.1},
+        away_context={"xg_for": 1.2, "xg_against": 1.3},
+        game_context={"is_playoff": False, "rest_days": 3},
+        prior_payload={"rho": -0.13},
+        odds={
+            "moneyline_home": -115,
+            "moneyline_away": +300,
+            "moneyline_draw": +260,
+            "markets": [
+                MarketQuote(market_type="asian_handicap", selection="Home", price=-105, line=-0.25),
+                MarketQuote(market_type="asian_handicap", selection="Away", price=-115, line=0.25),
+                MarketQuote(market_type="first_half_total", selection="Over", price=+105, line=1.25),
+                MarketQuote(market_type="first_half_total", selection="Under", price=-125, line=1.25),
+            ],
+        },
+    )
+
+    resp = analyze_game(req)
+    markets = {(e.market, e.side) for e in resp.edges}
+    assert ("asian_handicap", "home") in markets
+    assert ("first_half_total", "over") in markets
+
+
 def test_service_derivative_edges_are_deterministic():
     first = analyze_game(_request_with_derivatives())
     second = analyze_game(_request_with_derivatives())
+    assert len(first.edges) == len(second.edges)
     for a, b in zip(first.edges, second.edges):
         assert (a.market, a.side, a.edge_pct, a.ev_pct) == (b.market, b.side, b.edge_pct, b.ev_pct)
