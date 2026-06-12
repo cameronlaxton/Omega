@@ -179,7 +179,9 @@ class TestSimulation:
             assert result["draw_prob"] == 0.0
             assert abs(result["home_win_prob"] + result["away_win_prob"] - 100.0) <= 0.1
 
-    def test_fast_game_simulation_skips_when_context_absent_by_default(self):
+    def test_fast_game_simulation_baselines_when_context_absent_by_default(self):
+        """Absent context now auto-applies league-average archetype defaults
+        (calibration-eligible fallback), flagged with honest provenance."""
         from omega.core.simulation.engine import OmegaSimulationEngine
 
         engine = OmegaSimulationEngine()
@@ -189,9 +191,9 @@ class TestSimulation:
             league="NBA",
             n_iterations=100,
         )
-        assert result.get("success") is False
-        assert result["context_source"] == "missing"
-        assert "allow_baseline=True" in result["skip_reason"]
+        assert result.get("success") is True
+        assert result["context_source"] == "league_default"
+        assert result["baseline_used"] is True
 
     def test_fast_game_simulation_allows_explicit_baseline(self):
         from omega.core.simulation.engine import OmegaSimulationEngine

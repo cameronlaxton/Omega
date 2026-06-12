@@ -183,31 +183,34 @@ class TestSchemaWiring:
                 home_team="Home",
                 away_team="Away",
                 game_date="2026-05-22",
+                game_context={"is_playoff": False, "rest_days": 2},
             )
         assert req.evidence == []
 
     def test_game_analysis_request_defaults_empty_evidence(self):
         from omega.core.contracts.schemas import GameAnalysisRequest
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            req = GameAnalysisRequest(home_team="H", away_team="A", league="NBA")
+        req = GameAnalysisRequest(
+            home_team="H",
+            away_team="A",
+            league="NBA",
+            game_context={"is_playoff": False, "rest_days": 2},
+        )
         assert req.evidence == []
 
     def test_request_accepts_evidence_list(self):
         from omega.core.contracts.schemas import PlayerPropRequest
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            req = PlayerPropRequest(
-                player_name="Test Player",
-                league="NBA",
-                prop_type="pts",
-                line=20.5,
-                home_team="Home",
-                away_team="Away",
-                game_date="2026-05-22",
-                evidence=[_known_signal()],
-            )
+        req = PlayerPropRequest(
+            player_name="Test Player",
+            league="NBA",
+            prop_type="pts",
+            line=20.5,
+            home_team="Home",
+            away_team="Away",
+            game_date="2026-05-22",
+            game_context={"is_playoff": False, "rest_days": 2},
+            evidence=[_known_signal()],
+        )
         assert len(req.evidence) == 1
         assert isinstance(req.evidence[0], EvidenceSignal)

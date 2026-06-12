@@ -84,9 +84,33 @@ def test_collect_sackmann_results_matches_window(tmp_path):
         cache_root=str(tmp_path / "cache"),
     )
     assert len(results) == 1
-    (pair, sets_map), = results.items()
-    assert sets_map[sorted(pair)[0]] in (0, 3)  # one player 3 sets, other 0
+    ((pair, played), sets_map), = results.items()
+    assert played == date(2026, 6, 29)  # keyed by tourney start date
     assert sorted(sets_map.values()) == [0, 3]
+
+
+def test_lookup_match_falls_back_within_tournament_window():
+    """Sackmann keys carry the tournament START date; a mid-event trace date
+    (e.g. a Wimbledon QF on July 8) must still resolve via the window
+    fallback, while exact-date entries win and out-of-window entries never
+    match."""
+    from omega.ops.fetch_outcomes_tennis import lookup_match
+
+    pair = frozenset({"a", "b"})
+    tournament = {(pair, date(2026, 6, 29)): {"a": 3, "b": 1}}
+    assert lookup_match(tournament, pair, date(2026, 7, 8)) == {"a": 3, "b": 1}
+    # Same pair, two tournaments in range: the most recent start date wins.
+    two = {
+        (pair, date(2026, 6, 1)): {"a": 2, "b": 0},
+        (pair, date(2026, 6, 29)): {"a": 3, "b": 1},
+    }
+    assert lookup_match(two, pair, date(2026, 7, 8)) == {"a": 3, "b": 1}
+    # Exact-date hit short-circuits.
+    exact = {(pair, date(2026, 7, 8)): {"a": 0, "b": 2}, **two}
+    assert lookup_match(exact, pair, date(2026, 7, 8)) == {"a": 0, "b": 2}
+    # Outside the lookback window -> no match.
+    assert lookup_match(tournament, pair, date(2026, 8, 15)) is None
+    assert lookup_match(tournament, pair, date(2026, 6, 20)) is None
 
 
 # ---------------------------------------------------------------------------

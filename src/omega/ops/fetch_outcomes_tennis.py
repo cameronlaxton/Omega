@@ -119,6 +119,35 @@ def _trace_players(trace: dict) -> tuple[str, str] | None:
 MatchKey = tuple[frozenset[str], date]
 
 
+def lookup_match(
+    results: dict[MatchKey, dict[str, int]],
+    pair: frozenset,
+    trace_date: date,
+) -> dict[str, int] | None:
+    """Resolve a trace's player pair against date-keyed match results.
+
+    Exact (pair, trace_date) first. Sackmann rows are keyed by the TOURNAMENT
+    start date (tourney_date), not the match date, so a mid-event match (e.g.
+    a Wimbledon QF) lands days after its key — fall back to the most recent
+    entry for the pair within the tournament lookback window ending at the
+    trace date. Date keying still disambiguates the same pair meeting in two
+    different tournaments inside the window (the later start date wins for
+    the later trace).
+    """
+    exact = results.get((pair, trace_date))
+    if exact is not None:
+        return exact
+    window_start = trace_date - timedelta(days=_TOURNEY_DATE_LOOKBACK_DAYS)
+    best: dict[str, int] | None = None
+    best_date: date | None = None
+    for (key_pair, played), sets_map in results.items():
+        if key_pair != pair or not (window_start <= played <= trace_date):
+            continue
+        if best_date is None or played > best_date:
+            best, best_date = sets_map, played
+    return best
+
+
 def collect_sackmann_results(
     tours: list[str],
     start: date,
@@ -289,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 home_key = _canonical_player(players[0], alias_table)
                 away_key = _canonical_player(players[1], alias_table)
-                match = results.get((frozenset((home_key, away_key)), d))
+                match = lookup_match(results, frozenset((home_key, away_key)), d)
                 if match is None:
                     unmatched.append(f"{tid} [{league}] ({players[1]} @ {players[0]})")
                     continue
