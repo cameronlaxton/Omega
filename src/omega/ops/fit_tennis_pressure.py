@@ -15,13 +15,26 @@ group rows are also written under the reserved ``__group__`` player key so
 players with no charted data at all resolve to group means at request time —
 flat 0.0 deltas are never silently applied.
 
-State classification (server's perspective; ``Pts`` is server-first):
-  break_point_against  0-40 / 15-40 / 30-40 / 40-AD
+State classification is EXCLUSIVE — every point lands in at most one fit
+population — because the backend (tennis_markov._hold_for) applies deltas
+ADDITIVELY at overlapping nodes (e.g. a break point inside a serving-for-set
+game gets serving_for_set + break_point_against). Fitting those states on
+overlapping populations would bake the same depression into both deltas and
+double-count it at application (review finding, PR #12). Populations
+(server's perspective; ``Pts`` is server-first):
+
+  tiebreak             any service point at 6-6 games
   set_point_serving    game point (40-x / AD-40) in a serving-for-set game
   match_point_serving  same, when the set win clinches the match
-  tiebreak             any service point at 6-6 games
-  serving_for_set      any point of a 5-x (x<=4) or 6-5 service game
+  serving_for_set      NON-node points of a 5-x (x<=4) or 6-5 service game
   serving_for_match    same, when the set win clinches the match
+  break_point_against  0-40 / 15-40 / 30-40 / 40-AD in a NON-serving-for-set
+                       game (break points inside serving-for-set games belong
+                       to no fit population; the additive model predicts them)
+
+``set_point_serving``/``match_point_serving`` are RESIDUAL deltas, measured
+against (baseline + the flat serving-for-set/-match delta), matching how the
+backend stacks them: applied p = base + flat + gp_residual.
 
 Usage:
     omega-fit-tennis-pressure-coefficients --tour atp --decades 2020s
@@ -58,29 +71,44 @@ _BP_SCORES = frozenset({"0-40", "15-40", "30-40", "40-AD"})
 _GP_SCORES = frozenset({"40-0", "40-15", "40-30", "AD-40"})
 
 
-def classify_point_states(
+# Residual states are fit against (baseline + their flat parent's delta),
+# mirroring the additive application in tennis_markov._hold_for.
+_RESIDUAL_PARENT = {
+    "set_point_serving": "serving_for_set",
+    "match_point_serving": "serving_for_match",
+}
+
+
+def classify_point_state(
     point, *, server_sets: int, sets_to_win: int
-) -> list[str]:
-    """Return the pressure states a charted point belongs to (possibly several)."""
+) -> str | None:
+    """Return the single (exclusive) fit population a charted point belongs to.
+
+    None means the point is in no fit population: ordinary points, plain-game
+    game points (no delta is applied there), and break points inside
+    serving-for-set games (the overlap the additive model predicts rather
+    than fits — counting them in two populations double-counts at application).
+    """
     server_is_p1 = point.Svr == 1
     srv_games = point.Gm1 if server_is_p1 else point.Gm2
     ret_games = point.Gm2 if server_is_p1 else point.Gm1
 
     if srv_games == 6 and ret_games == 6:
-        return ["tiebreak"]
+        return "tiebreak"
 
-    states: list[str] = []
     clinch = server_sets == sets_to_win - 1
     serving_for_set = (srv_games == 5 and ret_games <= 4) or (
         srv_games == 6 and ret_games == 5
     )
     if serving_for_set:
-        states.append("serving_for_match" if clinch else "serving_for_set")
+        if point.Pts in _BP_SCORES:
+            return None  # overlap node: predicted additively, never fit
         if point.Pts in _GP_SCORES:
-            states.append("match_point_serving" if clinch else "set_point_serving")
+            return "match_point_serving" if clinch else "set_point_serving"
+        return "serving_for_match" if clinch else "serving_for_set"
     if point.Pts in _BP_SCORES:
-        states.append("break_point_against")
-    return states
+        return "break_point_against"
+    return None
 
 
 @dataclass
@@ -116,9 +144,10 @@ def accumulate_pressure_stats(
         bucket = acc[(server, surface)]
         bucket.total_pts += 1
         bucket.total_won += won
-        for state in classify_point_states(
+        state = classify_point_state(
             point, server_sets=server_sets, sets_to_win=sets_to_win
-        ):
+        )
+        if state is not None:
             bucket.state_pts[state] += 1
             bucket.state_won[state] += won
     return dict(acc)
@@ -151,11 +180,26 @@ def build_pressure_deltas(
             return {}
         baseline = bucket.total_won / bucket.total_pts
         out: dict[str, tuple[float, int]] = {}
+        # Flat states first so residual states can reference their parent.
         for state in TENNIS_PRESSURE_STATES:
+            if state in _RESIDUAL_PARENT:
+                continue
             n = bucket.state_pts.get(state, 0)
             if n <= 0:
                 continue
             out[state] = (bucket.state_won[state] / n - baseline, n)
+        # Residual states: measured against (baseline + flat parent delta),
+        # matching the backend's additive stacking. An unfitted parent
+        # contributes 0.0 (the backend applies the same 0.0 then).
+        for state, parent in _RESIDUAL_PARENT.items():
+            n = bucket.state_pts.get(state, 0)
+            if n <= 0:
+                continue
+            parent_delta = out.get(parent, (0.0, 0))[0]
+            out[state] = (
+                bucket.state_won[state] / n - (baseline + parent_delta),
+                n,
+            )
         return out
 
     rows: list[TennisPressureDelta] = []

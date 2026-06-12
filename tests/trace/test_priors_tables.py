@@ -56,6 +56,35 @@ def test_fresh_and_reopened_db_have_v16_tables():
         reopened.close()
 
 
+def test_reopening_up_to_date_db_skips_schema_replay(monkeypatch):
+    """An up-to-date DB must not replay the forward-additive DDL on reopen.
+
+    Per-request TraceStore opens (prior injection, batch loops) previously
+    re-ran all ~17 idempotent executescripts plus the bet_records
+    consolidation probe on every open. The probe is the observable: it runs
+    during the initial build, and must NOT run when reopening a DB already
+    stamped at CURRENT_VERSION.
+    """
+    path = _tmp_db()
+    store = TraceStore(db_path=path)
+    store.close()
+
+    calls = {"n": 0}
+    original = TraceStore._consolidate_legacy_bet_records
+
+    def _spy(self):
+        calls["n"] += 1
+        return original(self)
+
+    monkeypatch.setattr(TraceStore, "_consolidate_legacy_bet_records", _spy)
+    reopened = TraceStore(db_path=path)
+    try:
+        assert calls["n"] == 0  # fast path: no DDL replay on an up-to-date DB
+        assert reopened.schema_version() == 17
+    finally:
+        reopened.close()
+
+
 def test_no_production_profile_returns_none():
     store = _store()
     try:

@@ -1,4 +1,10 @@
-"""Tests for omega-fit-tennis-pressure-coefficients (Phase 7 M3 PR-T4)."""
+"""Tests for omega-fit-tennis-pressure-coefficients (Phase 7 M3 PR-T4).
+
+State classification is exclusive (one fit population per point) and the
+set/match-point deltas are residuals against their flat serving-for-set/-match
+parent, so the additive application in tennis_markov never double-counts a
+depression that was fit twice (review finding, PR #12).
+"""
 
 from __future__ import annotations
 
@@ -8,7 +14,7 @@ from omega.integrations.tennis_sackmann import ChartingMatchRow, ChartingPointRo
 from omega.ops.fit_tennis_pressure import (
     accumulate_pressure_stats,
     build_pressure_deltas,
-    classify_point_states,
+    classify_point_state,
 )
 from omega.trace.priors import (
     PRESSURE_GROUP_PLAYER_KEY,
@@ -30,54 +36,61 @@ def _match(match_id="m1", p1="Player A", p2="Opponent", surface="Hard", best_of=
     )
 
 
+def _classify(point, server_sets=0, sets_to_win=2):
+    return classify_point_state(point, server_sets=server_sets, sets_to_win=sets_to_win)
+
+
 # ---------------------------------------------------------------------------
-# State classification
+# Exclusive state classification
 # ---------------------------------------------------------------------------
 
 
-def test_break_point_states():
+def test_break_point_states_in_plain_games():
     for pts in ("0-40", "15-40", "30-40", "40-AD"):
-        assert classify_point_states(
-            _point(pts=pts), server_sets=0, sets_to_win=2
-        ) == ["break_point_against"]
-    assert classify_point_states(_point(pts="40-30"), server_sets=0, sets_to_win=2) == []
+        assert _classify(_point(pts=pts)) == "break_point_against"
+    assert _classify(_point(pts="40-30")) is None  # plain-game GP carries no delta
+    assert _classify(_point(pts="15-0")) is None
 
 
 def test_tiebreak_state_is_exclusive():
-    point = _point(gm1=6, gm2=6, pts="3-2")
-    assert classify_point_states(point, server_sets=0, sets_to_win=2) == ["tiebreak"]
+    assert _classify(_point(gm1=6, gm2=6, pts="3-2")) == "tiebreak"
 
 
-def test_serving_for_set_and_set_point():
-    point = _point(gm1=5, gm2=4, pts="40-30")
-    states = classify_point_states(point, server_sets=0, sets_to_win=2)
-    assert states == ["serving_for_set", "set_point_serving"]
-    # 6-5 service game also serves for the set.
-    assert "serving_for_set" in classify_point_states(
-        _point(gm1=6, gm2=5, pts="0-0"), server_sets=0, sets_to_win=2
-    )
+def test_serving_for_set_populations_are_disjoint():
+    # Game point in a serving-for-set game -> residual set-point state only.
+    assert _classify(_point(gm1=5, gm2=4, pts="40-30")) == "set_point_serving"
+    # Non-node point in the same game -> flat serving_for_set only.
+    assert _classify(_point(gm1=5, gm2=4, pts="15-0")) == "serving_for_set"
+    assert _classify(_point(gm1=6, gm2=5, pts="0-0")) == "serving_for_set"
+    # Break point inside a serving-for-set game is the overlap node the
+    # additive model predicts — it belongs to NO fit population.
+    assert _classify(_point(gm1=5, gm2=4, pts="30-40")) is None
 
 
 def test_clinch_set_upgrades_to_match_states():
-    point = _point(set1=1, gm1=5, gm2=3, pts="40-15")
-    states = classify_point_states(point, server_sets=1, sets_to_win=2)
-    assert states == ["serving_for_match", "match_point_serving"]
+    assert (
+        _classify(_point(set1=1, gm1=5, gm2=3, pts="40-15"), server_sets=1)
+        == "match_point_serving"
+    )
+    assert (
+        _classify(_point(set1=1, gm1=5, gm2=3, pts="0-15"), server_sets=1)
+        == "serving_for_match"
+    )
 
 
 def test_server_two_perspective():
     """When player 2 serves, game/set counts swap perspective."""
     point = _point(gm1=3, gm2=5, pts="40-0", svr=2, winner=2)
-    states = classify_point_states(point, server_sets=0, sets_to_win=2)
-    assert states == ["serving_for_set", "set_point_serving"]
+    assert _classify(point) == "set_point_serving"
 
 
 # ---------------------------------------------------------------------------
-# Aggregation + fallback
+# Aggregation, residual deltas, fallback
 # ---------------------------------------------------------------------------
 
 
 def _synthetic_dataset():
-    """Player A: 1000 charted points (800 plain @70%, 200 BP @60%).
+    """Player A: 1000 charted points (800 plain @70%, 200 plain BP @60%).
     Player B: 200 plain points @65% — below the N=500 threshold."""
     points = []
     for i in range(800):
@@ -104,6 +117,52 @@ def test_player_deltas_hand_computed():
     assert a_bp.source == PRESSURE_SOURCE_PLAYER
     assert a_bp.n_points == 200
     assert a_bp.surface == "hard"
+
+
+def test_set_point_delta_is_residual_over_serving_for_set():
+    """sp_delta = SPW(GP in SFS) − (baseline + sfs_delta), not vs baseline.
+
+    600 plain @65% + 200 SFS non-node @62% + 200 GP-in-SFS @60%:
+      baseline  = (390+124+120)/1000 = .634
+      sfs_delta = .62 − .634          = −.014
+      sp_delta  = .60 − (.634 − .014) = −.02   (naive vs-baseline = −.034)
+    """
+    points = []
+    for i in range(600):
+        points.append(_point(pts="15-0", winner=1 if i < 390 else 2))
+    for i in range(200):
+        points.append(_point(gm1=5, gm2=3, pts="15-0", winner=1 if i < 124 else 2))
+    for i in range(200):
+        points.append(_point(gm1=5, gm2=3, pts="40-30", winner=1 if i < 120 else 2))
+
+    acc = accumulate_pressure_stats(points, [_match()])
+    rows = build_pressure_deltas(
+        acc, tour="ATP", as_of_date="2026-06-10", min_points=500
+    )
+    by_state = {r.state: r for r in rows if r.player == "Player A"}
+    assert by_state["serving_for_set"].delta == pytest.approx(-0.014, abs=1e-4)
+    assert by_state["set_point_serving"].delta == pytest.approx(-0.02, abs=1e-4)
+    # The additive application reproduces the observed node SPW exactly:
+    # base(.634) + sfs(−.014) + sp(−.02) = .60.
+    applied = 0.634 + by_state["serving_for_set"].delta + by_state["set_point_serving"].delta
+    assert applied == pytest.approx(0.60, abs=1e-4)
+
+
+def test_overlap_break_points_are_excluded_from_both_fits():
+    """A BP inside a serving-for-set game must not contaminate either fit."""
+    points = []
+    for i in range(600):
+        points.append(_point(pts="15-0", winner=1 if i < 390 else 2))
+    # Heavily depressed BPs inside SFS games (SPW .10) — excluded entirely.
+    for i in range(100):
+        points.append(_point(gm1=5, gm2=3, pts="30-40", winner=1 if i < 10 else 2))
+
+    acc = accumulate_pressure_stats(points, [_match()])
+    bucket = acc[("Player A", "hard")]
+    assert "break_point_against" not in bucket.state_pts
+    assert "serving_for_set" not in bucket.state_pts
+    # They still count toward the baseline volume (they are service points).
+    assert bucket.total_pts == 700
 
 
 def test_sub_threshold_player_gets_group_means_not_zeros():

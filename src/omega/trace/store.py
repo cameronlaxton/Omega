@@ -590,6 +590,16 @@ class TraceStore:
         # it. Must be read before any _record_version() call below.
         prior_version = self._existing_schema_version()
 
+        # Fast path: an up-to-date DB skips the whole forward-additive replay.
+        # Every open used to re-run all ~17 idempotent executescripts plus the
+        # bet_records consolidation probe — pure no-op DDL that turned hot
+        # paths (e.g. per-request prior injection, batch loops) into serialized
+        # schema churn. schema_versions stamping CURRENT_VERSION guarantees the
+        # DDL already ran; manual table drops are out-of-contract and surface
+        # via the repo-state validators, not via per-open self-healing.
+        if prior_version >= CURRENT_VERSION:
+            return
+
         # V1: traces, outcomes, schema_versions
         self.conn.executescript(SCHEMA_V1)
         self._record_version(1, "Initial schema: traces, outcomes, schema_versions")
