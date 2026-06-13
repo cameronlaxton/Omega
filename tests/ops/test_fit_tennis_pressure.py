@@ -165,21 +165,38 @@ def test_overlap_break_points_are_excluded_from_both_fits():
     assert bucket.total_pts == 700
 
 
-def test_sub_threshold_player_gets_group_means_not_zeros():
+def test_sub_threshold_player_has_no_rows_and_resolves_to_group_at_lookup():
+    """Sub-threshold players get NO stored rows; the lookup falls back to the
+    __group__ rows and reports source='group_fallback' — never silent zeros,
+    never redundant per-player copies of the group means."""
+    import tempfile
+
+    from omega.trace.priors import get_pressure_coefficients, upsert_pressure_deltas
+    from omega.trace.store import TraceStore
+
     points, matches = _synthetic_dataset()
     acc = accumulate_pressure_stats(points, matches)
     rows = build_pressure_deltas(acc, tour="ATP", as_of_date="2026-06-10")
 
-    b_rows = [r for r in rows if r.player == "Player B"]
-    assert b_rows, "sub-threshold player must still get rows (group means)"
-    assert all(r.source == PRESSURE_SOURCE_GROUP for r in b_rows)
+    # Player B (200 charted points < 500) gets no rows of its own.
+    assert [r for r in rows if r.player == "Player B"] == []
     group_bp = next(
         r for r in rows
         if r.player == PRESSURE_GROUP_PLAYER_KEY and r.state == "break_point_against"
     )
-    b_bp = next(r for r in b_rows if r.state == "break_point_against")
-    assert b_bp.delta == group_bp.delta
-    assert b_bp.delta != 0.0  # never silent zeros
+    assert group_bp.delta != 0.0
+
+    # The lookup fallback yields the group means with group-fallback provenance.
+    f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    f.close()
+    store = TraceStore(db_path=f.name)
+    try:
+        upsert_pressure_deltas(store, rows)
+        coeffs, source = get_pressure_coefficients(store, "Player B", "ATP", "hard")
+        assert source == PRESSURE_SOURCE_GROUP
+        assert coeffs["break_point_against"] == group_bp.delta
+    finally:
+        store.close()
 
 
 def test_group_rows_written_under_reserved_key():

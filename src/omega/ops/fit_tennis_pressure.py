@@ -220,11 +220,15 @@ def build_pressure_deltas(
                 )
             )
 
+    # Only at-threshold players get their own rows. Sub-threshold players are
+    # NOT written: get_pressure_coefficients() already falls back player ->
+    # __group__ at lookup time and reports source="group_fallback", so storing
+    # per-player copies of the group means would be redundant (and re-fits would
+    # multiply thousands of identical rows).
     for (player, surface), bucket in sorted(acc.items()):
-        use_player = bucket.total_pts >= min_points
-        source = PRESSURE_SOURCE_PLAYER if use_player else PRESSURE_SOURCE_GROUP
-        deltas = _deltas(bucket) if use_player else group_deltas.get(surface, {})
-        for state, (delta, n) in sorted(deltas.items()):
+        if bucket.total_pts < min_points:
+            continue
+        for state, (delta, n) in sorted(_deltas(bucket).items()):
             rows.append(
                 TennisPressureDelta(
                     player=player,
@@ -233,7 +237,7 @@ def build_pressure_deltas(
                     state=state,
                     delta=round(delta, 5),
                     n_points=n,
-                    source=source,
+                    source=PRESSURE_SOURCE_PLAYER,
                     as_of_date=as_of_date,
                 )
             )
