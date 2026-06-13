@@ -244,8 +244,11 @@ def test_signal_guidance_buckets_bootstrap_warnings():
     guidance = report_calibration._signal_guidance(rows)
 
     assert guidance["trusted"][0]["signal_type"] == "usage_role_change"
-    assert guidance["warnings"][0]["signal_type"] == "series_avg"
-    assert guidance["insufficient"][0]["signal_type"] == "recent_form"
+    assert guidance["trusted"][0]["direction_accuracy"] == 0.65
+    assert guidance["trusted"][0]["brier"] == 0.15
+    assert guidance["warnings"][0]["signal_type"] == "unknown"
+    assert guidance["warnings"][0]["calibration_gap"] == 0.15
+    assert guidance["insufficient"][0]["signal_type"] == "unknown"
 
 
 def test_report_frontmatter_emits_per_market_map(tmp_path, monkeypatch):

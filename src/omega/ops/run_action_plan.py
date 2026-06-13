@@ -23,7 +23,7 @@ Allowlist:
         args.league: str (required)
         args.window_days: int (default 30)
     type=fetch_outcomes
-        args.leagues: list[str] (default ["nba", "mlb", "props"])
+        args.leagues: list[str] (default ["nba", "mlb", "nhl", "props"])
         args.since: str YYYY-MM-DD (optional)
         args.until: str YYYY-MM-DD (optional)
     type=settle_bets
@@ -189,8 +189,8 @@ def _validate_report_calibration(args: dict[str, Any]) -> list[str]:
 
 def _validate_fetch_outcomes(args: dict[str, Any]) -> list[str]:
     _reject_unknown_args("fetch_outcomes", args, {"leagues", "since", "until"})
-    _VALID_LEAGUES = {"nba", "wnba", "mlb", "props"}
-    leagues = args.get("leagues", ["nba", "mlb", "props"])
+    _VALID_LEAGUES = {"nba", "wnba", "mlb", "nhl", "props"}
+    leagues = args.get("leagues", ["nba", "mlb", "nhl", "props"])
     if not isinstance(leagues, list) or not all(isinstance(league, str) for league in leagues):
         raise ValueError("fetch_outcomes.args.leagues must be a list of strings")
     leagues = [league.lower() for league in leagues]
@@ -458,5 +458,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 

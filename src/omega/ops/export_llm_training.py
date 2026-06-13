@@ -78,6 +78,15 @@ PROTECTED_NAME_FRAGMENTS = (
 )
 
 PROTECTED_TEXT_TOKENS = tuple(sorted(PROTECTED_FIELD_NAMES, key=len, reverse=True))
+PROTECTED_ID_PATTERNS = (
+    re.compile(r"\bsandbox-[A-Za-z0-9][A-Za-z0-9._:-]*\b"),
+    re.compile(
+        r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+        flags=re.I,
+    ),
+    re.compile(r"\b(?:trace|run|sess)-[A-Za-z0-9][A-Za-z0-9._:-]*\b", flags=re.I),
+    re.compile(r"\b[0-9a-f]{32}\b", flags=re.I),
+)
 
 
 def _is_protected_key(key: Any) -> bool:
@@ -88,10 +97,12 @@ def _is_protected_key(key: Any) -> bool:
 
 
 def redact_text(text: str) -> str:
-    """Remove explicit protected field names from free-form text."""
+    """Remove protected field names and literal IDs from free-form text."""
     redacted = text
     for token in PROTECTED_TEXT_TOKENS:
         redacted = re.sub(rf"\b{re.escape(token)}\b", "[REDACTED_FIELD]", redacted, flags=re.I)
+    for pattern in PROTECTED_ID_PATTERNS:
+        redacted = pattern.sub("[REDACTED_ID]", redacted)
     return redacted
 
 
@@ -212,7 +223,7 @@ def _contains_protected_key(value: Any) -> bool:
     if isinstance(value, list):
         return any(_contains_protected_key(item) for item in value)
     if isinstance(value, str):
-        return any(re.search(rf"\b{re.escape(token)}\b", value, flags=re.I) for token in PROTECTED_TEXT_TOKENS)
+        return redact_text(value) != value
     return False
 
 

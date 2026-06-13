@@ -104,6 +104,9 @@ def parse_scoreboard(payload: dict) -> list[FinalGame]:
         status_obj = (comp.get("status") or {}).get("type") or {}
         status = (status_obj.get("name") or "").lower()
         status_short = status.replace("status_", "")
+        if not status_short.startswith("final"):
+            logger.debug("skipping event %s - non-final status %r", event_id, status_short)
+            continue
         home = away = None
         home_score = away_score = 0
         for competitor in comp.get("competitors") or []:
@@ -139,7 +142,7 @@ def fetch_team_context(team_name: str, url_opener=urllib.request.urlopen) -> dic
     if not c_team:
         return {}
     abbr = NFL_TEAMS[c_team][0]
-    url = f"http://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{abbr}/statistics"
+    url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{abbr}/statistics"
     try:
         with url_opener(url, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -156,7 +159,7 @@ def fetch_team_context(team_name: str, url_opener=urllib.request.urlopen) -> dic
 
 def fetch_player_context(player_id: str, url_opener=urllib.request.urlopen) -> dict[str, Any]:
     """Fetch seasonal statistics for an NFL player. player_id must be the ESPN athlete ID."""
-    url = f"http://site.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{player_id}"
+    url = f"https://site.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{player_id}"
     try:
         with url_opener(url, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
             data = json.loads(resp.read().decode("utf-8"))

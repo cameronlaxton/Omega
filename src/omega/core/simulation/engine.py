@@ -1483,9 +1483,13 @@ def run_markov_game_simulation(
 
     home_context = request.home_context
     away_context = request.away_context
+    effective_context_source = context_source
+    effective_baseline_used = baseline_used
     if home_context is None or away_context is None:
         defaults = _archetype_league_defaults(league)
         if defaults:
+            effective_context_source = "league_default"
+            effective_baseline_used = True
             if home_context is None:
                 home_context = dict(defaults)
             if away_context is None:
@@ -1529,8 +1533,8 @@ def run_markov_game_simulation(
     simulator = MarkovSimulator(
         league=league,
         players=[],
-        home_context=request.home_context,
-        away_context=request.away_context,
+        home_context=home_context,
+        away_context=away_context,
         transition_modifiers=request.transition_modifiers,
     )
     n_possessions = simulator._base_n_possessions
@@ -1548,13 +1552,13 @@ def run_markov_game_simulation(
         request.n_iterations,
         home_scores,
         away_scores,
-        home_context=request.home_context,
-        away_context=request.away_context,
+        home_context=home_context,
+        away_context=away_context,
         archetype_name=archetype_name,
         spread_home=request.spread_home,
         over_under=request.over_under,
-        context_source=context_source,
-        baseline_used=baseline_used,
+        context_source=effective_context_source,
+        baseline_used=effective_baseline_used,
         seed=request.seed,
         backend_name=backend_name,
         component_version=component_version,
@@ -1667,9 +1671,13 @@ class OmegaSimulationEngine:
 
         Architecture fix: callers must supply all context. No network calls.
         """
+        context_source = "provided"
+        baseline_used = False
         if home_context is None or away_context is None:
             defaults = _archetype_league_defaults(league)
             if defaults:
+                context_source = "league_default"
+                baseline_used = True
                 if home_context is None:
                     home_context = dict(defaults)
                 if away_context is None:
@@ -1770,8 +1778,8 @@ class OmegaSimulationEngine:
             home_context=home_context,
             away_context=away_context,
             archetype_name=get_archetype_name(league),
-            context_source="provided",
-            baseline_used=False,
+            context_source=context_source,
+            baseline_used=baseline_used,
             backend_name="markov_state",
             component_version="markov_state_v1",
         )
@@ -1808,8 +1816,8 @@ class OmegaSimulationEngine:
             "player_projections": player_projections,
             "home_scores_sample": [round(s, 1) for s in home_scores[:20]],
             "away_scores_sample": [round(s, 1) for s in away_scores[:20]],
-            "context_source": "provided",
-            "baseline_used": False,
+            "context_source": context_source,
+            "baseline_used": baseline_used,
             "simulation_backend": "markov_state",
             "component_version": "markov_state_v1",
             "simulation_distributions": distribution_result["simulation_distributions"],
@@ -2034,6 +2042,7 @@ register_game_backend("markov_state", MarkovGameSimulationBackend())
 register_prop_backend("prop_distribution_router", PropDistributionRouterBackend())
 
 from omega.core.simulation.prop_neg_binom import NegBinomPropBackend  # noqa: E402
+
 register_prop_backend("prop_neg_binom", NegBinomPropBackend())
 
 # Phase 7 sport backends. Imported here (after run_markov_game_simulation is

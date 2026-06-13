@@ -50,6 +50,7 @@ def test_new_deterministic_actions_validate_to_expected_commands():
                 "type": "settle_bets",
                 "args": {"league": "nba", "provenance": "user_confirmed"},
             },
+            {"type": "fetch_outcomes", "args": {"leagues": ["nba", "nhl"]}},
         ],
     }
 
@@ -76,6 +77,8 @@ def test_new_deterministic_actions_validate_to_expected_commands():
         "NBA",
         "--apply",
     ]
+    assert _script_name(cmds["fetch_outcomes"]) == "omega.ops.fetch_outcomes_all"
+    assert cmds["fetch_outcomes"][-3:] == ["--leagues", "nba", "nhl"]
 
 
 @pytest.mark.parametrize(
@@ -84,7 +87,7 @@ def test_new_deterministic_actions_validate_to_expected_commands():
         {"type": "promote_adjustment_policy", "args": {"go_live": True}},
         {"type": "fit_adjustment_policy", "args": {"league": "NBA", "mode": "live"}},
         {"type": "fit_adjustment_policy", "args": {"league": "NBA", "go_live": True}},
-        {"type": "fetch_outcomes", "args": {"leagues": ["nba", "nhl"]}},
+        {"type": "fetch_outcomes", "args": {"leagues": ["nba", "kbo"]}},
         {"type": "ingest_traces", "args": {"verbose": "yes"}},
         {"type": "fetch_closing_lines", "args": {"league": "KBO"}},
         {"type": "fit_calibration", "args": {"league": "NBA", "plane": "all"}},

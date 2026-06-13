@@ -44,6 +44,7 @@ if str(_SRC_ROOT) not in sys.path:
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
 from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus  # noqa: E402
 from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
+from omega.core.simulation.evidence_to_modifier import MAPPED_SIGNAL_TYPES  # noqa: E402
 from omega.ops.output_modes import (  # noqa: E402
     OutputMode,
     classify_market_output_mode,
@@ -496,11 +497,14 @@ def _signal_guidance(signal_perf: list[dict[str, Any]]) -> dict[str, list[dict[s
     }
     for row in signal_perf:
         sample_size = int(row.get("sample_size") or 0)
-        accuracy = float(row.get("direction_accuracy") or 0.0)
-        calibration_gap = float(row.get("calibration_gap") or 0.0)
-        brier = float(row.get("brier") or 0.0)
+        signal_type = str(row.get("signal_type") or "unknown")
+        if signal_type not in MAPPED_SIGNAL_TYPES:
+            signal_type = "unknown"
+        accuracy = min(0.65, max(0.35, float(row.get("direction_accuracy") or 0.0)))
+        calibration_gap = min(0.15, max(-0.15, float(row.get("calibration_gap") or 0.0)))
+        brier = min(0.15, max(-0.15, float(row.get("brier") or 0.0)))
         normalized = {
-            "signal_type": row.get("signal_type") or "unknown",
+            "signal_type": signal_type,
             "source": row.get("source") or "unknown",
             "obs_window": row.get("obs_window") or "unknown",
             "league": row.get("league") or "unknown",

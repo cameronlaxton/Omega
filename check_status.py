@@ -7,7 +7,13 @@ c.execute("""
     SELECT count(*)
     FROM bet_ledger b
     JOIN traces t ON t.trace_id = b.trace_id
-    LEFT JOIN closing_lines cl ON cl.trace_id = b.trace_id AND cl.market = b.market AND cl.selection_descriptor = b.selection_descriptor
+    LEFT JOIN closing_lines cl
+      ON cl.trace_id = b.trace_id
+     AND cl.market = b.market
+     AND (
+        cl.selection_descriptor = b.selection_descriptor
+        OR (cl.selection_descriptor IS NULL AND b.selection_descriptor IS NULL)
+     )
     WHERE t.league IN ('MLB', 'NBA')
       AND cl.closing_id IS NULL
 """)
@@ -17,7 +23,13 @@ c.execute("""
     SELECT b.status, count(*)
     FROM bet_ledger b
     JOIN traces t ON t.trace_id = b.trace_id
-    LEFT JOIN closing_lines cl ON cl.trace_id = b.trace_id AND cl.market = b.market AND cl.selection_descriptor = b.selection_descriptor
+    LEFT JOIN closing_lines cl
+      ON cl.trace_id = b.trace_id
+     AND cl.market = b.market
+     AND (
+        cl.selection_descriptor = b.selection_descriptor
+        OR (cl.selection_descriptor IS NULL AND b.selection_descriptor IS NULL)
+     )
     WHERE t.league IN ('MLB', 'NBA')
       AND cl.closing_id IS NULL
     GROUP BY b.status

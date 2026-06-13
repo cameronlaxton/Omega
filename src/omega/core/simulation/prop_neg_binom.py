@@ -20,14 +20,30 @@ class NegBinomPropBackend:
 
         """
         rng = np.random.default_rng(request.seed)
-        mean = float(request.projection_mean)
+        try:
+            mean = float(request.projection_mean)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("projection_mean must be a finite non-negative number") from exc
+        if not np.isfinite(mean) or mean < 0:
+            raise ValueError("projection_mean must be a finite non-negative number")
 
         prior = request.prior_payload or {}
         k = prior.get("nb_dispersion_k")
         if k is None:
-            k = 1.0
+            raise ValueError("prior_payload.nb_dispersion_k is required for negative binomial props")
+        try:
+            k = float(k)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("prior_payload.nb_dispersion_k must be a finite positive number") from exc
+        if not np.isfinite(k) or k <= 0:
+            raise ValueError("prior_payload.nb_dispersion_k must be a finite positive number")
 
-        p = k / (k + mean) if (k + mean) > 0 else 1.0
+        denom = k + mean
+        if denom <= 0:
+            raise ValueError("negative binomial dispersion and mean produce an invalid denominator")
+        p = k / denom
+        if not np.isfinite(p) or p <= 0 or p > 1:
+            raise ValueError("negative binomial probability must be in (0, 1]")
 
         samples = rng.negative_binomial(k, p, size=request.n_iter)
         market_line = request.line

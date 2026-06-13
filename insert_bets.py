@@ -1,10 +1,8 @@
-import sqlite3
 import json
 import uuid
-from datetime import datetime, timezone
 
-from omega.trace.store import TraceStore
 from omega.trace.bet_record import BetRecord
+from omega.trace.store import TraceStore
 
 db_path = 'var/omega_traces.db'
 store = TraceStore(db_path=db_path)
@@ -18,35 +16,42 @@ c.execute("SELECT trace_id, league, timestamp, full_trace FROM traces WHERE leag
 traces = c.fetchall()
 
 inserted = 0
+skipped_missing_timestamp = []
+skipped_missing_odds = []
 
 for trace_id, league, timestamp, full_trace in traces:
     if trace_id in ledger_trace_ids:
         continue
-    
+
     t_data = json.loads(full_trace)
-    
+
     # Check both top level and result dict
     rec = t_data.get('recommendation')
     if not rec:
         res = t_data.get('result', {})
         rec = res.get('recommendation')
-        
+
     if not rec or rec == 'PASS':
         continue
-        
+
+    trace_timestamp = timestamp or t_data.get('timestamp')
+    if not trace_timestamp:
+        skipped_missing_timestamp.append(trace_id)
+        continue
+
     snap = t_data.get('input_snapshot', {})
     if not snap:
         snap = t_data # flat trace
-        
+
     kind = t_data.get('kind', 'game')
     if 'prop_type' in t_data:
         kind = 'prop'
-    
+
     # Extract line, odds based on recommendation
     if kind == 'prop':
         market = f"player_prop:{t_data.get('prop_type', 'unknown')}"
         line = t_data.get('line')
-        
+
         if rec == 'OVER':
             sel_desc = 'over'
             odds = t_data.get('odds_over')
@@ -93,14 +98,15 @@ for trace_id, league, timestamp, full_trace in traces:
                 sel_desc = 'away_moneyline'
                 odds = snap.get('away_moneyline')
                 selection = snap.get('away_team')
-                
+
     if odds is None:
         # Fallback to result if missing in snap
         if 'bet_side_odds' in t_data and t_data['bet_side_odds']:
             odds = t_data['bet_side_odds']
         else:
-            odds = -110.0
-            
+            skipped_missing_odds.append(trace_id)
+            continue
+
     block = {
         "book": "consensus",
         "market": market,
@@ -109,15 +115,17 @@ for trace_id, league, timestamp, full_trace in traces:
         "line_taken": line,
         "odds_taken": odds,
         "units": t_data.get('recommended_units', 1.0),
-        "decision_timestamp": datetime.now(timezone.utc).isoformat()
+        "decision_timestamp": trace_timestamp
     }
-    
+
     bet_id = uuid.uuid4().hex[:12]
     bet = BetRecord.from_export_block(trace_id=trace_id, bet_id=bet_id, block=block)
     bet.provenance = "engine_auto"
-    
+
     store.record_bet(bet)
     inserted += 1
 
 store.close()
 print(f"Inserted {inserted} bets.")
+print(f"Skipped missing timestamp: {len(skipped_missing_timestamp)}")
+print(f"Skipped missing odds: {len(skipped_missing_odds)}")

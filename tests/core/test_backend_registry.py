@@ -255,6 +255,39 @@ def test_analyze_prop_routes_to_neg_binom():
     assert resp.distribution_type == "negative_binomial"
 
 
+def test_neg_binom_requires_valid_dispersion_k():
+    backend = resolve_prop_backend("prop_neg_binom")
+    assert backend is not None
+
+    with pytest.raises(ValueError, match="nb_dispersion_k"):
+        backend.run(
+            PropSimulationInput(
+                player_name="Test Player",
+                league="NFL",
+                stat_type="rushing_yards",
+                line=70.5,
+                projection_mean=80.0,
+                n_iter=100,
+                seed=1,
+                prior_payload={},
+            )
+        )
+
+    with pytest.raises(ValueError, match="finite positive"):
+        backend.run(
+            PropSimulationInput(
+                player_name="Test Player",
+                league="NFL",
+                stat_type="rushing_yards",
+                line=70.5,
+                projection_mean=80.0,
+                n_iter=100,
+                seed=1,
+                prior_payload={"nb_dispersion_k": 0},
+            )
+        )
+
+
 # ---------------------------------------------------------------------------
 # Registration-time Protocol validation (fail-loud at import, not at dispatch)
 # ---------------------------------------------------------------------------

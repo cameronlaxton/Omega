@@ -195,6 +195,24 @@ class TestSimulation:
         assert result["context_source"] == "league_default"
         assert result["baseline_used"] is True
 
+    def test_markov_game_simulation_baselines_when_context_absent_by_default(self):
+        from omega.core.simulation.backends import resolve_game_backend
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        backend = resolve_game_backend("markov_state")
+        assert backend is not None
+        engine = OmegaSimulationEngine()
+        result = engine.run_fast_game_simulation(
+            home_team="Team A",
+            away_team="Team B",
+            league="NBA",
+            n_iterations=100,
+            backend=backend,
+        )
+        assert result.get("success") is True
+        assert result["context_source"] == "league_default"
+        assert result["baseline_used"] is True
+
     def test_fast_game_simulation_allows_explicit_baseline(self):
         from omega.core.simulation.engine import OmegaSimulationEngine
 

@@ -44,8 +44,14 @@ def _training_trace(trace_id: str = "sandbox-secret-123") -> dict:
             "sources": ["injury_report"],
             "market_context": {"odds_over": -110},
         },
-        "reasoning_narrative": "Usage rose after injury news; ignore over_prob and edge_pct.",
-        "reasoning_downgrade_rationale": "Downgraded because market_context odds were stale.",
+        "reasoning_narrative": (
+            "Usage rose after injury news; ignore over_prob and edge_pct "
+            "from sandbox-secret-123."
+        ),
+        "reasoning_downgrade_rationale": (
+            "Downgraded because market_context odds were stale for "
+            "123e4567-e89b-12d3-a456-426614174000."
+        ),
         "trace_quality": {
             "aggregate_quality": 0.9,
             "calibration_eligible": True,
@@ -63,7 +69,9 @@ def test_training_record_redacts_protected_fields_from_messages():
     assert "edge_pct" not in rendered
     assert "confidence_tier" not in rendered
     assert "odds_over" not in rendered
+    assert "123e4567-e89b-12d3-a456-426614174000" not in rendered
     assert "[REDACTED_FIELD]" in rendered
+    assert "[REDACTED_ID]" in rendered
     assert record["metadata"]["trace_ref"] != "sandbox-secret-123"
 
 

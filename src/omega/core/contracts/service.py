@@ -1766,6 +1766,12 @@ def analyze_player_prop(
         "distribution": distribution_override,
         "dud_prob": float(player_ctx.get("dud_prob", 0.0)),
     }
+    if backend_name == "prop_neg_binom":
+        variance = std_f**2
+        if variance > mean_f:
+            prior_payload["nb_dispersion_k"] = (mean_f**2) / (variance - mean_f)
+        else:
+            prior_payload["nb_dispersion_k"] = 100.0
     # Whitelisted sport-specific prop priors travel from player_context into
     # prior_payload (tennis serve model keys; harmless no-ops elsewhere).
     for prior_key in ("ace_rate", "serve_win_pct", "match_format", "expected_total_games"):
