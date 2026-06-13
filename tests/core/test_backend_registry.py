@@ -206,6 +206,7 @@ def test_analyze_prop_routes_through_registry_bit_identical():
         n_iterations=500,
         seed=42,
         player_context={"pts_mean": 27.0, "pts_std": 5.5},
+        game_context={"is_playoff": False, "rest_days": 2},
     )
     resp = analyze_player_prop(req)
     assert resp.status == "success"
@@ -228,12 +229,12 @@ def test_analyze_prop_routes_through_registry_bit_identical():
     assert resp.under_prob == sim["under_prob"]
 
 
-def test_analyze_prop_unregistered_route_falls_back_to_router():
-    """NFL yardage routes to prop_neg_binom (unregistered) -> router + a note."""
+def test_analyze_prop_routes_to_neg_binom():
+    """NFL yardage routes to prop_neg_binom (now registered)."""
     from omega.core.contracts.service import PlayerPropRequest, analyze_player_prop
 
     assert resolve_default_prop_backend("NFL", "rushing_yards") == "prop_neg_binom"
-    assert resolve_prop_backend("prop_neg_binom") is None  # not yet registered
+    assert resolve_prop_backend("prop_neg_binom") is not None  # now registered
 
     req = PlayerPropRequest(
         player_name="Saquon Barkley",
@@ -246,10 +247,12 @@ def test_analyze_prop_unregistered_route_falls_back_to_router():
         n_iterations=500,
         seed=1,
         player_context={"rushing_yards_mean": 90.0, "rushing_yards_std": 30.0},
+        game_context={"is_playoff": False, "rest_days": 7},
     )
     resp = analyze_player_prop(req)
     assert resp.status == "success"
-    assert any("prop_neg_binom" in n and "distribution router" in n for n in resp.notes)
+    # Since prop_neg_binom is registered, the distribution type should reflect it
+    assert resp.distribution_type == "negative_binomial"
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +308,7 @@ def test_game_request_carries_prior_payload():
     req = GameAnalysisRequest(
         home_team="A", away_team="B", league="FIFA_WORLD_CUP_2026",
         prior_payload={"rho": -0.13},
+        game_context={"is_playoff": False, "rest_days": 2},
     )
     assert req.prior_payload == {"rho": -0.13}
 

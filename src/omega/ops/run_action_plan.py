@@ -15,6 +15,7 @@ Allowlist:
         args.plane: "game" | "prop" (default "game")
         args.method: "isotonic" | "shrinkage" | "both" (default "both")
         args.min_samples: int (default 100)
+        args.dry_run: bool (default false)
     type=promote_profile
         args.candidate_id: str (required)
         args.auto: bool (default false)
@@ -138,7 +139,7 @@ def _validate_fit_calibration(args: dict[str, Any]) -> list[str]:
     _reject_unknown_args(
         "fit_calibration",
         args,
-        {"league", "plane", "method", "min_samples"},
+        {"league", "plane", "method", "min_samples", "dry_run"},
     )
     league = _require_nonempty_str("fit_calibration", args, "league")
     plane = args.get("plane", "game")
@@ -148,6 +149,7 @@ def _validate_fit_calibration(args: dict[str, Any]) -> list[str]:
     if method not in ("isotonic", "shrinkage", "both"):
         raise ValueError(f"fit_calibration.args.method invalid: {method!r}")
     min_samples = _positive_int("fit_calibration", args, "min_samples", 100)
+    dry_run = _optional_bool("fit_calibration", args, "dry_run")
 
     cmd = _module_cmd(
         "fit_calibration",
@@ -160,6 +162,8 @@ def _validate_fit_calibration(args: dict[str, Any]) -> list[str]:
         "--min-samples",
         str(min_samples),
     )
+    if dry_run:
+        cmd.append("--dry-run")
     return cmd
 
 
@@ -454,6 +458,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 

@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +27,7 @@ from omega.core.contracts.service import analyze  # noqa: E402
 from omega.ops import cowork_preflight  # noqa: E402
 
 _PREFLIGHT_SCRIPT = _REPO_ROOT / "src" / "omega" / "ops" / "cowork_preflight.py"
+logger = logging.getLogger(__name__)
 
 
 def _check_preflight_sentinel() -> str | None:
@@ -78,6 +81,41 @@ def run(
     if seed is None:
         seed = derive_seed_from_request(request)
     request.setdefault("seed", seed)
+    if kind == "game":
+        # Gatherer seam: merge league dynamic priors (Dixon-Coles rho, ...)
+        # and record provenance when this session has a sidecar. Best-effort —
+        # a backend that requires a missing prior fails closed in the engine.
+        try:
+            from omega.trace.priors import inject_game_priors
+
+            request, prior_event = inject_game_priors(request)
+            if prior_event:
+                sidecar = _REPO_ROOT / "var" / "inbox" / "sessions" / f"{session_id}.json"
+                if sidecar.exists():
+                    from omega.trace.session_sidecar import append_audit_events
+
+                    append_audit_events(sidecar, [prior_event])
+        except Exception as exc:  # noqa: BLE001 - injection must never block analysis
+            logger.warning("prior injection failed for session_id=%s: %s", session_id, exc)
+            sidecar = _REPO_ROOT / "var" / "inbox" / "sessions" / f"{session_id}.json"
+            if sidecar.exists():
+                try:
+                    from omega.trace.session_sidecar import append_audit_events
+
+                    append_audit_events(sidecar, [{
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "event_type": "data_provenance",
+                        "step": "run_analyze:prior_injection",
+                        "status": "skipped",
+                        "notes": f"prior_injection_failed: {exc}",
+                        "trace_ids": [],
+                    }])
+                except Exception as audit_exc:  # noqa: BLE001
+                    logger.warning(
+                        "prior injection audit event failed for session_id=%s: %s",
+                        session_id,
+                        audit_exc,
+                    )
     typed = _typed_request(kind, request)
     trace = analyze(typed, session_id=session_id, bankroll=bankroll)
 
@@ -130,6 +168,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
 
 

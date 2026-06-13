@@ -33,6 +33,7 @@ import os
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
+from importlib import resources
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -248,11 +249,24 @@ def load_alias_table(league: str, alias_root: str | Path | None = None) -> dict[
     onboarding adapter degrades to normalize-only resolution rather than
     crashing.
     """
-    root = Path(alias_root) if alias_root is not None else _DEFAULT_ALIAS_ROOT
-    path = root / f"{league}.json"
-    if not path.exists():
+    data: dict[str, Any] | None = None
+    if alias_root is None:
+        try:
+            package_path = resources.files("omega.data.aliases").joinpath(f"{league}.json")
+            if package_path.is_file():
+                data = json.loads(package_path.read_text(encoding="utf-8"))
+        except ModuleNotFoundError:
+            data = None
+
+    if data is None:
+        root = Path(alias_root) if alias_root is not None else _DEFAULT_ALIAS_ROOT
+        path = root / f"{league}.json"
+        if not path.exists():
+            return {"canonical": [], "aliases": {}}
+        data = json.loads(path.read_text(encoding="utf-8"))
+
+    if not data:
         return {"canonical": [], "aliases": {}}
-    data = json.loads(path.read_text(encoding="utf-8"))
     data.setdefault("canonical", [])
     data.setdefault("aliases", {})
     return data

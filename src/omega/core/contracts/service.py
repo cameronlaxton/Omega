@@ -930,6 +930,52 @@ def _resolve_game_total_market(odds: OddsInput) -> tuple[float | None, float | N
     return line, over_price, under_price
 
 
+def _resolve_game_asian_handicap_market(
+    odds: OddsInput,
+    home_team: str,
+    away_team: str,
+) -> tuple[float | None, float | None, float | None]:
+    """Resolve home Asian-handicap line and both side prices."""
+    home_q = _market_quote(odds, "asian_handicap", home_team, "Home")
+    away_q = _market_quote(odds, "asian_handicap", away_team, "Away")
+    line = (
+        home_q.line
+        if home_q is not None and home_q.line is not None
+        else (
+            -away_q.line
+            if away_q is not None and away_q.line is not None
+            else odds.asian_handicap_home
+        )
+    )
+    if line is None:
+        return None, None, None
+    home_price = home_q.price if home_q is not None else odds.ah_home_price
+    away_price = away_q.price if away_q is not None else odds.ah_away_price
+    return line, home_price, away_price
+
+
+def _resolve_game_first_half_total_market(
+    odds: OddsInput,
+) -> tuple[float | None, float | None, float | None]:
+    """Resolve first-half total line and over/under prices."""
+    over_q = _market_quote(odds, "first_half_total", "Over")
+    under_q = _market_quote(odds, "first_half_total", "Under")
+    line = (
+        over_q.line
+        if over_q is not None and over_q.line is not None
+        else (
+            under_q.line
+            if under_q is not None and under_q.line is not None
+            else odds.first_half_total
+        )
+    )
+    if line is None:
+        return None, None, None
+    over_price = over_q.price if over_q is not None else odds.fh_over_price
+    under_price = under_q.price if under_q is not None else odds.fh_under_price
+    return line, over_price, under_price
+
+
 # ---------------------------------------------------------------------------
 # analyze_game  -- primary entry point
 # ---------------------------------------------------------------------------
@@ -1279,6 +1325,87 @@ def analyze_game(
                     market=market_name,
                 )
             )
+
+        # Asian handicap + first-half total (soccer derivatives). The backend
+        # emits empirical pmfs (margin_counts / fh_total_counts); the edge
+        # module evaluates the quoted line — quarter-ball split, push and
+        # half-stake semantics included — and bridges the exact EV back into
+        # the binary edge framework via the equivalent win probability.
+        ah_line, ah_home_price, ah_away_price = _resolve_game_asian_handicap_market(
+            request.odds, request.home_team, request.away_team
+        )
+        margin_counts = sim_result.get("margin_counts")
+        if ah_line is not None and margin_counts:
+            from omega.core.edge.soccer_derivatives import evaluate_asian_handicap
+
+            for ah_side, ah_price, ah_label, ah_signed_line in (
+                ("home", ah_home_price, request.home_team, ah_line),
+                ("away", ah_away_price, request.away_team, -ah_line),
+            ):
+                if ah_price is None:
+                    continue
+                evaluation = evaluate_asian_handicap(margin_counts, ah_line, ah_side)
+                q_equiv = evaluation.equivalent_win_prob(ah_price)
+                if q_equiv <= 0:
+                    continue
+                cal_q, ah_audit = _calibrate_audited(
+                    q_equiv,
+                    league=request.league,
+                    context_hints=gc,
+                    plane="game",
+                    market="asian_handicap",
+                )
+                edges.append(
+                    _build_edge(
+                        ah_side,
+                        f"{ah_label} {ah_signed_line:+g} (AH)",
+                        q_equiv,
+                        cal_q,
+                        ah_price,
+                        bankroll,
+                        request.n_iterations,
+                        calibration_audit=ah_audit,
+                        market="asian_handicap",
+                        line=ah_signed_line,
+                    )
+                )
+
+        fh_line, fh_over_price, fh_under_price = _resolve_game_first_half_total_market(request.odds)
+        fh_counts = sim_result.get("fh_total_counts")
+        if fh_line is not None and fh_counts:
+            from omega.core.edge.soccer_derivatives import evaluate_total
+
+            for fh_side, fh_price in (
+                ("over", fh_over_price),
+                ("under", fh_under_price),
+            ):
+                if fh_price is None:
+                    continue
+                evaluation = evaluate_total(fh_counts, fh_line, fh_side)
+                q_equiv = evaluation.equivalent_win_prob(fh_price)
+                if q_equiv <= 0:
+                    continue
+                cal_q, fh_audit = _calibrate_audited(
+                    q_equiv,
+                    league=request.league,
+                    context_hints=gc,
+                    plane="game",
+                    market="first_half_total",
+                )
+                edges.append(
+                    _build_edge(
+                        fh_side,
+                        f"1H {fh_side.capitalize()} {fh_line:g}",
+                        q_equiv,
+                        cal_q,
+                        fh_price,
+                        bankroll,
+                        request.n_iterations,
+                        calibration_audit=fh_audit,
+                        market="first_half_total",
+                        line=fh_line,
+                    )
+                )
 
         # Correct score: a map of scoreline -> price.
         cs_probs = sim_result.get("correct_score_probs") or {}
@@ -1635,6 +1762,16 @@ def analyze_player_prop(
         prop_backend = resolve_prop_backend("prop_distribution_router")
         notes.append(f"prop backend {backend_name!r} unregistered; using distribution router")
 
+    prior_payload: dict[str, Any] = {
+        "distribution": distribution_override,
+        "dud_prob": float(player_ctx.get("dud_prob", 0.0)),
+    }
+    # Whitelisted sport-specific prop priors travel from player_context into
+    # prior_payload (tennis serve model keys; harmless no-ops elsewhere).
+    for prior_key in ("ace_rate", "serve_win_pct", "match_format", "expected_total_games"):
+        if player_ctx.get(prior_key) is not None:
+            prior_payload[prior_key] = player_ctx[prior_key]
+
     sim_input = PropSimulationInput(
         player_name=request.player_name,
         league=request.league,
@@ -1644,10 +1781,7 @@ def analyze_player_prop(
         n_iter=request.n_iterations,
         seed=request.seed,
         projection_std=std_f,
-        prior_payload={
-            "distribution": distribution_override,
-            "dud_prob": float(player_ctx.get("dud_prob", 0.0)),
-        },
+        prior_payload=prior_payload,
     )
 
     try:

@@ -324,18 +324,22 @@ def _process_league(
             skipped.append(f"{bet['bet_id']} ({away} @ {home}: not in {league} snapshot)")
             continue
 
+        persisted_book = str(bet["book"]).lower()
         if bet["market"].startswith("player_prop:"):
             stat_key = bet["market"].split(":", 1)[1]
             provider_market = provider_market_for_prop(league, stat_key)
             if not provider_market:
                 skipped.append(f"{bet['bet_id']} (no provider prop mapping for {stat_key})")
                 continue
+            book_query = persisted_book
+            if book_query == "consensus":
+                book_query = "betmgm"
             try:
                 event = client.fetch_current_event_odds(
                     league,
                     event.event_id,
                     markets=provider_market,
-                    bookmakers=str(bet["book"]).lower(),
+                    bookmakers=book_query,
                 )
             except Exception as exc:  # noqa: BLE001
                 skipped.append(f"{bet['bet_id']} (prop event odds fetch failed: {exc})")
@@ -376,7 +380,7 @@ def _process_league(
             closing_odds=outcome.price,
             closing_line=outcome.point,
             closing_timestamp=outcome.last_update or datetime.now(UTC).isoformat(),
-            source=f"the-odds-api:{outcome.bookmaker}",
+            source=f"the-odds-api:{persisted_book}",
         )
         attached += 1
         logger.info(
@@ -468,6 +472,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
 

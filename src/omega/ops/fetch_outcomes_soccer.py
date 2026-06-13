@@ -35,11 +35,9 @@ import argparse
 import logging
 import sys
 from collections.abc import Callable
-from datetime import date, datetime, timedelta, timezone
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
-
-UTC = timezone.utc
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SRC_ROOT = _REPO_ROOT / "src"
@@ -52,32 +50,13 @@ from omega.integrations.espn_soccer import (  # noqa: E402
     canonical_team,
     fetch_scoreboard,
 )
+from omega.ops._date_args import iter_dates as _iter_dates  # noqa: E402
+from omega.ops._date_args import parse_date_arg as _parse_date_arg  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("fetch_outcomes_soccer")
 
 _SOCCER_LEAGUES = tuple(SOCCER_LEAGUE_SLUGS.keys())
-
-
-# ---------------------------------------------------------------------------
-# Date parsing
-# ---------------------------------------------------------------------------
-
-
-def _parse_date_arg(s: str) -> date:
-    s = s.strip().lower()
-    if s == "today":
-        return datetime.now(UTC).date()
-    if s == "yesterday":
-        return datetime.now(UTC).date() - timedelta(days=1)
-    return date.fromisoformat(s)
-
-
-def _iter_dates(start: date, end: date):
-    cur = start
-    while cur <= end:
-        yield cur
-        cur += timedelta(days=1)
 
 
 # ---------------------------------------------------------------------------

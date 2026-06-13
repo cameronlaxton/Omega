@@ -189,7 +189,9 @@ class TestAnalyzeGame:
         assert len(resp.edges) == 2
         assert all(isinstance(e, EdgeDetail) for e in resp.edges)
 
-    def test_skips_when_context_absent_by_default(self):
+    def test_baselines_when_context_absent_by_default(self):
+        """Absent context auto-applies league-average defaults with honest
+        league_default provenance (calibration-eligible fallback)."""
         req = GameAnalysisRequest(
             home_team="Team A",
             away_team="Team B",
@@ -198,9 +200,10 @@ class TestAnalyzeGame:
             game_context=_GAME_CONTEXT,
         )
         resp = analyze_game(req)
-        assert resp.status == "skipped"
-        assert resp.simulation is None
-        assert resp.context_source is None
+        assert resp.status == "success"
+        assert resp.simulation is not None
+        assert resp.simulation.context_source == "league_default"
+        assert resp.simulation.baseline_used is True
 
     def test_succeeds_with_explicit_baseline_but_marks_provenance(self):
         req = GameAnalysisRequest(

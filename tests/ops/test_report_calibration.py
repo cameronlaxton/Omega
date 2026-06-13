@@ -207,6 +207,47 @@ def test_aggregate_scalar_mode_is_conservative():
     assert report_calibration._aggregate_scalar_mode({}) is research
 
 
+def test_signal_guidance_buckets_bootstrap_warnings():
+    rows = [
+        {
+            "signal_type": "usage_role_change",
+            "source": "injury_report",
+            "obs_window": "matchup",
+            "league": "NBA",
+            "sample_size": 40,
+            "direction_accuracy": 0.70,
+            "calibration_gap": 0.02,
+            "brier": 0.18,
+        },
+        {
+            "signal_type": "series_avg",
+            "source": "nba.com",
+            "obs_window": "series",
+            "league": "NBA",
+            "sample_size": 35,
+            "direction_accuracy": 0.40,
+            "calibration_gap": 0.30,
+            "brier": 0.49,
+        },
+        {
+            "signal_type": "recent_form",
+            "source": "boxscore_derived",
+            "obs_window": "last_5",
+            "league": "NBA",
+            "sample_size": 8,
+            "direction_accuracy": 0.75,
+            "calibration_gap": -0.05,
+            "brier": 0.20,
+        },
+    ]
+
+    guidance = report_calibration._signal_guidance(rows)
+
+    assert guidance["trusted"][0]["signal_type"] == "usage_role_change"
+    assert guidance["warnings"][0]["signal_type"] == "series_avg"
+    assert guidance["insufficient"][0]["signal_type"] == "recent_form"
+
+
 def test_report_frontmatter_emits_per_market_map(tmp_path, monkeypatch):
     db = tmp_path / "omega.db"
     out = tmp_path / "latest.md"

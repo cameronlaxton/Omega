@@ -88,3 +88,17 @@ class LedgerBet(BaseModel):
     decision_timestamp: str = Field(description="ISO 8601 timestamp of the analysis/decision")
     graded_at: str | None = None
     recorded_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+    # Sizing audit (schema V15) — populated when a portfolio sizing decision
+    # produced the bet; NULL for autolog/backfill bets without one.
+    staking_policy_id: str | None = Field(
+        default=None, description="StakingPolicy.policy_id that sized this bet"
+    )
+    staking_policy_version: int | None = None
+    exposure_limits_version: int | None = None
+    sizing_reasons: list[str] | None = Field(
+        default=None, description="capped_by reasons from sizing (persisted as a JSON array)"
+    )
+    correlation_group: str | None = Field(
+        default=None, description="parlay.correlation_group_key for exposure grouping"
+    )

@@ -124,7 +124,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 14
+CURRENT_VERSION = 17
 
 # ---------------------------------------------------------------------------
 # Version lineage (applied in order by TraceStore._ensure_schema)
@@ -154,6 +154,9 @@ CURRENT_VERSION = 14
 #   V12 SCHEMA_V12           trace_qa_verdicts (trace-scoped QA audit)
 #   V13 SCHEMA_V13           bet_ledger (dollar/PnL bet log; separate from bet_records)
 #   V14 (store-side)         consolidate bet_records -> bet_ledger, then DROP it
+#   V15 apply_v15_migration  bet_ledger sizing-audit columns (staking/exposure/corr)
+#   V16 SCHEMA_V16           priors_xg + priors_dixon_coles (soccer dynamic priors)
+#   V17 SCHEMA_V17           priors_tennis + priors_tennis_pressure (tennis dynamic priors)
 #
 # There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
 # apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
@@ -638,4 +641,116 @@ SELECT
         WHEN l.odds < -110 THEN 'heavy_fav'
         ELSE 'plus_money' END                                    AS odds_bucket
 FROM bet_ledger l;
+"""
+
+
+# V15 adds sizing-audit columns to bet_ledger. Like V4/V7 this is a column-add,
+# which cannot use executescript (ALTER ADD COLUMN is non-idempotent in SQLite),
+# so the migration probes PRAGMA table_info first.
+V15_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("staking_policy_id", "TEXT"),
+    ("staking_policy_version", "INTEGER"),
+    ("exposure_limits_version", "INTEGER"),
+    ("sizing_reasons", "TEXT"),  # JSON array of capped_by reasons
+    ("correlation_group", "TEXT"),
+)
+
+
+def apply_v15_migration(conn) -> None:
+    """Idempotently apply V15: add bet_ledger sizing-audit columns.
+
+    Records which staking policy + exposure limits sized a recommended bet, why
+    (the ``capped_by`` reasons as a JSON array), and its correlation group, so a
+    bet's sizing is auditable. All columns are nullable — pre-V15 rows and bets
+    logged without a portfolio sizing decision simply carry NULL. Re-running on a
+    V15 DB is a no-op.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(bet_ledger)").fetchall()}
+    for name, sql_type in V15_COLUMNS:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE bet_ledger ADD COLUMN {name} {sql_type}")
+    conn.commit()
+
+
+# V16: soccer dynamic-prior tables (Phase 7 M2). priors_dixon_coles holds the
+# per-competition Dixon-Coles rho fits produced by omega-fit-dixon-coles; the
+# gatherer injects the production row's rho into request.prior_payload and the
+# soccer backend fails closed when none exists. priors_xg holds team attack/
+# defense xG aggregates from the StatsBomb/Understat/FBref adapters, keyed by
+# source so redundancy disagreement is auditable. Both are append-friendly
+# upsert targets; flushing them degrades to fail-closed, never to bad numbers.
+SCHEMA_V16 = """
+CREATE TABLE IF NOT EXISTS priors_dixon_coles (
+    profile_id   TEXT NOT NULL,
+    rho          REAL NOT NULL,
+    n_matches    INTEGER NOT NULL,
+    fit_loss     REAL,
+    as_of_date   TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'candidate',
+    source       TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (profile_id, as_of_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_priors_dc_profile_status
+    ON priors_dixon_coles(profile_id, status);
+
+CREATE TABLE IF NOT EXISTS priors_xg (
+    team         TEXT NOT NULL,
+    competition  TEXT NOT NULL,
+    season       TEXT NOT NULL,
+    xg_for       REAL NOT NULL,
+    xg_against   REAL NOT NULL,
+    matches      INTEGER NOT NULL,
+    source       TEXT NOT NULL,
+    as_of_date   TEXT NOT NULL,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (team, competition, season, source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_priors_xg_competition
+    ON priors_xg(competition, season);
+"""
+
+
+# V17: tennis dynamic-prior tables (Phase 7 M3). priors_tennis holds surface-
+# segmented rolling serve/return point-win rates from the Sackmann match CSVs
+# (12-month half-life, computed by omega-refresh-sackmann). priors_tennis_
+# pressure holds per-player additive SPW% deltas for the six pressure states,
+# fit from Match Charting Project point data by
+# omega-fit-tennis-pressure-coefficients; players below the charted-point
+# threshold carry source='group_fallback' rows (tour+surface group means) —
+# never silent 0.0 deltas. Truncating the pressure table rolls tennis back to
+# the flat IID closed-form model (design Part 9).
+SCHEMA_V17 = """
+CREATE TABLE IF NOT EXISTS priors_tennis (
+    player       TEXT NOT NULL,
+    tour         TEXT NOT NULL,
+    surface      TEXT NOT NULL,
+    spw_pct      REAL NOT NULL,
+    rpw_pct      REAL NOT NULL,
+    n_matches    INTEGER NOT NULL,
+    as_of_date   TEXT NOT NULL,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (player, tour, surface, as_of_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_priors_tennis_player
+    ON priors_tennis(player, tour, surface);
+
+CREATE TABLE IF NOT EXISTS priors_tennis_pressure (
+    player       TEXT NOT NULL,
+    tour         TEXT NOT NULL,
+    surface      TEXT NOT NULL,
+    state        TEXT NOT NULL,
+    delta        REAL NOT NULL,
+    n_points     INTEGER NOT NULL,
+    source       TEXT NOT NULL,
+    as_of_date   TEXT NOT NULL,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (player, tour, surface, state, as_of_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_priors_tennis_pressure_player
+    ON priors_tennis_pressure(player, tour, surface);
 """

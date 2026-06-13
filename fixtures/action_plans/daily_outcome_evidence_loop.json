@@ -27,6 +27,26 @@
         "league": "NBA",
         "window_days": 30
       }
+    },
+    {
+      "type": "fit_calibration",
+      "args": {
+        "league": "NBA",
+        "plane": "game",
+        "method": "both",
+        "min_samples": 100,
+        "dry_run": true
+      }
+    },
+    {
+      "type": "fit_calibration",
+      "args": {
+        "league": "NBA",
+        "plane": "prop",
+        "method": "both",
+        "min_samples": 100,
+        "dry_run": true
+      }
     }
   ]
 }

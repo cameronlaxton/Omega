@@ -202,6 +202,14 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "rho": -0.13,
         "timezone": "America/New_York",  # EST/EDT
     },
+    # Phase 7 M2 PR-S8: promoted club leagues run the bivariate-Poisson
+    # backend with per-competition rho profiles fit from the StatsBomb Big-5
+    # 2015/16 full-league release (EPL/La Liga/Serie A/Ligue 1). The legacy
+    # dixon_coles/rho keys remain for the fast_score path only (rollback =
+    # drop default_game_backend, design Part 9). NOT promoted, pending a
+    # credible fit dataset: CHAMPIONS_LEAGUE (open data has finals only) and
+    # BUNDESLIGA (open data has single-team Leverkusen seasons, 34 matches
+    # each — a biased sub-100 sample is no basis for a competition fit).
     "EPL": {
         "sport": "soccer",
         "archetype": "soccer",
@@ -214,6 +222,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "epl_v1",
         "timezone": "Europe/London",
     },
     "PREMIER_LEAGUE": {
@@ -228,6 +239,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "epl_v1",
     },
     "LA_LIGA": {
         "sport": "soccer",
@@ -241,6 +255,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.2,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "laliga_v1",
     },
     "LALIGA": {
         "sport": "soccer",
@@ -254,6 +271,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.2,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "laliga_v1",
     },
     "BUNDESLIGA": {
         "sport": "soccer",
@@ -281,6 +301,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "seriea_v1",
         "timezone": "Europe/Rome",
     },
     "LIGUE_1": {
@@ -295,6 +318,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.2,
         "dixon_coles": True,
         "rho": -0.13,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "ligue1_v1",
         "timezone": "Europe/Paris",
     },
     "CHAMPIONS_LEAGUE": {
@@ -348,6 +374,27 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         "dixon_coles": True,
         "rho": -0.13,
+    },
+    # Phase 7 M2: the 2026 World Cup runs the bivariate-Poisson backend. rho is
+    # NOT configured here — rho_fit_profile selects the fitted production row in
+    # priors_dixon_coles, and without one the engine fails closed (skipped).
+    # The static dixon_coles/rho keys on legacy soccer entries feed only the
+    # fast_score path; the new backend never reads them.
+    "FIFA_WORLD_CUP_2026": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 2.7,
+        "distribution": "bivariate_poisson",
+        "home_advantage": 0.0,  # neutral venues
+        "std": 1.3,
+        "supports_draw": True,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "fifa_intl_v1",
+        "timezone": "America/New_York",
     },
     "COPA_AMERICA": {
         "sport": "soccer",
@@ -523,6 +570,11 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "rho": -0.13,
     },
     # ── Tennis ─────────────────────────────────────────────────
+    # Phase 7 M3: tennis runs the closed-form Markov backend. Canonical tennis
+    # league codes are ATP / WTA / GRAND_SLAM only (event codes like WIMBLEDON
+    # have archetype mappings but no configs — they would fall to the default
+    # config with no best_of). best_of is overridable per event via
+    # prior_payload["match_format"] ("best_of_5" for ATP slams).
     "ATP": {
         "sport": "tennis",
         "archetype": "tennis",
@@ -530,6 +582,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "best_of": 3,
         "avg_total_games": 22.0,
         "distribution": "bernoulli",
+        "default_game_backend": "tennis_markov_iid",
+        "default_prop_backend": "prop_distribution_router",
     },
     "WTA": {
         "sport": "tennis",
@@ -538,6 +592,8 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "best_of": 3,
         "avg_total_games": 20.0,
         "distribution": "bernoulli",
+        "default_game_backend": "tennis_markov_iid",
+        "default_prop_backend": "prop_distribution_router",
     },
     "GRAND_SLAM": {
         "sport": "tennis",
@@ -546,6 +602,48 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "best_of": 5,
         "avg_total_games": 35.0,
         "distribution": "bernoulli",
+        "default_game_backend": "tennis_markov_iid",
+        "default_prop_backend": "prop_distribution_router",
+    },
+    "AUSTRALIAN_OPEN": {
+        "sport": "tennis",
+        "archetype": "tennis",
+        "scoring": "sets",
+        "best_of": 5,
+        "avg_total_games": 35.0,
+        "distribution": "bernoulli",
+        "default_game_backend": "tennis_markov_iid",
+        "default_prop_backend": "prop_distribution_router",
+    },
+    "FRENCH_OPEN": {
+        "sport": "tennis",
+        "archetype": "tennis",
+        "scoring": "sets",
+        "best_of": 5,
+        "avg_total_games": 35.0,
+        "distribution": "bernoulli",
+        "default_game_backend": "tennis_markov_iid",
+        "default_prop_backend": "prop_distribution_router",
+    },
+    "WIMBLEDON": {
+        "sport": "tennis",
+        "archetype": "tennis",
+        "scoring": "sets",
+        "best_of": 5,
+        "avg_total_games": 35.0,
+        "distribution": "bernoulli",
+        "default_game_backend": "tennis_markov_iid",
+        "default_prop_backend": "prop_distribution_router",
+    },
+    "US_OPEN_TENNIS": {
+        "sport": "tennis",
+        "archetype": "tennis",
+        "scoring": "sets",
+        "best_of": 5,
+        "avg_total_games": 35.0,
+        "distribution": "bernoulli",
+        "default_game_backend": "tennis_markov_iid",
+        "default_prop_backend": "prop_distribution_router",
     },
     # ── Golf ───────────────────────────────────────────────────
     "PGA": {

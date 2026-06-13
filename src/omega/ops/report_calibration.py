@@ -377,7 +377,7 @@ def _section_clv(store: TraceStore, league: str | None, cutoff: str) -> dict[str
               AND b.market = c.market
               AND b.selection_descriptor = c.selection_descriptor
            JOIN traces t ON b.trace_id = t.trace_id
-           WHERE b.provenance = 'user_confirmed'
+           WHERE b.provenance IN ('user_confirmed', 'engine_auto')
              AND t.timestamp >= ?"""
         + t_league_filter,
         (cutoff, *t_league_params),
@@ -480,6 +480,50 @@ def _signal_verdict(sample_size: int, accuracy: float, calibration_gap: float) -
     if calibration_gap > 0.10:
         verdict += " / overconfident"
     return verdict
+
+
+def _signal_guidance(signal_perf: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Bucket evidence signals into agent-facing bootstrap guidance.
+
+    This is deliberately derived from ``signal_performance``. It does not create
+    a second source-performance model; the detailed rows below remain the audit
+    substrate, and this section is only a compact prompt-time readout.
+    """
+    buckets: dict[str, list[dict[str, Any]]] = {
+        "trusted": [],
+        "warnings": [],
+        "insufficient": [],
+    }
+    for row in signal_perf:
+        sample_size = int(row.get("sample_size") or 0)
+        accuracy = float(row.get("direction_accuracy") or 0.0)
+        calibration_gap = float(row.get("calibration_gap") or 0.0)
+        brier = float(row.get("brier") or 0.0)
+        normalized = {
+            "signal_type": row.get("signal_type") or "unknown",
+            "source": row.get("source") or "unknown",
+            "obs_window": row.get("obs_window") or "unknown",
+            "league": row.get("league") or "unknown",
+            "sample_size": sample_size,
+            "direction_accuracy": accuracy,
+            "calibration_gap": calibration_gap,
+            "brier": brier,
+        }
+        if sample_size < 30:
+            buckets["insufficient"].append(normalized)
+        elif accuracy >= 0.55 and calibration_gap <= 0.10:
+            buckets["trusted"].append(normalized)
+        else:
+            buckets["warnings"].append(normalized)
+
+    buckets["trusted"].sort(
+        key=lambda r: (-r["direction_accuracy"], r["brier"], -r["sample_size"])
+    )
+    buckets["warnings"].sort(
+        key=lambda r: (r["direction_accuracy"], -r["calibration_gap"], -r["sample_size"])
+    )
+    buckets["insufficient"].sort(key=lambda r: (-r["sample_size"], r["signal_type"]))
+    return buckets
 
 
 def _section_pending_candidates(registry: CalibrationRegistry, league: str | None) -> list[dict[str, Any]]:
@@ -666,6 +710,50 @@ def _render(
         "research market: <= 1u."
     )
     lines.append("")
+
+    guidance = _signal_guidance(signal_perf)
+    lines.append("## Agent Directive - Evidence Learning")
+    lines.append("")
+    lines.append(
+        "Use this as prompt-time evidence weighting only. It must not change "
+        "engine probabilities, EV, Kelly, staking, confidence tiers, or trace IDs. "
+        "Rows are derived from `signal_performance`; low sample counts remain "
+        "unproven rather than bad."
+    )
+    lines.append("")
+    if not signal_perf:
+        lines.append(
+            "_No scored evidence signals yet. Run `omega-score-evidence-signals` "
+            "after outcomes attach before using evidence-performance warnings._"
+        )
+    else:
+        if guidance["trusted"]:
+            lines.append("Trusted signals to preserve:")
+            for row in guidance["trusted"][:5]:
+                lines.append(
+                    f"- {row['league']} `{row['signal_type']}` from `{row['source']}` "
+                    f"({row['obs_window']}): n={row['sample_size']}, "
+                    f"dir_acc={row['direction_accuracy']:.2f}, "
+                    f"cal_gap={row['calibration_gap']:+.2f}"
+                )
+        if guidance["warnings"]:
+            lines.append("Evidence warnings to discount:")
+            for row in guidance["warnings"][:5]:
+                lines.append(
+                    f"- {row['league']} `{row['signal_type']}` from `{row['source']}` "
+                    f"({row['obs_window']}): n={row['sample_size']}, "
+                    f"dir_acc={row['direction_accuracy']:.2f}, "
+                    f"cal_gap={row['calibration_gap']:+.2f}"
+                )
+        if guidance["insufficient"]:
+            lines.append("Insufficient-n signals to treat as unproven:")
+            for row in guidance["insufficient"][:5]:
+                lines.append(
+                    f"- {row['league']} `{row['signal_type']}` from `{row['source']}` "
+                    f"({row['obs_window']}): n={row['sample_size']}"
+                )
+    lines.append("")
+
     lines.append("## 1. Coverage")
     lines.append("")
     lines.append("| Metric | Count |")
@@ -1012,5 +1100,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

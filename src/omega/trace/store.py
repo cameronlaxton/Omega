@@ -50,9 +50,12 @@ from omega.trace.schema import (
     SCHEMA_V11,
     SCHEMA_V12,
     SCHEMA_V13,
+    SCHEMA_V16,
+    SCHEMA_V17,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
+    apply_v15_migration,
 )
 
 if TYPE_CHECKING:
@@ -587,6 +590,16 @@ class TraceStore:
         # it. Must be read before any _record_version() call below.
         prior_version = self._existing_schema_version()
 
+        # Fast path: an up-to-date DB skips the whole forward-additive replay.
+        # Every open used to re-run all ~17 idempotent executescripts plus the
+        # bet_records consolidation probe — pure no-op DDL that turned hot
+        # paths (e.g. per-request prior injection, batch loops) into serialized
+        # schema churn. schema_versions stamping CURRENT_VERSION guarantees the
+        # DDL already ran; manual table drops are out-of-contract and surface
+        # via the repo-state validators, not via per-open self-healing.
+        if prior_version >= CURRENT_VERSION:
+            return
+
         # V1: traces, outcomes, schema_versions
         self.conn.executescript(SCHEMA_V1)
         self._record_version(1, "Initial schema: traces, outcomes, schema_versions")
@@ -669,6 +682,27 @@ class TraceStore:
         self._record_version(
             14,
             "Consolidate bet_records into bet_ledger (provenance=user_confirmed); drop bet_records",
+        )
+
+        # V15: bet_ledger sizing-audit columns (staking policy / exposure / corr).
+        apply_v15_migration(self.conn)
+        self._record_version(
+            15,
+            "Sizing audit: bet_ledger staking_policy/exposure_limits/sizing_reasons/correlation_group columns",
+        )
+
+        # V16: soccer dynamic priors (Dixon-Coles rho profiles + team xG).
+        self.conn.executescript(SCHEMA_V16)
+        self._record_version(
+            16,
+            "Phase 7 M2: priors_dixon_coles + priors_xg tables (soccer dynamic priors)",
+        )
+
+        # V17: tennis dynamic priors (SPW/RPW rolling rates + pressure deltas).
+        self.conn.executescript(SCHEMA_V17)
+        self._record_version(
+            17,
+            "Phase 7 M3: priors_tennis + priors_tennis_pressure tables (tennis dynamic priors)",
         )
 
     def _existing_schema_version(self) -> int:
@@ -1512,7 +1546,8 @@ class TraceStore:
         "ledger_id, trace_id, bet_date, league, sport, matchup, market, bookmaker, "
         "selection, selection_descriptor, line, odds, stake_amount, payout_amount, "
         "net_pnl, bankroll_at_open, status, provenance, decision_timestamp, "
-        "graded_at, session_id, created_at"
+        "graded_at, session_id, created_at, staking_policy_id, staking_policy_version, "
+        "exposure_limits_version, sizing_reasons, correlation_group"
     )
 
     def record_ledger_bet(self, bet: LedgerBet) -> str:
@@ -1552,8 +1587,11 @@ class TraceStore:
                (ledger_id, trace_id, bet_date, league, sport, matchup, market,
                 bookmaker, selection, selection_descriptor, line, odds,
                 stake_amount, payout_amount, net_pnl, bankroll_at_open, status,
-                provenance, decision_timestamp, graded_at, session_id)
+                provenance, decision_timestamp, graded_at,
+                staking_policy_id, staking_policy_version, exposure_limits_version,
+                sizing_reasons, correlation_group, session_id)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?,
                        (SELECT session_id FROM traces WHERE trace_id = ?))
                ON CONFLICT(trace_id, market, selection_descriptor) DO UPDATE SET
                    provenance         = excluded.provenance,
@@ -1564,7 +1602,12 @@ class TraceStore:
                    stake_amount       = excluded.stake_amount,
                    bankroll_at_open   = excluded.bankroll_at_open,
                    bet_date           = excluded.bet_date,
-                   decision_timestamp = excluded.decision_timestamp
+                   decision_timestamp = excluded.decision_timestamp,
+                   staking_policy_id = excluded.staking_policy_id,
+                   staking_policy_version = excluded.staking_policy_version,
+                   exposure_limits_version = excluded.exposure_limits_version,
+                   sizing_reasons = excluded.sizing_reasons,
+                   correlation_group = excluded.correlation_group
                WHERE excluded.provenance = 'user_confirmed'
                  AND bet_ledger.provenance != 'user_confirmed'
                  AND bet_ledger.status = 'pending'""",
@@ -1589,6 +1632,11 @@ class TraceStore:
                 bet.provenance.value,
                 bet.decision_timestamp,
                 bet.graded_at,
+                bet.staking_policy_id,
+                bet.staking_policy_version,
+                bet.exposure_limits_version,
+                json.dumps(bet.sizing_reasons) if bet.sizing_reasons is not None else None,
+                bet.correlation_group,
                 bet.trace_id,
             ),
         )
@@ -1637,7 +1685,7 @@ class TraceStore:
             "WHERE trace_id = ? ORDER BY created_at",
             (trace_id,),
         ).fetchall()
-        return [dict(row) for row in rows]
+        return [self._decode_ledger_row(row) for row in rows]
 
     def query_ledger(
         self,
@@ -1687,7 +1735,14 @@ class TraceStore:
             "ORDER BY decision_timestamp DESC LIMIT ?",
             params,
         ).fetchall()
-        return [dict(row) for row in rows]
+        return [self._decode_ledger_row(row) for row in rows]
+
+    @staticmethod
+    def _decode_ledger_row(row: Any) -> dict[str, Any]:
+        data = dict(row)
+        if data.get("sizing_reasons") is not None:
+            data["sizing_reasons"] = json.loads(data["sizing_reasons"])
+        return data
 
     # ------------------------------------------------------------------
     # Closing lines (Phase 6e — CLV resolution)

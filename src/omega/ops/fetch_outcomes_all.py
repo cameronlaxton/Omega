@@ -39,10 +39,11 @@ _MODULES: dict[str, str] = {
     "wnba": "omega.ops.fetch_outcomes_wnba",
     "mlb": "omega.ops.fetch_outcomes_mlb",
     "soccer": "omega.ops.fetch_outcomes_soccer",
+    "nhl": "omega.ops.fetch_outcomes_nhl",
     "props": "omega.ops.fetch_outcomes_props",
 }
 
-_DEFAULT_LEAGUES = ("nba", "wnba", "mlb", "soccer", "props")
+_DEFAULT_LEAGUES = ("nba", "wnba", "mlb", "soccer", "nhl", "props")
 _FETCH_OUTCOMES_TIMEOUT_SECONDS = 20 * 60
 
 

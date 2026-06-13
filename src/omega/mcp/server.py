@@ -8,6 +8,7 @@ logic.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import uuid
@@ -34,6 +35,8 @@ from omega.mcp.schemas import (
     TraceVoidPropRequest,
 )
 from omega.paths import repo_root
+
+logger = logging.getLogger(__name__)
 
 TOOL_NAMES = (
     "omega_analyze_game",
@@ -122,6 +125,51 @@ def _request_with_mcp_defaults(
             "reason": "mcp_exploratory_default",
         }
     return payload, {}
+
+
+def _maybe_inject_game_priors(
+    payload: dict[str, Any], session_id: str | None
+) -> dict[str, Any]:
+    """Gatherer seam: merge league dynamic priors (e.g. Dixon-Coles rho) into
+    the request and record provenance in the session sidecar.
+
+    Best-effort by design — on any failure the payload passes through
+    unchanged and a backend that requires the prior fails closed
+    (status="skipped"), which is the honest outcome.
+    """
+    try:
+        from omega.trace.priors import inject_game_priors
+
+        payload, event = inject_game_priors(payload)
+        if event and session_id:
+            sidecar = repo_root() / "var" / "inbox" / "sessions" / f"{session_id}.json"
+            if sidecar.exists():
+                from omega.trace.session_sidecar import append_audit_events
+
+                append_audit_events(sidecar, [event])
+    except Exception as exc:  # noqa: BLE001 - injection must never block analysis
+        logger.warning("prior injection failed for session_id=%s: %s", session_id, exc)
+        if session_id:
+            sidecar = repo_root() / "var" / "inbox" / "sessions" / f"{session_id}.json"
+            if sidecar.exists():
+                try:
+                    from omega.trace.session_sidecar import append_audit_events
+
+                    append_audit_events(sidecar, [{
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "event_type": "data_provenance",
+                        "step": "mcp:prior_injection",
+                        "status": "skipped",
+                        "notes": f"prior_injection_failed: {exc}",
+                        "trace_ids": [],
+                    }])
+                except Exception as audit_exc:  # noqa: BLE001
+                    logger.warning(
+                        "prior injection audit event failed for session_id=%s: %s",
+                        session_id,
+                        audit_exc,
+                    )
+    return payload
 
 
 def _merge_mcp_trace_quality(
@@ -236,6 +284,7 @@ def omega_analyze_game(
 
     try:
         request_payload, mcp_defaults = _request_with_mcp_defaults(request, kind="game")
+        request_payload = _maybe_inject_game_priors(request_payload, session_id)
         effective_trace_quality = _merge_mcp_trace_quality(trace_quality, mcp_defaults)
         typed = GameAnalysisRequest(**request_payload)
         gate_failures = _formal_output_gate_failures()
@@ -491,6 +540,10 @@ def omega_run_batch(
             request_dict["seed"] = entry.seed
         else:
             request_dict["seed"] = derive_seed_from_request(request_dict, date=game_date)
+
+        # --- Dynamic priors (after seeding so seeds stay payload-stable) ---
+        if entry.kind != "prop":
+            request_dict = _maybe_inject_game_priors(request_dict, session_id)
 
         # --- Analyze ---
         try:
