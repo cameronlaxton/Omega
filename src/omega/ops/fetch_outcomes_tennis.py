@@ -29,10 +29,8 @@ import argparse
 import logging
 import re
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from pathlib import Path
-
-UTC = timezone.utc
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SRC_ROOT = _REPO_ROOT / "src"
@@ -41,6 +39,7 @@ if str(_SRC_ROOT) not in sys.path:
 
 from omega.integrations._etl import load_alias_table, resolve_entity  # noqa: E402
 from omega.integrations.espn_boxscore import normalize_player_name  # noqa: E402
+from omega.ops._date_args import parse_date_arg as _parse_date_arg  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("fetch_outcomes_tennis")
@@ -87,15 +86,6 @@ def parse_sets_from_score(score: str | None) -> tuple[int, int] | None:
 def _canonical_player(name: str, alias_table: dict) -> str:
     """Canonical match key for a player name: alias table, else normalized."""
     return resolve_entity(name, alias_table) or normalize_player_name(name)
-
-
-def _parse_date_arg(s: str) -> date:
-    s = s.strip().lower()
-    if s == "today":
-        return datetime.now(UTC).date()
-    if s == "yesterday":
-        return datetime.now(UTC).date() - timedelta(days=1)
-    return date.fromisoformat(s)
 
 
 def _trace_players(trace: dict) -> tuple[str, str] | None:
