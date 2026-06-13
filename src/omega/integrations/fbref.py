@@ -24,8 +24,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from omega.integrations._etl import cached_fetch, resolve_entity, validate_records
+from omega.integrations._etl import cached_fetch, validate_records
 from omega.integrations._guards import assert_not_replay_mode
+from omega.integrations._soccer_xg import build_team_xg_priors
 from omega.trace.priors import XgPrior
 
 logger = logging.getLogger("omega.integrations.fbref")
@@ -134,39 +135,14 @@ def build_xg_priors(
     validated = validate_records(
         rows, FbrefTeamSeason, source="fbref", session_path=session_path
     )
-    alias_table = alias_table or {"canonical": [], "aliases": {}}
-    enforce_aliases = bool(alias_table.get("canonical"))
-
-    priors: list[XgPrior] = []
-    unresolved: list[str] = []
-    for row in validated:
-        if row.games <= 0:
-            continue
-        canonical = resolve_entity(row.team, alias_table)
-        if canonical is None:
-            if enforce_aliases:
-                unresolved.append(row.team)
-                continue
-            canonical = row.team
-        priors.append(
-            XgPrior(
-                team=canonical,
-                competition=league.upper(),
-                season=season,
-                xg_for=round(row.xg_for / row.games, 4),
-                xg_against=round(row.xg_against / row.games, 4),
-                matches=row.games,
-                source="fbref",
-                as_of_date=as_of_date,
-            )
-        )
-    if unresolved:
-        logger.warning(
-            "excluded %d unresolved team(s) from fbref priors write: %s",
-            len(unresolved),
-            unresolved,
-        )
-    return priors, unresolved
+    return build_team_xg_priors(
+        ((row.team, row.xg_for, row.xg_against, row.games) for row in validated),
+        competition=league,
+        season=season,
+        as_of_date=as_of_date,
+        source="fbref",
+        alias_table=alias_table,
+    )
 
 
 def load_xg_priors(
