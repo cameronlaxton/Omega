@@ -16,6 +16,8 @@ These helpers only touch ``store.conn``; they add no state to ``TraceStore``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -540,16 +542,51 @@ def build_tennis_prior_payload(
     }
 
 
+def _inject_soccer_priors(
+    payload: dict[str, Any], store: TraceStore
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Registry adapter: merge the Dixon-Coles rho prior into the payload."""
+    merged, event = build_game_prior_payload(
+        str(payload.get("league") or ""), payload.get("prior_payload"), store
+    )
+    out = dict(payload)
+    if merged is not None:
+        out["prior_payload"] = merged
+    return out, event
+
+
+@dataclass(frozen=True)
+class _PriorBuilder:
+    """One sport's gatherer prior-injection rule.
+
+    ``applies`` decides from the league config whether this builder is in play;
+    ``build`` takes the raw request payload + an open store and returns the
+    (possibly updated) payload plus an optional ``data_provenance`` event.
+    """
+
+    applies: Callable[[dict[str, Any]], bool]
+    build: Callable[[dict[str, Any], "TraceStore"], tuple[dict[str, Any], dict[str, Any] | None]]
+
+
+# Per-sport injection registry. A new sport (e.g. NFL NB-dispersion priors in
+# M4) registers one entry here; inject_game_priors needs no edit. Order is
+# evaluation order — entries must be mutually exclusive per league.
+PRIOR_BUILDERS: list[_PriorBuilder] = [
+    _PriorBuilder(lambda cfg: cfg.get("sport") == "tennis", build_tennis_prior_payload),
+    _PriorBuilder(lambda cfg: bool(cfg.get("rho_fit_profile")), _inject_soccer_priors),
+]
+
+
 def inject_game_priors(
     payload: dict[str, Any], store: TraceStore | None = None
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Config-gated prior injection for a raw game-request dict.
 
-    Opens the default TraceStore only when the league actually carries dynamic
-    priors (soccer ``rho_fit_profile`` config, or a tennis league), so
-    NBA/MLB/... requests never pay the cost. Returns the (possibly updated)
-    payload plus an optional ``data_provenance`` event for the session
-    sidecar. Injection lives at the gatherer layer — outside
+    Dispatches to the first applicable ``PRIOR_BUILDERS`` entry (soccer
+    dynamic-rho, tennis rates/pressure, ...). A TraceStore is opened only when
+    a builder applies, so NBA/MLB/... requests never pay the cost. Returns the
+    (possibly updated) payload plus an optional ``data_provenance`` event for
+    the session sidecar. Injection lives at the gatherer layer — outside
     ``service.analyze`` — so replaying a recorded request (with its priors
     embedded) is deterministic regardless of live table state.
     """
@@ -560,9 +597,8 @@ def inject_game_priors(
     from omega.core.config.leagues import get_league_config
 
     config = get_league_config(league.upper())
-    is_soccer_dynamic = bool(config.get("rho_fit_profile"))
-    is_tennis = config.get("sport") == "tennis"
-    if not (is_soccer_dynamic or is_tennis):
+    builder = next((b.build for b in PRIOR_BUILDERS if b.applies(config)), None)
+    if builder is None:
         return payload, None
 
     own_store = store is None
@@ -571,16 +607,7 @@ def inject_game_priors(
 
         store = TraceStore()
     try:
-        if is_tennis:
-            return build_tennis_prior_payload(payload, store)
-        merged, event = build_game_prior_payload(
-            league, payload.get("prior_payload"), store
-        )
+        return builder(payload, store)
     finally:
         if own_store:
             store.close()
-
-    out = dict(payload)
-    if merged is not None:
-        out["prior_payload"] = merged
-    return out, event

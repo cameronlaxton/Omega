@@ -27,6 +27,24 @@ from omega.trace.priors import (
 from omega.trace.store import TraceStore
 
 
+def test_prior_builder_registry_dispatch():
+    """The per-sport registry resolves tennis and soccer-with-profile, and
+    skips leagues without dynamic priors (no store opened)."""
+    from omega.core.config.leagues import get_league_config
+    from omega.trace.priors import PRIOR_BUILDERS, _inject_soccer_priors, build_tennis_prior_payload
+
+    def _resolve(league):
+        cfg = get_league_config(league)
+        return next((b.build for b in PRIOR_BUILDERS if b.applies(cfg)), None)
+
+    assert _resolve("ATP") is build_tennis_prior_payload
+    assert _resolve("WTA") is build_tennis_prior_payload
+    assert _resolve("FIFA_WORLD_CUP_2026") is _inject_soccer_priors
+    assert _resolve("EPL") is _inject_soccer_priors  # promoted club league
+    assert _resolve("NBA") is None
+    assert _resolve("MLB") is None
+
+
 def _store() -> TraceStore:
     f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     f.close()
