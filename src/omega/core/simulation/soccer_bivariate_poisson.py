@@ -40,13 +40,11 @@ _SOCCER_ARCHETYPE_AVG_TOTAL = 2.5
 _FIRST_HALF_GOAL_SHARE = 0.45
 
 
-class MissingDixonColesPriorError(RuntimeError):
-    """No production Dixon-Coles profile available for a competition.
-
-    Raised by the gatherer/fitter plumbing (not across the service boundary —
-    the backend itself returns a skip result so ``analyze_game`` reports
-    ``status="skipped"`` rather than ``status="error"``).
-    """
+# Fail-closed contract: when no production Dixon-Coles profile exists the
+# gatherer leaves ``rho`` out of prior_payload and this backend returns a
+# skip-result (status="skipped", missing_requirements=["rho_prior"]). There is
+# deliberately no exception type — skipping a single competition must never
+# abort a batch, and the skip-result already carries the fail-closed signal.
 
 
 def _valid_dixon_coles_rho(home_lambda: float, away_lambda: float, rho: float) -> bool:

@@ -24,11 +24,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-
-def _american_to_decimal(american: float) -> float:
-    if american > 0:
-        return 1.0 + american / 100.0
-    return 1.0 + 100.0 / abs(american)
+from omega.core.betting.odds import american_to_decimal
 
 
 def _sub_lines(line: float) -> list[float]:
@@ -51,7 +47,7 @@ class LineBetEvaluation:
 
     def ev_per_unit(self, american: float) -> float:
         """Exact expected profit per unit stake at *american* odds."""
-        profit = _american_to_decimal(american) - 1.0
+        profit = american_to_decimal(american) - 1.0
         return (
             self.p_win * profit
             + self.p_half_win * profit / 2.0
@@ -65,7 +61,7 @@ class LineBetEvaluation:
         Solving ``q*(d-1) - (1-q) = EV`` gives ``q = (EV+1)/d``. Clamped to
         [0, 1] so degenerate quotes cannot produce out-of-range probabilities.
         """
-        q = (self.ev_per_unit(american) + 1.0) / _american_to_decimal(american)
+        q = (self.ev_per_unit(american) + 1.0) / american_to_decimal(american)
         return max(0.0, min(1.0, q))
 
 

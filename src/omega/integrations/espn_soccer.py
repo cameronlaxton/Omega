@@ -126,6 +126,8 @@ SOCCER_TEAM_ALIASES: dict[str, str] = {
     "usa": "United States",
     "united states": "United States",
     "usmnt": "United States",
+    "bosnia & herzegovina": "Bosnia-Herzegovina",
+    "bosnia-herzegovina": "Bosnia-Herzegovina",
 }
 
 

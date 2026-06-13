@@ -46,6 +46,7 @@ class TennisServePropBackend:
             raise RuntimeError("numpy is required for tennis_prop_serve")
 
         from omega.core.config.leagues import get_league_config
+        from omega.core.simulation.engine import _percentile
         from omega.core.simulation.tennis_markov import expected_game_points
 
         prior = request.prior_payload or {}
@@ -89,19 +90,15 @@ class TennisServePropBackend:
         std = (sum((x - mean) ** 2 for x in samples) / n) ** 0.5
         sorted_samples = sorted(samples)
 
-        def _pct(q: float) -> float:
-            idx = min(n - 1, max(0, int(round((n - 1) * q))))
-            return sorted_samples[idx]
-
         return {
             "over_prob": over / n,
             "under_prob": under / n,
             "push_prob": push / n,
             "mean": mean,
             "std": std,
-            "p10": _pct(0.10),
-            "p50": _pct(0.50),
-            "p90": _pct(0.90),
+            "p10": _percentile(sorted_samples, 0.10),
+            "p50": _percentile(sorted_samples, 0.50),
+            "p90": _percentile(sorted_samples, 0.90),
             "distribution_type": "binomial_serve_points",
             "distribution_params": {
                 "ace_rate": round(float(ace_rate), 5),

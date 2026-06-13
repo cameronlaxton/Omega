@@ -10,10 +10,7 @@ from omega.core.simulation.backends import (
     enforce_game_backend_contract,
     resolve_game_backend,
 )
-from omega.core.simulation.soccer_bivariate_poisson import (
-    MissingDixonColesPriorError,
-    SoccerPoissonBackend,
-)
+from omega.core.simulation.soccer_bivariate_poisson import SoccerPoissonBackend
 
 _HOME_CTX = {"xg_for": 1.5, "xg_against": 1.1}
 _AWAY_CTX = {"xg_for": 1.2, "xg_against": 1.3}
@@ -154,7 +151,3 @@ def test_static_league_rho_is_never_read():
     result = backend.run(_request(prior_payload=None, n_iterations=100))
     assert result["success"] is False
     assert result["missing_requirements"] == ["rho_prior"]
-
-
-def test_missing_prior_error_is_runtime_error():
-    assert issubclass(MissingDixonColesPriorError, RuntimeError)
