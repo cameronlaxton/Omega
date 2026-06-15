@@ -254,9 +254,31 @@ DEFAULT_PROP_BACKEND_BY_LEAGUE_STAT: dict[tuple[str, str], str] = {
     ("WTA", "player_aces"): "tennis_prop_serve",
 }
 
+PROP_STAT_ALIASES_BY_LEAGUE: dict[tuple[str, str], str] = {
+    # NFL request/odds surfaces historically use compact market keys, while the
+    # nflverse dispersion fitter writes the upstream stat-column names.
+    ("NFL", "pass_yds"): "passing_yards",
+    ("NFL", "pass_yards"): "passing_yards",
+    ("NFL", "passing_yds"): "passing_yards",
+    ("NFL", "rush_yds"): "rushing_yards",
+    ("NFL", "rush_yards"): "rushing_yards",
+    ("NFL", "rushing_yds"): "rushing_yards",
+    ("NFL", "rec_yds"): "receiving_yards",
+    ("NFL", "rec_yards"): "receiving_yards",
+    ("NFL", "receiving_yds"): "receiving_yards",
+}
+
+
+def canonical_prop_stat_type(league: str, stat_type: str) -> str:
+    """Return the canonical stat key used by prop routing and prior tables."""
+    league_uc = str(league or "").upper()
+    stat = str(stat_type or "").strip().lower()
+    return PROP_STAT_ALIASES_BY_LEAGUE.get((league_uc, stat), stat)
+
 
 def resolve_default_prop_backend(league: str, stat_type: str) -> str:
     """Return the default prop-backend name for a (league, stat_type) pair."""
+    canonical_stat = canonical_prop_stat_type(league, stat_type)
     return DEFAULT_PROP_BACKEND_BY_LEAGUE_STAT.get(
-        (league, stat_type), "prop_distribution_router"
+        (str(league or "").upper(), canonical_stat), "prop_distribution_router"
     )

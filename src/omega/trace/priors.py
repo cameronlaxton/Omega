@@ -16,6 +16,7 @@ These helpers only touch ``store.conn``; they add no state to ``TraceStore``.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -376,6 +377,136 @@ def get_pressure_coefficients(
 
 
 # ---------------------------------------------------------------------------
+# priors_nfl_dispersion
+# ---------------------------------------------------------------------------
+
+
+class NflDispersionPrior(BaseModel):
+    """One fitted NB dispersion ``k`` for an NFL (entity, stat_type, season).
+
+    ``nb_k_source`` (``player`` | ``position_group`` | ``league``) and
+    ``nb_k_shrinkage_weight`` record whether the value reflects genuine player
+    signal or the hierarchical group prior, so small-sample tail edges stay
+    auditable. The prop NB backend reads only ``nb_dispersion_k``.
+    """
+
+    entity: str
+    stat_type: str
+    season: str
+    nb_dispersion_k: float
+    nb_k_shrinkage_weight: float
+    nb_k_source: str
+    n_observations: int
+    as_of_date: str
+    position_group: str | None = None
+
+    @field_validator("nb_dispersion_k")
+    @classmethod
+    def _validate_nb_dispersion_k(cls, value: float) -> float:
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("nb_dispersion_k must be finite and positive")
+        return value
+
+    @field_validator("nb_k_shrinkage_weight")
+    @classmethod
+    def _validate_nb_k_shrinkage_weight(cls, value: float) -> float:
+        if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+            raise ValueError("nb_k_shrinkage_weight must be finite and between 0 and 1")
+        return value
+
+
+def upsert_nfl_dispersion(store: TraceStore, prior: NflDispersionPrior) -> None:
+    """Insert or refresh one (entity, stat_type, season, as_of_date) fit row."""
+    store.conn.execute(
+        """INSERT INTO priors_nfl_dispersion
+               (entity, stat_type, season, position_group, nb_dispersion_k,
+                nb_k_shrinkage_weight, nb_k_source, n_observations, as_of_date,
+                last_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT (entity, stat_type, season, as_of_date) DO UPDATE SET
+               position_group = excluded.position_group,
+               nb_dispersion_k = excluded.nb_dispersion_k,
+               nb_k_shrinkage_weight = excluded.nb_k_shrinkage_weight,
+               nb_k_source = excluded.nb_k_source,
+               n_observations = excluded.n_observations,
+               last_updated = datetime('now')""",
+        (
+            prior.entity,
+            prior.stat_type,
+            prior.season,
+            prior.position_group,
+            prior.nb_dispersion_k,
+            prior.nb_k_shrinkage_weight,
+            prior.nb_k_source,
+            prior.n_observations,
+            prior.as_of_date,
+        ),
+    )
+    store.conn.commit()
+
+
+def get_nfl_dispersion(
+    store: TraceStore,
+    entity: str,
+    stat_type: str,
+    season: str | None = None,
+    as_of_date: str | None = None,
+) -> NflDispersionPrior | None:
+    """Return the most recent NB dispersion fit for an entity/stat, or None.
+
+    With ``season=None`` the latest fit across seasons wins. Returning None lets
+    the prop backend fall back to a caller-supplied ``nb_dispersion_k`` (or fail
+    closed), never to a fabricated value. ``as_of_date`` bounds historical/replay
+    lookups to priors knowable on or before the request date.
+    """
+    query = """SELECT entity, stat_type, season, position_group, nb_dispersion_k,
+                      nb_k_shrinkage_weight, nb_k_source, n_observations, as_of_date
+               FROM priors_nfl_dispersion
+               WHERE entity = ? AND stat_type = ?"""
+    params: list = [entity, stat_type]
+    if season is not None:
+        query += " AND season = ?"
+        params.append(season)
+    if as_of_date is not None:
+        query += " AND as_of_date <= ?"
+        params.append(as_of_date)
+    query += " ORDER BY as_of_date DESC LIMIT 1"
+    row = store.conn.execute(query, params).fetchone()
+    if row is None:
+        return None
+    return NflDispersionPrior(
+        entity=row[0],
+        stat_type=row[1],
+        season=row[2],
+        position_group=row[3],
+        nb_dispersion_k=row[4],
+        nb_k_shrinkage_weight=row[5],
+        nb_k_source=row[6],
+        n_observations=row[7],
+        as_of_date=row[8],
+    )
+
+
+def _nfl_prior_lookup_candidates(player: str, stat_type: str) -> tuple[list[str], list[str]]:
+    """Return player/stat candidates for NFL dispersion lookup.
+
+    The fitted table is keyed by nflverse display names and canonical stat-column
+    names. Request surfaces can still carry player aliases (``Pat Mahomes``) and
+    market aliases (``pass_yds``), so lookup tries canonicalized values first and
+    then the original strings for backward compatibility with older rows.
+    """
+    from omega.core.simulation.backends import canonical_prop_stat_type
+    from omega.integrations._etl import load_alias_table, resolve_entity
+
+    resolved_player = resolve_entity(player, load_alias_table("NFL")) or player
+    canonical_stat = canonical_prop_stat_type("NFL", stat_type)
+
+    players = list(dict.fromkeys([resolved_player, player]))
+    stats = list(dict.fromkeys([canonical_stat, stat_type]))
+    return players, stats
+
+
+# ---------------------------------------------------------------------------
 # Gatherer injection: league config -> production prior -> prior_payload
 # ---------------------------------------------------------------------------
 
@@ -565,7 +696,7 @@ class _PriorBuilder:
     """
 
     applies: Callable[[dict[str, Any]], bool]
-    build: Callable[[dict[str, Any], "TraceStore"], tuple[dict[str, Any], dict[str, Any] | None]]
+    build: Callable[[dict[str, Any], TraceStore], tuple[dict[str, Any], dict[str, Any] | None]]
 
 
 # Per-sport injection registry. A new sport (e.g. NFL NB-dispersion priors in
@@ -611,3 +742,100 @@ def inject_game_priors(
     finally:
         if own_store:
             store.close()
+
+
+def inject_prop_priors(
+    payload: dict[str, Any], store: TraceStore | None = None
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Gatherer prior injection for a raw player-prop request dict.
+
+    For ``(league, prop_type)`` pairs routed to the ``prop_neg_binom`` backend
+    (NFL yardage), merge the fitted/shrunk Negative-Binomial dispersion ``k`` from
+    ``priors_nfl_dispersion`` (+ ``nb_k_source`` / ``nb_k_shrinkage_weight``
+    provenance) into ``player_context``. Mirrors :func:`inject_game_priors`:
+    injection lives at the gatherer layer — outside ``service.analyze`` — so a
+    recorded request replays deterministically regardless of live table state.
+
+    Behavior:
+
+    * non-NB ``(league, prop_type)`` (NBA pts, ...) -> payload unchanged, no event,
+      no store opened;
+    * caller already supplied ``player_context.nb_dispersion_k`` (recorded/replayed
+      request) -> unchanged, no event;
+    * no fitted dispersion row -> unchanged + ``warn`` event; the service then
+      derives ``k`` from the per-request projection std (the documented
+      fail-open fallback), never a hard skip;
+    * fitted row found -> merged ``nb_dispersion_k`` + provenance + ``ok`` event.
+    """
+    league = str(payload.get("league") or "")
+    player = str(payload.get("player_name") or "")
+    stat = payload.get("prop_type")
+    request_as_of = str(payload.get("game_date") or "")[:10] or None
+    if not league or not player or not isinstance(stat, str) or not stat:
+        return payload, None
+
+    from omega.core.simulation.backends import resolve_default_prop_backend
+
+    if resolve_default_prop_backend(league.upper(), stat) != "prop_neg_binom":
+        return payload, None
+
+    player_ctx = payload.get("player_context") or {}
+    if player_ctx.get("nb_dispersion_k") is not None:
+        return payload, None  # recorded/replayed request: never re-read live table
+
+    own_store = store is None
+    if own_store:
+        from omega.trace.store import TraceStore
+
+        store = TraceStore()
+    try:
+        lookup_players, lookup_stats = _nfl_prior_lookup_candidates(player, stat)
+        prior = None
+        for lookup_player in lookup_players:
+            for lookup_stat in lookup_stats:
+                prior = get_nfl_dispersion(
+                    store, lookup_player, lookup_stat, as_of_date=request_as_of
+                )
+                if prior is not None:
+                    break
+            if prior is not None:
+                break
+    finally:
+        if own_store:
+            store.close()
+
+    if prior is None:
+        return payload, {
+            "ts": _utc_now_iso(),
+            "event_type": "data_provenance",
+            "step": "nfl_dispersion_prior:inject",
+            "status": "warn",
+            "notes": (
+                f"no fitted NB dispersion for {player!r} {stat!r} "
+                f"(lookup players={lookup_players!r}, stats={lookup_stats!r}); "
+                "backend will derive k from the per-request projection std. "
+                "Fit via omega-fit-nfl-dispersion."
+            ),
+        }
+
+    out = dict(payload)
+    ctx = dict(player_ctx)
+    ctx["nb_dispersion_k"] = prior.nb_dispersion_k
+    ctx["nb_k_source"] = prior.nb_k_source
+    ctx["nb_k_shrinkage_weight"] = prior.nb_k_shrinkage_weight
+    out["player_context"] = ctx
+    return out, {
+        "ts": _utc_now_iso(),
+        "event_type": "data_provenance",
+        "step": "nfl_dispersion_prior:inject",
+        "status": "ok",
+        "notes": (
+            f"injected NB dispersion for {player} {stat} from "
+            f"{prior.entity} {prior.stat_type} ({prior.nb_k_source})"
+        ),
+        "outputs": {
+            "nb_dispersion_k": prior.nb_dispersion_k,
+            "nb_k_source": prior.nb_k_source,
+            "nb_k_shrinkage_weight": prior.nb_k_shrinkage_weight,
+        },
+    }

@@ -124,7 +124,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 17
+CURRENT_VERSION = 18
 
 # ---------------------------------------------------------------------------
 # Version lineage (applied in order by TraceStore._ensure_schema)
@@ -157,6 +157,7 @@ CURRENT_VERSION = 17
 #   V15 apply_v15_migration  bet_ledger sizing-audit columns (staking/exposure/corr)
 #   V16 SCHEMA_V16           priors_xg + priors_dixon_coles (soccer dynamic priors)
 #   V17 SCHEMA_V17           priors_tennis + priors_tennis_pressure (tennis dynamic priors)
+#   V18 SCHEMA_V18           priors_nfl_dispersion (NFL NB dispersion k w/ shrinkage provenance)
 #
 # There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
 # apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
@@ -753,4 +754,33 @@ CREATE TABLE IF NOT EXISTS priors_tennis_pressure (
 
 CREATE INDEX IF NOT EXISTS idx_priors_tennis_pressure_player
     ON priors_tennis_pressure(player, tour, surface);
+"""
+
+
+# V18: NFL dispersion priors (Phase 7 M4). priors_nfl_dispersion holds the
+# Negative-Binomial dispersion k per (entity, stat_type, season) fit by
+# omega-fit-nfl-dispersion with mandatory hierarchical Bayesian shrinkage toward
+# (position_group, stat_type) posteriors. nb_k_source (player|position_group|
+# league) and nb_k_shrinkage_weight record whether a high-EV tail call was driven
+# by genuine player signal or the group prior, so small-sample tail edges are
+# auditable. The prop NB backend reads only nb_dispersion_k; all hierarchy lives
+# in the offline fitter. Truncating the table degrades props to caller-supplied
+# k (fail closed), never to bad numbers (design Part 9).
+SCHEMA_V18 = """
+CREATE TABLE IF NOT EXISTS priors_nfl_dispersion (
+    entity                TEXT NOT NULL,
+    stat_type             TEXT NOT NULL,
+    season                TEXT NOT NULL,
+    position_group        TEXT,
+    nb_dispersion_k       REAL NOT NULL,
+    nb_k_shrinkage_weight REAL NOT NULL,
+    nb_k_source           TEXT NOT NULL,
+    n_observations        INTEGER NOT NULL,
+    as_of_date            TEXT NOT NULL,
+    last_updated          TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (entity, stat_type, season, as_of_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_priors_nfl_dispersion_entity
+    ON priors_nfl_dispersion(entity, stat_type, season);
 """

@@ -70,6 +70,13 @@ def test_quarter_total_over_under_buckets():
     assert over.equivalent_win_prob(+100) + under.equivalent_win_prob(+100) == pytest.approx(1.0)
 
 
+def test_non_quarter_decimal_does_not_split():
+    ev = evaluate_threshold_bet({"1.25": 100}, 1.4, direction="over")
+    assert ev.p_loss == pytest.approx(1.0)
+    assert ev.p_half_win == 0.0
+    assert ev.p_half_loss == 0.0
+
+
 def test_negative_american_odds_ev():
     ev = evaluate_asian_handicap(_MARGINS, -0.5, "home")  # p=0.5 win/lose
     assert ev.ev_per_unit(-110) == pytest.approx(0.5 * (100 / 110) - 0.5)
@@ -195,8 +202,12 @@ def test_service_derivative_edges_read_normalized_markets():
             "markets": [
                 MarketQuote(market_type="asian_handicap", selection="Home", price=-105, line=-0.25),
                 MarketQuote(market_type="asian_handicap", selection="Away", price=-115, line=0.25),
-                MarketQuote(market_type="first_half_total", selection="Over", price=+105, line=1.25),
-                MarketQuote(market_type="first_half_total", selection="Under", price=-125, line=1.25),
+                MarketQuote(
+                    market_type="first_half_total", selection="Over", price=+105, line=1.25
+                ),
+                MarketQuote(
+                    market_type="first_half_total", selection="Under", price=-125, line=1.25
+                ),
             ],
         },
     )
