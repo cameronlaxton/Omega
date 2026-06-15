@@ -342,6 +342,13 @@ def main(
                     logger.warning("ESPN scoreboard fetch failed for %s %s: %s", league, check_date, exc)
 
             if not games:
+                if args.dry_run:
+                    logger.warning(
+                        "All ESPN scoreboard fetches failed or empty for %s around %s (dry-run)",
+                        league,
+                        d,
+                    )
+                    continue
                 logger.error("All ESPN scoreboard fetches failed or empty for %s around %s", league, d)
                 return 1
 

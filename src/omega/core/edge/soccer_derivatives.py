@@ -4,8 +4,8 @@ Phase 7 M2 (design Part 4): the soccer backend emits empirical pmfs of the
 goal margin (``margin_counts``), full-time total (``total_counts``) and the
 thinned first-half total (``fh_total_counts``). This module evaluates handicap
 and total lines — including quarter-ball lines — against those pmfs. The
-backend stays line-unaware; the service layer turns the evaluations into
-EdgeDetail rows.
+backend stays line-unaware; the soccer edge consumer
+(``omega/core/edge/soccer_consumer.py``) turns the evaluations into EdgeDetail rows.
 
 Quarter-ball semantics: a line ending in .25/.75 splits the stake across the
 two adjacent half/integer lines. Each half-stake resolves independently

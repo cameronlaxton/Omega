@@ -34,7 +34,6 @@ from omega.core.contracts.schemas import (
     EdgeDetail,
     GameAnalysisRequest,
     GameAnalysisResponse,
-    MarketQuote,
     OddsInput,
     PlayerPropRequest,
     PlayerPropResponse,
@@ -42,7 +41,9 @@ from omega.core.contracts.schemas import (
     SlateAnalysisRequest,
     SlateAnalysisResponse,
 )
+from omega.core.contracts.market_quotes import market_quote
 from omega.core.contracts.seeding import stable_analysis_hash
+from omega.core.edge.consumers import resolve_edge_consumer
 from omega.core.simulation.archetypes import get_archetype_name
 from omega.core.simulation.backends import (
     GameSimulationBackend,
@@ -857,37 +858,14 @@ def _pick_best_bet(
     )
 
 
-def _quote_matches_selection(quote: MarketQuote, *labels: str) -> bool:
-    selection = quote.selection.strip().casefold()
-    return any(
-        selection == (label_text := label.strip().casefold())
-        or selection.startswith(f"{label_text} ")
-        for label in labels
-        if label
-    )
-
-
-def _market_quote(
-    odds: OddsInput,
-    market_type: str,
-    *labels: str,
-) -> MarketQuote | None:
-    for quote in odds.markets or []:
-        if quote.market_type != market_type:
-            continue
-        if _quote_matches_selection(quote, *labels):
-            return quote
-    return None
-
-
 def _resolve_game_market_odds(
     odds: OddsInput,
     home_team: str,
     away_team: str,
 ) -> tuple[float | None, float | None]:
     """Resolve home/away moneyline odds from normalized markets first, legacy fields second."""
-    home_ml = _market_quote(odds, "moneyline", home_team, "Home")
-    away_ml = _market_quote(odds, "moneyline", away_team, "Away")
+    home_ml = market_quote(odds, "moneyline", home_team, "Home")
+    away_ml = market_quote(odds, "moneyline", away_team, "Away")
 
     home_odds = home_ml.price if home_ml is not None else odds.moneyline_home
     away_odds = away_ml.price if away_ml is not None else odds.moneyline_away
@@ -900,8 +878,8 @@ def _resolve_game_spread_market(
     away_team: str,
 ) -> tuple[float | None, float | None, float | None]:
     """Resolve home spread line and both side prices."""
-    home_spread = _market_quote(odds, "spread", home_team, "Home")
-    away_spread = _market_quote(odds, "spread", away_team, "Away")
+    home_spread = market_quote(odds, "spread", home_team, "Home")
+    away_spread = market_quote(odds, "spread", away_team, "Away")
     line = (
         home_spread.line
         if home_spread is not None and home_spread.line is not None
@@ -916,8 +894,8 @@ def _resolve_game_spread_market(
 
 def _resolve_game_total_market(odds: OddsInput) -> tuple[float | None, float | None, float | None]:
     """Resolve total line and over/under prices."""
-    over_q = _market_quote(odds, "total", "Over")
-    under_q = _market_quote(odds, "total", "Under")
+    over_q = market_quote(odds, "total", "Over")
+    under_q = market_quote(odds, "total", "Under")
     line = (
         over_q.line
         if over_q is not None and over_q.line is not None
@@ -927,52 +905,6 @@ def _resolve_game_total_market(odds: OddsInput) -> tuple[float | None, float | N
         return None, None, None
     over_price = over_q.price if over_q is not None else odds.total_over_price
     under_price = under_q.price if under_q is not None else odds.total_under_price
-    return line, over_price, under_price
-
-
-def _resolve_game_asian_handicap_market(
-    odds: OddsInput,
-    home_team: str,
-    away_team: str,
-) -> tuple[float | None, float | None, float | None]:
-    """Resolve home Asian-handicap line and both side prices."""
-    home_q = _market_quote(odds, "asian_handicap", home_team, "Home")
-    away_q = _market_quote(odds, "asian_handicap", away_team, "Away")
-    line = (
-        home_q.line
-        if home_q is not None and home_q.line is not None
-        else (
-            -away_q.line
-            if away_q is not None and away_q.line is not None
-            else odds.asian_handicap_home
-        )
-    )
-    if line is None:
-        return None, None, None
-    home_price = home_q.price if home_q is not None else odds.ah_home_price
-    away_price = away_q.price if away_q is not None else odds.ah_away_price
-    return line, home_price, away_price
-
-
-def _resolve_game_first_half_total_market(
-    odds: OddsInput,
-) -> tuple[float | None, float | None, float | None]:
-    """Resolve first-half total line and over/under prices."""
-    over_q = _market_quote(odds, "first_half_total", "Over")
-    under_q = _market_quote(odds, "first_half_total", "Under")
-    line = (
-        over_q.line
-        if over_q is not None and over_q.line is not None
-        else (
-            under_q.line
-            if under_q is not None and under_q.line is not None
-            else odds.first_half_total
-        )
-    )
-    if line is None:
-        return None, None, None
-    over_price = over_q.price if over_q is not None else odds.fh_over_price
-    under_price = under_q.price if under_q is not None else odds.fh_under_price
     return line, over_price, under_price
 
 
@@ -1326,86 +1258,24 @@ def analyze_game(
                 )
             )
 
-        # Asian handicap + first-half total (soccer derivatives). The backend
-        # emits empirical pmfs (margin_counts / fh_total_counts); the edge
-        # module evaluates the quoted line — quarter-ball split, push and
-        # half-stake semantics included — and bridges the exact EV back into
-        # the binary edge framework via the equivalent win probability.
-        ah_line, ah_home_price, ah_away_price = _resolve_game_asian_handicap_market(
-            request.odds, request.home_team, request.away_team
-        )
-        margin_counts = sim_result.get("margin_counts")
-        if ah_line is not None and margin_counts:
-            from omega.core.edge.soccer_derivatives import evaluate_asian_handicap
-
-            for ah_side, ah_price, ah_label, ah_signed_line in (
-                ("home", ah_home_price, request.home_team, ah_line),
-                ("away", ah_away_price, request.away_team, -ah_line),
-            ):
-                if ah_price is None:
-                    continue
-                evaluation = evaluate_asian_handicap(margin_counts, ah_line, ah_side)
-                q_equiv = evaluation.equivalent_win_prob(ah_price)
-                if q_equiv <= 0:
-                    continue
-                cal_q, ah_audit = _calibrate_audited(
-                    q_equiv,
-                    league=request.league,
-                    context_hints=gc,
-                    plane="game",
-                    market="asian_handicap",
+        # Sport-specific exotic/derivative markets (soccer Asian handicap +
+        # first-half total today; NFL Wong teasers next) are priced by the
+        # archetype's registered EdgeConsumer rather than an inline per-sport
+        # ladder. The consumer resolves its own market lines from request.odds,
+        # evaluates them against the backend pmfs in sim_result, and bridges the
+        # exact EV into the binary edge framework via the injected calibrate /
+        # build_edge helpers. Unmapped or no-consumer archetypes are a no-op.
+        consumer = resolve_edge_consumer(archetype_name)
+        if consumer is not None:
+            edges.extend(
+                consumer.consume(
+                    sim_result,
+                    request,
+                    bankroll,
+                    _calibrate_audited,
+                    _build_edge,
                 )
-                edges.append(
-                    _build_edge(
-                        ah_side,
-                        f"{ah_label} {ah_signed_line:+g} (AH)",
-                        q_equiv,
-                        cal_q,
-                        ah_price,
-                        bankroll,
-                        request.n_iterations,
-                        calibration_audit=ah_audit,
-                        market="asian_handicap",
-                        line=ah_signed_line,
-                    )
-                )
-
-        fh_line, fh_over_price, fh_under_price = _resolve_game_first_half_total_market(request.odds)
-        fh_counts = sim_result.get("fh_total_counts")
-        if fh_line is not None and fh_counts:
-            from omega.core.edge.soccer_derivatives import evaluate_total
-
-            for fh_side, fh_price in (
-                ("over", fh_over_price),
-                ("under", fh_under_price),
-            ):
-                if fh_price is None:
-                    continue
-                evaluation = evaluate_total(fh_counts, fh_line, fh_side)
-                q_equiv = evaluation.equivalent_win_prob(fh_price)
-                if q_equiv <= 0:
-                    continue
-                cal_q, fh_audit = _calibrate_audited(
-                    q_equiv,
-                    league=request.league,
-                    context_hints=gc,
-                    plane="game",
-                    market="first_half_total",
-                )
-                edges.append(
-                    _build_edge(
-                        fh_side,
-                        f"1H {fh_side.capitalize()} {fh_line:g}",
-                        q_equiv,
-                        cal_q,
-                        fh_price,
-                        bankroll,
-                        request.n_iterations,
-                        calibration_audit=fh_audit,
-                        market="first_half_total",
-                        line=fh_line,
-                    )
-                )
+            )
 
         # Correct score: a map of scoreline -> price.
         cs_probs = sim_result.get("correct_score_probs") or {}
