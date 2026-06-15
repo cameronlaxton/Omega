@@ -1637,11 +1637,19 @@ def analyze_player_prop(
         "dud_prob": float(player_ctx.get("dud_prob", 0.0)),
     }
     if backend_name == "prop_neg_binom":
-        variance = std_f**2
-        if variance > mean_f:
-            prior_payload["nb_dispersion_k"] = (mean_f**2) / (variance - mean_f)
+        # Prefer a fitted/shrunk dispersion injected by the gatherer
+        # (inject_prop_priors -> player_context.nb_dispersion_k) over the
+        # per-request method-of-moments derivation, recording its provenance.
+        injected_k = player_ctx.get("nb_dispersion_k")
+        if injected_k is not None:
+            prior_payload["nb_dispersion_k"] = float(injected_k)
+            notes.append(f"nb_k_source:{player_ctx.get('nb_k_source', 'supplied')}")
         else:
-            prior_payload["nb_dispersion_k"] = 100.0
+            variance = std_f**2
+            if variance > mean_f:
+                prior_payload["nb_dispersion_k"] = (mean_f**2) / (variance - mean_f)
+            else:
+                prior_payload["nb_dispersion_k"] = 100.0
     # Whitelisted sport-specific prop priors travel from player_context into
     # prior_payload (tennis serve model keys; harmless no-ops elsewhere).
     for prior_key in ("ace_rate", "serve_win_pct", "match_format", "expected_total_games"):

@@ -703,3 +703,85 @@ def inject_game_priors(
     finally:
         if own_store:
             store.close()
+
+
+def inject_prop_priors(
+    payload: dict[str, Any], store: TraceStore | None = None
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Gatherer prior injection for a raw player-prop request dict.
+
+    For ``(league, prop_type)`` pairs routed to the ``prop_neg_binom`` backend
+    (NFL yardage), merge the fitted/shrunk Negative-Binomial dispersion ``k`` from
+    ``priors_nfl_dispersion`` (+ ``nb_k_source`` / ``nb_k_shrinkage_weight``
+    provenance) into ``player_context``. Mirrors :func:`inject_game_priors`:
+    injection lives at the gatherer layer — outside ``service.analyze`` — so a
+    recorded request replays deterministically regardless of live table state.
+
+    Behavior:
+
+    * non-NB ``(league, prop_type)`` (NBA pts, ...) -> payload unchanged, no event,
+      no store opened;
+    * caller already supplied ``player_context.nb_dispersion_k`` (recorded/replayed
+      request) -> unchanged, no event;
+    * no fitted dispersion row -> unchanged + ``warn`` event; the service then
+      derives ``k`` from the per-request projection std (the documented
+      fail-open fallback), never a hard skip;
+    * fitted row found -> merged ``nb_dispersion_k`` + provenance + ``ok`` event.
+    """
+    league = str(payload.get("league") or "")
+    player = str(payload.get("player_name") or "")
+    stat = payload.get("prop_type")
+    if not league or not player or not isinstance(stat, str) or not stat:
+        return payload, None
+
+    from omega.core.simulation.backends import resolve_default_prop_backend
+
+    if resolve_default_prop_backend(league.upper(), stat) != "prop_neg_binom":
+        return payload, None
+
+    player_ctx = payload.get("player_context") or {}
+    if player_ctx.get("nb_dispersion_k") is not None:
+        return payload, None  # recorded/replayed request: never re-read live table
+
+    own_store = store is None
+    if own_store:
+        from omega.trace.store import TraceStore
+
+        store = TraceStore()
+    try:
+        prior = get_nfl_dispersion(store, player, stat)
+    finally:
+        if own_store:
+            store.close()
+
+    if prior is None:
+        return payload, {
+            "ts": _utc_now_iso(),
+            "event_type": "data_provenance",
+            "step": "nfl_dispersion_prior:inject",
+            "status": "warn",
+            "notes": (
+                f"no fitted NB dispersion for {player!r} {stat!r}; backend will "
+                "derive k from the per-request projection std. Fit via "
+                "omega-fit-nfl-dispersion."
+            ),
+        }
+
+    out = dict(payload)
+    ctx = dict(player_ctx)
+    ctx["nb_dispersion_k"] = prior.nb_dispersion_k
+    ctx["nb_k_source"] = prior.nb_k_source
+    ctx["nb_k_shrinkage_weight"] = prior.nb_k_shrinkage_weight
+    out["player_context"] = ctx
+    return out, {
+        "ts": _utc_now_iso(),
+        "event_type": "data_provenance",
+        "step": "nfl_dispersion_prior:inject",
+        "status": "ok",
+        "notes": f"injected NB dispersion for {player} {stat} ({prior.nb_k_source})",
+        "outputs": {
+            "nb_dispersion_k": prior.nb_dispersion_k,
+            "nb_k_source": prior.nb_k_source,
+            "nb_k_shrinkage_weight": prior.nb_k_shrinkage_weight,
+        },
+    }

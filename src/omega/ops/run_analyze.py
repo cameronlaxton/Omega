@@ -116,6 +116,21 @@ def run(
                         session_id,
                         audit_exc,
                     )
+    elif kind == "prop":
+        # Gatherer seam: merge the fitted NB dispersion k (NFL yardage) into
+        # player_context. Best-effort — falls back to per-request std-derived k.
+        try:
+            from omega.trace.priors import inject_prop_priors
+
+            request, prior_event = inject_prop_priors(request)
+            if prior_event:
+                sidecar = _REPO_ROOT / "var" / "inbox" / "sessions" / f"{session_id}.json"
+                if sidecar.exists():
+                    from omega.trace.session_sidecar import append_audit_events
+
+                    append_audit_events(sidecar, [prior_event])
+        except Exception as exc:  # noqa: BLE001 - injection must never block analysis
+            logger.warning("prop prior injection failed for session_id=%s: %s", session_id, exc)
     typed = _typed_request(kind, request)
     trace = analyze(typed, session_id=session_id, bankroll=bankroll)
 
