@@ -10,7 +10,7 @@
     {
       "type": "fetch_outcomes",
       "args": {
-        "leagues": ["nba", "wnba", "mlb", "props"]
+        "leagues": ["nba", "wnba", "mlb", "soccer", "props"]
       }
     },
     {

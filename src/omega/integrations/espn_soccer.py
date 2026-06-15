@@ -42,7 +42,9 @@ _REQUEST_TIMEOUT_SECONDS = 15
 SOCCER_LEAGUE_SLUGS: dict[str, str] = {
     "MLS": "usa.1",
     "EPL": "eng.1",
+    "PREMIER_LEAGUE": "eng.1",
     "LA_LIGA": "esp.1",
+    "LALIGA": "esp.1",
     "BUNDESLIGA": "ger.1",
     "SERIE_A": "ita.1",
     "LIGUE_1": "fra.1",

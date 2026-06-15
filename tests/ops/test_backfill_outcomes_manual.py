@@ -32,6 +32,7 @@ if str(_SCRIPTS) not in sys.path:
 import backfill_outcomes_manual as backfill  # type: ignore  # noqa: E402
 
 from omega.integrations.espn_nba import FinalGame  # noqa: E402
+from omega.integrations.espn_soccer import FinalGame as SoccerFinalGame  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 
@@ -43,6 +44,7 @@ def _tmp_db() -> str:
 
 def _make_game_trace(
     trace_id: str = "sandbox-game-1",
+    league: str = "NBA",
     home_team: str = "Miami Heat",
     away_team: str = "Boston Celtics",
     timestamp: str = "2026-05-17T19:00:00Z",
@@ -52,7 +54,7 @@ def _make_game_trace(
         "run_id": trace_id,
         "timestamp": timestamp,
         "prompt": "game",
-        "league": "NBA",
+        "league": league,
         "matchup": f"{away_team} @ {home_team}",
         "execution_mode": "sandbox_game",
         "kind": "game",
@@ -63,7 +65,7 @@ def _make_game_trace(
         "input_snapshot": {
             "home_team": home_team,
             "away_team": away_team,
-            "league": "NBA",
+            "league": league,
         },
         "result": {},
     }
@@ -72,6 +74,7 @@ def _make_game_trace(
 def _make_prop_trace(
     trace_id: str = "sandbox-prop-1",
     *,
+    league: str = "NBA",
     home_team: str = "Miami Heat",
     away_team: str = "Boston Celtics",
     game_date: str = "2026-05-17",
@@ -83,7 +86,7 @@ def _make_prop_trace(
 ) -> dict[str, Any]:
     snap: dict[str, Any] = {
         "player_name": player_name,
-        "league": "NBA",
+        "league": league,
         "prop_type": prop_type,
         "line": line,
     }
@@ -96,7 +99,7 @@ def _make_prop_trace(
         "run_id": trace_id,
         "timestamp": "2026-05-17T19:00:00Z",
         "prompt": "prop",
-        "league": "NBA",
+        "league": league,
         "matchup": f"{away_team} @ {home_team}"
         if include_game_fields
         else f"{player_name} {prop_type} {line}",
@@ -149,6 +152,42 @@ def _nba_box_score(player: str, pts: float) -> dict[str, Any]:
                 }
             ]
         }
+    }
+
+
+def _soccer_final_game() -> SoccerFinalGame:
+    return SoccerFinalGame(
+        event_id="SOC-1",
+        date="2026-05-17",
+        home_team="Arsenal",
+        away_team="Chelsea",
+        home_score=2,
+        away_score=1,
+        status="final",
+        league="EPL",
+    )
+
+
+def _soccer_box_score(player: str, shots: float) -> dict[str, Any]:
+    return {
+        "rosters": [
+            {
+                "team": {"displayName": "Arsenal"},
+                "roster": [
+                    {
+                        "athlete": {"displayName": player},
+                        "stats": [
+                            {"name": "totalGoals", "value": 0.0},
+                            {"name": "goalAssists", "value": 0.0},
+                            {"name": "totalShots", "value": shots},
+                            {"name": "shotsOnTarget", "value": 1.0},
+                            {"name": "yellowCards", "value": 0.0},
+                            {"name": "redCards", "value": 0.0},
+                        ],
+                    }
+                ],
+            }
+        ]
     }
 
 
@@ -259,6 +298,70 @@ class TestBackfillDate:
         assert store.get_prop_outcomes("sandbox-prop-1") == []
         store.close()
 
+    def test_attaches_soccer_game_outcome_when_confirmed(self):
+        db = _tmp_db()
+        store = TraceStore(db_path=db)
+        store.persist(
+            _make_game_trace(
+                "sandbox-soccer-game",
+                league="EPL",
+                home_team="Arsenal",
+                away_team="Chelsea",
+                timestamp="2026-05-17T16:00:00Z",
+            )
+        )
+
+        counts = backfill.backfill_date(
+            store,
+            league="EPL",
+            d=date(2026, 5, 17),
+            confirm=lambda _desc: "y",
+            scoreboard_fetcher=lambda _l, _d: [_soccer_final_game()],
+            box_score_fetcher=lambda _l, _e: {},
+        )
+        assert counts["game_attached"] == 1
+        row = store.conn.execute(
+            "SELECT source, home_score, away_score, result FROM outcomes WHERE trace_id = ?",
+            ("sandbox-soccer-game",),
+        ).fetchone()
+        assert row["source"] == "manual:espn_boxscore_20260517"
+        assert row["home_score"] == 2
+        assert row["away_score"] == 1
+        assert row["result"] == "home_win"
+        store.close()
+
+    def test_attaches_soccer_prop_outcome_when_confirmed(self):
+        db = _tmp_db()
+        store = TraceStore(db_path=db)
+        store.persist(
+            _make_prop_trace(
+                "sandbox-soccer-prop",
+                league="EPL",
+                home_team="Arsenal",
+                away_team="Chelsea",
+                player_name="Bukayo Saka",
+                prop_type="shots",
+                line=2.5,
+            )
+        )
+
+        counts = backfill.backfill_date(
+            store,
+            league="EPL",
+            d=date(2026, 5, 17),
+            confirm=lambda _desc: "y",
+            scoreboard_fetcher=lambda _l, _d: [_soccer_final_game()],
+            box_score_fetcher=lambda _l, _e: _soccer_box_score("Bukayo Saka", 3),
+        )
+        assert counts["prop_attached"] == 1
+        rows = store.get_prop_outcomes("sandbox-soccer-prop")
+        assert len(rows) == 1
+        assert rows[0]["stat_type"] == "shots"
+        assert rows[0]["stat_value"] == 3.0
+        assert rows[0]["result"] == "win"
+        assert rows[0]["source"] == "manual:espn_boxscore_20260517"
+        store.close()
+
 
 class TestBackfillSingleTrace:
     def test_legacy_prop_without_game_identity_can_be_pinned(self):
@@ -308,4 +411,3 @@ class TestBackfillSingleTrace:
         assert counts["prop_attached"] == 0
         assert counts["game_attached"] == 0
         store.close()
-

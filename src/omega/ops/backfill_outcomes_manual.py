@@ -13,6 +13,7 @@ Two modes:
 
 1. **Date-window mode** (default):
        omega-backfill-outcomes-manual --date 2026-05-17 --league NBA
+       omega-backfill-outcomes-manual --date 2026-05-17 --league EPL
 
    Fetches the ESPN scoreboard + per-game box scores once, then walks each
    ungraded trace whose game_date (or trace timestamp, for legacy game-only
@@ -48,18 +49,21 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from omega.integrations import espn_mlb, espn_nba  # noqa: E402
+from omega.integrations import espn_mlb, espn_nba, espn_wnba  # noqa: E402
 from omega.integrations.espn_boxscore import (  # noqa: E402
     fetch_box_score,
     normalize_player_name,
     parse_box_score,
     supported_prop_type,
 )
+from omega.integrations.espn_soccer import SOCCER_LEAGUE_SLUGS  # noqa: E402
+from omega.integrations.espn_soccer import canonical_team as _soccer_canonical  # noqa: E402
+from omega.integrations.espn_soccer import fetch_scoreboard as _soccer_scoreboard  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 logger = logging.getLogger("backfill_outcomes_manual")
 
-_SUPPORTED_LEAGUES = ("NBA", "MLB")
+_SUPPORTED_LEAGUES = ("NBA", "WNBA", "MLB") + tuple(SOCCER_LEAGUE_SLUGS.keys())
 
 # Confirmation callback: takes a description and returns "y" | "n" | "q".
 ConfirmFn = Callable[[str], str]
@@ -83,9 +87,15 @@ def _canonical_pair(league: str, home: str, away: str) -> tuple[str, str] | None
     if league == "NBA":
         c_home = espn_nba.canonical_team(home)
         c_away = espn_nba.canonical_team(away)
+    elif league == "WNBA":
+        c_home = espn_wnba.canonical_team(home)
+        c_away = espn_wnba.canonical_team(away)
     elif league == "MLB":
         c_home = espn_mlb.canonical_team(home)
         c_away = espn_mlb.canonical_team(away)
+    elif league in SOCCER_LEAGUE_SLUGS:
+        c_home = _soccer_canonical(home)
+        c_away = _soccer_canonical(away)
     else:
         return None
     if not (c_home and c_away):
@@ -96,8 +106,12 @@ def _canonical_pair(league: str, home: str, away: str) -> tuple[str, str] | None
 def _scoreboard_for(league: str, d: date):
     if league == "NBA":
         return espn_nba.fetch_scoreboard(d.isoformat())
+    if league == "WNBA":
+        return espn_wnba.fetch_scoreboard(d.isoformat())
     if league == "MLB":
         return espn_mlb.fetch_scoreboard(d.isoformat())
+    if league in SOCCER_LEAGUE_SLUGS:
+        return _soccer_scoreboard(d.isoformat(), league)
     return []
 
 
@@ -541,8 +555,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
 
 

@@ -25,6 +25,7 @@ Usage:
     omega-fetch-outcomes-props
     omega-fetch-outcomes-props --since 2026-05-17 --until 2026-05-17
     omega-fetch-outcomes-props --league NBA --dry-run
+    omega-fetch-outcomes-props --league EPL
 
 Exit codes:
     0 â€” completed (may have unmatched; see log)
@@ -186,7 +187,10 @@ def main(
     the live ESPN fetchers are used.
     """
     parser = argparse.ArgumentParser(
-        description="Attach ESPN box-score player stats to NBA/WNBA/MLB/soccer prop traces"
+        description=(
+            "Attach ESPN box-score player stats to NBA/WNBA/MLB/supported-soccer "
+            "prop traces"
+        )
     )
     parser.add_argument(
         "--since", default="yesterday", help="Start date (YYYY-MM-DD | today | yesterday)"
@@ -453,7 +457,6 @@ def main(
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 
 

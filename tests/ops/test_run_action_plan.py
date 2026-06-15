@@ -50,7 +50,7 @@ def test_new_deterministic_actions_validate_to_expected_commands():
                 "type": "settle_bets",
                 "args": {"league": "nba", "provenance": "user_confirmed"},
             },
-            {"type": "fetch_outcomes", "args": {"leagues": ["nba", "nhl"]}},
+            {"type": "fetch_outcomes", "args": {"leagues": ["soccer", "props"]}},
         ],
     }
 
@@ -78,7 +78,7 @@ def test_new_deterministic_actions_validate_to_expected_commands():
         "--apply",
     ]
     assert _script_name(cmds["fetch_outcomes"]) == "omega.ops.fetch_outcomes_all"
-    assert cmds["fetch_outcomes"][-3:] == ["--leagues", "nba", "nhl"]
+    assert cmds["fetch_outcomes"][-3:] == ["--leagues", "soccer", "props"]
 
 
 @pytest.mark.parametrize(

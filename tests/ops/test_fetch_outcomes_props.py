@@ -14,6 +14,7 @@ Covers:
 
 from __future__ import annotations
 
+import logging
 import sys
 import tempfile
 from datetime import date
@@ -30,7 +31,10 @@ if str(_SCRIPTS) not in sys.path:
 import fetch_outcomes_props  # type: ignore  # noqa: E402
 
 from omega.integrations.espn_nba import FinalGame  # noqa: E402
+from omega.integrations.espn_soccer import FinalGame as SoccerFinalGame  # noqa: E402
 from omega.integrations.espn_wnba import FinalGame as WNBAFinalGame  # noqa: E402
+from omega.trace.ledger_bet import BetProvenance, LedgerBet, LedgerStatus  # noqa: E402
+from omega.trace.ledger_settlement import settle_pending_ledger  # noqa: E402
 from omega.trace.store import TraceStore  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -156,6 +160,38 @@ def _nba_pts_payload(player: str, pts: float) -> dict[str, Any]:
                 }
             ]
         }
+    }
+
+
+def _soccer_roster_payload(
+    player: str,
+    *,
+    goals: float = 0.0,
+    assists: float = 0.0,
+    shots: float = 3.0,
+    shots_on_target: float = 1.0,
+    yellow_cards: float = 0.0,
+    red_cards: float = 0.0,
+) -> dict[str, Any]:
+    return {
+        "rosters": [
+            {
+                "team": {"displayName": "Arsenal"},
+                "roster": [
+                    {
+                        "athlete": {"displayName": player},
+                        "stats": [
+                            {"name": "totalGoals", "value": goals},
+                            {"name": "goalAssists", "value": assists},
+                            {"name": "totalShots", "value": shots},
+                            {"name": "shotsOnTarget", "value": shots_on_target},
+                            {"name": "yellowCards", "value": yellow_cards},
+                            {"name": "redCards", "value": red_cards},
+                        ],
+                    }
+                ],
+            }
+        ]
     }
 
 
@@ -397,6 +433,157 @@ class TestFetchOutcomesPropsWNBA:
         store.close()
 
 
+class TestFetchOutcomesPropsSoccer:
+    def test_grades_a_soccer_prop_trace(self):
+        db = _tmp_store_path()
+        store = TraceStore(db_path=db)
+        store.persist(
+            _make_prop_trace(
+                "sandbox-soccer-prop-1",
+                league="EPL",
+                player_name="Bukayo Saka",
+                prop_type="shots",
+                line=2.5,
+                home_team="Arsenal",
+                away_team="Chelsea",
+                recommendation="over",
+            )
+        )
+        store.close()
+
+        games = [
+            SoccerFinalGame(
+                event_id="SOC-1",
+                date="2026-05-17",
+                home_team="Arsenal",
+                away_team="Chelsea",
+                home_score=2,
+                away_score=1,
+                status="final",
+                league="EPL",
+            )
+        ]
+        sb = _fake_scoreboard_factory({("EPL", "2026-05-17"): games})
+        bs = _fake_box_score_factory({"SOC-1": _soccer_roster_payload("Bukayo Saka", shots=3)})
+
+        rc = fetch_outcomes_props.main(
+            ["--since", "2026-05-17", "--league", "EPL", "--db", db],
+            scoreboard_fetcher=sb,
+            box_score_fetcher=bs,
+        )
+        assert rc == 0
+
+        store = TraceStore(db_path=db)
+        rows = store.get_prop_outcomes("sandbox-soccer-prop-1")
+        assert len(rows) == 1
+        assert rows[0]["stat_type"] == "shots"
+        assert rows[0]["stat_value"] == 3.0
+        assert rows[0]["line"] == 2.5
+        assert rows[0]["side"] == "over"
+        assert rows[0]["result"] == "win"
+        assert rows[0]["source"] == "api:espn_boxscore"
+        store.close()
+
+    def test_soccer_prop_outcome_settles_user_confirmed_ledger_row(self):
+        db = _tmp_store_path()
+        store = TraceStore(db_path=db)
+        store.persist(
+            _make_prop_trace(
+                "sandbox-soccer-ledger",
+                league="EPL",
+                player_name="Bukayo Saka",
+                prop_type="shots",
+                line=2.5,
+                home_team="Arsenal",
+                away_team="Chelsea",
+                recommendation="over",
+            )
+        )
+        store.record_ledger_bet(
+            LedgerBet(
+                ledger_id="soccer-ledger-1",
+                trace_id="sandbox-soccer-ledger",
+                bet_date="2026-05-17",
+                league="EPL",
+                sport="soccer",
+                matchup="Chelsea @ Arsenal",
+                market="player_prop:shots",
+                bookmaker="betmgm",
+                selection="Bukayo Saka Over 2.5 shots",
+                selection_descriptor="bukayo_saka_over_2.5_shots",
+                line=2.5,
+                odds=-110,
+                stake_amount=25.0,
+                status=LedgerStatus.PENDING,
+                provenance=BetProvenance.USER_CONFIRMED,
+                decision_timestamp="2026-05-17T12:00:00Z",
+            )
+        )
+        store.close()
+
+        games = [
+            SoccerFinalGame(
+                event_id="SOC-1",
+                date="2026-05-17",
+                home_team="Arsenal",
+                away_team="Chelsea",
+                home_score=2,
+                away_score=1,
+                status="final",
+                league="EPL",
+            )
+        ]
+        sb = _fake_scoreboard_factory({("EPL", "2026-05-17"): games})
+        bs = _fake_box_score_factory({"SOC-1": _soccer_roster_payload("Bukayo Saka", shots=3)})
+        rc = fetch_outcomes_props.main(
+            ["--since", "2026-05-17", "--league", "EPL", "--db", db],
+            scoreboard_fetcher=sb,
+            box_score_fetcher=bs,
+        )
+        assert rc == 0
+
+        store = TraceStore(db_path=db)
+        summary = settle_pending_ledger(store, apply=True, league="EPL")
+        assert summary.pending_scanned == 1
+        assert summary.settled["won"] == 1
+        row = store.get_ledger_bets("sandbox-soccer-ledger")[0]
+        assert row["status"] == "won"
+        assert row["net_pnl"] == 22.73
+        store.close()
+
+    def test_unsupported_soccer_prop_type_is_reported_as_unsupported(self, caplog):
+        db = _tmp_store_path()
+        store = TraceStore(db_path=db)
+        store.persist(
+            _make_prop_trace(
+                "sandbox-soccer-unsup",
+                league="EPL",
+                player_name="Bukayo Saka",
+                prop_type="offsides",
+                line=0.5,
+                home_team="Arsenal",
+                away_team="Chelsea",
+            )
+        )
+        store.close()
+
+        with caplog.at_level(logging.WARNING):
+            rc = fetch_outcomes_props.main(
+                ["--since", "2026-05-17", "--league", "EPL", "--db", db],
+                scoreboard_fetcher=_fake_scoreboard_factory({}),
+                box_score_fetcher=_fake_box_score_factory({}),
+            )
+        assert rc == 0
+
+        text = "\n".join(record.message for record in caplog.records)
+        assert "sandbox-soccer-unsup (EPL offsides)" in text
+        assert "Prop types not yet supported by box-score parser" in text
+        assert "missing game identity" not in text
+        store = TraceStore(db_path=db)
+        assert store.get_prop_outcomes("sandbox-soccer-unsup") == []
+        store.close()
+
+
 class TestFetchOutcomesPropsSkips:
     def test_missing_game_identity_is_skipped(self):
         """Prop trace lacking home_team/away_team/game_date must NOT be graded."""
@@ -562,4 +749,3 @@ class TestFetchOutcomesPropsSkips:
         # player_name on the row matches the trace's spelling, not ESPN's
         assert rows[0]["player_name"] == "Luka Doncic"
         store.close()
-

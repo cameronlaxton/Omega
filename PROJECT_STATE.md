@@ -119,14 +119,19 @@ Soccer is now wired end-to-end at the game plane:
 - 3-way result: draws are graded by `TraceStore.attach_outcome` (equal scores → `draw`)
   and calibrated via `CalibrationFitter.extract_draw_pairs`.
 
-Still open for soccer: player-prop grading (ESPN soccer boxscore not yet parsed, so soccer
-is **not** in `fetch_outcomes_props.py::_SUPPORTED_LEAGUES`), and a first fitted soccer
-calibration profile once eligible graded traces accumulate.
+Soccer player-prop grading is partially wired for ESPN-summary-backed leagues through
+`fetch_outcomes_props.py`: EPL/PREMIER_LEAGUE, LA_LIGA/LALIGA, BUNDESLIGA, SERIE_A,
+LIGUE_1, CHAMPIONS_LEAGUE, LIGA_MX, MLS, WORLD_CUP, and FIFA_WORLD_CUP_2026 can
+attach `goals`, `assists`, `shots`, `shots_on_target`, `yellow_cards`, and `red_cards`
+from ESPN roster stats. Still open for soccer: unsupported competitions without ESPN
+slug mappings, soccer player-prop odds-resolution/provider-market mappings, and a first
+fitted soccer calibration profile once eligible graded traces accumulate.
 
 ## Deferred to Phase 7
 
 - Tennis multi-league expansion.
-- Soccer player-prop grading (game plane is in progress above).
+- Expanded soccer player-prop source coverage and odds-resolution mappings beyond the
+  ESPN-summary-backed grading subset above.
 - Portfolio/risk guard (simple exposure caps can be documented as temporary operator rules for now).
 
 ## Superseded / Historical Docs
