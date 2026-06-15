@@ -52,6 +52,7 @@ from omega.trace.schema import (
     SCHEMA_V13,
     SCHEMA_V16,
     SCHEMA_V17,
+    SCHEMA_V18,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
@@ -703,6 +704,13 @@ class TraceStore:
         self._record_version(
             17,
             "Phase 7 M3: priors_tennis + priors_tennis_pressure tables (tennis dynamic priors)",
+        )
+
+        # V18: NFL dispersion priors (NB k with hierarchical-shrinkage provenance).
+        self.conn.executescript(SCHEMA_V18)
+        self._record_version(
+            18,
+            "Phase 7 M4: priors_nfl_dispersion table (NFL NB dispersion k + shrinkage source)",
         )
 
     def _existing_schema_version(self) -> int:

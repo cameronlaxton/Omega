@@ -376,6 +376,98 @@ def get_pressure_coefficients(
 
 
 # ---------------------------------------------------------------------------
+# priors_nfl_dispersion
+# ---------------------------------------------------------------------------
+
+
+class NflDispersionPrior(BaseModel):
+    """One fitted NB dispersion ``k`` for an NFL (entity, stat_type, season).
+
+    ``nb_k_source`` (``player`` | ``position_group`` | ``league``) and
+    ``nb_k_shrinkage_weight`` record whether the value reflects genuine player
+    signal or the hierarchical group prior, so small-sample tail edges stay
+    auditable. The prop NB backend reads only ``nb_dispersion_k``.
+    """
+
+    entity: str
+    stat_type: str
+    season: str
+    nb_dispersion_k: float
+    nb_k_shrinkage_weight: float
+    nb_k_source: str
+    n_observations: int
+    as_of_date: str
+    position_group: str | None = None
+
+
+def upsert_nfl_dispersion(store: TraceStore, prior: NflDispersionPrior) -> None:
+    """Insert or refresh one (entity, stat_type, season, as_of_date) fit row."""
+    store.conn.execute(
+        """INSERT INTO priors_nfl_dispersion
+               (entity, stat_type, season, position_group, nb_dispersion_k,
+                nb_k_shrinkage_weight, nb_k_source, n_observations, as_of_date,
+                last_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT (entity, stat_type, season, as_of_date) DO UPDATE SET
+               position_group = excluded.position_group,
+               nb_dispersion_k = excluded.nb_dispersion_k,
+               nb_k_shrinkage_weight = excluded.nb_k_shrinkage_weight,
+               nb_k_source = excluded.nb_k_source,
+               n_observations = excluded.n_observations,
+               last_updated = datetime('now')""",
+        (
+            prior.entity,
+            prior.stat_type,
+            prior.season,
+            prior.position_group,
+            prior.nb_dispersion_k,
+            prior.nb_k_shrinkage_weight,
+            prior.nb_k_source,
+            prior.n_observations,
+            prior.as_of_date,
+        ),
+    )
+    store.conn.commit()
+
+
+def get_nfl_dispersion(
+    store: TraceStore,
+    entity: str,
+    stat_type: str,
+    season: str | None = None,
+) -> NflDispersionPrior | None:
+    """Return the most recent NB dispersion fit for an entity/stat, or None.
+
+    With ``season=None`` the latest fit across seasons wins. Returning None lets
+    the prop backend fall back to a caller-supplied ``nb_dispersion_k`` (or fail
+    closed), never to a fabricated value.
+    """
+    query = """SELECT entity, stat_type, season, position_group, nb_dispersion_k,
+                      nb_k_shrinkage_weight, nb_k_source, n_observations, as_of_date
+               FROM priors_nfl_dispersion
+               WHERE entity = ? AND stat_type = ?"""
+    params: list = [entity, stat_type]
+    if season is not None:
+        query += " AND season = ?"
+        params.append(season)
+    query += " ORDER BY as_of_date DESC LIMIT 1"
+    row = store.conn.execute(query, params).fetchone()
+    if row is None:
+        return None
+    return NflDispersionPrior(
+        entity=row[0],
+        stat_type=row[1],
+        season=row[2],
+        position_group=row[3],
+        nb_dispersion_k=row[4],
+        nb_k_shrinkage_weight=row[5],
+        nb_k_source=row[6],
+        n_observations=row[7],
+        as_of_date=row[8],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Gatherer injection: league config -> production prior -> prior_payload
 # ---------------------------------------------------------------------------
 

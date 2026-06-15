@@ -2589,3 +2589,7 @@ from omega.core.simulation.tennis_prop_serve import (  # noqa: E402
 )
 
 register_prop_backend("tennis_prop_serve", TennisServePropBackend())
+
+from omega.core.simulation.nfl_neg_binom import NflSimulationBackend  # noqa: E402
+
+register_game_backend("nfl_neg_binom", NflSimulationBackend())
