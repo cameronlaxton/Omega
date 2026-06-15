@@ -2,7 +2,7 @@
 
 Use this when calling `omega-resolve-odds --kind prop` or supplying `prop_type` in an `analyze()` request. This documents the correct key values so you don't hit the silent `status: "unavailable"` from a wrong key (Issue #2 from `docs/phase6/engine_cowork_issues_2026-05-18.md`).
 
-Source of truth: `omega/integrations/espn_boxscore.py` (NBA_STAT_KEYS, MLB_BATTING_KEYS, MLB_PITCHING_KEYS).
+Source of truth: `omega/integrations/espn_boxscore.py` (NBA_STAT_KEYS, WNBA_STAT_KEYS, MLB_BATTING_KEYS, MLB_PITCHING_KEYS, SOCCER_STAT_KEYS).
 
 ---
 
@@ -83,6 +83,39 @@ Source of truth: `omega/integrations/espn_boxscore.py` (NBA_STAT_KEYS, MLB_BATTI
 
 ---
 
+## Soccer Prop Types
+
+Soccer prop grading is supported for ESPN-summary-backed leagues in
+`SOCCER_LEAGUE_SLUGS` (`EPL`/`PREMIER_LEAGUE`, `LA_LIGA`/`LALIGA`,
+`BUNDESLIGA`, `SERIE_A`, `LIGUE_1`, `CHAMPIONS_LEAGUE`, `LIGA_MX`, `MLS`,
+`WORLD_CUP`, and `FIFA_WORLD_CUP_2026`). Other soccer competitions stay
+manual/pending until an outcome source is mapped.
+
+| prop_type | ESPN roster stat | Notes |
+|---|---|---|
+| `goals` | totalGoals | Player goals |
+| `assists` | goalAssists | Player assists |
+| `shots` | totalShots | Total shots |
+| `shots_on_target` | shotsOnTarget | Shots on target |
+| `yellow_cards` | yellowCards | Yellow cards |
+| `red_cards` | redCards | Red cards |
+
+**Context fields by soccer prop_type:**
+
+| prop_type | required context fields |
+|---|---|
+| `goals` | `goals_mean`, `goals_std` |
+| `assists` | `assists_mean`, `assists_std` |
+| `shots` | `shots_mean`, `shots_std` |
+| `shots_on_target` | `shots_on_target_mean`, `shots_on_target_std` |
+| `yellow_cards` | `yellow_cards_mean`, `yellow_cards_std` |
+| `red_cards` | `red_cards_mean`, `red_cards_std` |
+
+Soccer prop odds resolution is not wired in `PROP_MARKET_MAP` in this pass.
+Use these keys only when explicit line/odds are already present on the trace.
+
+---
+
 ## Free tier vs. paid tier (The Odds API)
 
 `omega-resolve-odds` uses `OMEGA_ODDS_API_KEY`. Some prop markets are only available on paid tiers:
@@ -95,6 +128,10 @@ Source of truth: `omega/integrations/espn_boxscore.py` (NBA_STAT_KEYS, MLB_BATTI
 | Player props (NBA pts, reb, ast) | ❌ | ✅ |
 | Player props (MLB hitting/pitching) | ❌ | ✅ |
 | Historical closing lines | ❌ | ✅ |
+
+Soccer player props are not wired in Omega's Odds API provider map in this pass;
+verify provider market keys in a separate odds-mapping pass before using
+`omega-resolve-odds --kind prop` for soccer.
 
 If `resolve_odds.py` returns `status: "unavailable"` for a prop, the cause is either (a) wrong `prop_type` key (check table above) or (b) the free-tier key doesn't include player prop markets.
 

@@ -220,7 +220,7 @@ def apply_calibration(
 
     # Profile-driven path (when league is provided)
     if league is not None:
-        context_slice = _derive_context_slice(context_hints)
+        context_slice = _derive_context_slice(context_hints, league)
         profile = _get_active_profile(league, context_slice=context_slice, market=market)
         if profile is not None:
             result = calibrate_probability(raw_prob, method=profile.method, **profile.params)
@@ -257,7 +257,7 @@ def apply_calibration_audited(
       calibrated_prob: float
     """
     raw = max(0.0, min(1.0, raw_prob))
-    context_slice = _derive_context_slice(context_hints) if context_hints else None
+    context_slice = _derive_context_slice(context_hints, league) if context_hints else None
 
     if league is not None:
         profile = _get_active_profile(league, context_slice=context_slice, market=market)
@@ -311,20 +311,19 @@ def apply_calibration_audited(
     }
 
 
-def _derive_context_slice(context_hints: dict[str, Any] | None) -> str | None:
-    """Derive a calibration context_slice string from context hints.
-
-    Returns None (base profile) when no recognized context signal is present.
-    Playoff takes precedence over B2B when both are set.
-    """
+def _derive_context_slice(context_hints: dict[str, Any] | None, league: str | None = None) -> str | None:
+    """Derive a calibration context_slice string from context hints using the canonical resolution."""
     if not context_hints:
         return None
-    if context_hints.get("is_playoff"):
-        return "playoff"
-    rest = context_hints.get("rest_days")
-    if rest is not None and int(rest) == 0:
-        return "back_to_back"
-    return None
+        
+    from omega.core.calibration.context_slices import context_slice_for_trace
+    from omega.core.calibration.sport_family import sport_family_for_league
+    
+    # Pack hints into a dummy trace structure to reuse the canonical extractor
+    dummy_trace = {"context_hints": context_hints}
+    sport_family = sport_family_for_league(league) if league else None
+    
+    return context_slice_for_trace(dummy_trace, sport_family=sport_family)
 
 
 def _get_active_profile(league: str, context_slice: str | None = None, market: str = "game"):

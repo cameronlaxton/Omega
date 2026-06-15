@@ -39,6 +39,10 @@ class NegBinomPropBackend:
         if not np.isfinite(k) or k <= 0:
             raise ValueError("prior_payload.nb_dispersion_k must be a finite positive number")
 
+        if request.dispersion is not None and request.dispersion.variance_multiplier != 1.0:
+            k /= request.dispersion.variance_multiplier
+            request.dispersion.applied_to.append("nb_dispersion_k")
+
         denom = k + mean
         if denom <= 0:
             raise ValueError("negative binomial dispersion and mean produce an invalid denominator")

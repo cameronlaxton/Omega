@@ -160,12 +160,9 @@ class CalibrationRegistry:
     def gating_incumbent(self, candidate: CalibrationProfile) -> CalibrationProfile | None:
         """The production profile a candidate is gated against.
 
-        The exact ``(league, market, context_slice)`` production profile, else
-        — for a sliced candidate — the base (``context_slice=None``) production
-        it would shadow at selection time. Never crosses markets, so a prop
-        candidate is never compared against the game production. This mirrors the
-        row :meth:`_apply_promotion` would archive (with the slice->base shadow
-        extension used only for gating).
+        The exact ``(league, market, context_slice)`` production profile.
+        Never crosses markets, so a prop candidate is never compared against the game production.
+        Slice candidates never gate against base.
         """
         market = candidate.market or "game"
         same_market = [
@@ -178,10 +175,6 @@ class CalibrationRegistry:
         for p in same_market:
             if p.context_slice == candidate.context_slice:
                 return p
-        if candidate.context_slice is not None:
-            for p in same_market:
-                if p.context_slice is None:
-                    return p
         return None
 
     def promote(
