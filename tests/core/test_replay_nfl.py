@@ -12,7 +12,6 @@ import hashlib
 import pytest
 
 from omega.core.contracts.schemas import GameAnalysisRequest, MarketQuote, OddsInput
-
 from omega.core.contracts.service import analyze_game
 
 # (home, away, home_off, home_def, away_off, away_def)
@@ -61,9 +60,13 @@ def test_replay_is_bit_identical(home, away, hoff, hdef, aoff, adef):
     second = analyze_game(_request(home, away, hoff, hdef, aoff, adef, seed=seed))
 
     assert first.status == "success"
+    assert second.status == "success"
     assert first.simulation.simulation_backend == "nfl_neg_binom"
+    assert second.simulation.simulation_backend == "nfl_neg_binom"
     assert first.simulation.component_version == "nfl_nb_v1"
+    assert second.simulation.component_version == "nfl_nb_v1"
     assert first.simulation.draw_prob in (0.0, None)
+    assert second.simulation.draw_prob in (0.0, None)
 
     for field in (
         "home_win_prob",
@@ -78,6 +81,10 @@ def test_replay_is_bit_identical(home, away, hoff, hdef, aoff, adef):
     # Teaser edges priced and reproducible.
     teaser_sides = {e.side for e in first.edges if e.market == "teaser"}
     assert {"home", "away", "over", "under"} <= teaser_sides
+    second_teaser_sides = {e.side for e in second.edges if e.market == "teaser"}
+    assert {"home", "away", "over", "under"} <= second_teaser_sides
+    assert all(e.confidence_tier == "Pass" for e in first.edges if e.market == "teaser")
+    assert all(e.confidence_tier == "Pass" for e in second.edges if e.market == "teaser")
     assert len(first.edges) == len(second.edges)
     for a, b in zip(first.edges, second.edges):
         assert (a.market, a.side, a.edge_pct, a.ev_pct, a.line) == (

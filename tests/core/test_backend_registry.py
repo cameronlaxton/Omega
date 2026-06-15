@@ -278,6 +278,9 @@ def test_analyze_prop_routes_nfl_stat_alias_to_neg_binom():
     resp = analyze_player_prop(req)
     assert resp.status == "success"
     assert resp.distribution_type == "negative_binomial"
+    params = resp.simulation_distributions[0]["distribution_params"]
+    assert params["mu"] == pytest.approx(90.0)
+    assert params["k"] == pytest.approx(10.0)
 
 
 def test_neg_binom_requires_valid_dispersion_k():
@@ -364,7 +367,9 @@ def test_game_request_carries_prior_payload():
     from omega.core.contracts.schemas import GameAnalysisRequest
 
     req = GameAnalysisRequest(
-        home_team="A", away_team="B", league="FIFA_WORLD_CUP_2026",
+        home_team="A",
+        away_team="B",
+        league="FIFA_WORLD_CUP_2026",
         prior_payload={"rho": -0.13},
         game_context={"is_playoff": False, "rest_days": 2},
     )

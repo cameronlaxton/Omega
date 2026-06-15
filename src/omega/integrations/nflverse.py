@@ -189,7 +189,8 @@ def _emit_source_canonical_warning(
     }
     try:
         append_audit_events(Path(session_path), [event])
-    except Exception:  # pragma: no cover - audit write must not mask ETL work
+    except Exception as exc:  # pragma: no cover - audit write must not mask ETL work
+        logger.debug("failed to append nflverse source-canonical audit event: %s", exc)
         pass
 
 

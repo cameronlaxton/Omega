@@ -17,6 +17,7 @@ from omega.core.simulation.backends import PropSimulationInput
 from omega.core.simulation.prop_neg_binom import NegBinomPropBackend
 from omega.ops.fit_nfl_dispersion import (
     NB_K_SOURCE_GROUP,
+    NB_K_SOURCE_LEAGUE,
     NB_K_SOURCE_PLAYER,
     DispersionObservation,
     _mom_k,
@@ -59,6 +60,23 @@ def test_no_player_signal_falls_back_to_group():
     assert fit.k == pytest.approx(5.0)
     assert fit.weight == 0.0
     assert fit.source == NB_K_SOURCE_GROUP
+
+
+def test_no_player_or_group_signal_is_league_cold_start():
+    observations = [
+        DispersionObservation("Cold WR", "receiving_yards", "WR", 12.0),
+        DispersionObservation("Cold WR", "receiving_yards", "WR", 12.0),
+        DispersionObservation("Other WR", "receiving_yards", "WR", 8.0),
+        DispersionObservation("Other WR", "receiving_yards", "WR", 8.0),
+    ]
+    rows = fit_dispersions(
+        observations,
+        season="2025",
+        as_of_date="2026-06-15",
+        league_default_k=4.0,
+    )
+    assert {r.nb_k_source for r in rows} == {NB_K_SOURCE_LEAGUE}
+    assert {r.nb_dispersion_k for r in rows} == {4.0}
 
 
 def test_fit_dispersions_classifies_by_sample_size():

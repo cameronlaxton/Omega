@@ -126,24 +126,26 @@ def fit_group_k(
     values_by_entity: dict[str, Sequence[float]],
     *,
     league_default_k: float = _DEFAULT_LEAGUE_K,
-) -> float:
+) -> tuple[float, bool]:
     """Group posterior ``k`` = mean of valid per-player MoM ``k`` in the group.
 
     Falls back to ``league_default_k`` when no player in the group has an
-    estimable over-dispersion signal.
+    estimable over-dispersion signal. Returns ``(k, used_group_data)`` so
+    downstream provenance can distinguish real group fits from league cold starts.
     """
     player_ks = [
         k for values in values_by_entity.values() if (k := _mom_k(values)) is not None
     ]
     if not player_ks:
-        return league_default_k
-    return sum(player_ks) / len(player_ks)
+        return league_default_k, False
+    return sum(player_ks) / len(player_ks), True
 
 
 def shrink_entity_k(
     player_values: Sequence[float],
     group_k: float,
     *,
+    group_k_from_data: bool = True,
     n0: float = _DEFAULT_N0,
 ) -> EntityDispersionFit:
     """Shrink one entity's MoM ``k`` toward ``group_k`` by ``w(n)=n/(n+n0)``.
@@ -156,8 +158,9 @@ def shrink_entity_k(
     weight = n / (n + n0) if (n + n0) > 0 else 0.0
     player_k = _mom_k(player_values)
     if player_k is None:
+        source = NB_K_SOURCE_GROUP if group_k_from_data else NB_K_SOURCE_LEAGUE
         return EntityDispersionFit(
-            k=group_k, weight=0.0, source=NB_K_SOURCE_GROUP, n_observations=n
+            k=group_k, weight=0.0, source=source, n_observations=n
         )
     shrunk = weight * player_k + (1.0 - weight) * group_k
     return EntityDispersionFit(
@@ -193,9 +196,11 @@ def fit_dispersions(
 
     rows: list[NflDispersionPrior] = []
     for (position_group, stat_type), values_by_entity in grouped.items():
-        group_k = fit_group_k(values_by_entity, league_default_k=league_default_k)
+        group_k, group_k_from_data = fit_group_k(
+            values_by_entity, league_default_k=league_default_k
+        )
         for entity, values in values_by_entity.items():
-            fit = shrink_entity_k(values, group_k, n0=n0)
+            fit = shrink_entity_k(values, group_k, group_k_from_data=group_k_from_data, n0=n0)
             rows.append(
                 NflDispersionPrior(
                     entity=entity,

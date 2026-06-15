@@ -126,11 +126,23 @@ def test_analyze_game_routes_to_nfl_backend_and_builds_teaser_edges():
     assert ("teaser", "under") in markets
     home_leg = next(e for e in resp.edges if e.market == "teaser" and e.side == "home")
     assert home_leg.line == pytest.approx(-2.5)
+    teaser_edges = [e for e in resp.edges if e.market == "teaser"]
+    assert teaser_edges
+    assert all(e.confidence_tier == "Pass" and e.recommended_units == 0.0 for e in teaser_edges)
+    assert resp.best_bet is None
 
 
 def test_analyze_game_teaser_edges_deterministic():
     first = analyze_game(_nfl_request())
     second = analyze_game(_nfl_request())
+    assert first.status == "success"
+    assert second.status == "success"
+    assert first.simulation.simulation_backend == "nfl_neg_binom"
+    assert second.simulation.simulation_backend == "nfl_neg_binom"
+    assert first.edges
+    assert second.edges
+    assert all(e.market == "teaser" for e in first.edges)
+    assert all(e.market == "teaser" for e in second.edges)
     assert len(first.edges) == len(second.edges)
     for a, b in zip(first.edges, second.edges):
         assert (a.market, a.side, a.edge_pct, a.ev_pct) == (b.market, b.side, b.edge_pct, b.ev_pct)

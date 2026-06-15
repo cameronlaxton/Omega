@@ -16,6 +16,7 @@ These helpers only touch ``store.conn``; they add no state to ``TraceStore``.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -399,6 +400,20 @@ class NflDispersionPrior(BaseModel):
     as_of_date: str
     position_group: str | None = None
 
+    @field_validator("nb_dispersion_k")
+    @classmethod
+    def _validate_nb_dispersion_k(cls, value: float) -> float:
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("nb_dispersion_k must be finite and positive")
+        return value
+
+    @field_validator("nb_k_shrinkage_weight")
+    @classmethod
+    def _validate_nb_k_shrinkage_weight(cls, value: float) -> float:
+        if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+            raise ValueError("nb_k_shrinkage_weight must be finite and between 0 and 1")
+        return value
+
 
 def upsert_nfl_dispersion(store: TraceStore, prior: NflDispersionPrior) -> None:
     """Insert or refresh one (entity, stat_type, season, as_of_date) fit row."""
@@ -435,12 +450,14 @@ def get_nfl_dispersion(
     entity: str,
     stat_type: str,
     season: str | None = None,
+    as_of_date: str | None = None,
 ) -> NflDispersionPrior | None:
     """Return the most recent NB dispersion fit for an entity/stat, or None.
 
     With ``season=None`` the latest fit across seasons wins. Returning None lets
     the prop backend fall back to a caller-supplied ``nb_dispersion_k`` (or fail
-    closed), never to a fabricated value.
+    closed), never to a fabricated value. ``as_of_date`` bounds historical/replay
+    lookups to priors knowable on or before the request date.
     """
     query = """SELECT entity, stat_type, season, position_group, nb_dispersion_k,
                       nb_k_shrinkage_weight, nb_k_source, n_observations, as_of_date
@@ -450,6 +467,9 @@ def get_nfl_dispersion(
     if season is not None:
         query += " AND season = ?"
         params.append(season)
+    if as_of_date is not None:
+        query += " AND as_of_date <= ?"
+        params.append(as_of_date)
     query += " ORDER BY as_of_date DESC LIMIT 1"
     row = store.conn.execute(query, params).fetchone()
     if row is None:
@@ -750,6 +770,7 @@ def inject_prop_priors(
     league = str(payload.get("league") or "")
     player = str(payload.get("player_name") or "")
     stat = payload.get("prop_type")
+    request_as_of = str(payload.get("game_date") or "")[:10] or None
     if not league or not player or not isinstance(stat, str) or not stat:
         return payload, None
 
@@ -772,7 +793,9 @@ def inject_prop_priors(
         prior = None
         for lookup_player in lookup_players:
             for lookup_stat in lookup_stats:
-                prior = get_nfl_dispersion(store, lookup_player, lookup_stat)
+                prior = get_nfl_dispersion(
+                    store, lookup_player, lookup_stat, as_of_date=request_as_of
+                )
                 if prior is not None:
                     break
             if prior is not None:

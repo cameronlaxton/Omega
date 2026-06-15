@@ -29,8 +29,7 @@ from omega.core.betting.odds import american_to_decimal
 
 def _sub_lines(line: float) -> list[float]:
     """Split a quarter-ball line into its two component lines; else identity."""
-    quarter = round((line * 4) % 2)
-    if quarter:  # .25 or .75 fraction -> split into the two adjacent lines
+    if (line * 4) % 2 == 1.0:  # .25 or .75 fraction -> split into adjacent lines
         return [line - 0.25, line + 0.25]
     return [line]
 

@@ -99,7 +99,7 @@ class AmericanFootballEdgeConsumer:
                     calibration_audit=audit,
                     market="teaser",
                     line=line,
-                )
+                ).model_copy(update={"confidence_tier": "Pass", "recommended_units": 0.0})
             )
 
         return edges
