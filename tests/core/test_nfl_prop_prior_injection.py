@@ -71,6 +71,27 @@ def test_injects_fitted_dispersion_with_provenance():
         store.close()
 
 
+def test_injects_with_player_and_stat_aliases():
+    store = _tmp_store()
+    try:
+        _seed(store, entity="Patrick Mahomes", stat="passing_yards", k=6.25)
+        out, event = inject_prop_priors(
+            {
+                "league": "NFL",
+                "player_name": "Pat Mahomes",
+                "prop_type": "pass_yds",
+                "player_context": {"pass_yds_mean": 285.0, "pass_yds_std": 42.0},
+            },
+            store=store,
+        )
+        ctx = out["player_context"]
+        assert ctx["nb_dispersion_k"] == pytest.approx(6.25)
+        assert event is not None and event["status"] == "ok"
+        assert "Patrick Mahomes passing_yards" in event["notes"]
+    finally:
+        store.close()
+
+
 def test_warns_when_no_fitted_row():
     store = _tmp_store()
     try:

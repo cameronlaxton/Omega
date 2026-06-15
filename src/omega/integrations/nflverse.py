@@ -15,8 +15,9 @@ ETL standards (docs/phase7 Part 5B) are inherited from omega/integrations/_etl.p
   2. Every upstream row is validated against ``NflverseWeeklyStatRow`` at
      ingestion; a renamed/missing column raises ``SourceSchemaDriftError`` and the
      job fails loud rather than coercing it to ``None``.
-  3. Player names resolve through data/aliases/NFL.json before any observation is
-     emitted; unresolved players are excluded with a data_provenance warning.
+  3. Player names resolve through data/aliases/NFL.json when a mapping exists;
+     otherwise the nflverse display name is treated as source-canonical and
+     reported with a data_provenance warning during live loads.
 
 Only the three NB-routed weekly yardage stats are emitted today
 (``rushing_yards``/``receiving_yards``/``passing_yards`` — see
@@ -32,11 +33,14 @@ import logging
 import math
 import urllib.request
 from collections.abc import Callable
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
 from omega.integrations._etl import (
+    SourceSchemaDriftError,
     cached_fetch,
     load_alias_table,
     resolve_entities,
@@ -47,12 +51,12 @@ from omega.ops.fit_nfl_dispersion import DispersionObservation
 
 logger = logging.getLogger("omega.integrations.nflverse")
 
-# nflverse-data weekly player-stats Parquet release. Documented best-known path;
-# the operator should verify against the current release tag. A moved URL or
-# renamed column fails loud (ETL standards 1/2) rather than coercing silently.
-NFLVERSE_PLAYER_STATS_URL_TEMPLATE = (
+# nflverse-data weekly player-stats Parquet release. nflreadr documents this as
+# the current direct Parquet asset. It carries all seasons and is filtered after
+# the raw cached pull.
+NFLVERSE_PLAYER_STATS_URL = (
     "https://github.com/nflverse/nflverse-data/releases/download/"
-    "player_stats/player_stats_{season}.parquet"
+    "player_stats/player_stats.parquet"
 )
 
 _CACHE_TTL_SECONDS = 7 * 24 * 3600  # weekly refresh cadence
@@ -99,8 +103,8 @@ def _clean_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _download_player_stats(season: int | str, url_opener: Callable[..., Any]) -> Any:
-    """Download the nflverse weekly player-stats Parquet for *season*.
+def _download_player_stats(url_opener: Callable[..., Any]) -> Any:
+    """Download the aggregate nflverse weekly player-stats Parquet.
 
     Raw network fetch — guarded against replay mode. Wrapped by ``cached_fetch``
     in :func:`fetch_player_stats`, so within TTL this never runs.
@@ -108,11 +112,34 @@ def _download_player_stats(season: int | str, url_opener: Callable[..., Any]) ->
     import pandas as pd
 
     assert_not_replay_mode("nflverse player-stats fetch")
-    url = NFLVERSE_PLAYER_STATS_URL_TEMPLATE.format(season=season)
-    logger.info("fetching nflverse player stats: %s", url)
-    with url_opener(url, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
+    logger.info("fetching nflverse player stats: %s", NFLVERSE_PLAYER_STATS_URL)
+    with url_opener(
+        NFLVERSE_PLAYER_STATS_URL, timeout=_REQUEST_TIMEOUT_SECONDS
+    ) as resp:
         raw = resp.read()
     return pd.read_parquet(io.BytesIO(raw))
+
+
+def _filter_player_stats_season(df: Any, season: int | str) -> Any:
+    """Return only rows for *season*, failing loudly on drift or empty seasons."""
+    import pandas as pd
+
+    if "season" not in getattr(df, "columns", ()):
+        raise SourceSchemaDriftError("nflverse", "season: Field required")
+
+    season_int = int(season)
+    seasons = pd.to_numeric(df["season"], errors="coerce")
+    filtered = df.loc[seasons == season_int].copy()
+    if filtered.empty:
+        available = sorted({int(v) for v in seasons.dropna().unique()})
+        if available:
+            detail = f"; available seasons: {available[0]}-{available[-1]}"
+        else:
+            detail = "; no valid seasons found"
+        raise ValueError(
+            f"nflverse player_stats contains no rows for season {season}{detail}"
+        )
+    return filtered
 
 
 def fetch_player_stats(
@@ -121,15 +148,49 @@ def fetch_player_stats(
     cache_root: str | None = None,
     url_opener: Callable[..., Any] = urllib.request.urlopen,
 ) -> Any:
-    """Return the nflverse weekly player-stats DataFrame for *season*, cached."""
+    """Return the nflverse weekly player-stats DataFrame for *season*, cached.
+
+    The upstream asset is aggregate across seasons. The cache stores that raw
+    Parquet once, and this function filters to the requested season after the
+    cache read. A requested season absent from the aggregate raises rather than
+    fitting zero priors.
+    """
 
     @cached_fetch(
         "nflverse", ttl_seconds=_CACHE_TTL_SECONDS, fmt="parquet", cache_root=cache_root
     )
     def _fetch() -> Any:
-        return _download_player_stats(season, url_opener)
+        return _download_player_stats(url_opener)
 
-    return _fetch(cache_key=f"nfl_player_stats_{season}")
+    return _filter_player_stats_season(_fetch(cache_key="nfl_player_stats"), season)
+
+
+def _emit_source_canonical_warning(
+    session_path: str | Path | None,
+    *,
+    source: str,
+    unresolved: list[str],
+) -> None:
+    """Best-effort sidecar warning for names kept from nflverse itself."""
+    if session_path is None or not unresolved:
+        return
+
+    from omega.trace.session_sidecar import append_audit_events
+
+    event = {
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "event_type": "data_provenance",
+        "step": f"{source}:ingest",
+        "status": "warn",
+        "notes": (
+            f"kept {len(unresolved)} player name(s) as nflverse source-canonical "
+            f"display names because no alias entry existed: {unresolved}"
+        ),
+    }
+    try:
+        append_audit_events(Path(session_path), [event])
+    except Exception:  # pragma: no cover - audit write must not mask ETL work
+        pass
 
 
 def build_dispersion_observations(
@@ -138,6 +199,7 @@ def build_dispersion_observations(
     alias_table: dict[str, Any] | None = None,
     source: str = "nflverse",
     session_path: str | None = None,
+    source_canonical_fallback: bool = False,
 ) -> tuple[list[DispersionObservation], list[str]]:
     """Build NB-dispersion observations from nflverse weekly stat rows.
 
@@ -158,9 +220,21 @@ def build_dispersion_observations(
     unique_names = sorted({row.player_display_name for row in skill_rows})
 
     if alias_table.get("canonical"):
+        resolution_session_path = None if source_canonical_fallback else session_path
         resolved_map, unresolved = resolve_entities(
-            unique_names, alias_table, source=source, session_path=session_path
+            unique_names, alias_table, source=source, session_path=resolution_session_path
         )
+        if source_canonical_fallback and unresolved:
+            resolved_map.update({name: name for name in unresolved})
+            logger.warning(
+                "nflverse: kept %d player name(s) as source-canonical display names "
+                "because no alias entry existed",
+                len(unresolved),
+            )
+            _emit_source_canonical_warning(
+                session_path, source=source, unresolved=unresolved
+            )
+            unresolved = []
     else:  # no alias table -> normalize-only pass-through (matches wehoop)
         resolved_map = {name: name for name in unique_names}
         unresolved = []
@@ -205,7 +279,10 @@ def load_dispersion_observations(
     df = fetch_player_stats(season, cache_root=cache_root, url_opener=url_opener)
     rows = df.to_dict(orient="records")
     observations, unresolved = build_dispersion_observations(
-        rows, alias_table=alias_table, session_path=session_path
+        rows,
+        alias_table=alias_table,
+        session_path=session_path,
+        source_canonical_fallback=True,
     )
     if unresolved:
         logger.warning(

@@ -467,6 +467,25 @@ def get_nfl_dispersion(
     )
 
 
+def _nfl_prior_lookup_candidates(player: str, stat_type: str) -> tuple[list[str], list[str]]:
+    """Return player/stat candidates for NFL dispersion lookup.
+
+    The fitted table is keyed by nflverse display names and canonical stat-column
+    names. Request surfaces can still carry player aliases (``Pat Mahomes``) and
+    market aliases (``pass_yds``), so lookup tries canonicalized values first and
+    then the original strings for backward compatibility with older rows.
+    """
+    from omega.core.simulation.backends import canonical_prop_stat_type
+    from omega.integrations._etl import load_alias_table, resolve_entity
+
+    resolved_player = resolve_entity(player, load_alias_table("NFL")) or player
+    canonical_stat = canonical_prop_stat_type("NFL", stat_type)
+
+    players = list(dict.fromkeys([resolved_player, player]))
+    stats = list(dict.fromkeys([canonical_stat, stat_type]))
+    return players, stats
+
+
 # ---------------------------------------------------------------------------
 # Gatherer injection: league config -> production prior -> prior_payload
 # ---------------------------------------------------------------------------
@@ -657,7 +676,7 @@ class _PriorBuilder:
     """
 
     applies: Callable[[dict[str, Any]], bool]
-    build: Callable[[dict[str, Any], "TraceStore"], tuple[dict[str, Any], dict[str, Any] | None]]
+    build: Callable[[dict[str, Any], TraceStore], tuple[dict[str, Any], dict[str, Any] | None]]
 
 
 # Per-sport injection registry. A new sport (e.g. NFL NB-dispersion priors in
@@ -749,7 +768,15 @@ def inject_prop_priors(
 
         store = TraceStore()
     try:
-        prior = get_nfl_dispersion(store, player, stat)
+        lookup_players, lookup_stats = _nfl_prior_lookup_candidates(player, stat)
+        prior = None
+        for lookup_player in lookup_players:
+            for lookup_stat in lookup_stats:
+                prior = get_nfl_dispersion(store, lookup_player, lookup_stat)
+                if prior is not None:
+                    break
+            if prior is not None:
+                break
     finally:
         if own_store:
             store.close()
@@ -761,9 +788,10 @@ def inject_prop_priors(
             "step": "nfl_dispersion_prior:inject",
             "status": "warn",
             "notes": (
-                f"no fitted NB dispersion for {player!r} {stat!r}; backend will "
-                "derive k from the per-request projection std. Fit via "
-                "omega-fit-nfl-dispersion."
+                f"no fitted NB dispersion for {player!r} {stat!r} "
+                f"(lookup players={lookup_players!r}, stats={lookup_stats!r}); "
+                "backend will derive k from the per-request projection std. "
+                "Fit via omega-fit-nfl-dispersion."
             ),
         }
 
@@ -778,7 +806,10 @@ def inject_prop_priors(
         "event_type": "data_provenance",
         "step": "nfl_dispersion_prior:inject",
         "status": "ok",
-        "notes": f"injected NB dispersion for {player} {stat} ({prior.nb_k_source})",
+        "notes": (
+            f"injected NB dispersion for {player} {stat} from "
+            f"{prior.entity} {prior.stat_type} ({prior.nb_k_source})"
+        ),
         "outputs": {
             "nb_dispersion_k": prior.nb_dispersion_k,
             "nb_k_source": prior.nb_k_source,

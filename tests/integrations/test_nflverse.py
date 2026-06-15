@@ -89,14 +89,34 @@ def test_unresolved_player_excluded_when_alias_table_present():
 def test_fetch_served_from_cache_without_network(tmp_path):
     cache_dir = tmp_path / "nflverse"
     cache_dir.mkdir(parents=True)
-    df = pd.DataFrame([_row("Saquon Barkley", "RB", rush=95.0, rec=30.0)])
-    df.to_parquet(cache_dir / "nfl_player_stats_2025.parquet", index=False)
+    df = pd.DataFrame(
+        [
+            _row("Saquon Barkley", "RB", season=2025, rush=95.0, rec=30.0),
+            _row("Barry Sanders", "RB", season=1999, rush=110.0),
+        ]
+    )
+    df.to_parquet(cache_dir / "nfl_player_stats.parquet", index=False)
 
     def _never(*_a, **_kw):
         raise AssertionError("network fetch should not happen on a cache hit")
 
     out = nflverse.fetch_player_stats(2025, cache_root=str(tmp_path), url_opener=_never)
     assert len(out) == 1
+    assert set(out["season"]) == {2025}
+
+
+def test_fetch_empty_requested_season_fails_loud(tmp_path):
+    cache_dir = tmp_path / "nflverse"
+    cache_dir.mkdir(parents=True)
+    pd.DataFrame([_row("Barry Sanders", "RB", season=1999, rush=110.0)]).to_parquet(
+        cache_dir / "nfl_player_stats.parquet", index=False
+    )
+
+    def _never(*_a, **_kw):
+        raise AssertionError("cache hit expected")
+
+    with pytest.raises(ValueError, match="no rows for season 2025"):
+        nflverse.fetch_player_stats(2025, cache_root=str(tmp_path), url_opener=_never)
 
 
 def test_cold_fetch_blocked_in_replay_mode(tmp_path, monkeypatch):
@@ -117,7 +137,7 @@ def test_load_observations_end_to_end_feeds_fitter(tmp_path):
     ]
     cache_dir = tmp_path / "nflverse"
     cache_dir.mkdir(parents=True)
-    pd.DataFrame(rows).to_parquet(cache_dir / "nfl_player_stats_2025.parquet", index=False)
+    pd.DataFrame(rows).to_parquet(cache_dir / "nfl_player_stats.parquet", index=False)
 
     def _never(*_a, **_kw):
         raise AssertionError("cache hit expected")
@@ -136,3 +156,27 @@ def test_load_observations_end_to_end_feeds_fitter(tmp_path):
     assert jj.stat_type == "receiving_yards"
     assert jj.position_group == "WR"
     assert math.isfinite(jj.nb_dispersion_k)
+
+
+def test_live_loader_keeps_nflverse_names_when_alias_missing(tmp_path):
+    rows = [
+        _row("Pat Mahomes", "QB", season=2025, pas=305.0),
+        _row("Justin Jefferson", "WR", season=2025, rec=120.0),
+    ]
+    cache_dir = tmp_path / "nflverse"
+    cache_dir.mkdir(parents=True)
+    pd.DataFrame(rows).to_parquet(cache_dir / "nfl_player_stats.parquet", index=False)
+
+    def _never(*_a, **_kw):
+        raise AssertionError("cache hit expected")
+
+    observations = nflverse.load_dispersion_observations(
+        2025,
+        cache_root=str(tmp_path),
+        alias_table={
+            "canonical": ["Patrick Mahomes"],
+            "aliases": {"Pat Mahomes": "Patrick Mahomes"},
+        },
+        url_opener=_never,
+    )
+    assert {o.entity for o in observations} == {"Patrick Mahomes", "Justin Jefferson"}
