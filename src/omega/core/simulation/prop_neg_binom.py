@@ -1,5 +1,6 @@
 """omega.core.simulation.prop_neg_binom -- Negative Binomial sampler for over-dispersed prop targets."""
 
+import math
 from typing import Any
 
 import numpy as np
@@ -45,8 +46,12 @@ class NegBinomPropBackend:
         if not np.isfinite(p) or p <= 0 or p > 1:
             raise ValueError("negative binomial probability must be in (0, 1]")
 
-        samples = rng.negative_binomial(k, p, size=request.n_iter)
         market_line = request.line
+
+        if request.exact:
+            return self._run_exact(mean, k, p, market_line)
+
+        samples = rng.negative_binomial(k, p, size=request.n_iter)
 
         over_hits = (samples > market_line).sum()
         under_hits = (samples < market_line).sum()
@@ -69,4 +74,48 @@ class NegBinomPropBackend:
                 "p": float(p),
             },
             "samples": samples[:100].tolist(),
+        }
+
+    @staticmethod
+    def _run_exact(mean: float, k: float, p: float, market_line: float) -> dict[str, Any]:
+        """Exact over/under/push and percentiles from the negative-binomial CDF.
+
+        Evaluates the same distribution the MC path samples — ``over = P(X > line)``,
+        ``under = P(X < line)``, ``push = P(|X - line| < 0.5)`` — by summing the pmf,
+        and reports true distribution quantiles for p10/p50/p90. Zero sampling noise.
+        """
+        from omega.core.simulation import exact_eval
+
+        std = math.sqrt(mean + mean * mean / k)
+        max_count = max(int(math.ceil(mean + 15.0 * std)), int(market_line) + 5)
+        values, probs = exact_eval.negative_binomial_pmf(mean, k, max_count)
+
+        over_prob = float(probs[values > market_line].sum())
+        under_prob = float(probs[values < market_line].sum())
+        push_prob = float(probs[np.abs(values - market_line) < 0.5].sum())
+
+        exact_mean = float((values * probs).sum())
+        exact_std = float(math.sqrt(max(0.0, ((values - exact_mean) ** 2 * probs).sum())))
+        cum = np.cumsum(probs)
+
+        def _q(q: float) -> float:
+            idx = int(np.searchsorted(cum, q, side="left"))
+            return float(values[min(idx, values.size - 1)])
+
+        return {
+            "over_prob": over_prob,
+            "under_prob": under_prob,
+            "push_prob": push_prob,
+            "mean": exact_mean,
+            "std": exact_std,
+            "p10": _q(0.10),
+            "p50": _q(0.50),
+            "p90": _q(0.90),
+            "distribution_type": "negative_binomial_exact",
+            "distribution_params": {
+                "mu": mean,
+                "k": float(k),
+                "p": float(p),
+            },
+            "samples": [],
         }

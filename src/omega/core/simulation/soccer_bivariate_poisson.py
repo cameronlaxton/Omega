@@ -170,6 +170,16 @@ class SoccerPoissonBackend:
                 missing_requirements=["valid_rho_prior"],
             )
 
+        if request.exact:
+            return self._run_exact(
+                request,
+                league,
+                home_lambda,
+                away_lambda,
+                rho,
+                prior,
+            )
+
         rng = np.random.default_rng(request.seed)
         home_scores, away_scores = _dixon_coles_scores(
             home_lambda, away_lambda, rho, request.n_iterations, rng=rng
@@ -272,4 +282,117 @@ class SoccerPoissonBackend:
         )
         result["total_counts"] = _counts(totals)
         result["fh_total_counts"] = _counts(fh_totals)
+        return result
+
+    def _run_exact(
+        self,
+        request: GameSimulationInput,
+        league: str,
+        home_lambda: float,
+        away_lambda: float,
+        rho: float,
+        prior: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Exact (non-MC) evaluation of the Dixon-Coles joint.
+
+        Sums every market over the same Dixon-Coles grid the MC path samples, and
+        emits exact pmfs for the soccer-derivative rows/counts the edge layer
+        consumes (margin/total/first-half) — zero sampling noise. Markets and rows
+        mirror the MC ``run`` path; the equivalence is pinned by the exact-eval
+        parity tests.
+        """
+        from omega.core.simulation import exact_eval
+        from omega.core.simulation.engine import (
+            _SOCCER_DC_MAX_GOALS,
+            _analytic_distribution_row,
+            _build_team_score_result_exact_grid,
+            _context_hash,
+            _normalized_score_grid,
+        )
+
+        max_goals = _SOCCER_DC_MAX_GOALS
+        grid = _normalized_score_grid(home_lambda, away_lambda, rho, max_goals)
+        exact_version = self.component_version.removesuffix("_v1") + "_exact_v1"
+
+        result = _build_team_score_result_exact_grid(
+            request.home_team,
+            request.away_team,
+            league,
+            request.n_iterations,
+            grid,
+            home_lambda,
+            away_lambda,
+            rho,
+            max_goals,
+            home_context=request.home_context,
+            away_context=request.away_context,
+            archetype_name="soccer",
+            spread_home=request.spread_home,
+            over_under=request.over_under,
+            context_source="provided",
+            baseline_used=False,
+            seed=request.seed,
+            backend_name=self.backend_name + "_exact",
+            component_version=exact_version,
+        )
+
+        # Provenance (mirrors the MC path).
+        result["dc_rho"] = rho
+        if prior.get("rho_profile_id") is not None:
+            result["rho_profile_id"] = prior["rho_profile_id"]
+        if prior.get("rho_as_of_date") is not None:
+            result["rho_as_of_date"] = prior["rho_as_of_date"]
+
+        # Exact soccer-derivative rows + pmfs (consumed by soccer_derivatives.py).
+        ctx_hash = _context_hash(request.home_context, request.away_context)
+        dc_params = {
+            "source": "dixon_coles_joint_exact",
+            "home_lambda": round(home_lambda, 4),
+            "away_lambda": round(away_lambda, 4),
+            "rho": rho,
+        }
+        g = grid.shape[0]
+        home_marg = grid.sum(axis=1)
+        away_marg = grid.sum(axis=0)
+        hh, aa = np.indices((g, g))
+        flat = grid.ravel()
+        total_vals = np.arange(2 * (g - 1) + 1)
+        total_probs = np.zeros(2 * (g - 1) + 1)
+        np.add.at(total_probs, (hh + aa).ravel(), flat)
+
+        p_home_cs = float(away_marg[0])  # home clean sheet ⇔ away scores 0
+        p_away_cs = float(home_marg[0])
+        p_btts = float(1.0 - home_marg[0] - away_marg[0] + grid[0, 0])
+
+        fh_pmf = exact_eval.thinned_total_pmf(grid, _FIRST_HALF_GOAL_SHARE)
+        fh_vals = np.array(sorted(int(k) for k in fh_pmf), dtype=float)
+        fh_probs = np.array([fh_pmf[str(int(v))] for v in fh_vals], dtype=float)
+
+        def _exrow(target: str, market: str, values, probs) -> dict[str, Any]:
+            return _analytic_distribution_row(
+                target=target,
+                market=market,
+                values=values,
+                probs=probs,
+                distribution_params=dc_params,
+                n_iterations=request.n_iterations,
+                seed=request.seed,
+                context_hash=ctx_hash,
+                component_version=exact_version,
+            )
+
+        result["simulation_distributions"].extend(
+            [
+                _exrow("total_goals", "game_total", total_vals, total_probs),
+                _exrow("home_clean_sheet", "clean_sheet", np.array([0.0, 1.0]), np.array([1.0 - p_home_cs, p_home_cs])),
+                _exrow("away_clean_sheet", "clean_sheet", np.array([0.0, 1.0]), np.array([1.0 - p_away_cs, p_away_cs])),
+                _exrow("both_teams_to_score", "btts", np.array([0.0, 1.0]), np.array([1.0 - p_btts, p_btts])),
+                _exrow("first_half_total", "first_half_total", fh_vals, fh_probs),
+            ]
+        )
+
+        margin_counts, total_counts = exact_eval.margin_total_pmfs(grid)
+        result["margin_counts"] = margin_counts
+        result["total_counts"] = total_counts
+        result["fh_total_counts"] = dict(fh_pmf)
         return result

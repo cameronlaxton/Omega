@@ -121,7 +121,7 @@ def test_odds_api_get_json_blocked_in_replay_mode(monkeypatch):
 # asserts that nothing on the allowlist references a network-fetch primitive —
 # so a real adapter can never be whitelisted to silence the guard requirement.
 
-PURE_LOCAL_MODULES = frozenset({"odds_cache.py"})
+PURE_LOCAL_MODULES = frozenset({"odds_cache.py", "_soccer_xg.py"})
 
 # Indicators that a module performs (or directly triggers) a live network fetch.
 _FETCH_INDICATORS = ("urllib", "requests", "http.client", "url_opener", "OddsApiClient")

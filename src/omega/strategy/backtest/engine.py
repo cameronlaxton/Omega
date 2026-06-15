@@ -134,10 +134,17 @@ class BacktestEngine:
         self,
         n_iterations: int = 1000,
         seed: int = 42,
+        exact_eval: bool = False,
     ) -> None:
         self._sim = OmegaSimulationEngine()
         self._n_iterations = n_iterations
         self._seed = seed
+        # When True, parametric backends (integer-Poisson archetypes) evaluate
+        # market probabilities exactly instead of Monte-Carlo sampling. Removes
+        # the MC sampling noise the edge filter selects on (optimizer's curse),
+        # making backtest probabilities — and the calibration pairs derived from
+        # them — noise-free. Non-parametric backends ignore the flag.
+        self._exact_eval = exact_eval
 
     def run(
         self,
@@ -327,6 +334,7 @@ class BacktestEngine:
             seed=artifact.simulation_seed if artifact.simulation_seed is not None else self._seed,
             spread_home=spread_line,
             over_under=total_line,
+            exact=self._exact_eval,
         )
 
         if not sim_result.get("success"):

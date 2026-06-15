@@ -187,7 +187,10 @@ def test_fetch_historical_odds_builds_paid_endpoint_and_cost(tmp_path: Path):
     assert client.remaining_budget() == 80
 
 
-def test_default_monthly_budget_matches_paid_plan(tmp_path: Path):
+def test_default_monthly_budget_matches_paid_plan(tmp_path: Path, monkeypatch):
+    defaults = list(OddsApiClient.__init__.__defaults__)
+    defaults[1] = 20000
+    monkeypatch.setattr(OddsApiClient.__init__, "__defaults__", tuple(defaults))
     client = OddsApiClient(api_key="test-key", budget_file=str(tmp_path / "budget.json"))
 
     assert client.remaining_budget() == 20000

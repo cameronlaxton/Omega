@@ -70,6 +70,12 @@ class GameSimulationInput:
     # from ``GameAnalysisRequest.prior_payload``; backends that require a prior
     # fail closed when it is absent.
     prior_payload: dict[str, Any] | None = None
+    # Exact-evaluation mode: when True, parametric backends evaluate market
+    # probabilities by summing the closed-form outcome distribution instead of
+    # Monte-Carlo sampling it. Removes MC sampling noise (and its optimizer's-curse
+    # bias) from backtest/calibration decisions. Backends without a closed form
+    # (path-dependent Markov, tennis set-chains) ignore the flag and stay on MC.
+    exact: bool = False
 
 
 class GameSimulationBackend(Protocol):
@@ -193,6 +199,10 @@ class PropSimulationInput:
     seed: int | None = None
     projection_std: float | None = None
     prior_payload: dict[str, Any] | None = None
+    # See ``GameSimulationInput.exact``: evaluate over/under/push and percentiles
+    # from the closed-form CDF instead of sampling. Honored by parametric prop
+    # backends (negative binomial); empirical/MC backends ignore it.
+    exact: bool = False
 
 
 class PropSimulationBackend(Protocol):

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 from typing import Any
 
@@ -261,6 +262,44 @@ def _distribution_row(
     }
 
 
+def _analytic_distribution_row(
+    *,
+    target: str,
+    market: str,
+    values: Any,
+    probs: Any,
+    distribution_params: dict[str, Any],
+    n_iterations: int,
+    seed: int | None,
+    context_hash: str | None,
+    component_version: str,
+    distribution_type: str = "analytic_pmf",
+) -> dict[str, Any]:
+    """Contract-valid V10 distribution row whose moments/quantiles come from an
+    exact pmf (``values``/``probs``) rather than samples. Used by the exact-eval
+    builders so the row stats carry zero MC noise."""
+    from omega.core.simulation import exact_eval
+
+    mean, std, p10, p50, p90 = exact_eval.pmf_stats(values, probs)
+    return {
+        "target": target,
+        "market": market,
+        "stat_key": None,
+        "distribution_type": distribution_type,
+        "distribution_params": distribution_params,
+        "params_schema_version": 1,
+        "sample_mean": mean,
+        "sample_std": std,
+        "p10": p10,
+        "p50": p50,
+        "p90": p90,
+        "n_iterations": n_iterations,
+        "seed": seed,
+        "context_hash": context_hash,
+        "component_version": component_version,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Skip / missing-requirements helpers
 # ---------------------------------------------------------------------------
@@ -455,6 +494,264 @@ def _build_team_score_result(
             context_hash=ctx_hash,
             component_version=component_version,
         ),
+    ]
+
+    return result
+
+
+def _build_team_score_result_exact_grid(
+    home_team: str,
+    away_team: str,
+    league: str,
+    n_iterations: int,
+    grid: np.ndarray,
+    home_lambda: float,
+    away_lambda: float,
+    rho: float,
+    max_goals: int,
+    home_context: dict | None = None,
+    away_context: dict | None = None,
+    archetype_name: str | None = None,
+    spread_home: float | None = None,
+    over_under: float | None = None,
+    context_source: str = "provided",
+    baseline_used: bool = False,
+    seed: int | None = None,
+    backend_name: str = "fast_score_exact",
+    component_version: str = "fast_score_exact_v1",
+) -> dict:
+    """Exact analogue of ``_build_team_score_result`` for a discrete joint score
+    grid.
+
+    Produces the identical field set, but every probability is summed over
+    ``grid`` instead of counted from samples — zero MC noise. The market formulas
+    mirror ``_build_team_score_result`` cell for cell; the equivalence (to within
+    MC standard error) is pinned by ``tests/core/test_exact_eval.py``.
+    """
+    from omega.core.simulation import exact_eval
+
+    archetype = get_archetype(league)
+    supports_draw = bool(archetype.supports_draw) if archetype is not None else True
+
+    markets = exact_eval.discrete_joint_market_probs(
+        grid,
+        supports_draw=supports_draw,
+        spread_home=spread_home,
+        over_under=over_under,
+    )
+
+    result = {
+        "success": True,
+        "home_team": home_team,
+        "away_team": away_team,
+        "league": league,
+        "archetype": archetype_name,
+        "iterations": n_iterations,
+        "home_win_prob": round(markets["home_win"] * 100, 1),
+        "away_win_prob": round(markets["away_win"] * 100, 1),
+        "draw_prob": round(markets["draw"] * 100, 1),
+        "predicted_home_score": round(markets["home_mean"], 1),
+        "predicted_away_score": round(markets["away_mean"], 1),
+        "predicted_spread": round(markets["home_mean"] - markets["away_mean"], 1),
+        "predicted_total": round(markets["home_mean"] + markets["away_mean"], 1),
+        "missing_requirements": [],
+        "home_context": home_context or {},
+        "away_context": away_context or {},
+        "context_source": context_source,
+        "baseline_used": baseline_used,
+        "simulation_backend": backend_name,
+        "component_version": component_version,
+    }
+
+    if supports_draw:
+        result["double_chance_home_draw_prob"] = round(
+            markets["double_chance_home_draw"] * 100, 1
+        )
+        result["double_chance_home_away_prob"] = round(
+            markets["double_chance_home_away"] * 100, 1
+        )
+        result["double_chance_away_draw_prob"] = round(
+            markets["double_chance_away_draw"] * 100, 1
+        )
+        result["dnb_home_prob"] = round(markets["dnb_home"] * 100, 1)
+        result["dnb_away_prob"] = round(markets["dnb_away"] * 100, 1)
+        result["btts_yes_prob"] = round(markets["btts_yes"] * 100, 1)
+        result["btts_no_prob"] = round(markets["btts_no"] * 100, 1)
+        result["correct_score_probs"] = exact_eval.correct_score_probs(grid)
+
+    if spread_home is not None:
+        result["home_cover_prob"] = round(markets["home_cover"] * 100, 1)
+        result["away_cover_prob"] = round(markets["away_cover"] * 100, 1)
+
+    if over_under is not None:
+        result["over_prob"] = round(markets["over"] * 100, 1)
+        result["under_prob"] = round(markets["under"] * 100, 1)
+
+    ctx_hash = _context_hash(home_context, away_context)
+    dist_params = {
+        "source": "exact_grid",
+        "home_lambda": round(home_lambda, 4),
+        "away_lambda": round(away_lambda, 4),
+        "rho": rho,
+        "max_goals": max_goals,
+    }
+    g = grid.shape[0]
+    idx = np.arange(g)
+    home_marg = grid.sum(axis=1)
+    away_marg = grid.sum(axis=0)
+    hh, aa = np.indices((g, g))
+    flat = grid.ravel()
+    total_pmf = np.zeros(2 * (g - 1) + 1)
+    np.add.at(total_pmf, (hh + aa).ravel(), flat)
+    spread_pmf = np.zeros(2 * (g - 1) + 1)
+    np.add.at(spread_pmf, (hh - aa).ravel() + (g - 1), flat)
+    total_vals = np.arange(0, 2 * (g - 1) + 1)
+    spread_vals = np.arange(-(g - 1), (g - 1) + 1)
+
+    def _row(target: str, market: str, values, probs) -> dict:
+        return _analytic_distribution_row(
+            target=target,
+            market=market,
+            values=values,
+            probs=probs,
+            distribution_params=dist_params,
+            n_iterations=n_iterations,
+            seed=seed,
+            context_hash=ctx_hash,
+            component_version=component_version,
+        )
+
+    result["simulation_distributions"] = [
+        _row("home_score", "game_score", idx, home_marg),
+        _row("away_score", "game_score", idx, away_marg),
+        _row("total", "game_total", total_vals, total_pmf),
+        _row("spread", "game_spread", spread_vals, spread_pmf),
+    ]
+
+    return result
+
+
+def _build_team_score_result_exact_gaussian(
+    home_team: str,
+    away_team: str,
+    league: str,
+    n_iterations: int,
+    mu_h: float,
+    sigma_h: float,
+    mu_a: float,
+    sigma_a: float,
+    home_context: dict | None = None,
+    away_context: dict | None = None,
+    archetype_name: str | None = None,
+    spread_home: float | None = None,
+    over_under: float | None = None,
+    context_source: str = "provided",
+    baseline_used: bool = False,
+    seed: int | None = None,
+    backend_name: str = "fast_score_exact",
+    component_version: str = "fast_score_exact_v1",
+    censored: bool = True,
+) -> dict:
+    """Exact analogue of ``_build_team_score_result`` for the Normal archetypes.
+
+    Markets are summed over the closed-form margin/total distributions of two
+    independent normals — the same model the MC path samples, with zero sampling
+    noise. ``censored=True`` clips scores at 0 (basketball/football's
+    ``max(0, N(mu, sigma))``); ``censored=False`` is a plain normal (golf, whose
+    negated stroke totals are far from any clip). These archetypes never support
+    draws, so the 3-way derived markets are absent (matching the MC builder).
+    """
+    from omega.core.simulation import exact_eval
+
+    archetype = get_archetype(league)
+    supports_draw = bool(archetype.supports_draw) if archetype is not None else False
+
+    market_fn = (
+        exact_eval.gaussian_censored_market_probs
+        if censored
+        else exact_eval.gaussian_market_probs
+    )
+    markets = market_fn(
+        mu_h,
+        sigma_h,
+        mu_a,
+        sigma_a,
+        supports_draw=supports_draw,
+        spread_home=spread_home,
+        over_under=over_under,
+    )
+
+    result = {
+        "success": True,
+        "home_team": home_team,
+        "away_team": away_team,
+        "league": league,
+        "archetype": archetype_name,
+        "iterations": n_iterations,
+        "home_win_prob": round(markets["home_win"] * 100, 1),
+        "away_win_prob": round(markets["away_win"] * 100, 1),
+        "draw_prob": round(markets["draw"] * 100, 1),
+        "predicted_home_score": round(markets["home_mean"], 1),
+        "predicted_away_score": round(markets["away_mean"], 1),
+        "predicted_spread": round(markets["home_mean"] - markets["away_mean"], 1),
+        "predicted_total": round(markets["home_mean"] + markets["away_mean"], 1),
+        "missing_requirements": [],
+        "home_context": home_context or {},
+        "away_context": away_context or {},
+        "context_source": context_source,
+        "baseline_used": baseline_used,
+        "simulation_backend": backend_name,
+        "component_version": component_version,
+    }
+
+    if supports_draw:
+        # Normal archetypes are non-draw today; kept for symmetry if one ever is.
+        result["double_chance_home_draw_prob"] = round(
+            (markets["home_win"] + markets["draw"]) * 100, 1
+        )
+        result["double_chance_home_away_prob"] = round(
+            (markets["home_win"] + markets["away_win"]) * 100, 1
+        )
+        result["double_chance_away_draw_prob"] = round(
+            (markets["away_win"] + markets["draw"]) * 100, 1
+        )
+
+    if spread_home is not None:
+        result["home_cover_prob"] = round(markets["home_cover"] * 100, 1)
+        result["away_cover_prob"] = round(markets["away_cover"] * 100, 1)
+
+    if over_under is not None:
+        result["over_prob"] = round(markets["over"] * 100, 1)
+        result["under_prob"] = round(markets["under"] * 100, 1)
+
+    ctx_hash = _context_hash(home_context, away_context)
+    dist_params = {
+        "source": "exact_clipped_normal" if censored else "exact_normal",
+        "home_mu": round(mu_h, 4),
+        "home_sigma": round(sigma_h, 4),
+        "away_mu": round(mu_a, 4),
+        "away_sigma": round(sigma_a, 4),
+    }
+    dists = markets["_dists"]
+
+    def _row(target: str, market: str, values, probs) -> dict:
+        return _analytic_distribution_row(
+            target=target,
+            market=market,
+            values=values,
+            probs=probs,
+            distribution_params=dist_params,
+            n_iterations=n_iterations,
+            seed=seed,
+            context_hash=ctx_hash,
+            component_version=component_version,
+        )
+
+    result["simulation_distributions"] = [
+        _row("home_score", "game_score", *dists["home"]),
+        _row("away_score", "game_score", *dists["away"]),
+        _row("total", "game_total", *dists["total"]),
+        _row("spread", "game_spread", *dists["spread"]),
     ]
 
     return result
@@ -724,10 +1021,11 @@ def _archetype_league_defaults(league: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _sim_basketball(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None
-) -> tuple:
-    """Basketball: ORtg/DRtg/pace possession model (Normal distribution)."""
+def _basketball_score_params(
+    home_ctx: dict, away_ctx: dict, league: str, config: dict
+) -> tuple[float, float, float, float]:
+    """Basketball Normal score params ``(mu_h, sigma_h, mu_a, sigma_a)`` shared by
+    the MC sampler and the exact (clipped-normal) evaluator."""
     home_off = home_ctx.get("off_rating", 110.0)
     home_def = home_ctx.get("def_rating", 110.0)
     home_pace = home_ctx.get("pace", config.get("avg_pace", 100.0))
@@ -755,7 +1053,16 @@ def _sim_basketball(
     hca = config.get("home_advantage", 3.0)
     home_expected += hca / 2.0
     away_expected -= hca / 2.0
+    return home_expected, std, away_expected, std
 
+
+def _sim_basketball(
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None
+) -> tuple:
+    """Basketball: ORtg/DRtg/pace possession model (Normal distribution)."""
+    home_expected, std, away_expected, _ = _basketball_score_params(
+        home_ctx, away_ctx, league, config
+    )
     home_scores = _normal_sample(home_expected, std, n_iter, rng=rng)
     away_scores = _normal_sample(away_expected, std, n_iter, rng=rng)
     home_scores = [max(0, s) for s in home_scores]
@@ -763,10 +1070,10 @@ def _sim_basketball(
     return home_scores, away_scores
 
 
-def _sim_american_football(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None
-) -> tuple:
-    """American Football: (PPG + opp PAPG) / 2 with Normal distribution."""
+def _american_football_score_params(
+    home_ctx: dict, away_ctx: dict, league: str, config: dict
+) -> tuple[float, float, float, float]:
+    """American-football Normal score params ``(mu_h, sigma_h, mu_a, sigma_a)``."""
     home_off = home_ctx.get("off_rating", config.get("avg_total", 45.0) / 2)
     home_def = home_ctx.get("def_rating", config.get("avg_total", 45.0) / 2)
     away_off = away_ctx.get("off_rating", config.get("avg_total", 45.0) / 2)
@@ -781,6 +1088,16 @@ def _sim_american_football(
     away_expected -= hca / 2.0
 
     std = config.get("std", 10.0)
+    return home_expected, std, away_expected, std
+
+
+def _sim_american_football(
+    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None
+) -> tuple:
+    """American Football: (PPG + opp PAPG) / 2 with Normal distribution."""
+    home_expected, std, away_expected, _ = _american_football_score_params(
+        home_ctx, away_ctx, league, config
+    )
     home_scores = _normal_sample(home_expected, std, n_iter, rng=rng)
     away_scores = _normal_sample(away_expected, std, n_iter, rng=rng)
     home_scores = [max(0, s) for s in home_scores]
@@ -788,12 +1105,10 @@ def _sim_american_football(
     return home_scores, away_scores
 
 
-def _sim_baseball(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
-    """Baseball: Poisson run environment model.
-
-    off_rating = runs scored per game, def_rating = runs allowed per game.
-    Expected runs = (team_off * opp_runs_allowed / league_avg) adjusted for park factor.
-    """
+def _baseball_score_params(
+    home_ctx: dict, away_ctx: dict, league: str, config: dict
+) -> tuple[float, float, float | None]:
+    """Baseball run-rate params (independent Poisson) shared by MC and exact."""
     league_avg_rpg = config.get("avg_total", 8.5) / 2.0  # ~4.25
 
     home_off = home_ctx.get("off_rating", league_avg_rpg)
@@ -827,18 +1142,27 @@ def _sim_baseball(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, conf
 
     home_lambda = max(0.5, home_lambda)
     away_lambda = max(0.5, away_lambda)
+    return home_lambda, away_lambda, None
 
+
+def _sim_baseball(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
+    """Baseball: Poisson run environment model.
+
+    off_rating = runs scored per game, def_rating = runs allowed per game.
+    Expected runs = (team_off * opp_runs_allowed / league_avg) adjusted for park factor.
+    """
+    home_lambda, away_lambda, _ = _baseball_score_params(
+        home_ctx, away_ctx, league, config
+    )
     home_scores = _poisson_sample(home_lambda, n_iter, rng=rng)
     away_scores = _poisson_sample(away_lambda, n_iter, rng=rng)
     return home_scores, away_scores
 
 
-def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
-    """Hockey: Poisson goal model with goalie/shot-rate adjustments.
-
-    off_rating = goals per game, def_rating = goals allowed per game.
-    Goalie save percentage adjusts expected goals against.
-    """
+def _hockey_score_params(
+    home_ctx: dict, away_ctx: dict, league: str, config: dict
+) -> tuple[float, float, float | None]:
+    """Hockey goal-rate params (independent Poisson) shared by MC and exact."""
     league_avg_gpg = config.get("avg_total", 6.0) / 2.0  # ~3.0
 
     home_off = home_ctx.get("off_rating", league_avg_gpg)
@@ -878,7 +1202,18 @@ def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
 
     home_lambda = max(0.3, home_lambda)
     away_lambda = max(0.3, away_lambda)
+    return home_lambda, away_lambda, None
 
+
+def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
+    """Hockey: Poisson goal model with goalie/shot-rate adjustments.
+
+    off_rating = goals per game, def_rating = goals allowed per game.
+    Goalie save percentage adjusts expected goals against.
+    """
+    home_lambda, away_lambda, _ = _hockey_score_params(
+        home_ctx, away_ctx, league, config
+    )
     home_scores = _poisson_sample(home_lambda, n_iter, rng=rng)
     away_scores = _poisson_sample(away_lambda, n_iter, rng=rng)
     return home_scores, away_scores
@@ -892,6 +1227,59 @@ def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
 _SOCCER_DC_RHO_DEFAULT = -0.13
 _SOCCER_DIXON_COLES_DEFAULT = False
 _SOCCER_DC_MAX_GOALS = 15
+
+
+def _dc_joint(
+    home_lambda: float,
+    away_lambda: float,
+    rho: float,
+    max_goals: int = _SOCCER_DC_MAX_GOALS,
+) -> np.ndarray:
+    """Clipped, UN-normalized Dixon-Coles joint score grid ``joint[h, a]``.
+
+    Single source of truth for the joint pmf: both the Monte-Carlo sampler
+    (``_dixon_coles_scores``) and the exact evaluator (``exact_eval``) consume
+    this so the model can never drift between the two paths. ``rho == 0`` reduces
+    to the independent-Poisson joint (all four tau factors become 1).
+    """
+    import math
+
+    ks = range(max_goals + 1)
+    h_pmf = np.array(
+        [math.exp(-home_lambda) * home_lambda**k / math.factorial(k) for k in ks]
+    )
+    a_pmf = np.array(
+        [math.exp(-away_lambda) * away_lambda**k / math.factorial(k) for k in ks]
+    )
+    joint = np.outer(h_pmf, a_pmf)  # joint[i, j] = P(home=i) * P(away=j)
+
+    # Dixon-Coles tau correction (x = home goals, y = away goals).
+    joint[0, 0] *= 1.0 - home_lambda * away_lambda * rho
+    joint[0, 1] *= 1.0 + home_lambda * rho
+    joint[1, 0] *= 1.0 + away_lambda * rho
+    joint[1, 1] *= 1.0 - rho
+    joint = np.clip(joint, 0.0, None)
+    return joint
+
+
+def _normalized_score_grid(
+    home_lambda: float,
+    away_lambda: float,
+    rho: float,
+    max_goals: int,
+) -> np.ndarray:
+    """Normalized joint score grid for exact evaluation.
+
+    Falls back to the independent-Poisson joint if the Dixon-Coles correction is
+    degenerate (extreme ``rho`` driving total mass to zero), mirroring the MC
+    sampler's fallback so exact and MC agree.
+    """
+    joint = _dc_joint(home_lambda, away_lambda, rho, max_goals)
+    total = float(joint.sum())
+    if total <= 0.0:
+        joint = _dc_joint(home_lambda, away_lambda, 0.0, max_goals)
+        total = float(joint.sum())
+    return joint / total
 
 
 def _dixon_coles_scores(
@@ -911,23 +1299,7 @@ def _dixon_coles_scores(
     set keeps reruns with the same seed bit-identical (frozen-artifact
     invariant).
     """
-    import math
-
-    ks = range(max_goals + 1)
-    h_pmf = np.array(
-        [math.exp(-home_lambda) * home_lambda**k / math.factorial(k) for k in ks]
-    )
-    a_pmf = np.array(
-        [math.exp(-away_lambda) * away_lambda**k / math.factorial(k) for k in ks]
-    )
-    joint = np.outer(h_pmf, a_pmf)  # joint[i, j] = P(home=i) * P(away=j)
-
-    # Dixon-Coles tau correction (x = home goals, y = away goals).
-    joint[0, 0] *= 1.0 - home_lambda * away_lambda * rho
-    joint[0, 1] *= 1.0 + home_lambda * rho
-    joint[1, 0] *= 1.0 + away_lambda * rho
-    joint[1, 1] *= 1.0 - rho
-    joint = np.clip(joint, 0.0, None)
+    joint = _dc_joint(home_lambda, away_lambda, rho, max_goals)
 
     total = float(joint.sum())
     if total <= 0.0:
@@ -949,21 +1321,15 @@ def _dixon_coles_scores(
     return home_scores, away_scores
 
 
-def _sim_soccer(
-    home_ctx: dict,
-    away_ctx: dict,
-    league: str,
-    n_iter: int,
-    config: dict,
-    rng: np.random.Generator | random.Random | None = None,
-) -> tuple:
-    """Soccer: Poisson goal model with xG integration.
+def _soccer_score_params(
+    home_ctx: dict, away_ctx: dict, league: str, config: dict
+) -> tuple[float, float, float | None]:
+    """Soccer goal-rate params shared by the MC sampler and the exact evaluator.
 
-    off_rating = goals per game (or xG), def_rating = goals conceded per game (or xGA).
-
-    When the league config sets ``dixon_coles: True``, low-score correlation is
-    modelled via a Dixon-Coles tau correction (see :func:`_dixon_coles_scores`);
-    otherwise home and away goals are sampled independently.
+    Returns ``(home_lambda, away_lambda, rho)`` where ``rho`` is the Dixon-Coles
+    dependence parameter when the league config enables ``dixon_coles``, else
+    ``None`` (independent Poisson). Keeping this derivation in one place means MC
+    and exact never disagree on the model — only on how it is evaluated.
     """
     # Defensive clamp: if the config's avg_total is unreasonably high for soccer
     # (e.g. falling through to the generic _DEFAULT_CONFIG with avg_total=100),
@@ -1009,8 +1375,31 @@ def _sim_soccer(
     away_lambda = max(0.5, away_lambda)
 
     use_dc = config.get("dixon_coles", _SOCCER_DIXON_COLES_DEFAULT)
-    if use_dc and np is not None:
-        rho = config.get("rho", _SOCCER_DC_RHO_DEFAULT)
+    rho = config.get("rho", _SOCCER_DC_RHO_DEFAULT) if use_dc else None
+    return home_lambda, away_lambda, rho
+
+
+def _sim_soccer(
+    home_ctx: dict,
+    away_ctx: dict,
+    league: str,
+    n_iter: int,
+    config: dict,
+    rng: np.random.Generator | random.Random | None = None,
+) -> tuple:
+    """Soccer: Poisson goal model with xG integration.
+
+    off_rating = goals per game (or xG), def_rating = goals conceded per game (or xGA).
+
+    When the league config sets ``dixon_coles: True``, low-score correlation is
+    modelled via a Dixon-Coles tau correction (see :func:`_dixon_coles_scores`);
+    otherwise home and away goals are sampled independently.
+    """
+    home_lambda, away_lambda, rho = _soccer_score_params(
+        home_ctx, away_ctx, league, config
+    )
+
+    if rho is not None and np is not None:
         return _dixon_coles_scores(home_lambda, away_lambda, rho, n_iter, rng=rng)
 
     home_scores = _poisson_sample(home_lambda, n_iter, rng=rng)
@@ -1136,6 +1525,30 @@ def _tennis_game_win_prob(p: float) -> float:
     p_win_2 = 10 * (p**4) * (q**2)
 
     return p_win_0 + p_win_1 + p_win_2 + p_reach_deuce * p_deuce_win
+
+
+def _golf_score_params(
+    home_ctx: dict, away_ctx: dict, league: str, config: dict
+) -> tuple[float, float, float, float]:
+    """Golf *uncensored*-normal score params in the negated (lower-strokes-wins)
+    frame used by ``_sim_golf``, as ``(mu_home, sigma_home, mu_away, sigma_away)``.
+
+    Exact-only: the MC path sums ``n_rounds`` per-round draws, which is distributed
+    as ``N(n_rounds*per_round, sqrt(n_rounds)*round_std)``. Exact evaluates that
+    summed normal directly (it does not reuse the MC per-round RNG sequence), and
+    negates to match ``_sim_golf``'s frame so the standard ``home_win = home>away``
+    means golfer A posts the lower total.
+    """
+    n_rounds = config.get("rounds", 4)
+    round_std = config.get("round_std", 3.0)
+    sg_a = home_ctx.get("strokes_gained_total", home_ctx.get("off_rating", 0.0))
+    sg_b = away_ctx.get("strokes_gained_total", away_ctx.get("off_rating", 0.0))
+    par = 72.0
+    mu_a_total = n_rounds * (par - sg_a)
+    mu_b_total = n_rounds * (par - sg_b)
+    sigma_total = math.sqrt(n_rounds) * round_std
+    # Negated frame: home "score" = -A_total, so higher wins ⇔ A has fewer strokes.
+    return -mu_a_total, sigma_total, -mu_b_total, sigma_total
 
 
 def _sim_golf(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
@@ -1320,6 +1733,45 @@ _ARCHETYPE_SIMULATORS = {
     "esports": _sim_esports,
 }
 
+# Archetypes whose score model is a (possibly Dixon-Coles-correlated) integer
+# Poisson grid. These support exact evaluation: each param fn returns
+# ``(home_lambda, away_lambda, rho_or_None)`` and the markets are summed over the
+# joint grid instead of Monte-Carlo sampled. The Normal archetypes (basketball,
+# american_football, golf) censor scores at 0 and the tennis archetype is a
+# path-dependent set-by-set chain, so they are intentionally absent and stay on
+# the MC path.
+_POISSON_EXACT_PARAMS = {
+    "soccer": _soccer_score_params,
+    "baseball": _baseball_score_params,
+    "hockey": _hockey_score_params,
+}
+
+# Archetypes whose score model is an independent Normal. Each entry maps to
+# ``(param_fn, censored)`` where ``param_fn`` returns
+# ``(mu_home, sigma_home, mu_away, sigma_away)``. ``censored=True`` clips scores at
+# 0 (basketball/football, ``max(0, N)``); golf is uncensored — its param fn works
+# in the negated frame (lower strokes win) so the standard home>away comparison
+# still means golfer A posts the better score.
+_GAUSSIAN_EXACT_PARAMS = {
+    "basketball": (_basketball_score_params, True),
+    "american_football": (_american_football_score_params, True),
+    "golf": (_golf_score_params, False),
+}
+
+# Exact-grid truncation. Soccer reuses the MC sampler's 15-goal truncation so the
+# two paths share an identical support; the higher run/goal-rate Poisson sports
+# size the grid to the requested means so truncated tail mass is negligible
+# (<< MC standard error).
+_EXACT_SOCCER_MAX_GOALS = _SOCCER_DC_MAX_GOALS
+
+
+def _exact_grid_max_goals(archetype_name: str, home_lambda: float, away_lambda: float) -> int:
+    """Choose a grid truncation that covers the Poisson tail for exact eval."""
+    if archetype_name == "soccer":
+        return _EXACT_SOCCER_MAX_GOALS
+    m = max(home_lambda, away_lambda, 1.0)
+    return max(15, int(math.ceil(m + 12.0 * math.sqrt(m))))
+
 
 # ---------------------------------------------------------------------------
 # Main engine class
@@ -1411,6 +1863,71 @@ class FastScoreSimulationBackend:
 
         assert home_context is not None
         assert away_context is not None
+
+        # Exact evaluation: sum market probabilities over the closed-form outcome
+        # distribution instead of Monte-Carlo sampling it. Same model, zero
+        # sampling noise. Poisson archetypes sum a joint score grid; Normal
+        # archetypes convolve two clipped normals.
+        exact_backend = f"{self.backend_name}_exact"
+        exact_version = f"{self.component_version.removesuffix('_v1')}_exact_v1"
+        poisson_params = _POISSON_EXACT_PARAMS.get(archetype_name) if request.exact else None
+        gaussian_params = _GAUSSIAN_EXACT_PARAMS.get(archetype_name) if request.exact else None
+        if poisson_params is not None:
+            home_lambda, away_lambda, rho = poisson_params(
+                home_context, away_context, league, config
+            )
+            max_goals = _exact_grid_max_goals(archetype_name, home_lambda, away_lambda)
+            grid = _normalized_score_grid(
+                home_lambda, away_lambda, rho if rho is not None else 0.0, max_goals
+            )
+            return _build_team_score_result_exact_grid(
+                request.home_team,
+                request.away_team,
+                league,
+                request.n_iterations,
+                grid,
+                home_lambda,
+                away_lambda,
+                rho if rho is not None else 0.0,
+                max_goals,
+                home_context=home_context,
+                away_context=away_context,
+                archetype_name=archetype_name,
+                spread_home=request.spread_home,
+                over_under=request.over_under,
+                context_source=context_source,
+                baseline_used=baseline_used,
+                seed=request.seed,
+                backend_name=exact_backend,
+                component_version=exact_version,
+            )
+        if gaussian_params is not None:
+            param_fn, censored = gaussian_params
+            mu_h, sigma_h, mu_a, sigma_a = param_fn(
+                home_context, away_context, league, config
+            )
+            return _build_team_score_result_exact_gaussian(
+                request.home_team,
+                request.away_team,
+                league,
+                request.n_iterations,
+                mu_h,
+                sigma_h,
+                mu_a,
+                sigma_a,
+                home_context=home_context,
+                away_context=away_context,
+                archetype_name=archetype_name,
+                spread_home=request.spread_home,
+                over_under=request.over_under,
+                context_source=context_source,
+                baseline_used=baseline_used,
+                seed=request.seed,
+                backend_name=exact_backend,
+                component_version=exact_version,
+                censored=censored,
+            )
+
         home_scores, away_scores = simulator(
             home_context,
             away_context,
@@ -1617,6 +2134,7 @@ class OmegaSimulationEngine:
         transition_modifiers: dict | None = None,
         prior_payload: dict | None = None,
         backend: GameSimulationBackend | None = None,
+        exact: bool = False,
     ) -> dict:
         """
         Run a fast game simulation using team stats dispatched by sport archetype.
@@ -1652,6 +2170,7 @@ class OmegaSimulationEngine:
             allow_baseline=allow_baseline,
             transition_modifiers=transition_modifiers,
             prior_payload=prior_payload,
+            exact=exact,
         )
         return enforce_game_backend_contract(active.run(request))
 
