@@ -130,6 +130,8 @@ SOCCER_TEAM_ALIASES: dict[str, str] = {
     "bosnia-herzegovina": "Bosnia-Herzegovina",
     "turkey": "Türkiye",
     "türkiye": "Türkiye",
+    "czechia": "Czech Republic",
+    "czech republic": "Czech Republic",
 }
 
 

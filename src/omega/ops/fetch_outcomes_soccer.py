@@ -88,11 +88,18 @@ def _trace_matchup(trace: dict) -> tuple[str, str] | None:
 def _match_trace_to_game(
     trace: dict,
     games_by_pair: dict[tuple[str, str], FinalGame],
-) -> FinalGame | None:
+) -> tuple[FinalGame, bool] | None:
     pair = _trace_matchup(trace)
     if pair is None:
         return None
-    return games_by_pair.get(pair)
+    # 1. Try exact match
+    if pair in games_by_pair:
+        return games_by_pair[pair], False
+    # 2. Try reversed match (neutral site games can nominalize home/away differently)
+    reversed_pair = (pair[1], pair[0])
+    if reversed_pair in games_by_pair:
+        return games_by_pair[reversed_pair], True
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +160,7 @@ def main(
     log_effective_db(store, logger)
 
     attached = 0
-    unmatched: list[str] = []
+    all_queried_traces: dict[str, tuple[str, str]] = {}
     skipped_already_graded = 0
     matched_trace_ids: set[str] = set()
 
@@ -175,46 +182,47 @@ def main(
                 (g.home_team, g.away_team): g for g in finals
             }
 
+            # Query traces in a generous window around date d (d - 30 days to d + 2 days)
+            # to handle pre-placed bets (e.g. World Cup tournament) and timezone offsets.
+            window_start = (d - timedelta(days=30)).isoformat() + "T00:00:00Z"
+            window_end = (d + timedelta(days=2)).isoformat() + "T23:59:59Z"
             traces = store.query_traces(
                 league=league,
-                start=f"{d.isoformat()}T00:00:00Z",
-                end=f"{d.isoformat()}T23:59:59Z",
+                start=window_start,
+                end=window_end,
                 has_outcome=False,
-                limit=500,
-            )
-            prior = d - timedelta(days=1)
-            traces.extend(
-                store.query_traces(
-                    league=league,
-                    start=f"{prior.isoformat()}T00:00:00Z",
-                    end=f"{prior.isoformat()}T23:59:59Z",
-                    has_outcome=False,
-                    limit=500,
-                )
+                limit=1000,
             )
 
             for trace in traces:
-                # Prop traces grade against player stats â€” fetch_outcomes_props owns them.
+                # Prop traces grade against player stats — fetch_outcomes_props owns them.
                 if trace.get("kind") == "prop":
                     continue
 
                 tid = trace.get("trace_id", "?")
-                game = _match_trace_to_game(trace, games_by_pair)
-                if game is None:
-                    if tid not in matched_trace_ids:
-                        pair = _trace_matchup(trace)
-                        pair_str = f"{pair[1]} @ {pair[0]}" if pair else "<unresolved>"
-                        unmatched.append(f"{tid} [{league}] ({pair_str})")
+                pair = _trace_matchup(trace)
+                pair_str = f"{pair[1]} @ {pair[0]}" if pair else "<unresolved>"
+                all_queried_traces[tid] = (league, pair_str)
+
+                matched = _match_trace_to_game(trace, games_by_pair)
+                if matched is None:
                     continue
+                game, is_reversed = matched
+
+                home_score = game.away_score if is_reversed else game.home_score
+                away_score = game.home_score if is_reversed else game.away_score
+
+                h_team = pair[0] if pair else "Home"
+                a_team = pair[1] if pair else "Away"
 
                 if args.dry_run:
                     logger.info(
                         "DRY %s -> %s @ %s (%d-%d)",
                         tid,
-                        game.away_team,
-                        game.home_team,
-                        game.away_score,
-                        game.home_score,
+                        a_team,
+                        h_team,
+                        away_score,
+                        home_score,
                     )
                     matched_trace_ids.add(tid)
                     attached += 1
@@ -223,8 +231,8 @@ def main(
                 try:
                     store.attach_outcome(
                         trace_id=tid,
-                        home_score=game.home_score,
-                        away_score=game.away_score,
+                        home_score=home_score,
+                        away_score=away_score,
                         source="api:espn",
                     )
                     matched_trace_ids.add(tid)
@@ -232,14 +240,19 @@ def main(
                     logger.info(
                         "ATTACHED %s -> %s %d, %s %d",
                         tid,
-                        game.home_team,
-                        game.home_score,
-                        game.away_team,
-                        game.away_score,
+                        h_team,
+                        home_score,
+                        a_team,
+                        away_score,
                     )
                 except ValueError as exc:
                     logger.warning("Skipped %s: %s", tid, exc)
                     skipped_already_graded += 1
+
+    unmatched = []
+    for tid, (league, pair_str) in all_queried_traces.items():
+        if tid not in matched_trace_ids:
+            unmatched.append(f"{tid} [{league}] ({pair_str})")
 
     logger.info(
         "Done. attached=%d unmatched=%d skipped=%d",
