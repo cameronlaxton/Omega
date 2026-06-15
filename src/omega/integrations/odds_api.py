@@ -355,9 +355,11 @@ class OddsApiClient:
         commence_time_to: str | None = None,
         *,
         request_cost: int = 0,
+        sport_key: str | None = None,
     ) -> list[HistoricalEvent]:
         """Fetch current/live event metadata for resolving event IDs."""
-        sport_key = _require_sport_key(league)
+        if sport_key is None:
+            sport_key = _require_sport_key(league)
         params: dict[str, Any] = {"dateFormat": "iso"}
         if commence_time_from:
             params["commenceTimeFrom"] = commence_time_from
