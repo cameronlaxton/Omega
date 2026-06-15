@@ -242,7 +242,7 @@ def _pending_bets_needing_close(
             AND c.market = b.market
             AND c.selection_descriptor = b.selection_descriptor
            WHERE b.status = 'pending'
-             AND b.provenance = 'user_confirmed'
+             AND b.provenance IN ('user_confirmed', 'engine_auto', 'backfill')
              AND c.closing_id IS NULL"""
     params: tuple = ()
     if league_filter:

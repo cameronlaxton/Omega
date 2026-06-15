@@ -235,7 +235,7 @@ def main(
     # Read-only pre-scan so "0 processed" is explainable: how many ungraded prop
     # traces are even in the window, in THIS DB?
     for _league in leagues:
-        _ws = (start - timedelta(days=1)).isoformat() + "T00:00:00Z"
+        _ws = (start - timedelta(days=5)).isoformat() + "T00:00:00Z"
         _we = (end + timedelta(days=1)).isoformat() + "T23:59:59Z"
         _pending = store.query_traces(
             league=_league, start=_ws, end=_we, has_outcome=False, limit=10000
@@ -262,7 +262,7 @@ def main(
         for d in _iter_dates(start, end):
             # Pull ungraded prop traces in a generous time window (game date
             # Â± 1 day). Then we filter to those whose game_date matches d.
-            window_start = (d - timedelta(days=1)).isoformat() + "T00:00:00Z"
+            window_start = (d - timedelta(days=5)).isoformat() + "T00:00:00Z"
             window_end = (d + timedelta(days=1)).isoformat() + "T23:59:59Z"
             traces = store.query_traces(
                 league=league,
@@ -333,11 +333,16 @@ def main(
             if not grouped:
                 continue
 
-            # Fetch scoreboard once for this league/date to resolve pair â†’ event_id
-            try:
-                games = sb_fetch(league, d)
-            except Exception as exc:  # noqa: BLE001
-                logger.error("ESPN scoreboard fetch failed for %s %s: %s", league, d, exc)
+            # Fetch scoreboard for d-1, d, and d+1 to handle timezone mismatches
+            games = []
+            for check_date in (d - timedelta(days=1), d, d + timedelta(days=1)):
+                try:
+                    games.extend(sb_fetch(league, check_date))
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("ESPN scoreboard fetch failed for %s %s: %s", league, check_date, exc)
+
+            if not games:
+                logger.error("All ESPN scoreboard fetches failed or empty for %s around %s", league, d)
                 return 1
 
             games_by_pair = {(g.home_team, g.away_team): g for g in games}
