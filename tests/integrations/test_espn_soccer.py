@@ -39,7 +39,9 @@ def _event(home, away, hs, as_, *, completed=True, state="post", name="STATUS_FU
 class TestSlugMapping:
     def test_known_leagues_have_slugs(self):
         assert espn_soccer.espn_slug("EPL") == "eng.1"
+        assert espn_soccer.espn_slug("PREMIER_LEAGUE") == "eng.1"
         assert espn_soccer.espn_slug("la_liga") == "esp.1"
+        assert espn_soccer.espn_slug("LALIGA") == "esp.1"
         assert espn_soccer.espn_slug("CHAMPIONS_LEAGUE") == "uefa.champions"
 
     def test_unknown_league_is_none(self):

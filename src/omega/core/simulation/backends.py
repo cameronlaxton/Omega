@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from omega.core.simulation.dispersion import DispersionPolicy
+
 CONTEXT_SOURCES = frozenset({"provided", "league_default", "missing"})
 REQUIRED_SUCCESS_FIELDS = frozenset(
     {
@@ -76,6 +78,7 @@ class GameSimulationInput:
     # bias) from backtest/calibration decisions. Backends without a closed form
     # (path-dependent Markov, tennis set-chains) ignore the flag and stay on MC.
     exact: bool = False
+    dispersion: DispersionPolicy | None = None
 
 
 class GameSimulationBackend(Protocol):
@@ -203,6 +206,7 @@ class PropSimulationInput:
     # from the closed-form CDF instead of sampling. Honored by parametric prop
     # backends (negative binomial); empirical/MC backends ignore it.
     exact: bool = False
+    dispersion: DispersionPolicy | None = None
 
 
 class PropSimulationBackend(Protocol):
