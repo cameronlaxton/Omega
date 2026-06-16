@@ -301,6 +301,16 @@ def analyze(
     context_source = _result_context_source(result)
     baseline_used = _result_baseline_used(result)
     identity_status = _identity_status(kind, typed_req)
+    # "missing" only fires when context was provided: the caller had data to
+    # reason about but submitted no structured signals, so the evidence-learning
+    # loop has a gap. "not_applicable" covers baseline/engine-skipped runs where
+    # no signals are expected. This never gates calibration eligibility — that
+    # path is deliberately evidence-agnostic (see omega.trace.eligibility).
+    evidence_quality = (
+        "present" if evidence_signals
+        else "missing" if context_source == "provided"
+        else "not_applicable"
+    )
     caller_exclusion_reasons = (
         [str(reason) for reason in trace_quality.get("calibration_exclusion_reasons", [])]
         if trace_quality
@@ -325,6 +335,7 @@ def analyze(
         "downgrades": result_downgrades,
         "passed": len(result_downgrades) == 0,
         "evidence_status": evidence_status,
+        "evidence_quality": evidence_quality,
         "identity_status": identity_status,
         "context_source": context_source,
         "baseline_used": baseline_used,
@@ -339,7 +350,8 @@ def analyze(
             **engine_trace_quality,
             **trace_quality,
             "downgrades": merged_downgrades,
-            "evidence_status": evidence_status,  # engine-computed; caller cannot override
+            "evidence_status": evidence_status,   # engine-computed; caller cannot override
+            "evidence_quality": evidence_quality,  # engine-computed; caller cannot override
             "identity_status": identity_status,
             "context_source": context_source,
             "baseline_used": baseline_used,

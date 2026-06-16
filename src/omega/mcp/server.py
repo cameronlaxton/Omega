@@ -320,12 +320,21 @@ def omega_analyze_game(
             session_id=session_id,
             trace_quality=effective_trace_quality,
         )
+        tq = trace.get("trace_quality") or {}
+        extra: dict[str, Any] = {}
+        if tq.get("evidence_quality") == "missing":
+            extra["evidence_warning"] = (
+                "No evidence signals were submitted despite full provided context. "
+                "Include at least one EvidenceSignal in evidence=[] to enable "
+                "retrospective signal scoring and the evidence-learning feedback loop."
+            )
         return _ok(
             "omega_analyze_game",
             trace=trace,
             result=trace.get("result"),
-            trace_quality=trace.get("trace_quality"),
+            trace_quality=tq,
             mcp_defaults=mcp_defaults,
+            **extra,
         )
     except ValidationError as exc:
         return _error("omega_analyze_game", "invalid_request", exc.errors())
@@ -369,12 +378,21 @@ def omega_analyze_prop(
             session_id=session_id,
             trace_quality=effective_trace_quality,
         )
+        tq = trace.get("trace_quality") or {}
+        extra: dict[str, Any] = {}
+        if tq.get("evidence_quality") == "missing":
+            extra["evidence_warning"] = (
+                "No evidence signals were submitted despite full provided context. "
+                "Include at least one EvidenceSignal in evidence=[] to enable "
+                "retrospective signal scoring and the evidence-learning feedback loop."
+            )
         return _ok(
             "omega_analyze_prop",
             trace=trace,
             result=trace.get("result"),
-            trace_quality=trace.get("trace_quality"),
+            trace_quality=tq,
             mcp_defaults=mcp_defaults,
+            **extra,
         )
     except ValidationError as exc:
         return _error("omega_analyze_prop", "invalid_request", exc.errors())

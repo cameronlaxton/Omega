@@ -302,3 +302,130 @@ def test_resolve_odds_tool_returns_input_prep_result(monkeypatch):
 
     assert result["status"] == "success"
     assert result["result"]["status"] == "unavailable"
+
+
+# ── Evidence quality / warning tests ─────────────────────────────────────────
+
+_GAME_REQUEST_WITH_CONTEXT = {
+    "home_team": "Boston Celtics",
+    "away_team": "Indiana Pacers",
+    "league": "NBA",
+    "n_iterations": 100,
+    "seed": 42,
+    "home_context": {"off_rating": 118.0, "def_rating": 108.0, "pace": 100.0},
+    "away_context": {"off_rating": 115.0, "def_rating": 110.0, "pace": 98.0},
+    "game_context": {"is_playoff": False, "rest_days": 2},
+    "odds": {"moneyline_home": -160, "moneyline_away": 140},
+}
+
+_PROP_REQUEST_WITH_CONTEXT = {
+    "player_name": "Jayson Tatum",
+    "league": "NBA",
+    "prop_type": "pts",
+    "line": 25.5,
+    "home_team": "Boston Celtics",
+    "away_team": "Indiana Pacers",
+    "game_date": "2026-05-17",
+    "odds_over": -110,
+    "odds_under": -110,
+    "n_iterations": 100,
+    "player_context": {"pts_mean": 27.0, "pts_std": 5.5},
+    "game_context": {"is_playoff": False, "rest_days": 2},
+}
+
+_EVIDENCE_SIGNAL = {
+    "signal_type": "rest_advantage",
+    "category": "situational",
+    "plane": "game",
+    "value": 2,
+    "source": "schedule",
+    "confidence": 0.8,
+    "window": "matchup",
+    "direction": "home",
+}
+
+
+def test_analyze_game_emits_evidence_quality_missing_when_no_evidence(monkeypatch):
+    monkeypatch.setattr(mcp_server, "_formal_output_gate_failures", lambda: [])
+
+    result = omega_analyze_game(
+        _GAME_REQUEST_WITH_CONTEXT,
+        bankroll=2500.0,
+        session_id="sess-test-ev",
+    )
+
+    assert result["status"] == "success"
+    assert result["trace_quality"]["evidence_status"] == "empty"
+    assert result["trace_quality"]["evidence_quality"] == "missing"
+    assert "evidence_warning" in result
+    assert "evidence-learning" in result["evidence_warning"]
+
+
+def test_analyze_game_no_warning_when_evidence_provided(monkeypatch):
+    monkeypatch.setattr(mcp_server, "_formal_output_gate_failures", lambda: [])
+
+    result = omega_analyze_game(
+        {**_GAME_REQUEST_WITH_CONTEXT, "evidence": [_EVIDENCE_SIGNAL]},
+        bankroll=2500.0,
+        session_id="sess-test-ev",
+    )
+
+    assert result["status"] == "success"
+    assert result["trace_quality"]["evidence_status"] == "present"
+    assert result["trace_quality"]["evidence_quality"] == "present"
+    assert "evidence_warning" not in result
+
+
+def test_analyze_prop_emits_evidence_quality_missing_when_no_evidence(monkeypatch):
+    monkeypatch.setattr(mcp_server, "_formal_output_gate_failures", lambda: [])
+
+    result = omega_analyze_prop(
+        _PROP_REQUEST_WITH_CONTEXT,
+        bankroll=1000.0,
+        session_id="sess-test-ev",
+    )
+
+    assert result["status"] == "success"
+    assert result["trace_quality"]["evidence_status"] == "empty"
+    assert result["trace_quality"]["evidence_quality"] == "missing"
+    assert "evidence_warning" in result
+
+
+def test_analyze_prop_no_warning_when_evidence_provided(monkeypatch):
+    monkeypatch.setattr(mcp_server, "_formal_output_gate_failures", lambda: [])
+
+    prop_signal = {**_EVIDENCE_SIGNAL, "plane": "player", "stat_key": "pts"}
+    result = omega_analyze_prop(
+        {**_PROP_REQUEST_WITH_CONTEXT, "evidence": [prop_signal]},
+        bankroll=1000.0,
+        session_id="sess-test-ev",
+    )
+
+    assert result["status"] == "success"
+    assert result["trace_quality"]["evidence_quality"] == "present"
+    assert "evidence_warning" not in result
+
+
+def test_evidence_quality_not_applicable_on_baseline_run(monkeypatch):
+    monkeypatch.setattr(mcp_server, "_formal_output_gate_failures", lambda: [])
+
+    result = omega_analyze_game(
+        {
+            "home_team": "Boston Celtics",
+            "away_team": "Indiana Pacers",
+            "league": "NBA",
+            "n_iterations": 100,
+            "seed": 42,
+            "allow_baseline": True,
+            "game_context": {"is_playoff": False, "rest_days": 2},
+            "odds": {"moneyline_home": -160, "moneyline_away": 140},
+        },
+        bankroll=2500.0,
+        session_id="sess-test-ev",
+    )
+
+    assert result["status"] == "success"
+    tq = result["trace_quality"]
+    # baseline_default_context → context_source != "provided" → not_applicable
+    assert tq["evidence_quality"] == "not_applicable"
+    assert "evidence_warning" not in result
