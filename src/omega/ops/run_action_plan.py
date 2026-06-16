@@ -52,6 +52,8 @@ Allowlist:
         args.all_open: bool           (optional; render every sidecar in var/inbox/sessions/)
         args.verbose: bool (default false)
         Exactly one of session_ids or all_open must be provided.
+    type=validate_all
+        args.skip_tests: bool (default false)
 
 Usage:
     omega-run-action-plan var/inbox/action_plans/<session_id>.json
@@ -338,6 +340,16 @@ def _validate_render_audit(args: dict[str, Any]) -> list[str]:
     return cmd
 
 
+def _validate_validate_all(args: dict[str, Any]) -> list[str]:
+    _reject_unknown_args("validate_all", args, {"skip_tests"})
+    skip_tests = _optional_bool("validate_all", args, "skip_tests")
+
+    cmd = _module_cmd("validate_all")
+    if skip_tests:
+        cmd.append("--skip-tests")
+    return cmd
+
+
 # Strict allowlist. Adding a key here is a deliberate boundary change.
 _DISPATCH: dict[str, Any] = {
     "fit_calibration": _validate_fit_calibration,
@@ -350,6 +362,7 @@ _DISPATCH: dict[str, Any] = {
     "score_evidence_signals": _validate_score_evidence_signals,
     "fit_adjustment_policy": _validate_fit_adjustment_policy,
     "render_audit": _validate_render_audit,
+    "validate_all": _validate_validate_all,
 }
 
 
@@ -415,13 +428,13 @@ def main() -> int:
 
     logger.info("Plan session=%s: %d action(s) validated.", session_id, len(validated))
 
-    # Sub-scripts inherit the default DB path (cwd=_REPO_ROOT). Report which DB
-    # they will actually hit once, up front, so an empty/redirected DB is visible
-    # before any action runs.
+    # Sub-scripts inherit the default DB path (cwd=_REPO_ROOT). Guard the
+    # effective DB once, up front, so scheduled writes fail closed before the
+    # first action dispatch.
     try:
-        from omega.trace.store import db_status
+        from omega.ops.runtime_db_guard import assert_safe_runtime_db
 
-        st = db_status()
+        st = assert_safe_runtime_db(dry_run=args.dry_run)
         logger.info(
             "Effective DB: %s (source=%s, traces=%s, integrity_ok=%s, EMPTY_HISTORY_MODE=%s). %s",
             st["effective_path"],
@@ -432,7 +445,11 @@ def main() -> int:
             st["recommended_action"],
         )
     except Exception as exc:  # noqa: BLE001 â€” never let diagnostics break the run
-        logger.warning("db_status summary unavailable: %s", exc)
+        if args.dry_run:
+            logger.warning("runtime DB guard unavailable during dry-run: %s", exc)
+        else:
+            logger.error("Runtime DB guard failed: %s", exc)
+            return 2
 
     if args.dry_run:
         for atype, cmd in validated:

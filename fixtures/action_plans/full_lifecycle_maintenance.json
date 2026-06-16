@@ -1,0 +1,56 @@
+{
+  "session_id": "template-full-lifecycle-maintenance",
+  "actions": [
+    {
+      "type": "ingest_traces",
+      "args": {
+        "verbose": true
+      }
+    },
+    {
+      "type": "fetch_closing_lines",
+      "args": {
+        "verbose": true
+      }
+    },
+    {
+      "type": "fetch_outcomes",
+      "args": {
+        "leagues": [
+          "nba",
+          "wnba",
+          "mlb",
+          "soccer",
+          "props"
+        ]
+      }
+    },
+    {
+      "type": "settle_bets",
+      "args": {}
+    },
+    {
+      "type": "score_evidence_signals",
+      "args": {}
+    },
+    {
+      "type": "report_calibration",
+      "args": {
+        "league": "NBA",
+        "window_days": 30
+      }
+    },
+    {
+      "type": "render_audit",
+      "args": {
+        "all_open": true
+      }
+    },
+    {
+      "type": "validate_all",
+      "args": {
+        "skip_tests": true
+      }
+    }
+  ]
+}

@@ -221,6 +221,15 @@ local workspace, you can point `TraceStore` at any writable path with
 `OMEGA_TRACE_DB=<absolute-path>`. This is the explicit-override path; the
 auto-redirect described in Â§2b is the implicit fallback.
 
+**Scheduled/action-plan DB guard.** `omega-run-action-plan` now calls
+`assert_safe_runtime_db()` after plan validation and before the first
+non-dry-run action. Runs fail closed when the effective DB is auto-redirected,
+divergent, missing, corrupt, or empty. The only intentional empty-history path
+is `OMEGA_ALLOW_EMPTY_DB=1`, which logs `EMPTY_HISTORY_MODE=true` with the
+effective DB path and source. Schedule recurring jobs from
+`%USERPROFILE%\.omega\workspace\Omega` or set explicit durable
+`OMEGA_TRACE_DB`; dry-runs warn but do not raise on DB safety.
+
 ### 2e. Native Linux Container (preferred long-term runtime)
 
 For sustained development or repeated formal sessions, use the native Linux

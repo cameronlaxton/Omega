@@ -51,6 +51,7 @@ def test_new_deterministic_actions_validate_to_expected_commands():
                 "args": {"league": "nba", "provenance": "user_confirmed"},
             },
             {"type": "fetch_outcomes", "args": {"leagues": ["soccer", "props"]}},
+            {"type": "validate_all", "args": {"skip_tests": True}},
         ],
     }
 
@@ -79,6 +80,8 @@ def test_new_deterministic_actions_validate_to_expected_commands():
     ]
     assert _script_name(cmds["fetch_outcomes"]) == "omega.ops.fetch_outcomes_all"
     assert cmds["fetch_outcomes"][-3:] == ["--leagues", "soccer", "props"]
+    assert _script_name(cmds["validate_all"]) == "omega.ops.validate_all"
+    assert cmds["validate_all"][-1] == "--skip-tests"
 
 
 @pytest.mark.parametrize(
@@ -93,6 +96,7 @@ def test_new_deterministic_actions_validate_to_expected_commands():
         {"type": "fit_calibration", "args": {"league": "NBA", "plane": "all"}},
         {"type": "settle_bets", "args": {"provenance": "phantom"}},
         {"type": "settle_bets", "args": {"apply": True}},
+        {"type": "validate_all", "args": {"skip_tests": "yes"}},
     ],
 )
 def test_action_plan_validation_rejects_unsafe_or_invalid_args(action: dict):
@@ -127,3 +131,50 @@ def test_action_plan_templates_dry_run_and_do_not_go_live():
             check=False,
         )
         assert result.returncode == 0, result.stderr
+
+
+def _unsafe_db_status():
+    return {
+        "effective_path": "C:/Users/test/AppData/Local/omega/runtime/var/omega_traces.db",
+        "source": "auto_redirect_network_fs",
+        "effective_exists": True,
+        "effective_integrity_ok": True,
+        "effective_trace_count": 1,
+        "divergence": None,
+        "empty_history_mode": False,
+        "recommended_action": "run from local workspace",
+    }
+
+
+def _write_validate_plan(tmp_path: Path) -> Path:
+    plan = tmp_path / "plan.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "session_id": "test",
+                "actions": [{"type": "validate_all", "args": {"skip_tests": True}}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return plan
+
+
+def test_action_plan_non_dry_run_aborts_on_unsafe_runtime_db(tmp_path, monkeypatch):
+    from omega.ops import runtime_db_guard
+
+    plan = _write_validate_plan(tmp_path)
+    monkeypatch.setattr(runtime_db_guard, "db_status", lambda requested=None: _unsafe_db_status())
+    monkeypatch.setattr(sys, "argv", ["omega-run-action-plan", str(plan)])
+
+    assert run_action_plan.main() == 2
+
+
+def test_action_plan_dry_run_reports_unsafe_runtime_db_without_raising(tmp_path, monkeypatch):
+    from omega.ops import runtime_db_guard
+
+    plan = _write_validate_plan(tmp_path)
+    monkeypatch.setattr(runtime_db_guard, "db_status", lambda requested=None: _unsafe_db_status())
+    monkeypatch.setattr(sys, "argv", ["omega-run-action-plan", str(plan), "--dry-run"])
+
+    assert run_action_plan.main() == 0

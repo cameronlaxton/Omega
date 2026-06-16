@@ -29,6 +29,9 @@ recommendations, compute protected values, or promote adjustment policies live.
 - `weekly_shadow_review`: scores evidence, reports calibration health, and fits
   a shadow-only adjustment-policy candidate. It does not promote live behavior.
 - `empty_slate`: validates the scheduler path on days with no work.
+- `full_lifecycle_maintenance`: chains intake, close/outcome follow-up, audit
+  rendering, and `omega-validate-all --skip-tests` without creating picks or
+  promoting live behavior.
 
 Run every template through the dispatcher before executing it:
 
@@ -59,6 +62,13 @@ Operators should record or review these counts after each loop:
 - `fit_adjustment_policy` action plans only allow `mode: "shadow"`.
 - `fetch_closing_lines` follows up confirmed `bet_records`; it never fetches
   candidate bets or creates picks.
+- Non-dry-run `omega-run-action-plan` runs the runtime DB guard after plan
+  validation and before dispatch. Scheduled tasks must run from
+  `%USERPROFILE%\.omega\workspace\Omega` or set explicit durable
+  `OMEGA_TRACE_DB`; auto-redirected, divergent, missing, corrupt, or empty DBs
+  fail closed unless `OMEGA_ALLOW_EMPTY_DB=1` is intentionally set.
+- Dry-runs still validate every action and report DB safety warnings, but they
+  do not raise for unsafe DB identity.
 - Calibration promotion remains an explicit operator action through
   `promote_profile`.
 - `adj_v1_seed` remains in shadow unless a separate validation and promotion

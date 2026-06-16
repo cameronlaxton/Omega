@@ -26,6 +26,7 @@ The previous standalone bridge has been removed. Do not rebuild or route through
 | `omega-ingest-traces` | Trace export ingestion |
 | `omega-fetch-closing-lines` | Closing-line capture |
 | `omega-fetch-outcomes-props` | Player-prop outcome attachment |
+| `omega-prove-lifecycle` | Deterministic local/CI lifecycle proof harness |
 | `OMEGA_COWORK.md` | Local VM runtime protocol |
 
 ## Next Pickup
@@ -43,5 +44,14 @@ Continue hardening the MCP-native workflow: improve seed provenance, add richer 
 **Mitigation applied (2026-05-28):** The 13 MLB traces + outcomes from the 2026-05-27 daily loop were exported to `var/inbox/traces/backfill_20260528/` as ingest-ready JSON. To restore them: move those files to `var/inbox/traces/` and run `omega-ingest-traces`. The `_export_meta.outcome_attached` field on each file documents the already-fetched ESPN outcome — skip `fetch_outcomes` after re-ingest to avoid a no-op second pass (idempotent anyway).
 
 **To fix permanently:** Run `tools/windows/cowork_bootstrap.ps1` on the Windows host to set up the local workspace. Future scheduled tasks must be pointed at that local clone, not `C:\repos\Omega`.
+
+**Guard now enforced (Phase 6h):** `omega-run-action-plan` calls
+`omega.ops.runtime_db_guard.assert_safe_runtime_db()` after plan validation and
+before the first non-dry-run action. Non-dry-run scheduled/action-plan work
+fails closed on auto-redirected, divergent, missing, corrupt, or empty runtime
+DBs unless `OMEGA_ALLOW_EMPTY_DB=1` is explicitly set. Dry-runs report the same
+DB safety verdict as a warning so templates can be checked without writing.
+Run scheduled tasks from `%USERPROFILE%\.omega\workspace\Omega` or provide an
+explicit durable `OMEGA_TRACE_DB`.
 
 **Also flagged this session:** FUSE mount truncation of four source files (`espn_nba.py`, `espn_mlb.py`, `store.py`, `session_sidecar.py`) — trailing bytes dropped silently at the mount cache boundary. Per OMEGA_COWORK.md §2c, repair path is `omega-cowork-preflight --repair-from-git` (runs `git checkout HEAD` through bash to bypass the cache). The `Write` tool does NOT fix this — Windows-side writes don't invalidate the Linux mount cache.
