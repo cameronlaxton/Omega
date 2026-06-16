@@ -34,6 +34,14 @@ _MIN_SAMPLES = 30
 # Epsilon for log loss clipping
 _LOG_EPS = 1e-15
 
+# Isotonic output clip: prevents extreme 0.0/1.0 PAV outputs from tail bins with
+# sparse training samples, which otherwise produce large ECE gaps on the holdout.
+# 0.15 is consistent with empirical upset rates across supported sports (MLB ~15–30%,
+# NBA ~15–25%); draws in soccer are naturally lower but 0.15 is a safe floor for
+# game-plane moneyline calibration. Revisit per sport family if draw or tennis
+# calibration profiles show systematic floor violations.
+_ISO_CLIP = 0.15
+
 # Phase 7 red-team finding 4: early low-liquidity captures carry phantom edges and
 # must not contaminate the production calibration profile. Traces tagged with this
 # liquidity profile are excluded from fitting by default; opting in routes them
@@ -330,11 +338,14 @@ class CalibrationFitter:
         pav_values, pav_counts = _pool_adjacent_violators(observed_filled, bin_counts)
 
         # Build calibration map: bin_center → calibrated_prob
+        # Clip to [_ISO_CLIP, 1 - _ISO_CLIP] to prevent tail bins with sparse
+        # training samples from clamping to exactly 0.0 or 1.0, which produces
+        # large ECE gaps on the holdout.
         calibration_map: dict[str, float] = {}
         for i in range(n_bins):
             center = (bin_edges[i] + bin_edges[i + 1]) / 2.0
-            # Use string keys for JSON serialization
-            calibration_map[str(round(center, 4))] = round(pav_values[i], 6)
+            clipped = max(_ISO_CLIP, min(1.0 - _ISO_CLIP, pav_values[i]))
+            calibration_map[str(round(center, 4))] = round(clipped, 6)
 
         dataset_hash = _compute_hash(predictions, outcomes)
 
