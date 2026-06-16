@@ -17,7 +17,7 @@ from omega.historical.contracts import (
 )
 from omega.historical.identity import event_key
 from omega.historical.normalize import parse_datetime_utc
-from omega.historical.replay import ReplayDataset, ReplayEngine
+from omega.historical.replay import ReplayDataset, ReplayEngine, _recommended_prop_side
 
 LG, FAM = "NBA", "basketball"
 
@@ -87,7 +87,7 @@ def test_prop_replay_eligible_and_decision_time_line(backtest_store, tmp_path):
         calibration_eligible_only=True, limit=100,
     )
     prop_traces = [t for t in props if t.get("kind") == "prop"]
-    assert len(prop_traces) == 2  # both prop predictions are eligible traces
+    assert len(prop_traces) == 1  # pass recommendations are not graded as phantom sides
 
     lebron = next(
         t for t in prop_traces
@@ -112,3 +112,9 @@ def test_void_prop_excluded_from_calibration(backtest_store, tmp_path):
     # Only the non-void prop contributes a calibration pair.
     assert len(preds) == 1
     assert outs == [1]
+
+
+def test_recommended_prop_side_only_allows_over_under():
+    assert _recommended_prop_side({"result": {"recommendation": "under"}}) == "under"
+    assert _recommended_prop_side({"result": {"recommendation": "OVER"}}) == "over"
+    assert _recommended_prop_side({"result": {"recommendation": "pass"}}) is None

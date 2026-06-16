@@ -62,6 +62,7 @@ def _seed_dataset(root) -> None:
         source_name="test",
         league=LEAGUE,
         sport_family=FAMILY,
+        odds_timing_class="closing_only",
     )
     save_dataset_manifest(manifest, root=root)
     save_normalized_dataset(MANIFEST_ID, events=events, outcomes=outcomes, root=root)
@@ -95,10 +96,12 @@ def test_replay_history_tags_and_audits(tmp_path):
     try:
         modes = sorted({r[0] for r in con.execute("SELECT DISTINCT execution_mode FROM traces")})
         n_traces = con.execute("SELECT COUNT(*) FROM traces").fetchone()[0]
+        first_trace = con.execute("SELECT full_trace FROM traces LIMIT 1").fetchone()[0]
     finally:
         con.close()
     assert modes == ["historical_replay"]
     assert n_traces == 4
+    assert json.loads(first_trace)["odds_timing_class"] == "closing_only"
 
     # Sidecars exist beside the replay manifest.
     replay_dir = root / "replays" / f"replay_{MANIFEST_ID}"
@@ -110,5 +113,6 @@ def test_replay_history_tags_and_audits(tmp_path):
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["n_persisted"] == 4
     assert summary["eligible_count"] >= 1
+    assert summary["calibration_eligible_rate_denominator"] >= summary["eligible_count"]
     assert summary["context_source_distribution"].get("provided", 0) >= 1
     assert "Replay Run Audit" in audit.read_text(encoding="utf-8")

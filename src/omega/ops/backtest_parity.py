@@ -65,6 +65,7 @@ def evaluate_backtest_parity(
             recommend = False
             reasons.append("ece_regressed")
     else:
+        recommend = False
         reasons.append("no_incumbent_baseline")
 
     return {
@@ -113,11 +114,13 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     store = TraceStore(db_path=args.historical_db)
-    graded = store.query_traces(
-        league=args.league, execution_mode="historical_replay",
-        has_outcome=True, calibration_eligible_only=True, limit=1_000_000,
-    )
-    store.close()
+    try:
+        graded = store.query_traces(
+            league=args.league, execution_mode="historical_replay",
+            has_outcome=True, calibration_eligible_only=True, limit=1_000_000,
+        )
+    finally:
+        store.close()
 
     report = evaluate_backtest_parity(graded, candidate, incumbent, plane=args.plane)
     print(json.dumps(report, indent=2))

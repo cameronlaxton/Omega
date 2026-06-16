@@ -47,6 +47,11 @@ from omega.trace.store import TraceStore
 ARTIFACT_SCHEMA_VERSION = 1
 
 
+def _recommended_prop_side(envelope: dict) -> str | None:
+    recommendation = str((envelope.get("result") or {}).get("recommendation") or "").lower()
+    return recommendation if recommendation in {"over", "under"} else None
+
+
 class LeakageError(RuntimeError):
     """Raised when an event fails the leakage guard under ``policy='fail'``."""
 
@@ -395,7 +400,8 @@ class ReplayEngine:
                 trace_id = self.store.persist(record)
 
             po = po_by_key.get((m.player_name, m.stat_type))
-            if po is not None:
+            side = _recommended_prop_side(envelope)
+            if po is not None and side is not None:
                 try:
                     self.store.attach_prop_outcome(
                         trace_id,
@@ -405,7 +411,7 @@ class ReplayEngine:
                         # still float()s the arg — pass 0.0 rather than None.
                         stat_value=po.stat_value if po.stat_value is not None else 0.0,
                         line=m.line,
-                        side="over",
+                        side=side,
                         source="historical_replay",
                         void=po.void,
                     )
