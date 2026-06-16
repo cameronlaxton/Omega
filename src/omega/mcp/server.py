@@ -172,6 +172,30 @@ def _maybe_inject_game_priors(
     return payload
 
 
+def _maybe_inject_prop_priors(
+    payload: dict[str, Any], session_id: str | None
+) -> dict[str, Any]:
+    """Gatherer seam for player props: merge the fitted NB dispersion ``k``
+    (NFL yardage) into player_context and record provenance in the sidecar.
+
+    Best-effort by design — on any failure the payload passes through unchanged
+    and the service falls back to the per-request std-derived ``k`` (fail-open).
+    """
+    try:
+        from omega.trace.priors import inject_prop_priors
+
+        payload, event = inject_prop_priors(payload)
+        if event and session_id:
+            sidecar = repo_root() / "var" / "inbox" / "sessions" / f"{session_id}.json"
+            if sidecar.exists():
+                from omega.trace.session_sidecar import append_audit_events
+
+                append_audit_events(sidecar, [event])
+    except Exception as exc:  # noqa: BLE001 - injection must never block analysis
+        logger.warning("prop prior injection failed for session_id=%s: %s", session_id, exc)
+    return payload
+
+
 def _merge_mcp_trace_quality(
     trace_quality: dict[str, Any] | None,
     mcp_defaults: dict[str, Any],
@@ -334,6 +358,7 @@ def omega_analyze_prop(
     try:
         request_payload, mcp_defaults = _request_with_mcp_defaults(request, kind="prop")
         effective_trace_quality = _merge_mcp_trace_quality(trace_quality, mcp_defaults)
+        request_payload = _maybe_inject_prop_priors(request_payload, session_id)
         typed = PlayerPropRequest(**request_payload)
         gate_failures = _formal_output_gate_failures()
         if gate_failures:
@@ -544,6 +569,8 @@ def omega_run_batch(
         # --- Dynamic priors (after seeding so seeds stay payload-stable) ---
         if entry.kind != "prop":
             request_dict = _maybe_inject_game_priors(request_dict, session_id)
+        else:
+            request_dict = _maybe_inject_prop_priors(request_dict, session_id)
 
         # --- Analyze ---
         try:

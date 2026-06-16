@@ -158,6 +158,12 @@ class SoccerPoissonBackend:
         home_lambda = max(0.5, home_lambda)
         away_lambda = max(0.5, away_lambda)
 
+        if request.dispersion is not None and request.dispersion.variance_multiplier != 1.0:
+            mult = request.dispersion.variance_multiplier
+            home_lambda *= mult
+            away_lambda *= mult
+            request.dispersion.applied_to.extend(["home_lambda", "away_lambda"])
+
         if not _valid_dixon_coles_rho(home_lambda, away_lambda, rho):
             return _skip_result(
                 request.home_team,

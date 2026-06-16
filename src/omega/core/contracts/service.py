@@ -8,6 +8,7 @@ no data fetching, no config loading, no network calls.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import uuid
 from dataclasses import dataclass, field
@@ -27,6 +28,7 @@ from omega.core.calibration.adjustment_policy import (
 from omega.core.calibration.market import calibration_market_for_plane
 from omega.core.calibration.probability import apply_calibration, apply_calibration_audited
 from omega.core.config.leagues import get_league_config
+from omega.core.contracts.market_quotes import market_quote
 from omega.core.contracts.schemas import (
     AnalysisMetadata,
     BetSlip,
@@ -41,7 +43,6 @@ from omega.core.contracts.schemas import (
     SlateAnalysisRequest,
     SlateAnalysisResponse,
 )
-from omega.core.contracts.market_quotes import market_quote
 from omega.core.contracts.seeding import stable_analysis_hash
 from omega.core.edge.consumers import resolve_edge_consumer
 from omega.core.simulation.archetypes import get_archetype_name
@@ -1637,11 +1638,24 @@ def analyze_player_prop(
         "dud_prob": float(player_ctx.get("dud_prob", 0.0)),
     }
     if backend_name == "prop_neg_binom":
-        variance = std_f**2
-        if variance > mean_f:
-            prior_payload["nb_dispersion_k"] = (mean_f**2) / (variance - mean_f)
-        else:
-            prior_payload["nb_dispersion_k"] = 100.0
+        # Prefer a fitted/shrunk dispersion injected by the gatherer
+        # (inject_prop_priors -> player_context.nb_dispersion_k) over the
+        # per-request method-of-moments derivation, recording its provenance.
+        injected_k = player_ctx.get("nb_dispersion_k")
+        if injected_k is not None:
+            try:
+                injected_k_f = float(injected_k)
+            except (TypeError, ValueError):
+                injected_k_f = None
+            if injected_k_f is not None and math.isfinite(injected_k_f) and injected_k_f > 0:
+                prior_payload["nb_dispersion_k"] = injected_k_f
+                notes.append(f"nb_k_source:{player_ctx.get('nb_k_source', 'supplied')}")
+        if "nb_dispersion_k" not in prior_payload:
+            variance = std_f**2
+            if variance > mean_f:
+                prior_payload["nb_dispersion_k"] = (mean_f**2) / (variance - mean_f)
+            else:
+                prior_payload["nb_dispersion_k"] = 100.0
     # Whitelisted sport-specific prop priors travel from player_context into
     # prior_payload (tennis serve model keys; harmless no-ops elsewhere).
     for prior_key in ("ace_rate", "serve_win_pct", "match_format", "expected_total_games"):

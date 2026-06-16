@@ -59,6 +59,9 @@ def test_duplicate_prop_registration_raises():
 def test_default_prop_backend_routing():
     # NFL yardage -> Negative Binomial; unknown stat -> distribution router.
     assert resolve_default_prop_backend("NFL", "rushing_yards") == "prop_neg_binom"
+    assert resolve_default_prop_backend("NFL", "rush_yds") == "prop_neg_binom"
+    assert resolve_default_prop_backend("NFL", "pass_yds") == "prop_neg_binom"
+    assert resolve_default_prop_backend("NFL", "rec_yds") == "prop_neg_binom"
     assert resolve_default_prop_backend("NBA", "pts") == "prop_distribution_router"
     assert ("NFL", "passing_yards") in DEFAULT_PROP_BACKEND_BY_LEAGUE_STAT
 
@@ -255,6 +258,31 @@ def test_analyze_prop_routes_to_neg_binom():
     assert resp.distribution_type == "negative_binomial"
 
 
+def test_analyze_prop_routes_nfl_stat_alias_to_neg_binom():
+    """NFL compact yardage aliases route to NB while reading alias mean/std keys."""
+    from omega.core.contracts.service import PlayerPropRequest, analyze_player_prop
+
+    req = PlayerPropRequest(
+        player_name="Saquon Barkley",
+        league="NFL",
+        prop_type="rush_yds",
+        line=82.5,
+        home_team="Philadelphia Eagles",
+        away_team="Dallas Cowboys",
+        game_date="2026-05-17",
+        n_iterations=500,
+        seed=1,
+        player_context={"rush_yds_mean": 90.0, "rush_yds_std": 30.0},
+        game_context={"is_playoff": False, "rest_days": 7},
+    )
+    resp = analyze_player_prop(req)
+    assert resp.status == "success"
+    assert resp.distribution_type == "negative_binomial"
+    params = resp.simulation_distributions[0]["distribution_params"]
+    assert params["mu"] == pytest.approx(90.0)
+    assert params["k"] == pytest.approx(10.0)
+
+
 def test_neg_binom_requires_valid_dispersion_k():
     backend = resolve_prop_backend("prop_neg_binom")
     assert backend is not None
@@ -339,7 +367,9 @@ def test_game_request_carries_prior_payload():
     from omega.core.contracts.schemas import GameAnalysisRequest
 
     req = GameAnalysisRequest(
-        home_team="A", away_team="B", league="FIFA_WORLD_CUP_2026",
+        home_team="A",
+        away_team="B",
+        league="FIFA_WORLD_CUP_2026",
         prior_payload={"rho": -0.13},
         game_context={"is_playoff": False, "rest_days": 2},
     )

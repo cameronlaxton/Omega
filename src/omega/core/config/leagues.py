@@ -87,10 +87,12 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "scoring": "points",
         "avg_total": 45.0,
         "avg_pace": 130.0,
-        "distribution": "normal",
+        "distribution": "normal",  # legacy fallback for the fast_score path
         "home_advantage": 2.5,
         "std": 10.0,
         "timezone": "America/New_York",  # EST/EDT
+        "default_game_backend": "nfl_neg_binom",
+        "teaser_evaluation": True,  # consumed by omega/core/edge/nfl_teasers.py
     },
     "NCAAF": {
         "sport": "football",

@@ -583,6 +583,36 @@ class TestFetchOutcomesPropsSoccer:
         assert store.get_prop_outcomes("sandbox-soccer-unsup") == []
         store.close()
 
+    def test_unsupported_soccer_league_choice_is_non_mutating(self):
+        db = _tmp_store_path()
+        store = TraceStore(db_path=db)
+        store.persist(
+            _make_prop_trace(
+                "sandbox-soccer-unsupported-league",
+                league="K_LEAGUE",
+                player_name="Player One",
+                prop_type="shots",
+                line=1.5,
+                home_team="FC Seoul",
+                away_team="Ulsan",
+            )
+        )
+        store.close()
+
+        try:
+            fetch_outcomes_props.main(
+                ["--since", "2026-05-17", "--league", "K_LEAGUE", "--db", db],
+                scoreboard_fetcher=_fake_scoreboard_factory({}),
+                box_score_fetcher=_fake_box_score_factory({}),
+            )
+        except SystemExit as exc:
+            assert exc.code == 2
+        else:
+            raise AssertionError("unsupported soccer league should fail argparse choices")
+
+        store = TraceStore(db_path=db)
+        assert store.get_prop_outcomes("sandbox-soccer-unsupported-league") == []
+        store.close()
 
 class TestFetchOutcomesPropsSkips:
     def test_missing_game_identity_is_skipped(self):

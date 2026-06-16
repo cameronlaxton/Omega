@@ -470,6 +470,21 @@ class TennisMarkovBackend:
         coeffs_a = _side_coeffs(prior, "home")
         coeffs_b = _side_coeffs(prior, "away")
 
+        if request.dispersion is not None and request.dispersion.variance_multiplier != 1.0:
+            import math
+            mult = request.dispersion.variance_multiplier
+            def _scale_coeffs(c: dict[str, float] | None) -> dict[str, float] | None:
+                if c is None:
+                    return None
+                return {
+                    k: math.copysign(min(abs(v * mult), _PRESSURE_CAP), v)
+                    for k, v in c.items()
+                }
+            coeffs_a = _scale_coeffs(coeffs_a)
+            coeffs_b = _scale_coeffs(coeffs_b)
+            if coeffs_a is not None or coeffs_b is not None:
+                request.dispersion.applied_to.append("pressure_coefficients")
+
         # Closed-form probabilities.
         terminals = match_set_score_distribution(pa, pb, coeffs_a, coeffs_b, best_of)
         p_match_a = sum(p for (a, b), p in terminals.items() if a > b)

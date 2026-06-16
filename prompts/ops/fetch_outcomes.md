@@ -60,8 +60,8 @@ If you only need outcomes for one league:
 
 ```bash
 omega-fetch-outcomes-all --leagues nba
-omega-fetch-outcomes-all --leagues mlb
 omega-fetch-outcomes-all --leagues soccer
+omega-fetch-outcomes-all --leagues mlb
 omega-fetch-outcomes-all --leagues props
 omega-fetch-outcomes-all --since 2026-05-25 --until 2026-05-27  # backfill range
 omega-fetch-outcomes-all --dry-run

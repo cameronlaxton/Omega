@@ -33,16 +33,23 @@ import logging
 import random
 import sys
 from pathlib import Path
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from omega.core.calibration.context_slices import (  # noqa: E402
+    BASE_CONTEXT_SLICE,
+    INITIAL_CONTEXT_SLICES,
+    context_slice_for_trace,
+)
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
 from omega.core.calibration.market import calibration_market_for_plane  # noqa: E402
 from omega.core.calibration.profiles import CalibrationProfile  # noqa: E402
 from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
+from omega.core.calibration.sport_family import sport_family_for_league  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("fit_calibration")
@@ -93,16 +100,16 @@ def _next_version(registry: CalibrationRegistry, league: str, method: str, marke
 
 
 def _unique_profile_id(
-    method: str, league: str, version: int, dataset_hash: str, market: str = "game"
+    method: str, league: str, version: int, dataset_hash: str, market: str = "game", context_slice: str | None = None
 ) -> str:
     """Build a profile_id that will not collide with any prior fit.
 
-    Format: <method-prefix>_<league>[_<market>]_v<version>_<short_hash>
-    Example: iso_nba_v3_4f7a9d2b1c3e5f0a, iso_epl_draw_v1_4f7a9d2b1c3e5f0a
+    Format: <method-prefix>_<league>[_<market>][_<slice>]_v<version>_<short_hash>
     """
     prefix = {"isotonic": "iso", "shrinkage": "shrink"}.get(method, method)
     market_tag = "" if market == "game" else f"{market}_"
-    return f"{prefix}_{league.lower()}_{market_tag}v{version}_{dataset_hash[:16]}"
+    slice_tag = f"{context_slice}_" if context_slice else ""
+    return f"{prefix}_{league.lower()}_{market_tag}{slice_tag}v{version}_{dataset_hash[:16]}"
 
 
 def fit_and_register(
@@ -116,6 +123,7 @@ def fit_and_register(
     hold_o: list[int],
     dry_run: bool,
     market: str = "game",
+    context_slice: str | None = None,
 ) -> CalibrationProfile:
     """Fit one method, evaluate on holdout, register as CANDIDATE. Returns profile."""
     if method == "isotonic":
@@ -127,6 +135,7 @@ def fit_and_register(
 
     metrics = fitter.evaluate(profile, hold_p, hold_o)
     profile.metrics = metrics
+    profile.context_slice = context_slice
 
     version = _next_version(registry, league, method, market)
     profile.version = version
@@ -136,6 +145,7 @@ def fit_and_register(
         version=version,
         dataset_hash=profile.dataset_hash,
         market=market,
+        context_slice=context_slice,
     )
 
     if not dry_run:
@@ -186,6 +196,11 @@ def main() -> int:
         default=_DEFAULT_MIN_SAMPLES,
         help=f"Refuse to fit with fewer total graded samples (default: {_DEFAULT_MIN_SAMPLES})",
     )
+    parser.add_argument("--shadow-min-samples", type=int, default=30, help="Minimum samples to fit a shadow profile")
+    parser.add_argument("--context-slice", type=str, default=None, help="Fit specific context slice only")
+    parser.add_argument("--all-context-slices", action="store_true", help="Fit all canonical slices")
+    parser.add_argument("--include-base-with-slices", action="store_true", help="Fit base slice when --all-context-slices is used")
+    parser.add_argument("--sport-family", type=str, default=None, help="Override sport family for context resolution")
     parser.add_argument("--db", type=str, default=None, help="SQLite path")
     parser.add_argument(
         "--dry-run", action="store_true", help="Fit and evaluate but do not register"
@@ -231,76 +246,117 @@ def main() -> int:
         logger.error("No graded traces found for league=%s", args.league)
         return 1
 
-    fitter = CalibrationFitter()
-    predictions, outcomes, pair_label = _extract_plane_pairs(fitter, graded, args.plane)
+    sport_family = args.sport_family or sport_family_for_league(args.league)
 
-    if len(predictions) < args.min_samples:
-        logger.error(
-            "Refusing to fit %s plane: only %d graded %s pairs available, "
-            "minimum %d required. Run with --min-samples to override.",
-            args.plane,
-            len(predictions),
-            pair_label,
-            args.min_samples,
-        )
-        return 1
+    # Group traces by requested context slice strategy
+    groups: dict[str | None, list[dict[str, Any]]] = {}
 
-    train_p, train_o, hold_p, hold_o = _deterministic_split(predictions, outcomes, args.league)
-    logger.info(
-        "Loaded %d graded %s pairs for %s plane; split %d train / %d holdout (deterministic).",
-        len(predictions),
-        pair_label,
-        args.plane,
-        len(train_p),
-        len(hold_p),
-    )
+    if args.all_context_slices:
+        for t in graded:
+            slice_val = context_slice_for_trace(t, sport_family=sport_family)
+            if slice_val is BASE_CONTEXT_SLICE and not args.include_base_with_slices:
+                continue
+            # If sport is tennis, we have implicit sub-slices like "surface_clay".
+            # For simplicity, if we are doing all slices, we only group by the explicit initial slices
+            # plus any discovered surface sub-slices.
+            if slice_val is not BASE_CONTEXT_SLICE and slice_val not in INITIAL_CONTEXT_SLICES and not slice_val.startswith("surface_"):
+                # We can just include all discovered low cardinality slices if they meet the sample threshold later.
+                pass
+            groups.setdefault(slice_val, []).append(t)
+    elif args.context_slice:
+        req_slice = args.context_slice
+        for t in graded:
+            if context_slice_for_trace(t, sport_family=sport_family) == req_slice:
+                groups.setdefault(req_slice, []).append(t)
+    else:
+        # Existing behaviour: base slice only, filtering out early_market natively if not opted in
+        groups[BASE_CONTEXT_SLICE] = [
+            t for t in graded if context_slice_for_trace(t, sport_family=sport_family) is BASE_CONTEXT_SLICE
+        ]
 
     methods = ["isotonic", "shrinkage"] if args.method == "both" else [args.method]
     market = calibration_market_for_plane(args.plane)
+    fitter = CalibrationFitter()
     registry = CalibrationRegistry()
     registered = []
 
-    for method in methods:
-        try:
-            profile = fit_and_register(
-                fitter=fitter,
-                registry=registry,
-                league=args.league,
-                method=method,
-                train_p=train_p,
-                train_o=train_o,
-                hold_p=hold_p,
-                hold_o=hold_o,
-                dry_run=args.dry_run,
-                market=market,
-            )
-        except ValueError as exc:
-            logger.error("Failed to fit %s: %s", method, exc)
+    # Dry run table header
+    if args.dry_run:
+        print(f"{'League':<10} | {'Family':<15} | {'Market':<10} | {'Slice':<25} | {'N Pairs':<7} | {'Status':<15} | {'Threshold':<9}")
+        print("-" * 110)
+
+    for slice_name, slice_traces in groups.items():
+        predictions, outcomes, pair_label = _extract_plane_pairs(fitter, slice_traces, args.plane)
+        n = len(predictions)
+
+        status = "eligible"
+        threshold = args.min_samples
+        if n < args.shadow_min_samples:
+            status = "skipped"
+            threshold = args.shadow_min_samples
+        elif n < args.min_samples:
+            status = "shadow"
+            threshold = args.min_samples
+
+        if args.dry_run:
+            print(f"{args.league:<10} | {sport_family:<15} | {market:<10} | {str(slice_name or 'base'):<25} | {n:<7} | {status:<15} | {threshold:<9}")
             continue
 
-        registered.append(profile)
+        if n < args.shadow_min_samples:
+            logger.warning(
+                "Skipping slice %r: %d graded %s pairs available, minimum %d required.",
+                slice_name, n, pair_label, args.shadow_min_samples
+            )
+            continue
+
+        if n < args.min_samples:
+            logger.info("Fitting slice %r as shadow profile (%d pairs).", slice_name, n)
+
+        train_p, train_o, hold_p, hold_o = _deterministic_split(predictions, outcomes, args.league)
         logger.info(
-            "%s candidate %s: brier=%.4f ece=%.4f log_loss=%.4f n_eval=%d",
-            "DRY-RUN" if args.dry_run else "Registered",
-            profile.profile_id,
-            profile.metrics.get("brier_score", -1),
-            profile.metrics.get("calibration_error", -1),
-            profile.metrics.get("log_loss", -1),
-            profile.metrics.get("n_eval", 0),
+            "Loaded %d graded %s pairs for %s plane (slice=%r); split %d train / %d holdout.",
+            n, pair_label, args.plane, slice_name, len(train_p), len(hold_p)
         )
 
+        for method in methods:
+            try:
+                profile = fit_and_register(
+                    fitter=fitter,
+                    registry=registry,
+                    league=args.league,
+                    method=method,
+                    train_p=train_p,
+                    train_o=train_o,
+                    hold_p=hold_p,
+                    hold_o=hold_o,
+                    dry_run=args.dry_run,
+                    market=market,
+                    context_slice=slice_name,
+                )
+                registered.append(profile)
+                logger.info(
+                    "Registered candidate %s: brier=%.4f ece=%.4f log_loss=%.4f n_eval=%d",
+                    profile.profile_id,
+                    profile.metrics.get("brier_score", -1),
+                    profile.metrics.get("calibration_error", -1),
+                    profile.metrics.get("log_loss", -1),
+                    profile.metrics.get("n_eval", 0),
+                )
+            except ValueError as exc:
+                logger.error("Failed to fit %s for slice %r: %s", method, slice_name, exc)
+
+    if args.dry_run:
+        return 0
+
     if not registered:
-        logger.error("No profiles registered (all fits failed).")
+        logger.error("No profiles registered (all fits failed or were skipped).")
         return 1
 
-    logger.info(
-        "Done. %d candidate(s) %s.", len(registered), "evaluated" if args.dry_run else "registered"
-    )
+    logger.info("Done. %d candidate(s) registered.", len(registered))
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 

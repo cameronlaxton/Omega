@@ -177,12 +177,12 @@ def _soccer_box_score(player: str, shots: float) -> dict[str, Any]:
                     {
                         "athlete": {"displayName": player},
                         "stats": [
-                            {"name": "totalGoals", "value": 0.0},
-                            {"name": "goalAssists", "value": 0.0},
-                            {"name": "totalShots", "value": shots},
-                            {"name": "shotsOnTarget", "value": 1.0},
-                            {"name": "yellowCards", "value": 0.0},
-                            {"name": "redCards", "value": 0.0},
+                            {"name": "totalGoals", "value": "1"},
+                            {"name": "goalAssists", "value": "0"},
+                            {"name": "totalShots", "value": str(shots)},
+                            {"name": "shotsOnTarget", "value": "2"},
+                            {"name": "yellowCards", "value": "0"},
+                            {"name": "redCards", "value": "0"},
                         ],
                     }
                 ],
@@ -234,6 +234,70 @@ class TestBackfillDate:
         rows = store.get_prop_outcomes("sandbox-prop-1")
         assert len(rows) == 1
         assert rows[0]["stat_value"] == 31.0
+        assert rows[0]["result"] == "win"
+        assert rows[0]["source"] == "manual:espn_boxscore_20260517"
+        store.close()
+
+    def test_attaches_soccer_game_outcome_when_confirmed(self):
+        db = _tmp_db()
+        store = TraceStore(db_path=db)
+        store.persist(
+            _make_game_trace(
+                trace_id="sandbox-soccer-game-1",
+                home_team="Arsenal",
+                away_team="Chelsea",
+                league="EPL",
+            )
+        )
+
+        counts = backfill.backfill_date(
+            store,
+            league="EPL",
+            d=date(2026, 5, 17),
+            confirm=lambda _desc: "y",
+            scoreboard_fetcher=lambda _l, _d: [_soccer_final_game()],
+            box_score_fetcher=lambda _l, _e: {},
+        )
+        assert counts["game_attached"] == 1
+        row = store.conn.execute(
+            "SELECT source, home_score, away_score, result FROM outcomes WHERE trace_id = ?",
+            ("sandbox-soccer-game-1",),
+        ).fetchone()
+        assert row["source"] == "manual:espn_boxscore_20260517"
+        assert row["home_score"] == 2
+        assert row["away_score"] == 1
+        assert row["result"] == "home_win"
+        store.close()
+
+    def test_attaches_soccer_prop_outcome_when_confirmed(self):
+        db = _tmp_db()
+        store = TraceStore(db_path=db)
+        store.persist(
+            _make_prop_trace(
+                trace_id="sandbox-soccer-prop-1",
+                home_team="Arsenal",
+                away_team="Chelsea",
+                league="EPL",
+                player_name="Bukayo Saka",
+                prop_type="shots",
+                line=2.5,
+                recommendation="over",
+            )
+        )
+
+        counts = backfill.backfill_date(
+            store,
+            league="EPL",
+            d=date(2026, 5, 17),
+            confirm=lambda _desc: "y",
+            scoreboard_fetcher=lambda _l, _d: [_soccer_final_game()],
+            box_score_fetcher=lambda _l, _e: _soccer_box_score("Bukayo Saka", 4),
+        )
+        assert counts["prop_attached"] == 1
+        rows = store.get_prop_outcomes("sandbox-soccer-prop-1")
+        assert len(rows) == 1
+        assert rows[0]["stat_type"] == "shots"
+        assert rows[0]["stat_value"] == 4.0
         assert rows[0]["result"] == "win"
         assert rows[0]["source"] == "manual:espn_boxscore_20260517"
         store.close()
@@ -297,71 +361,6 @@ class TestBackfillDate:
         assert counts["prop_attached"] == 1
         assert store.get_prop_outcomes("sandbox-prop-1") == []
         store.close()
-
-    def test_attaches_soccer_game_outcome_when_confirmed(self):
-        db = _tmp_db()
-        store = TraceStore(db_path=db)
-        store.persist(
-            _make_game_trace(
-                "sandbox-soccer-game",
-                league="EPL",
-                home_team="Arsenal",
-                away_team="Chelsea",
-                timestamp="2026-05-17T16:00:00Z",
-            )
-        )
-
-        counts = backfill.backfill_date(
-            store,
-            league="EPL",
-            d=date(2026, 5, 17),
-            confirm=lambda _desc: "y",
-            scoreboard_fetcher=lambda _l, _d: [_soccer_final_game()],
-            box_score_fetcher=lambda _l, _e: {},
-        )
-        assert counts["game_attached"] == 1
-        row = store.conn.execute(
-            "SELECT source, home_score, away_score, result FROM outcomes WHERE trace_id = ?",
-            ("sandbox-soccer-game",),
-        ).fetchone()
-        assert row["source"] == "manual:espn_boxscore_20260517"
-        assert row["home_score"] == 2
-        assert row["away_score"] == 1
-        assert row["result"] == "home_win"
-        store.close()
-
-    def test_attaches_soccer_prop_outcome_when_confirmed(self):
-        db = _tmp_db()
-        store = TraceStore(db_path=db)
-        store.persist(
-            _make_prop_trace(
-                "sandbox-soccer-prop",
-                league="EPL",
-                home_team="Arsenal",
-                away_team="Chelsea",
-                player_name="Bukayo Saka",
-                prop_type="shots",
-                line=2.5,
-            )
-        )
-
-        counts = backfill.backfill_date(
-            store,
-            league="EPL",
-            d=date(2026, 5, 17),
-            confirm=lambda _desc: "y",
-            scoreboard_fetcher=lambda _l, _d: [_soccer_final_game()],
-            box_score_fetcher=lambda _l, _e: _soccer_box_score("Bukayo Saka", 3),
-        )
-        assert counts["prop_attached"] == 1
-        rows = store.get_prop_outcomes("sandbox-soccer-prop")
-        assert len(rows) == 1
-        assert rows[0]["stat_type"] == "shots"
-        assert rows[0]["stat_value"] == 3.0
-        assert rows[0]["result"] == "win"
-        assert rows[0]["source"] == "manual:espn_boxscore_20260517"
-        store.close()
-
 
 class TestBackfillSingleTrace:
     def test_legacy_prop_without_game_identity_can_be_pinned(self):
