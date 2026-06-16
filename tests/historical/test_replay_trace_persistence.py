@@ -117,6 +117,15 @@ def test_replay_persists_normal_traces_with_metadata(backtest_store, tmp_path):
     assert trace["odds_snapshot_hash"]
     assert trace["leakage_status"] == "clean"
 
+    # Calibration-backfill tagging: replayed traces carry the historical_replay
+    # selection tag + provenance, while predictions stay RAW (uncalibrated).
+    assert trace["execution_mode"] == "historical_replay"
+    assert trace["artifact_schema_version"] == 1
+    assert trace["source_provenance"]["source_name"] == "test"
+    assert trace["source_provenance"]["dataset_manifest_id"] == "m-test"
+    preds = trace["predictions"]
+    assert isinstance(preds, dict) and preds.get("home_win_prob") is not None
+
 
 def test_replay_attaches_outcome_and_closing_line(backtest_store, tmp_path):
     dataset, target = _dataset()

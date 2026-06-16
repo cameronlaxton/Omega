@@ -14,6 +14,8 @@ that points here and carries no independent rules.
 - [`prompts/reference/markov_evidence_vocab.md`](prompts/reference/markov_evidence_vocab.md) —
   approved Markov `signal_type` vocabulary and the ±15% cap.
 - [`OMEGA_DATA_SOURCES.md`](OMEGA_DATA_SOURCES.md) — data sourcing, fallbacks, freshness rules.
+- [`docs/historical_calibration_backfill.md`](docs/historical_calibration_backfill.md) — historical
+  replay → calibration backfill runbook (ingest → replay → fit → parity → promote).
 
 ### Output mode ⊥ engine execution (summary — full rule in output_modes.md)
 

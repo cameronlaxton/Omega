@@ -59,6 +59,8 @@ def main(argv: list[str] | None = None) -> int:
         odds=ds_parts["odds"],
         extra_context=ds_parts["extra_context"],
         history_override=ds_parts["history_override"],
+        prop_markets=ds_parts.get("prop_markets", {}),
+        prop_context=ds_parts.get("prop_context", {}),
     )
 
     config = ReplayConfig(

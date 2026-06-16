@@ -16,6 +16,7 @@ from omega.historical.contracts import (
     BacktestReport,
     HistoricalEvent,
     HistoricalOutcome,
+    HistoricalPropMarket,
     OddsObservation,
     ReplayCandidateSelection,
     ReplayTraceManifest,
@@ -116,6 +117,22 @@ def load_selections(
     ]
 
 
+def save_replay_summary(replay_id: str, summary: dict, root: str | Path | None = None) -> Path:
+    """Persist the machine-readable replay summary beside the replay manifest."""
+    out = replays_dir(root) / replay_id / "replay_summary.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return out
+
+
+def save_run_audit(replay_id: str, text: str, root: str | Path | None = None) -> Path:
+    """Persist the human-readable RUN_AUDIT.md beside the replay manifest."""
+    out = replays_dir(root) / replay_id / "RUN_AUDIT.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text, encoding="utf-8")
+    return out
+
+
 def save_backtest_report(report: BacktestReport, root: str | Path | None = None) -> Path:
     out = replays_dir(root) / report.replay_id / "backtest_report.json"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -143,6 +160,8 @@ def save_normalized_dataset(
     odds: list[OddsObservation] | None = None,
     extra_context: dict[str, dict] | None = None,
     history_override: dict[str, list[TeamGameRow]] | None = None,
+    prop_markets: dict[str, list[HistoricalPropMarket]] | None = None,
+    prop_context: dict[str, dict] | None = None,
     root: str | Path | None = None,
 ) -> Path:
     """Persist the normalized, identity-resolved dataset for a manifest.
@@ -173,6 +192,11 @@ def save_normalized_dataset(
             ),
             encoding="utf-8",
         )
+    if prop_markets:
+        flat = [m.model_dump(mode="json") for ms in prop_markets.values() for m in ms]
+        (base / "prop_markets.json").write_text(json.dumps(flat, indent=2), encoding="utf-8")
+    if prop_context:
+        (base / "prop_context.json").write_text(json.dumps(prop_context, indent=2), encoding="utf-8")
     return base
 
 
@@ -210,10 +234,24 @@ def load_normalized_dataset(manifest_id: str, root: str | Path | None = None) ->
         raw = json.loads(hist_path.read_text(encoding="utf-8"))
         history_override = {k: [TeamGameRow(**r) for r in rows] for k, rows in raw.items()}
 
+    prop_markets: dict[str, list[HistoricalPropMarket]] = {}
+    pm_path = base / "prop_markets.json"
+    if pm_path.exists():
+        for d in json.loads(pm_path.read_text(encoding="utf-8")):
+            m = HistoricalPropMarket.model_validate(d)
+            prop_markets.setdefault(m.event_key, []).append(m)
+
+    pc_path = base / "prop_context.json"
+    prop_context = (
+        json.loads(pc_path.read_text(encoding="utf-8")) if pc_path.exists() else {}
+    )
+
     return {
         "events": events,
         "outcomes": outcomes,
         "odds": odds,
         "extra_context": extra_context,
         "history_override": history_override,
+        "prop_markets": prop_markets,
+        "prop_context": prop_context,
     }
