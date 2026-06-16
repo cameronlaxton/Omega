@@ -48,6 +48,13 @@ class IngestBundle:
     row_counts: dict[str, int] = field(default_factory=dict)
 
 
+def _apply_clean_events(bundle: IngestBundle, clean_events: list[HistoricalEvent]) -> None:
+    kept_event_ids = {event.event_id for event in clean_events}
+    bundle.events = clean_events
+    bundle.outcomes = [outcome for outcome in bundle.outcomes if outcome.event_id in kept_event_ids]
+    bundle.odds = [odds for odds in bundle.odds if odds.event_key in kept_event_ids]
+
+
 def _merge_prop_outcomes(
     outcomes: list[HistoricalOutcome], po_by_event: dict[str, list]
 ) -> list[HistoricalOutcome]:
@@ -162,10 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     clean_events, rejected = partition_events(bundle.events)
     if rejected:
         path = write_rejected(rejected, args.league, root=args.quarantine_root)
-        rejected_ids = {r["event_id"] for r in rejected}
-        bundle.events = clean_events
-        bundle.outcomes = [o for o in bundle.outcomes if o.event_id not in rejected_ids]
-        bundle.odds = [o for o in bundle.odds if o.event_key not in rejected_ids]
+        _apply_clean_events(bundle, clean_events)
         logger.warning("Quarantined %d row(s) -> %s", len(rejected), path)
     if not bundle.events:
         logger.error("no clean events after quarantine for %s", args.games)
@@ -188,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         bundle.prop_context = json.loads(Path(args.prop_context).read_text(encoding="utf-8"))
 
     family = sport_family_for(args.league)
+    timing = args.odds_timing_class or timing_class_for_source(args.source).value
     manifest = compute_manifest(
         bundle.files,
         source_name=args.source,
@@ -196,9 +201,8 @@ def main(argv: list[str] | None = None) -> int:
         row_counts=bundle.row_counts,
         date_range=_date_range(bundle.events),
         limitations=args.limitations,
+        odds_timing_class=timing,
     )
-    timing = args.odds_timing_class or timing_class_for_source(args.source).value
-    manifest = manifest.model_copy(update={"odds_timing_class": timing})
     save_dataset_manifest(manifest, root=args.root)
     save_normalized_dataset(
         manifest.manifest_id,

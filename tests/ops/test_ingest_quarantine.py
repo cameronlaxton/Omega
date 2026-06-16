@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 
-from omega.historical.contracts import HistoricalEvent
+from omega.historical.contracts import HistoricalEvent, HistoricalOutcome, OddsObservation
 from omega.historical.quarantine import partition_events, quarantine_path, write_rejected
+from omega.ops.ingest_historical_dataset import IngestBundle, _apply_clean_events
 
 
 def _ev(event_id: str, *, identity_status: str = "complete", raw_home="H", raw_away="A") -> HistoricalEvent:
@@ -46,9 +47,30 @@ def test_write_rejected_appends_jsonl(tmp_path):
     row = json.loads(lines[0])
     assert row["reason_code"] == "missing_identity"
     assert row["league"] == "NFL"
+    assert row["schema_version"] == 1
     assert "quarantined_at" in row
 
 
 def test_write_rejected_noop_when_empty(tmp_path):
     path = write_rejected([], "NFL", root=tmp_path)
     assert not path.exists()
+
+
+def test_apply_clean_events_keeps_canonical_duplicate_records():
+    clean = [_ev("dup")]
+    bundle = IngestBundle(
+        events=[_ev("dup"), _ev("dup")],
+        outcomes=[HistoricalOutcome(event_id="dup", home_score=1, away_score=0)],
+        odds=[
+            OddsObservation(
+                event_key="dup",
+                market="moneyline",
+                selection_descriptor="home",
+                odds=-110,
+            )
+        ],
+    )
+    _apply_clean_events(bundle, clean)
+    assert [event.event_id for event in bundle.events] == ["dup"]
+    assert [outcome.event_id for outcome in bundle.outcomes] == ["dup"]
+    assert [odds.event_key for odds in bundle.odds] == ["dup"]

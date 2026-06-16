@@ -108,13 +108,14 @@ def build_replay_summary(
     manifest: ReplayTraceManifest,
     *,
     eligible_count: int,
+    eligible_denominator: int | None = None,
     league: str | None = None,
 ) -> dict:
     """Summarize a replay run for the RUN_AUDIT + machine-readable sidecar.
 
-    ``eligible_count`` (count of calibration-eligible graded replay traces) is
-    supplied by the caller via a DB query so this module stays free of storage
-    coupling, mirroring how ``to_text``/``to_json`` take a prebuilt report.
+    ``eligible_count`` and ``eligible_denominator`` are supplied by the caller
+    via DB queries so DB-wide appended seasons do not get divided by this run's
+    manifest-local persisted count.
     """
     records = manifest.records
     n_events = len(records)
@@ -128,8 +129,11 @@ def build_replay_summary(
     missing_odds = sum(1 for r in persisted if r.missing_odds)
     stale = sum(1 for r in persisted if r.is_stale)
 
-    def _rate(n: int) -> float:
-        return round(n / n_persisted, 4) if n_persisted else 0.0
+    def _rate(n: int, denominator: int | None = None) -> float:
+        den = n_persisted if denominator is None else denominator
+        return round(n / den, 4) if den else 0.0
+
+    eligible_denominator = n_persisted if eligible_denominator is None else eligible_denominator
 
     return {
         "replay_id": manifest.replay_id,
@@ -142,7 +146,8 @@ def build_replay_summary(
         "n_persisted": n_persisted,
         "n_skipped": n_skipped,
         "eligible_count": eligible_count,
-        "calibration_eligible_rate": _rate(eligible_count),
+        "calibration_eligible_rate": _rate(eligible_count, eligible_denominator),
+        "calibration_eligible_rate_denominator": eligible_denominator,
         "context_source_distribution": context_source_distribution,
         "missing_odds_rate": _rate(missing_odds),
         "stale_context_rate": _rate(stale),

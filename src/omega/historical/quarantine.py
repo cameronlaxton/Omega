@@ -15,6 +15,7 @@ from pathlib import Path
 from omega.historical.contracts import HistoricalEvent
 
 _DEFAULT_ROOT = Path("data/historical/quarantine")
+REJECTED_ROW_SCHEMA_VERSION = 1
 
 
 def quarantine_path(league: str, root: str | Path | None = None) -> Path:
@@ -31,7 +32,17 @@ def write_rejected(rows: list[dict], league: str, root: str | Path | None = None
     ts = datetime.now(timezone.utc).isoformat()
     with out.open("a", encoding="utf-8") as fh:
         for row in rows:
-            fh.write(json.dumps({**row, "quarantined_at": ts}, default=str) + "\n")
+            fh.write(
+                json.dumps(
+                    {
+                        **row,
+                        "schema_version": REJECTED_ROW_SCHEMA_VERSION,
+                        "quarantined_at": ts,
+                    },
+                    default=str,
+                )
+                + "\n"
+            )
     return out
 
 

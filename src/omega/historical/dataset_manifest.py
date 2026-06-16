@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +21,7 @@ from omega.historical.contracts import stable_hash
 UTC = timezone.utc
 
 _HASH_CHUNK = 1 << 20  # 1 MiB
+DATASET_MANIFEST_SCHEMA_VERSION: Literal[1] = 1
 
 
 class DatasetFileRef(BaseModel):
@@ -36,6 +38,7 @@ class DatasetManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    schema_version: Literal[1] = Field(default=DATASET_MANIFEST_SCHEMA_VERSION)
     manifest_id: str = Field(description="Deterministic id over source + file hashes + config")
     source_name: str
     league: str
@@ -93,6 +96,7 @@ def compute_manifest(
     row_counts: dict[str, int] | None = None,
     date_range: tuple[str | None, str | None] = (None, None),
     limitations: list[str] | None = None,
+    odds_timing_class: str | None = None,
 ) -> DatasetManifest:
     """Build a :class:`DatasetManifest` from a set of source files.
 
@@ -118,6 +122,7 @@ def compute_manifest(
             "source_name": source_name,
             "league": league.upper(),
             "sport_family": sport_family,
+            "odds_timing_class": odds_timing_class,
             "files": [(r.path, r.sha256) for r in refs],
         },
         length=24,
@@ -132,6 +137,7 @@ def compute_manifest(
         total_rows=total_rows,
         files=refs,
         limitations=limitations or [],
+        odds_timing_class=odds_timing_class,
     )
 
 
@@ -168,5 +174,6 @@ def verify_manifest(
             row_counts={f.path: f.row_count for f in manifest.files},
             date_range=(manifest.date_range_start, manifest.date_range_end),
             limitations=manifest.limitations,
+            odds_timing_class=manifest.odds_timing_class,
         )
     return manifest

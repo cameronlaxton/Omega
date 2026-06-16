@@ -14,6 +14,7 @@ from omega.historical.contracts import (
     HistoricalFeatureSnapshot,
     HistoricalMarketSnapshot,
     HistoricalOutcome,
+    HistoricalPropOutcome,
     MetricBlock,
     OddsObservation,
     OddsQuote,
@@ -69,6 +70,15 @@ def test_event_rejects_unknown_field():
 )
 def test_outcome_result_derivation(home, away, expected):
     assert HistoricalOutcome.derive_result(home, away) == expected
+
+
+def test_prop_outcome_requires_stat_value_unless_void():
+    assert HistoricalPropOutcome(player_name="P", stat_type="pts", stat_value=1.0).stat_value == 1.0
+    assert HistoricalPropOutcome(player_name="P", stat_type="pts", void=True).stat_value is None
+    with pytest.raises(ValidationError):
+        HistoricalPropOutcome(player_name="P", stat_type="pts")
+    with pytest.raises(ValidationError):
+        HistoricalPropOutcome(player_name="P", stat_type="pts", stat_value=1.0, void=True)
 
 
 def test_market_snapshot_hash_excludes_closing():
@@ -128,6 +138,13 @@ def test_replay_config_hash_stable_and_db_path_irrelevant():
     assert c1.config_hash() == c2.config_hash()
     c3 = ReplayConfig(dataset_manifest_id="m2", backtest_db_path="/tmp/a.db", code_version="v1")
     assert c1.config_hash() != c3.config_hash()
+    c4 = ReplayConfig(
+        dataset_manifest_id="m1",
+        backtest_db_path="/tmp/a.db",
+        code_version="v1",
+        odds_timing_class="closing_only",
+    )
+    assert c1.config_hash() != c4.config_hash()
 
 
 def test_replay_observation_and_manifest_roundtrip():

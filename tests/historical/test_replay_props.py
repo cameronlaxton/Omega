@@ -1,4 +1,4 @@
-"""Player-prop replay: eligible prop traces, decision-time lines, void exclusion.
+﻿"""Player-prop replay: eligible prop traces, decision-time lines, void exclusion.
 
 Props stay league-scoped player-stat markets. The decision-time line/prices drive
 the prediction; the realized stat_value is attached only as the outcome; void/DNP
@@ -87,7 +87,7 @@ def test_prop_replay_eligible_and_decision_time_line(backtest_store, tmp_path):
         calibration_eligible_only=True, limit=100,
     )
     prop_traces = [t for t in props if t.get("kind") == "prop"]
-    assert len(prop_traces) == 2  # both prop predictions are eligible traces
+    assert len(prop_traces) == 1  # pass recommendations are not graded as phantom sides
 
     lebron = next(
         t for t in prop_traces

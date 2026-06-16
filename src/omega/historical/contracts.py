@@ -12,7 +12,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 UTC = timezone.utc
 
@@ -99,6 +99,15 @@ class HistoricalPropOutcome(BaseModel):
     stat_type: str
     stat_value: float | None = None
     void: bool = False
+
+    @model_validator(mode="after")
+    def _stat_value_matches_void(self) -> HistoricalPropOutcome:
+        if self.void:
+            if self.stat_value is not None:
+                raise ValueError("stat_value must be None when void=True")
+        elif self.stat_value is None:
+            raise ValueError("stat_value is required when void=False")
+        return self
 
 
 class HistoricalPropMarket(BaseModel):
@@ -318,6 +327,7 @@ class ReplayConfig(BaseModel):
                 "decision_odds_policy": self.decision_odds_policy,
                 "enable_staking": self.enable_staking,
                 "leakage_policy": self.leakage_policy,
+                "odds_timing_class": self.odds_timing_class,
                 "code_version": self.code_version,
                 "seed_namespace": self.seed_namespace,
                 "prior_payload": self.prior_payload,
