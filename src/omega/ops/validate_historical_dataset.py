@@ -30,6 +30,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Re-pin file hashes when they drifted (writes a new manifest).",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail if the normalized dataset is missing (no events on disk).",
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -63,8 +68,12 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("files=%d total_rows=%d", len(verified.files), verified.total_rows)
     logger.info("date_range=%s..%s", verified.date_range_start, verified.date_range_end)
     logger.info("normalized: events=%d outcomes=%d odds=%d", n_events, n_outcomes, n_odds)
+    logger.info("odds_timing_class=%s", verified.odds_timing_class)
     if verified.limitations:
         logger.info("limitations: %s", "; ".join(verified.limitations))
+    if args.strict and n_events == 0:
+        logger.error("strict: no normalized events on disk for %s", verified.manifest_id)
+        return 1
     print("OK")
     return 0
 

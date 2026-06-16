@@ -124,6 +124,7 @@ def fit_and_register(
     dry_run: bool,
     market: str = "game",
     context_slice: str | None = None,
+    training_window: str | None = None,
 ) -> CalibrationProfile:
     """Fit one method, evaluate on holdout, register as CANDIDATE. Returns profile."""
     if method == "isotonic":
@@ -136,6 +137,10 @@ def fit_and_register(
     metrics = fitter.evaluate(profile, hold_p, hold_o)
     profile.metrics = metrics
     profile.context_slice = context_slice
+    if training_window:
+        # Date-windowed fit: record the train window for auditability (AGENTS.md:
+        # every calibration fit attributable to a specific dataset + window).
+        profile.training_window = training_window
 
     version = _next_version(registry, league, method, market)
     profile.version = version
@@ -169,7 +174,56 @@ def _extract_plane_pairs(
     return predictions, outcomes, "home_win_prob/outcome"
 
 
-def main() -> int:
+def _decision_date(trace: dict[str, Any]) -> str:
+    """Event decision date for windowing.
+
+    Historical-replay traces carry the event's ``decision_time`` (the replay run
+    timestamp is irrelevant for leakage windows); live traces fall back to the
+    analysis ``timestamp`` (taken near game time).
+    """
+    return str(trace.get("decision_time") or trace.get("timestamp") or "")[:10]
+
+
+def _in_window(date: str, start: str | None, end: str | None) -> bool:
+    if not date:
+        return False
+    if start and date < start:
+        return False
+    if end and date > end:
+        return False
+    return True
+
+
+def _load_graded_traces(args: argparse.Namespace) -> list[dict[str, Any]]:
+    """Load graded traces from the live DB, the historical DB, or both.
+
+    Historical traces are selected by ``execution_mode='historical_replay'`` and
+    must already be calibration-eligible + graded. Production ``--db`` is read
+    only when not ``--historical-only``.
+    """
+    graded: list[dict[str, Any]] = []
+    if not args.historical_only:
+        store = TraceStore(db_path=args.db)
+        log_effective_db(store, logger)
+        graded.extend(store.get_graded_traces(league=args.league, limit=100_000))
+        store.close()
+    if args.historical_only or args.include_historical:
+        hstore = TraceStore(db_path=args.historical_db)
+        logger.info("historical DB: %s", args.historical_db)
+        graded.extend(
+            hstore.query_traces(
+                league=args.league,
+                execution_mode="historical_replay",
+                has_outcome=True,
+                calibration_eligible_only=True,
+                limit=1_000_000,
+            )
+        )
+        hstore.close()
+    return graded
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Fit calibration profile candidates from graded traces."
     )
@@ -201,7 +255,37 @@ def main() -> int:
     parser.add_argument("--all-context-slices", action="store_true", help="Fit all canonical slices")
     parser.add_argument("--include-base-with-slices", action="store_true", help="Fit base slice when --all-context-slices is used")
     parser.add_argument("--sport-family", type=str, default=None, help="Override sport family for context resolution")
-    parser.add_argument("--db", type=str, default=None, help="SQLite path")
+    parser.add_argument("--db", type=str, default=None, help="SQLite path (live trace DB)")
+    parser.add_argument(
+        "--historical-db",
+        type=str,
+        default=None,
+        help="Dedicated historical-replay DB to include/fit from (execution_mode=historical_replay).",
+    )
+    parser.add_argument(
+        "--include-historical",
+        action="store_true",
+        help="Union live (--db) + historical (--historical-db) graded traces.",
+    )
+    parser.add_argument(
+        "--historical-only",
+        action="store_true",
+        help="Fit ONLY from --historical-db (ignore live --db traces).",
+    )
+    parser.add_argument("--train-start", default=None, help="Train window start YYYY-MM-DD (incl.)")
+    parser.add_argument("--train-end", default=None, help="Train window end YYYY-MM-DD (incl.)")
+    parser.add_argument(
+        "--holdout-start", default=None, help="Holdout window start YYYY-MM-DD (incl.)"
+    )
+    parser.add_argument("--holdout-end", default=None, help="Holdout window end YYYY-MM-DD (incl.)")
+    parser.add_argument(
+        "--allow-same-season-shadow",
+        action="store_true",
+        help=(
+            "Permit overlapping train/holdout windows (shadow diagnostics only). "
+            "Such fits must never be promoted."
+        ),
+    )
     parser.add_argument(
         "--dry-run", action="store_true", help="Fit and evaluate but do not register"
     )
@@ -215,17 +299,39 @@ def main() -> int:
         ),
     )
     parser.add_argument("--verbose", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    store = TraceStore(db_path=args.db)
-    log_effective_db(store, logger)
-    graded = store.get_graded_traces(league=args.league, limit=100_000)
-    store.close()
+    if args.historical_only and args.include_historical:
+        logger.error("--historical-only and --include-historical are mutually exclusive.")
+        return 1
+    if (args.historical_only or args.include_historical) and not args.historical_db:
+        logger.error("--historical-only/--include-historical require --historical-db.")
+        return 1
+
+    date_window = any(
+        [args.train_start, args.train_end, args.holdout_start, args.holdout_end]
+    )
+    if date_window:
+        if not (args.train_end and args.holdout_start):
+            logger.error(
+                "date-windowed fit requires at least --train-end and --holdout-start."
+            )
+            return 1
+        if args.holdout_start < args.train_end and not args.allow_same_season_shadow:
+            logger.error(
+                "holdout-start (%s) precedes train-end (%s): same-season leakage. Pass "
+                "--allow-same-season-shadow for shadow diagnostics only (never promotable).",
+                args.holdout_start,
+                args.train_end,
+            )
+            return 1
+
+    graded = _load_graded_traces(args)
 
     if not args.include_backfilled:
         pre_filter = len(graded)
@@ -286,8 +392,24 @@ def main() -> int:
         print("-" * 110)
 
     for slice_name, slice_traces in groups.items():
-        predictions, outcomes, pair_label = _extract_plane_pairs(fitter, slice_traces, args.plane)
-        n = len(predictions)
+        train_window: str | None = None
+        if date_window:
+            train_traces = [
+                t
+                for t in slice_traces
+                if _in_window(_decision_date(t), args.train_start, args.train_end)
+            ]
+            hold_traces = [
+                t
+                for t in slice_traces
+                if _in_window(_decision_date(t), args.holdout_start, args.holdout_end)
+            ]
+            train_p, train_o, pair_label = _extract_plane_pairs(fitter, train_traces, args.plane)
+            hold_p, hold_o, _ = _extract_plane_pairs(fitter, hold_traces, args.plane)
+            n = len(train_p) + len(hold_p)
+        else:
+            predictions, outcomes, pair_label = _extract_plane_pairs(fitter, slice_traces, args.plane)
+            n = len(predictions)
 
         status = "eligible"
         threshold = args.min_samples
@@ -312,7 +434,19 @@ def main() -> int:
         if n < args.min_samples:
             logger.info("Fitting slice %r as shadow profile (%d pairs).", slice_name, n)
 
-        train_p, train_o, hold_p, hold_o = _deterministic_split(predictions, outcomes, args.league)
+        if date_window:
+            if not train_p or not hold_p:
+                logger.warning(
+                    "Skipping slice %r: date-windowed split produced %d train / %d holdout "
+                    "pairs (both must be non-empty).",
+                    slice_name, len(train_p), len(hold_p)
+                )
+                continue
+            train_window = f"{args.train_start or 'min'}..{args.train_end}"
+        else:
+            train_p, train_o, hold_p, hold_o = _deterministic_split(
+                predictions, outcomes, args.league
+            )
         logger.info(
             "Loaded %d graded %s pairs for %s plane (slice=%r); split %d train / %d holdout.",
             n, pair_label, args.plane, slice_name, len(train_p), len(hold_p)
@@ -332,6 +466,7 @@ def main() -> int:
                     dry_run=args.dry_run,
                     market=market,
                     context_slice=slice_name,
+                    training_window=train_window,
                 )
                 registered.append(profile)
                 logger.info(

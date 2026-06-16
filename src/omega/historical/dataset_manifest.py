@@ -48,6 +48,9 @@ class DatasetManifest(BaseModel):
         default_factory=list,
         description="Known gaps/biases: e.g. 'no closing odds', 'home/away nominal only'",
     )
+    odds_timing_class: str | None = Field(
+        default=None, description="decision_time_safe | closing_only | timing_unknown"
+    )
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def file_hash_index(self) -> dict[str, str]:

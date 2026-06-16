@@ -18,11 +18,12 @@ import hashlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from omega.core.contracts.schemas import GameAnalysisRequest, OddsInput
+from omega.core.contracts.schemas import GameAnalysisRequest, OddsInput, PlayerPropRequest
 from omega.core.contracts.service import analyze
 from omega.historical.contracts import (
     HistoricalEvent,
     HistoricalOutcome,
+    HistoricalPropMarket,
     OddsObservation,
     ReplayCandidateSelection,
     ReplayConfig,
@@ -31,6 +32,7 @@ from omega.historical.contracts import (
 )
 from omega.historical.leakage import evaluate_leakage
 from omega.historical.odds_snapshots import build_odds_snapshot
+from omega.historical.odds_timing import is_selection_safe
 from omega.historical.snapshots import (
     MatchupHistory,
     TeamGameRow,
@@ -39,6 +41,10 @@ from omega.historical.snapshots import (
 from omega.historical.staking import size_historical_bet
 from omega.trace.persistable import PersistableTrace
 from omega.trace.store import TraceStore
+
+# Schema version for the replay record provenance block. Bump when the shape of
+# the persisted replay metadata (source_provenance, hashes) changes.
+ARTIFACT_SCHEMA_VERSION = 1
 
 
 class LeakageError(RuntimeError):
@@ -57,6 +63,12 @@ class ReplayDataset:
     # team-score sports leave this None and the engine derives history from
     # events + outcomes.
     history_override: dict[str, list[TeamGameRow]] | None = None
+    # Player-prop replay inputs (optional). prop_markets carries decision-time
+    # lines/prices by event_key; prop_context carries as-of player context keyed
+    # by "<event_key>|<player>|<stat_type>". Prop OUTCOMES live on the matching
+    # HistoricalOutcome.prop_outcomes (post-game stat values).
+    prop_markets: dict[str, list[HistoricalPropMarket]] = field(default_factory=dict)
+    prop_context: dict[str, dict] = field(default_factory=dict)
 
     @staticmethod
     def group_odds(observations: list[OddsObservation]) -> dict[str, list[OddsObservation]]:
@@ -237,14 +249,28 @@ class ReplayEngine:
         record = PersistableTrace.from_analyze_output(envelope).to_store_record()
         record.update(
             {
+                # Queryable selection tag the calibration fitter uses to
+                # include/exclude replayed traces. Overrides the default
+                # "sandbox_<kind>"; the game/prop plane is still carried by
+                # record["kind"] and the predictions payload. context_source is
+                # intentionally left untouched ("provided") — eligibility depends
+                # on it, so replay provenance lives here, not there.
+                "execution_mode": "historical_replay",
                 "historical_replay": True,
                 "replay_id": replay_id,
                 "event_id": ev.event_id,
                 "decision_time": decision_time,
                 "dataset_manifest_id": self.config.dataset_manifest_id,
+                "artifact_schema_version": ARTIFACT_SCHEMA_VERSION,
                 "feature_snapshot_hash": snapshot.feature_snapshot_hash,
                 "odds_snapshot_hash": odds_snapshot.odds_snapshot_hash,
                 "leakage_status": leak.status,
+                "odds_timing_class": self.config.odds_timing_class,
+                "source_provenance": {
+                    "source_name": ev.source_name,
+                    "dataset_manifest_id": self.config.dataset_manifest_id,
+                    "source_row_ref": ev.source_row_ref,
+                },
             }
         )
 
@@ -253,10 +279,12 @@ class ReplayEngine:
 
         self._attach_outcome(trace_id, dataset.outcomes.get(ev.event_id))
         self._attach_closing(trace_id, odds_snapshot, decision_time)
+        self._replay_props(ev, dataset, replay_id, decision_time, snapshot.game_context)
 
         event_sels: list[ReplayCandidateSelection] = []
         ledger_ids: list[str] = []
-        if self.config.enable_staking:
+        # Odds-timing guard: only decision_time_safe sources may drive staking.
+        if self.config.enable_staking and is_selection_safe(self.config.odds_timing_class):
             result = size_historical_bet(
                 record,
                 replay_id=replay_id,
@@ -308,3 +336,79 @@ class ReplayEngine:
                 closing_timestamp=q.timestamp or decision_time,
                 source="historical_replay",
             )
+
+    def _replay_props(self, ev, dataset, replay_id, decision_time, game_context) -> None:
+        """Replay each decision-time prop market for an event as a kind='prop' trace.
+
+        Props stay league-scoped player-stat markets (no standalone props league).
+        The line/prices are decision-time inputs; the realized stat_value is
+        attached as the outcome only after the prediction is persisted.
+        """
+        markets = dataset.prop_markets.get(ev.event_id, [])
+        if not markets:
+            return
+        outcome = dataset.outcomes.get(ev.event_id)
+        po_by_key = {}
+        if outcome is not None:
+            po_by_key = {(po.player_name, po.stat_type): po for po in outcome.prop_outcomes}
+
+        for m in markets:
+            ctx = dict(dataset.prop_context.get(f"{ev.event_id}|{m.player_name}|{m.stat_type}", {}))
+            seed = derive_seed(self.config, f"{ev.event_id}|{m.player_name}|{m.stat_type}")
+            request = PlayerPropRequest(
+                player_name=m.player_name,
+                league=ev.league,
+                home_team=ev.home_team,
+                away_team=ev.away_team,
+                game_date=decision_time[:10],
+                prop_type=m.stat_type,
+                line=m.line,
+                odds_over=m.over_price,
+                odds_under=m.under_price,
+                player_context=ctx,
+                game_context=game_context,
+                seed=seed,
+                evidence=[],
+            )
+            envelope = analyze(
+                request, session_id=self.config.session_id, bankroll=self.config.bankroll
+            )
+            record = PersistableTrace.from_analyze_output(envelope).to_store_record()
+            record.update(
+                {
+                    "execution_mode": "historical_replay",
+                    "historical_replay": True,
+                    "replay_id": replay_id,
+                    "event_id": ev.event_id,
+                    "decision_time": decision_time,
+                    "dataset_manifest_id": self.config.dataset_manifest_id,
+                    "artifact_schema_version": ARTIFACT_SCHEMA_VERSION,
+                    "odds_timing_class": self.config.odds_timing_class,
+                    "source_provenance": {
+                        "source_name": ev.source_name,
+                        "dataset_manifest_id": self.config.dataset_manifest_id,
+                        "source_row_ref": ev.source_row_ref,
+                    },
+                }
+            )
+            with self.store.autolog_suppressed():
+                trace_id = self.store.persist(record)
+
+            po = po_by_key.get((m.player_name, m.stat_type))
+            if po is not None:
+                try:
+                    self.store.attach_prop_outcome(
+                        trace_id,
+                        player_name=m.player_name,
+                        stat_type=m.stat_type,
+                        # stat_value is ignored by the store when void=True, but it
+                        # still float()s the arg — pass 0.0 rather than None.
+                        stat_value=po.stat_value if po.stat_value is not None else 0.0,
+                        line=m.line,
+                        side="over",
+                        source="historical_replay",
+                        void=po.void,
+                    )
+                except ValueError:
+                    # idempotent: outcome already attached for this (trace, player, stat)
+                    pass

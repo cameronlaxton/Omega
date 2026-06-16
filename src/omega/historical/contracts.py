@@ -12,7 +12,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 UTC = timezone.utc
 
@@ -91,11 +91,35 @@ class HistoricalEvent(BaseModel):
 
 
 class HistoricalPropOutcome(BaseModel):
+    """Post-game player-stat outcome. ``stat_value`` is None only when void/DNP."""
+
     model_config = ConfigDict(extra="forbid")
 
     player_name: str
     stat_type: str
-    stat_value: float
+    stat_value: float | None = None
+    void: bool = False
+
+
+class HistoricalPropMarket(BaseModel):
+    """Decision-time player-prop market — a safe pre-game input.
+
+    The betting ``line`` (and optional prices) are decision-time data; the realized
+    ``stat_value`` lives on :class:`HistoricalPropOutcome` and never enters context.
+    Joins to an event via ``event_key``; to an outcome via (player_name, stat_type).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_key: str
+    player_name: str
+    stat_type: str
+    line: float
+    over_price: float | None = None
+    under_price: float | None = None
+    book: str | None = None
+    timestamp: str | None = None
+    tier_hint: Literal["opening", "closing"] | None = None
 
 
 class HistoricalOutcome(BaseModel):
@@ -266,6 +290,10 @@ class ReplayConfig(BaseModel):
     decision_odds_policy: str = Field(default="latest_before_decision")
     enable_staking: bool = Field(default=False)
     leakage_policy: Literal["skip", "fail"] = Field(default="skip")
+    odds_timing_class: str = Field(
+        default="decision_time_safe",
+        description="Source odds timing class; gates staking/ROI/CLV, never calibration.",
+    )
     code_version: str = Field(default_factory=current_code_version)
     seed_namespace: str = Field(default="omega-historical-replay-v1")
 
@@ -284,6 +312,24 @@ class ReplayConfig(BaseModel):
                 "seed_namespace": self.seed_namespace,
             }
         )
+
+    @field_validator("backtest_db_path")
+    @classmethod
+    def _reject_production_db(cls, v: str) -> str:
+        """Fail closed: replayed (synthetic) traces must never land in production.
+
+        A replay DB equal to ``var/omega_traces.db`` (or the ``OMEGA_TRACE_DB``
+        override) would silently pollute the live calibration pool.
+        """
+        from omega.paths import is_production_trace_db
+
+        if is_production_trace_db(v):
+            raise ValueError(
+                "backtest_db_path must be an isolated DB, never the production trace "
+                "DB (var/omega_traces.db): historical replay traces are synthetic and "
+                "must not pollute the live calibration pool."
+            )
+        return v
 
 
 class ReplayEventRecord(BaseModel):

@@ -8,8 +8,14 @@ leakage / identity / missing-odds health rates so data problems are visible.
 from __future__ import annotations
 
 import json
+from collections import Counter
 
-from omega.historical.contracts import BacktestReport, BettingBlock, MetricBlock
+from omega.historical.contracts import (
+    BacktestReport,
+    BettingBlock,
+    MetricBlock,
+    ReplayTraceManifest,
+)
 
 
 def to_json(report: BacktestReport, *, indent: int = 2) -> str:
@@ -90,4 +96,94 @@ def to_text(report: BacktestReport) -> str:
             f"  [{f.fold_index}] test {f.test_start[:10]}..{f.test_end[:10]} "
             f"train={f.n_train} test={f.n_test} profiles={len(f.frozen_profiles)} {brier}"
         )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Replay run audit (calibration backfill)
+# ---------------------------------------------------------------------------
+
+
+def build_replay_summary(
+    manifest: ReplayTraceManifest,
+    *,
+    eligible_count: int,
+    league: str | None = None,
+) -> dict:
+    """Summarize a replay run for the RUN_AUDIT + machine-readable sidecar.
+
+    ``eligible_count`` (count of calibration-eligible graded replay traces) is
+    supplied by the caller via a DB query so this module stays free of storage
+    coupling, mirroring how ``to_text``/``to_json`` take a prebuilt report.
+    """
+    records = manifest.records
+    n_events = len(records)
+    persisted = [r for r in records if r.trace_id is not None]
+    n_persisted = len(persisted)
+    n_skipped = n_events - n_persisted
+
+    context_source_distribution = dict(Counter(r.context_source for r in persisted))
+    leakage_skipped = sum(1 for r in records if r.leakage_status == "skipped")
+    identity_missing = sum(1 for r in records if r.identity_status == "missing")
+    missing_odds = sum(1 for r in persisted if r.missing_odds)
+    stale = sum(1 for r in persisted if r.is_stale)
+
+    def _rate(n: int) -> float:
+        return round(n / n_persisted, 4) if n_persisted else 0.0
+
+    return {
+        "replay_id": manifest.replay_id,
+        "dataset_manifest_id": manifest.dataset_manifest_id,
+        "league": league or manifest.league,
+        "code_version": manifest.code_version,
+        "config_hash": manifest.config_hash,
+        "created_at": manifest.created_at,
+        "n_events": n_events,
+        "n_persisted": n_persisted,
+        "n_skipped": n_skipped,
+        "eligible_count": eligible_count,
+        "calibration_eligible_rate": _rate(eligible_count),
+        "context_source_distribution": context_source_distribution,
+        "missing_odds_rate": _rate(missing_odds),
+        "stale_context_rate": _rate(stale),
+        "leakage_skipped": leakage_skipped,
+        "identity_missing": identity_missing,
+    }
+
+
+def render_run_audit(summary: dict) -> str:
+    """Render a human-readable RUN_AUDIT.md from a :func:`build_replay_summary` dict."""
+    csd = summary.get("context_source_distribution") or {}
+    csd_str = ", ".join(f"{k}={v}" for k, v in sorted(csd.items())) or "(none)"
+    lines = [
+        f"# Replay Run Audit — {summary.get('replay_id')}",
+        "",
+        f"- League: {summary.get('league')}",
+        f"- Dataset manifest: {summary.get('dataset_manifest_id')}",
+        f"- Code version: {summary.get('code_version')}",
+        f"- Config hash: {summary.get('config_hash')}",
+        f"- Created: {summary.get('created_at')}",
+        "",
+        "## Counts",
+        f"- Events: {summary.get('n_events')}",
+        f"- Persisted traces: {summary.get('n_persisted')}",
+        f"- Skipped (leakage/identity): {summary.get('n_skipped')}",
+        (
+            f"- Calibration-eligible graded traces: {summary.get('eligible_count')} "
+            f"(rate {summary.get('calibration_eligible_rate')})"
+        ),
+        "",
+        "## Quality / leakage visibility",
+        f"- context_source distribution: {csd_str}",
+        f"- missing_odds_rate: {summary.get('missing_odds_rate')}",
+        f"- stale_context_rate: {summary.get('stale_context_rate')}",
+        f"- leakage_skipped: {summary.get('leakage_skipped')}",
+        f"- identity_missing: {summary.get('identity_missing')}",
+        "",
+        (
+            "_Synthetic historical-replay traces. Not promotable until the "
+            "backtest-parity and historical-vs-live parity gates pass "
+            "(see the calibration backfill runbook)._"
+        ),
+    ]
     return "\n".join(lines)
