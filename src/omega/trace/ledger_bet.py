@@ -46,6 +46,7 @@ class BetProvenance(str, Enum):
     BACKFILL = "backfill"  # Created by backfill_bets.py from historical traces
     ENGINE_AUTO = "engine_auto"  # Auto-logged by TraceStore.persist() dual-write
     USER_CONFIRMED = "user_confirmed"  # Reserved: a real wager the user confirmed
+    HISTORICAL_REPLAY = "historical_replay"  # Simulated bet from a historical replay run
 
 
 class LedgerBet(BaseModel):

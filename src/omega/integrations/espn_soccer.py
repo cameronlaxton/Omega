@@ -99,6 +99,8 @@ SOCCER_TEAM_ALIASES: dict[str, str] = {
     # France
     "psg": "Paris Saint-Germain",
     "paris": "Paris Saint-Germain",
+    "paris saint germain": "Paris Saint-Germain",
+    "paris saint-germain": "Paris Saint-Germain",
     "marseille": "Olympique Marseille",
     "om": "Olympique Marseille",
     "lyon": "Olympique Lyonnais",

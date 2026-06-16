@@ -356,17 +356,34 @@ def main(
                 logger.error("All ESPN scoreboard fetches failed or empty for %s around %s", league, d)
                 return 1
 
-            games_by_pair = {(g.home_team, g.away_team): g for g in games}
+            games_by_pair = defaultdict(list)
+            for g in games:
+                games_by_pair[(g.home_team, g.away_team)].append(g)
 
             for pair, items in grouped.items():
-                game = games_by_pair.get(pair)
-                if game is None or game.status != "final":
+                pair_games = games_by_pair.get(pair, [])
+                if not pair_games:
+                    pair_games = games_by_pair.get((pair[1], pair[0]), [])
+                final_games = [g for g in pair_games if g.status == "final"]
+                if not final_games:
                     for trace, fields in items:
                         unmatched.append(
                             f"{trace.get('trace_id', '?')} (no final game for "
                             f"{fields['away_team']} @ {fields['home_team']} on {d})"
                         )
                     continue
+
+                if len(final_games) == 1:
+                    game = final_games[0]
+                else:
+                    target_date = d
+                    def date_diff(g) -> int:
+                        try:
+                            g_date = date.fromisoformat(g.date)
+                            return abs((g_date - target_date).days)
+                        except ValueError:
+                            return 999
+                    game = min(final_games, key=date_diff)
 
                 # Fetch the box score once per game
                 try:
