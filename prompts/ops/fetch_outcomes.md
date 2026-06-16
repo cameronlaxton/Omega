@@ -38,7 +38,7 @@ This dispatches the tracked daily outcome/evidence loop in sequence:
 [omega-report-calibration] wrote var/reports/latest.md
 ```
 
-**If unmatched > 20% of traces:** check alias table or date range. ESPN aliases change with trades — add new mappings to `omega/integrations/espn_nba.py::TEAM_ALIASES`, `espn_wnba.py::WNBA_TEAMS`, `espn_mlb.py::MLB_TEAMS`, or `espn_soccer.py::SOCCER_TEAM_ALIASES`.
+**If unmatched > 20% of traces:** check alias table or date range. ESPN aliases change with trades/team naming. Add new mappings to `omega/integrations/espn_nba.py::TEAM_ALIASES`, `espn_wnba.py::WNBA_TEAMS`, `espn_mlb.py::MLB_TEAMS`, or `espn_soccer.py::SOCCER_TEAM_ALIASES`.
 
 **If a sub-step fails:** check `var/inbox/traces/failed/` for `.error.txt` sidecars. Common causes: missing `home_team`/`away_team`/`game_date` on prop traces, or `omega-ingest-traces` validation errors.
 

@@ -1,12 +1,11 @@
-import pytest
 
-from omega.core.calibration.registry import CalibrationRegistry
 from omega.core.calibration.profiles import CalibrationProfile
+from omega.core.calibration.registry import CalibrationRegistry
 
 
 def test_gating_incumbent_slice_isolation(monkeypatch):
     registry = CalibrationRegistry()
-    
+
     # We have a base profile, but NO playoff profile
     profiles = [
         CalibrationProfile(
@@ -76,3 +75,19 @@ def test_gating_incumbent_slice_isolation(monkeypatch):
     incumbent2 = registry.gating_incumbent(candidate_base)
     assert incumbent2 is not None
     assert incumbent2.profile_id == "base_nba"
+
+    candidate_spread = CalibrationProfile(
+        profile_id="spread_cand",
+        method="isotonic",
+        league="NBA",
+        market="spread",
+        status="candidate",
+        context_slice="playoff",
+        version=2,
+        dataset_hash="spread",
+        training_window="365d",
+        sample_size=1000,
+        params={},
+        metrics={}
+    )
+    assert registry.gating_incumbent(candidate_spread) is None

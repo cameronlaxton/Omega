@@ -15,7 +15,7 @@ def test_unique_profile_id_with_slice():
         context_slice="playoff"
     )
     assert pid == "iso_nba_playoff_v1_1234567890abcdef"
-    
+
     pid_base = _unique_profile_id(
         method="shrinkage",
         league="EPL",

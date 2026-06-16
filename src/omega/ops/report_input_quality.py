@@ -11,6 +11,7 @@ import logging
 import sys
 from collections import defaultdict
 
+from omega.core.calibration.context_slices import labels_from_trace
 from omega.trace.store import TraceStore, log_effective_db
 
 logger = logging.getLogger("report_input_quality")
@@ -36,14 +37,14 @@ def main() -> int:
     total = len(traces)
 
     for t in traces:
-        labels = t.get("context_labels")
+        labels = labels_from_trace(t)
         if not labels:
             missing_counts["missing_context_labels"] += 1
 
         market = t.get("market")
         if not market:
             missing_counts["missing_market"] += 1
-        
+
         home_ctx = t.get("home_context")
         away_ctx = t.get("away_context")
         if not home_ctx or not away_ctx:
@@ -55,10 +56,10 @@ def main() -> int:
         pct = (v / total) * 100
         print(f"{k:<30} | {v:>7d} | {pct:>5.1f}%")
     print("-" * 50)
-    
+
     if len(missing_counts) == 0:
         print("No missing key inputs detected.")
-        
+
     return 0
 
 

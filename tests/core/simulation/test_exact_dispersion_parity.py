@@ -1,13 +1,12 @@
-import pytest
+from omega.core.simulation.backends import GameSimulationInput, PropSimulationInput
 from omega.core.simulation.dispersion import DispersionPolicy
 from omega.core.simulation.prop_neg_binom import NegBinomPropBackend
 from omega.core.simulation.soccer_bivariate_poisson import SoccerPoissonBackend
-from omega.core.simulation.backends import GameSimulationInput, PropSimulationInput
 
 
 def test_neg_binom_dispersion_parity():
     backend = NegBinomPropBackend()
-    
+
     input_mc = PropSimulationInput(
         player_name="P",
         league="NBA",
@@ -21,24 +20,28 @@ def test_neg_binom_dispersion_parity():
         dispersion=DispersionPolicy(variance_multiplier=1.5)
     )
     mc_res = backend.run(input_mc)
-    
+
     import dataclasses
     input_ex = dataclasses.replace(input_mc, exact=True)
     ex_res = backend.run(input_ex)
-    
+
     assert abs(mc_res["over_prob"] - ex_res["over_prob"]) < 0.015
     assert abs(mc_res["under_prob"] - ex_res["under_prob"]) < 0.015
     assert abs(mc_res["push_prob"] - ex_res["push_prob"]) < 0.015
     assert abs(mc_res["mean"] - ex_res["mean"]) < 0.1
-    
+
     # Assert policy applied
     assert "nb_dispersion_k" in input_mc.dispersion.applied_to
 
 
 def test_soccer_bivariate_dispersion_parity(monkeypatch):
     import omega.core.config.leagues
-    monkeypatch.setattr(omega.core.config.leagues, "get_league_config", lambda l: {"avg_total": 2.5, "home_advantage": 0.2})
-    
+    monkeypatch.setattr(
+        omega.core.config.leagues,
+        "get_league_config",
+        lambda league_code: {"avg_total": 2.5, "home_advantage": 0.2},
+    )
+
     backend = SoccerPoissonBackend()
     input_mc = GameSimulationInput(
         seed=42,
@@ -52,17 +55,17 @@ def test_soccer_bivariate_dispersion_parity(monkeypatch):
         exact=False,
         dispersion=DispersionPolicy(variance_multiplier=1.2)
     )
-    
+
     mc_res = backend.run(input_mc)
-    
+
     import dataclasses
-    
+
     input_ex = dataclasses.replace(input_mc, exact=True)
     ex_res = backend.run(input_ex)
-    
+
     assert abs(mc_res["home_win_prob"] - ex_res["home_win_prob"]) < 1.5
     assert abs(mc_res["away_win_prob"] - ex_res["away_win_prob"]) < 1.5
     assert abs(mc_res["draw_prob"] - ex_res["draw_prob"]) < 1.5
-    
+
     assert "home_lambda" in input_mc.dispersion.applied_to
     assert "away_lambda" in input_mc.dispersion.applied_to

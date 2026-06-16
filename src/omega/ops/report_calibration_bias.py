@@ -70,12 +70,12 @@ def main() -> int:
             continue
 
         # Extract pairs for the moneyline/game market
-        predictions, outcomes, _ = fitter.extract_pairs(slice_traces, "game")
+        predictions, outcomes = fitter.extract_pairs(slice_traces)
         if not predictions:
             continue
 
         metrics = fitter.evaluate(identity_profile, predictions, outcomes)
-        
+
         brier = metrics.get("brier_score", 0.0)
         ece = metrics.get("calibration_error", 0.0)
         log_loss = metrics.get("log_loss", 0.0)

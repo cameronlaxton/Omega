@@ -157,7 +157,7 @@ class SoccerPoissonBackend:
         # 0-0 rates (see _sim_soccer).
         home_lambda = max(0.5, home_lambda)
         away_lambda = max(0.5, away_lambda)
-        
+
         if request.dispersion is not None and request.dispersion.variance_multiplier != 1.0:
             mult = request.dispersion.variance_multiplier
             home_lambda *= mult

@@ -44,9 +44,9 @@ def _tmp_db() -> str:
 
 def _make_game_trace(
     trace_id: str = "sandbox-game-1",
+    league: str = "NBA",
     home_team: str = "Miami Heat",
     away_team: str = "Boston Celtics",
-    league: str = "NBA",
     timestamp: str = "2026-05-17T19:00:00Z",
 ) -> dict[str, Any]:
     return {
@@ -74,9 +74,9 @@ def _make_game_trace(
 def _make_prop_trace(
     trace_id: str = "sandbox-prop-1",
     *,
+    league: str = "NBA",
     home_team: str = "Miami Heat",
     away_team: str = "Boston Celtics",
-    league: str = "NBA",
     game_date: str = "2026-05-17",
     include_game_fields: bool = True,
     player_name: str = "Jayson Tatum",
@@ -296,6 +296,7 @@ class TestBackfillDate:
         assert counts["prop_attached"] == 1
         rows = store.get_prop_outcomes("sandbox-soccer-prop-1")
         assert len(rows) == 1
+        assert rows[0]["stat_type"] == "shots"
         assert rows[0]["stat_value"] == 4.0
         assert rows[0]["result"] == "win"
         assert rows[0]["source"] == "manual:espn_boxscore_20260517"
@@ -360,7 +361,6 @@ class TestBackfillDate:
         assert counts["prop_attached"] == 1
         assert store.get_prop_outcomes("sandbox-prop-1") == []
         store.close()
-
 
 class TestBackfillSingleTrace:
     def test_legacy_prop_without_game_identity_can_be_pinned(self):

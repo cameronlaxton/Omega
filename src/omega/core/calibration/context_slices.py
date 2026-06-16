@@ -6,7 +6,8 @@ precedence, and trace extraction across the Omega system.
 """
 
 import re
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 BASE_CONTEXT_SLICE = None
 
@@ -79,7 +80,7 @@ def normalize_context_label(value: Any) -> str | None:
 def labels_from_trace(trace: Mapping[str, Any]) -> set[str]:
     """Extract and normalize context labels defensively from a trace."""
     labels = set()
-    
+
     locations = [
         trace.get("context_labels"),
         trace.get("context_slice"),
@@ -120,12 +121,12 @@ def labels_from_trace(trace: Mapping[str, Any]) -> set[str]:
                         _extract(k)
                 elif isinstance(v, str):
                     if normalize_context_label(k) == "surface":
-                        _extract("surface_" + v) # Encode surface_{value}
-                        _extract("surface") # General fallback
+                        _extract("surface_" + v)  # Encode surface_{value}
+                        _extract("surface")  # General fallback
                     else:
                         _extract(v)
                 else:
-                    _extract(k)
+                    _extract(v)
 
     for loc in locations:
         if loc:
@@ -149,13 +150,16 @@ def _map_aliases(raw_labels: set[str], sport_family: str | None = None) -> set[s
         mapped.add("playoff")
 
     if sport_family == "basketball":
-        if "playoffs" in mapped: mapped.add("playoff")
-        if "travel_disadvantage" in mapped: mapped.add("rest_disadvantage")
+        if "playoffs" in mapped:
+            mapped.add("playoff")
+        if "travel_disadvantage" in mapped:
+            mapped.add("rest_disadvantage")
         if any(x in mapped for x in ("star_absent", "injury_uncertain")):
             mapped.add("lineup_uncertain")
 
     elif sport_family == "american_football":
-        if "nfl_playoff" in mapped: mapped.add("playoff")
+        if "nfl_playoff" in mapped:
+            mapped.add("playoff")
         if any(x in mapped for x in ("thursday", "thursday_night")):
             mapped.add("short_week")
         if any(x in mapped for x in ("qb_change", "starting_qb_out")):
@@ -170,10 +174,12 @@ def _map_aliases(raw_labels: set[str], sport_family: str | None = None) -> set[s
     elif sport_family == "soccer":
         if any(x in mapped for x in ("knockout", "tournament", "world_cup", "ucl_knockout")):
             mapped.add("cup_match")
-        if "rivalry" in mapped: mapped.add("derby")
+        if "rivalry" in mapped:
+            mapped.add("derby")
         if any(x in mapped for x in ("fixture_congestion", "short_rest")):
             mapped.add("congested_fixture")
-        if "squad_rotation" in mapped: mapped.add("rotation_risk")
+        if "squad_rotation" in mapped:
+            mapped.add("rotation_risk")
 
     elif sport_family == "tennis":
         # Encode surface types directly if specified
@@ -184,21 +190,29 @@ def _map_aliases(raw_labels: set[str], sport_family: str | None = None) -> set[s
                     mapped.add(f"surface_{s}")
         if any(x in mapped for x in ("bo5", "grand_slam_men")):
             mapped.add("best_of_5")
-        if "serve_dominant" in mapped: mapped.add("serve_dominant")
-        if "break_point_pressure" in mapped: mapped.add("pressure_state")
-        if "injury_risk" in mapped: mapped.add("injury_retirement_risk")
-        
+        if "serve_dominant" in mapped:
+            mapped.add("serve_dominant")
+        if "break_point_pressure" in mapped:
+            mapped.add("pressure_state")
+        if "injury_risk" in mapped:
+            mapped.add("injury_retirement_risk")
+
     elif sport_family == "baseball":
         if any(x in mapped for x in ("pitcher_change", "opener_change")):
             mapped.add("starting_pitcher_change")
-        if "bullpen_fatigue" in mapped: mapped.add("bullpen_taxed")
-        if "wind_out" in mapped: mapped.add("weather_wind_out")
+        if "bullpen_fatigue" in mapped:
+            mapped.add("bullpen_taxed")
+        if "wind_out" in mapped:
+            mapped.add("weather_wind_out")
 
     elif sport_family == "hockey":
-        if "confirmed_goalie" in mapped: mapped.add("goalie_confirmed")
-        if "goalie_change" in mapped: mapped.add("goalie_uncertain")
-        if "three_in_four" in mapped: mapped.add("three_in_four")
-        
+        if "confirmed_goalie" in mapped:
+            mapped.add("goalie_confirmed")
+        if "goalie_change" in mapped:
+            mapped.add("goalie_uncertain")
+        if "three_in_four" in mapped:
+            mapped.add("three_in_four")
+
     # Handle implicit surface if no sport family was provided but surfaces exist
     if sport_family is None and any(x in mapped for x in ("clay", "grass", "hard", "indoor_hard")):
         mapped.add("surface")
@@ -216,7 +230,7 @@ def context_slice_for_trace(trace: Mapping[str, Any], *, sport_family: str | Non
         return BASE_CONTEXT_SLICE
 
     mapped_labels = _map_aliases(raw_labels, sport_family)
-    
+
     # Check data_quality_quarantine labels if any exist
     if "data_quality_quarantine" in mapped_labels:
         return "data_quality_quarantine"

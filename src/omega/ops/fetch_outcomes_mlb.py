@@ -101,7 +101,10 @@ def _match_trace_to_game(
     pair = _trace_matchup(trace)
     if pair is None:
         return None
-    return games_by_pair.get(pair)
+    game = games_by_pair.get(pair)
+    if game is None:
+        game = games_by_pair.get((pair[1], pair[0]))
+    return game
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +200,29 @@ def main(
                 limit=500,
             )
         )
+
+        # Also pull ungraded traces from the next day (to handle timezone rolls
+        # where decisions/run timestamps fall on the next day UTC)
+        nxt = d + timedelta(days=1)
+        traces.extend(
+            store.query_traces(
+                league="MLB",
+                start=f"{nxt.isoformat()}T00:00:00Z",
+                end=f"{nxt.isoformat()}T23:59:59Z",
+                has_outcome=False,
+                limit=500,
+            )
+        )
+
+        # Dedup by trace_id to avoid double-processing if any overlap occurs
+        seen_tids = set()
+        unique_traces = []
+        for t in traces:
+            tid = t.get("trace_id")
+            if tid and tid not in seen_tids:
+                seen_tids.add(tid)
+                unique_traces.append(t)
+        traces = unique_traces
 
         for trace in traces:
             # Prop traces grade against player stats, not game scores. Skip

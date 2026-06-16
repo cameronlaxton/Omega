@@ -54,7 +54,7 @@ def test_context_slice_for_trace_precedence():
 def test_context_slice_for_trace_soccer_aliases():
     trace = {"context_labels": ["knockout"]}
     assert context_slice_for_trace(trace, sport_family="soccer") == "cup_match"
-    
+
     trace = {"context_labels": ["world_cup"]}
     assert context_slice_for_trace(trace, sport_family="soccer") == "cup_match"
 
@@ -63,7 +63,7 @@ def test_context_slice_for_trace_tennis_surface():
     trace = {"context_labels": ["clay"]}
     # If no more specific label is present, it uses surface_clay
     assert context_slice_for_trace(trace, sport_family="tennis") == "surface_clay"
-    
+
     trace = {"context_labels": ["playoff", "clay"]}
     # Playoff beats surface
     assert context_slice_for_trace(trace, sport_family="tennis") == "playoff"

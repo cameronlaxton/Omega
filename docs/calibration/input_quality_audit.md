@@ -3,13 +3,13 @@
 The `report_input_quality.py` tool provides an offline audit of data gaps in historical simulation traces. Before fitting context-sliced calibration profiles, it is critical to verify that the upstream data population supports the intended slicing.
 
 ## Rationale
-Context-sliced calibration relies entirely on the presence and accuracy of `context_labels` and `market` data within each trace. If the game context or prior payload is missing, the simulation traces cannot be correctly assigned to specific context slices (e.g., `playoff`, `back_to_back`, `short_week`). 
+Context-sliced calibration relies entirely on the presence and accuracy of `context_labels` and `market` data within each trace. If the game context or prior payload is missing, the simulation traces cannot be correctly assigned to specific context slices (e.g., `playoff`, `back_to_back`, `short_week`).
 Consequently, these traces would fall back to the generic base profile, polluting the baseline and starving the specialized slices of data.
 
 ## Usage
 Run the script to analyze the missing components of a specific league:
 ```bash
-python -m omega.ops.report_input_quality --league NBA --db data/omega_traces.db
+python -m omega.ops.report_input_quality --league NBA --db var/omega_traces.db
 ```
 
 ## Report Output

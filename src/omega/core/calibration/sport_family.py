@@ -32,16 +32,16 @@ def sport_family_for_league(league: str) -> str:
         Returns 'unknown' if the league is not recognized.
     """
     config = get_league_config(league)
-    
+
     archetype = config.get("archetype")
     if archetype == "american_football":
         return "american_football"
-        
+
     sport = config.get("sport", "unknown")
     if sport == "football" and archetype is None:
         return "american_football"
-        
+
     if sport not in VALID_SPORT_FAMILIES:
         return "unknown"
-        
+
     return sport

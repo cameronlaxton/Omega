@@ -1,16 +1,18 @@
-import pytest
-import dataclasses
+from omega.core.simulation.backends import GameSimulationInput, PropSimulationInput
 from omega.core.simulation.dispersion import DispersionPolicy
 from omega.core.simulation.prop_neg_binom import NegBinomPropBackend
 from omega.core.simulation.soccer_bivariate_poisson import SoccerPoissonBackend
 from omega.core.simulation.tennis_markov import TennisMarkovBackend
-from omega.core.simulation.backends import GameSimulationInput, PropSimulationInput
 
 
 def test_soccer_replay_parity(monkeypatch):
     import omega.core.config.leagues
-    monkeypatch.setattr(omega.core.config.leagues, "get_league_config", lambda l: {"avg_total": 2.5, "home_advantage": 0.2})
-    
+    monkeypatch.setattr(
+        omega.core.config.leagues,
+        "get_league_config",
+        lambda league_code: {"avg_total": 2.5, "home_advantage": 0.2},
+    )
+
     backend = SoccerPoissonBackend()
     input1 = GameSimulationInput(
         seed=101,
@@ -24,18 +26,22 @@ def test_soccer_replay_parity(monkeypatch):
         exact=False,
         dispersion=DispersionPolicy(variance_multiplier=1.2)
     )
-    
+
     res1 = backend.run(input1)
     res2 = backend.run(input1)
-    
+
     assert res1["home_win_prob"] == res2["home_win_prob"]
     assert res1["away_win_prob"] == res2["away_win_prob"]
 
 
 def test_tennis_replay_parity(monkeypatch):
     import omega.core.config.leagues
-    monkeypatch.setattr(omega.core.config.leagues, "get_league_config", lambda l: {"match_format": "best_of_3"})
-    
+    monkeypatch.setattr(
+        omega.core.config.leagues,
+        "get_league_config",
+        lambda league_code: {"match_format": "best_of_3"},
+    )
+
     backend = TennisMarkovBackend()
     input1 = GameSimulationInput(
         seed=202,
@@ -45,20 +51,25 @@ def test_tennis_replay_parity(monkeypatch):
         league="ATP",
         home_context={"serve_win_pct": 0.65, "return_win_pct": 0.35},
         away_context={"serve_win_pct": 0.65, "return_win_pct": 0.35},
-        prior_payload={"pressure_coefficients": {"home": 0.05, "away": 0.05}},
+        prior_payload={
+            "pressure_coefficients": {
+                "home": {"break_point": 0.05},
+                "away": {"break_point": 0.05},
+            }
+        },
         exact=False,
         dispersion=DispersionPolicy(variance_multiplier=1.5)
     )
-    
+
     res1 = backend.run(input1)
     res2 = backend.run(input1)
-    
+
     assert res1["home_win_prob"] == res2["home_win_prob"]
 
 
 def test_prop_replay_parity():
     backend = NegBinomPropBackend()
-    
+
     input1 = PropSimulationInput(
         player_name="P1",
         league="NBA",
@@ -71,8 +82,8 @@ def test_prop_replay_parity():
         exact=False,
         dispersion=DispersionPolicy(variance_multiplier=2.0)
     )
-    
+
     res1 = backend.run(input1)
     res2 = backend.run(input1)
-    
+
     assert res1["over_prob"] == res2["over_prob"]

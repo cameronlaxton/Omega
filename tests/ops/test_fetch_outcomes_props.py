@@ -614,7 +614,6 @@ class TestFetchOutcomesPropsSoccer:
         assert store.get_prop_outcomes("sandbox-soccer-unsupported-league") == []
         store.close()
 
-
 class TestFetchOutcomesPropsSkips:
     def test_missing_game_identity_is_skipped(self):
         """Prop trace lacking home_team/away_team/game_date must NOT be graded."""

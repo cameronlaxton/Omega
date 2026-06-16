@@ -1,0 +1,160 @@
+"""omega-ingest-historical-dataset — ingest a local historical CSV dataset.
+
+Reads source CSVs through the matching adapter, resolves identities, computes a
+:class:`DatasetManifest` (pinning per-file hashes + row counts + date range),
+and persists the normalized, identity-resolved dataset for replay. No network
+this pass — local files only.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from omega.historical.adapters.csv_games import CsvGamesAdapter
+from omega.historical.adapters.csv_odds import CsvOddsAdapter
+from omega.historical.adapters.nba_csv import NbaCsvAdapter
+from omega.historical.adapters.nflfast_csv import NflfastCsvAdapter
+from omega.historical.adapters.soccer_football_data import SoccerFootballDataAdapter
+from omega.historical.adapters.tennis_atp_csv import TennisAtpCsvAdapter
+from omega.historical.contracts import HistoricalEvent, HistoricalOutcome, OddsObservation
+from omega.historical.dataset_manifest import compute_manifest
+from omega.historical.manifests import save_dataset_manifest, save_normalized_dataset
+from omega.historical.normalize import sport_family_for
+from omega.historical.snapshots import TeamGameRow
+
+logger = logging.getLogger("omega.ops.ingest_historical_dataset")
+
+SOURCES = ("nflfast", "nba_csv", "football_data", "tennis_atp", "csv_games")
+
+
+@dataclass
+class IngestBundle:
+    events: list[HistoricalEvent]
+    outcomes: list[HistoricalOutcome]
+    odds: list[OddsObservation] = field(default_factory=list)
+    extra_context: dict[str, dict] = field(default_factory=dict)
+    history_override: dict[str, list[TeamGameRow]] | None = None
+    files: list[str] = field(default_factory=list)
+    row_counts: dict[str, int] = field(default_factory=dict)
+
+
+def _build_bundle(args: argparse.Namespace) -> IngestBundle:
+    games = args.games
+    if args.source in ("nflfast", "nba_csv"):
+        a = NflfastCsvAdapter(args.league) if args.source == "nflfast" else NbaCsvAdapter(args.league)
+        return IngestBundle(
+            events=a.read_events(games),
+            outcomes=a.read_outcomes(games),
+            files=[games],
+            row_counts={games: a.row_count(games)},
+        )
+    if args.source == "football_data":
+        a = SoccerFootballDataAdapter(args.league)
+        return IngestBundle(
+            events=a.read_events(games),
+            outcomes=a.read_outcomes(games),
+            odds=a.read_odds(games),
+            files=[games],
+            row_counts={games: a.row_count(games)},
+        )
+    if args.source == "tennis_atp":
+        a = TennisAtpCsvAdapter(args.league)
+        return IngestBundle(
+            events=a.read_events(games),
+            outcomes=a.read_outcomes(games),
+            extra_context=a.read_extra_context(games),
+            history_override=a.read_serve_history(games),
+            files=[games],
+            row_counts={games: a.row_count(games)},
+        )
+
+    # csv_games (+ optional generic odds)
+    g = CsvGamesAdapter(args.league)
+    bundle = IngestBundle(
+        events=g.read_events(games),
+        outcomes=g.read_outcomes(games),
+        files=[games],
+        row_counts={games: g.row_count(games)},
+    )
+    if args.odds:
+        o = CsvOddsAdapter(args.league)
+        bundle.odds = o.read_odds(args.odds)
+        bundle.files.append(args.odds)
+        bundle.row_counts[args.odds] = o.row_count(args.odds)
+    return bundle
+
+
+def _date_range(events: list[HistoricalEvent]) -> tuple[str | None, str | None]:
+    if not events:
+        return None, None
+    dates = sorted(e.start_time for e in events)
+    return dates[0], dates[-1]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Ingest a local historical CSV dataset.")
+    parser.add_argument("--source", required=True, choices=SOURCES)
+    parser.add_argument("--league", required=True, help="League code, e.g. NFL, EPL, ATP")
+    parser.add_argument("--games", required=True, help="Path to the games/matches CSV")
+    parser.add_argument("--odds", default=None, help="Optional separate odds CSV (csv_games source)")
+    parser.add_argument("--root", default=None, help="Artifact root (default var/historical)")
+    parser.add_argument(
+        "--limitations", action="append", default=[], help="Documented dataset limitation (repeatable)"
+    )
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
+    if not Path(args.games).exists():
+        logger.error("games file not found: %s", args.games)
+        return 1
+
+    bundle = _build_bundle(args)
+    if not bundle.events:
+        logger.error("no events parsed from %s", args.games)
+        return 1
+
+    family = sport_family_for(args.league)
+    manifest = compute_manifest(
+        bundle.files,
+        source_name=args.source,
+        league=args.league,
+        sport_family=family,
+        row_counts=bundle.row_counts,
+        date_range=_date_range(bundle.events),
+        limitations=args.limitations,
+    )
+    save_dataset_manifest(manifest, root=args.root)
+    save_normalized_dataset(
+        manifest.manifest_id,
+        events=bundle.events,
+        outcomes=bundle.outcomes,
+        odds=bundle.odds,
+        extra_context=bundle.extra_context,
+        history_override=bundle.history_override,
+        root=args.root,
+    )
+
+    logger.info(
+        "Ingested %d events, %d outcomes, %d odds observations for %s (%s).",
+        len(bundle.events),
+        len(bundle.outcomes),
+        len(bundle.odds),
+        args.league,
+        args.source,
+    )
+    logger.info("manifest_id=%s", manifest.manifest_id)
+    print(manifest.manifest_id)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

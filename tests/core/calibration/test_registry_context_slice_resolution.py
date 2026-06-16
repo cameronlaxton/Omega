@@ -6,7 +6,7 @@ from omega.core.calibration.profiles import CalibrationProfile
 
 def test_registry_slice_resolution(monkeypatch):
     registry = CalibrationRegistry()
-    
+
     profiles_data = {
         "profiles": [
             {
@@ -54,17 +54,17 @@ def test_registry_slice_resolution(monkeypatch):
         ]
     }
     monkeypatch.setattr(registry, "_load", lambda: profiles_data)
-    
+
     # 1. Exact slice match wins
     prof = registry.get_production("NBA", context_slice="playoff", market="game")
     assert prof is not None
     assert prof.profile_id == "playoff_nba"
-    
+
     # 2. Missing slice falls back to base
     prof2 = registry.get_production("NBA", context_slice="back_to_back", market="game")
     assert prof2 is not None
     assert prof2.profile_id == "base_nba"
-    
+
     # 3. Wrong-market slice cannot leak
     prof3 = registry.get_production("NBA", context_slice="back_to_back", market="spread")
     assert prof3 is not None
@@ -73,6 +73,6 @@ def test_registry_slice_resolution(monkeypatch):
     prof4 = registry.get_production("NBA", context_slice="back_to_back", market="game")
     assert prof4 is not None
     assert prof4.profile_id == "base_nba"
-    
+
     # 4. No profile means None
     assert registry.get_production("NFL", context_slice="playoff", market="game") is None

@@ -6,7 +6,7 @@ Context slicing improves the accuracy of simulation engine outputs by fitting ca
 
 Before deciding to fit a new context slice, verify that traces contain the required contextual data:
 ```bash
-python -m omega.ops.report_input_quality --league NBA --db data/omega_traces.db
+python -m omega.ops.report_input_quality --league NBA --db var/omega_traces.db
 ```
 If traces are missing `context_labels`, `market`, or `team_context`, investigate the upstream data gatherers (e.g., `priors_nba`) before proceeding.
 
@@ -14,9 +14,9 @@ If traces are missing `context_labels`, `market`, or `team_context`, investigate
 
 Report the baseline (pre-calibration) bias to see if specific contexts are structurally under-performing.
 ```bash
-python -m omega.ops.report_calibration_bias --league NBA --db data/omega_traces.db
+python -m omega.ops.report_calibration_bias --league NBA --db var/omega_traces.db
 ```
-This evaluates the raw probabilities and calculates ECE, Brier score, and Log Loss for each context slice (e.g., `base`, `playoff`). 
+This evaluates the raw probabilities and calculates ECE, Brier score, and Log Loss for each context slice (e.g., `base`, `playoff`).
 
 ## 3. Fit a Context-Sliced Profile
 
@@ -25,7 +25,7 @@ If a context slice shows significant bias and has sufficient sample size (e.g. >
 python -m omega.ops.fit_calibration \
     --league NBA \
     --context-slice playoff \
-    --db data/omega_traces.db \
+    --db var/omega_traces.db \
     --method isotonic
 ```
 This generates a profile strictly targeting traces where `context_slice_for_trace(...) == "playoff"`.

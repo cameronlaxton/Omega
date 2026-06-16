@@ -315,14 +315,14 @@ def _derive_context_slice(context_hints: dict[str, Any] | None, league: str | No
     """Derive a calibration context_slice string from context hints using the canonical resolution."""
     if not context_hints:
         return None
-        
+
     from omega.core.calibration.context_slices import context_slice_for_trace
     from omega.core.calibration.sport_family import sport_family_for_league
-    
+
     # Pack hints into a dummy trace structure to reuse the canonical extractor
     dummy_trace = {"context_hints": context_hints}
     sport_family = sport_family_for_league(league) if league else None
-    
+
     return context_slice_for_trace(dummy_trace, sport_family=sport_family)
 
 

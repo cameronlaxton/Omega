@@ -18,6 +18,7 @@ import logging
 import os
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -481,6 +482,12 @@ class TraceStore:
         if journal_mode is not None and journal_mode.upper() not in {"WAL", "DELETE", "AUTO"}:
             raise ValueError("journal_mode must be 'WAL', 'DELETE', 'AUTO', or None")
         self._repo: Any | None = None
+        # Explicit, scoped suppression of the bet_ledger dual-write. Replay sets
+        # this via autolog_suppressed() so historical traces never auto-log an
+        # engine_auto bet into the (backtest) ledger; staking entries are written
+        # explicitly with provenance=historical_replay instead. Falls back to the
+        # OMEGA_BET_LEDGER_AUTOLOG env var when unset (legacy behavior preserved).
+        self._autolog_suppressed = False
         backend = resolve_backend(db_path)
         if backend.backend == "postgres":
             if journal_mode is not None:
@@ -530,6 +537,23 @@ class TraceStore:
     def db_path_source(self) -> str:
         """How ``db_path`` was chosen: requested / env_override / auto_redirect_network_fs / default."""
         return self._db_path_source
+
+    @contextmanager
+    def autolog_suppressed(self):
+        """Disable the bet_ledger dual-write for the duration of the block.
+
+        Deterministic and scoped — unlike toggling OMEGA_BET_LEDGER_AUTOLOG, this
+        cannot leak across processes or outlive the ``with`` block. Used by
+        historical replay so persisted replay traces never auto-log an
+        ``engine_auto`` ledger row. Re-entrant: a prior suppression is restored
+        on exit rather than force-cleared.
+        """
+        prev = self._autolog_suppressed
+        self._autolog_suppressed = True
+        try:
+            yield self
+        finally:
+            self._autolog_suppressed = prev
 
     @property
     def conn(self) -> sqlite3.Connection:
@@ -904,6 +928,9 @@ class TraceStore:
         decouple stays explicit and reversible. Never raises into persist(): a
         malformed recommendation must not cost us the trace write.
         """
+        # Explicit scoped suppression wins over the env default (used by replay).
+        if self._autolog_suppressed:
+            return
         if os.environ.get("OMEGA_BET_LEDGER_AUTOLOG", "1") not in ("1", "true", "True"):
             return
         try:

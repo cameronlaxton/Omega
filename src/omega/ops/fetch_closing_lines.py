@@ -294,9 +294,13 @@ def _process_league(
     )
 
     canonicalize = _load_canonicalizer(league)
-    events_by_pair: dict[tuple[str, str], EventOdds] = {
-        _event_key(e.home_team, e.away_team, canonicalize): e for e in events
-    }
+    events_by_pair: dict[tuple[str, str], EventOdds] = {}
+    for e in events:
+        key = _event_key(e.home_team, e.away_team, canonicalize)
+        events_by_pair[key] = e
+        rev_key = (key[1], key[0])
+        if rev_key not in events_by_pair:
+            events_by_pair[rev_key] = e
 
     attached = 0
     skipped: list[str] = []
@@ -347,11 +351,21 @@ def _process_league(
             bet = {**bet, "league": league}
             outcome = _match_prop_outcome(bet, event.books)
         else:
+            is_reversed = False
+            if event.home_team and event.away_team:
+                api_home_canon = canonicalize(event.home_team) or event.home_team
+                api_away_canon = canonicalize(event.away_team) or event.away_team
+                if api_home_canon.lower() == away.lower() or api_away_canon.lower() == home.lower():
+                    is_reversed = True
+
+            match_home = event.away_team if is_reversed else event.home_team
+            match_away = event.home_team if is_reversed else event.away_team
+
             outcome = _match_outcome(
                 bet_market=bet["market"],
                 descriptor=bet["selection_descriptor"],
-                home=event.home_team,
-                away=event.away_team,
+                home=match_home,
+                away=match_away,
                 books=event.books,
                 book_preference=bet["book"],
                 line_taken=bet.get("line_taken"),

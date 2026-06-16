@@ -33,17 +33,22 @@ import logging
 import random
 import sys
 from pathlib import Path
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from omega.core.calibration.context_slices import (  # noqa: E402
+    BASE_CONTEXT_SLICE,
+    INITIAL_CONTEXT_SLICES,
+    context_slice_for_trace,
+)
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
 from omega.core.calibration.market import calibration_market_for_plane  # noqa: E402
 from omega.core.calibration.profiles import CalibrationProfile  # noqa: E402
 from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
-from omega.core.calibration.context_slices import context_slice_for_trace, BASE_CONTEXT_SLICE, INITIAL_CONTEXT_SLICES  # noqa: E402
 from omega.core.calibration.sport_family import sport_family_for_league  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
@@ -252,7 +257,7 @@ def main() -> int:
             if slice_val is BASE_CONTEXT_SLICE and not args.include_base_with_slices:
                 continue
             # If sport is tennis, we have implicit sub-slices like "surface_clay".
-            # For simplicity, if we are doing all slices, we only group by the explicit initial slices 
+            # For simplicity, if we are doing all slices, we only group by the explicit initial slices
             # plus any discovered surface sub-slices.
             if slice_val is not BASE_CONTEXT_SLICE and slice_val not in INITIAL_CONTEXT_SLICES and not slice_val.startswith("surface_"):
                 # We can just include all discovered low cardinality slices if they meet the sample threshold later.
@@ -271,9 +276,10 @@ def main() -> int:
 
     methods = ["isotonic", "shrinkage"] if args.method == "both" else [args.method]
     market = calibration_market_for_plane(args.plane)
+    fitter = CalibrationFitter()
     registry = CalibrationRegistry()
     registered = []
-    
+
     # Dry run table header
     if args.dry_run:
         print(f"{'League':<10} | {'Family':<15} | {'Market':<10} | {'Slice':<25} | {'N Pairs':<7} | {'Status':<15} | {'Threshold':<9}")
@@ -282,7 +288,7 @@ def main() -> int:
     for slice_name, slice_traces in groups.items():
         predictions, outcomes, pair_label = _extract_plane_pairs(fitter, slice_traces, args.plane)
         n = len(predictions)
-        
+
         status = "eligible"
         threshold = args.min_samples
         if n < args.shadow_min_samples:
@@ -291,7 +297,7 @@ def main() -> int:
         elif n < args.min_samples:
             status = "shadow"
             threshold = args.min_samples
-            
+
         if args.dry_run:
             print(f"{args.league:<10} | {sport_family:<15} | {market:<10} | {str(slice_name or 'base'):<25} | {n:<7} | {status:<15} | {threshold:<9}")
             continue
@@ -302,7 +308,7 @@ def main() -> int:
                 slice_name, n, pair_label, args.shadow_min_samples
             )
             continue
-            
+
         if n < args.min_samples:
             logger.info("Fitting slice %r as shadow profile (%d pairs).", slice_name, n)
 
@@ -352,6 +358,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 

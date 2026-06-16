@@ -110,6 +110,7 @@ def _match_outcome(
     away: str,
     books,
     book_preference: str | None,
+    line_taken: float | None = None,
 ):
     odds_market = _MARKET_MAP[bet_market]
     candidates = [b for b in books if b.market == odds_market]
@@ -120,8 +121,11 @@ def _match_outcome(
 
     desc = descriptor.lower()
     if bet_market == "moneyline":
-        target = home if "home" in desc else (away if "away" in desc else None)
-        if target is None:
+        if "home" in desc:
+            target = home
+        elif "away" in desc:
+            target = away
+        else:
             return None
         for b in candidates:
             if b.selection.lower() == target.lower():
@@ -129,21 +133,32 @@ def _match_outcome(
         return None
 
     if bet_market == "spread":
-        target = home if "home" in desc else (away if "away" in desc else None)
-        if target is None:
+        spread_target = home if "home" in desc else (away if "away" in desc else None)
+        if spread_target is None:
             return None
         for b in candidates:
-            if b.selection.lower() == target.lower():
-                return b
+            if b.selection.lower() != spread_target.lower():
+                continue
+            # Exact-point match: a -3 bet must not be graded against a -5.5 close.
+            if line_taken is not None and b.point is not None and b.point != float(line_taken):
+                continue
+            return b
         return None
 
     if bet_market == "total":
-        label = "Over" if "over" in desc else ("Under" if "under" in desc else None)
-        if label is None:
+        if "over" in desc:
+            label = "Over"
+        elif "under" in desc:
+            label = "Under"
+        else:
             return None
         for b in candidates:
-            if b.selection == label:
-                return b
+            if b.selection != label:
+                continue
+            # Exact-point match: an Over 47.5 must not be graded against Over 45.5.
+            if line_taken is not None and b.point is not None and b.point != float(line_taken):
+                continue
+            return b
         return None
 
     return None
@@ -155,8 +170,11 @@ def _match_prop_outcome(bet: dict, books):
     if not provider_market:
         return None
     desc = f"{bet.get('selection_descriptor', '')} {bet.get('selection', '')}".lower()
-    side = "over" if "over" in desc else ("under" if "under" in desc else None)
-    if side is None:
+    if "over" in desc:
+        side = "over"
+    elif "under" in desc:
+        side = "under"
+    else:
         return None
     selection = bet.get("selection") or ""
     player_hint = selection.split(" Over ", 1)[0].split(" Under ", 1)[0]
@@ -291,10 +309,13 @@ def _process_league(
             client.remaining_budget(),
         )
 
-        events_by_pair: dict[tuple[str, str], EventOdds] = {
-            (canonicalize(e.home_team) or e.home_team, canonicalize(e.away_team) or e.away_team): e
-            for e in snapshot.events
-        }
+        events_by_pair: dict[tuple[str, str], EventOdds] = {}
+        for e in snapshot.events:
+            h = canonicalize(e.home_team) or e.home_team
+            a = canonicalize(e.away_team) or e.away_team
+            events_by_pair[(h, a)] = e
+            if (a, h) not in events_by_pair:
+                events_by_pair[(a, h)] = e
 
         for bet in ts_bets:
             if not _is_supported_market(bet["market"]):
@@ -319,22 +340,23 @@ def _process_league(
                 continue
 
             persisted_book = str(bet["book"]).lower()
+            book_preference = persisted_book
+            if book_preference == "consensus":
+                book_preference = "betmgm"
+
             if bet["market"].startswith("player_prop:"):
                 stat_key = bet["market"].split(":", 1)[1]
                 provider_market = provider_market_for_prop(league, stat_key)
                 if not provider_market:
                     skipped.append(f"{bet['bet_id']} (no provider prop mapping for {stat_key})")
                     continue
-                book_query = persisted_book
-                if book_query == "consensus":
-                    book_query = "betmgm"
                 try:
                     prop_snapshot = client.fetch_historical_event_odds(
                         league,
                         event_id=event.event_id,
                         date=ts,
                         markets=provider_market,
-                        bookmakers=book_query,
+                        bookmakers=book_preference,
                     )
                     event = prop_snapshot.events[0] if prop_snapshot.events else None
                     if event is None:
@@ -348,13 +370,24 @@ def _process_league(
                 bet = {**bet, "league": league}
                 outcome = _match_prop_outcome(bet, event.books)
             else:
+                is_reversed = False
+                if event.home_team and event.away_team:
+                    api_home_canon = canonicalize(event.home_team) or event.home_team
+                    api_away_canon = canonicalize(event.away_team) or event.away_team
+                    if api_home_canon.lower() == away.lower() or api_away_canon.lower() == home.lower():
+                        is_reversed = True
+
+                match_home = event.away_team if is_reversed else event.home_team
+                match_away = event.home_team if is_reversed else event.away_team
+
                 outcome = _match_outcome(
                     bet_market=bet["market"],
                     descriptor=bet["selection_descriptor"],
-                    home=event.home_team,
-                    away=event.away_team,
+                    home=match_home,
+                    away=match_away,
                     books=event.books,
-                    book_preference=bet["book"],
+                    book_preference=book_preference,
+                    line_taken=bet.get("line_taken"),
                 )
 
             if outcome is None:
