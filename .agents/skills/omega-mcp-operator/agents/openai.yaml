@@ -1,0 +1,4 @@
+agent:
+  display_name: "Omega MCP Operator"
+  short_description: "Operate Omega through MCP tools."
+  default_prompt: "Run Omega via MCP and preserve engine boundaries."

@@ -1,0 +1,4 @@
+agent:
+  display_name: "Omega Trace QA"
+  short_description: "Verify Omega trace and sidecar quality."
+  default_prompt: "Use $omega-trace-qa to verify Omega trace completeness before session close."

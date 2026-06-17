@@ -1,0 +1,26 @@
+{
+  "session_id": "template-weekly-shadow-review",
+  "actions": [
+    {
+      "type": "score_evidence_signals",
+      "args": {
+        "window_days": 30
+      }
+    },
+    {
+      "type": "report_calibration",
+      "args": {
+        "league": "NBA",
+        "window_days": 30
+      }
+    },
+    {
+      "type": "fit_adjustment_policy",
+      "args": {
+        "league": "NBA",
+        "mode": "shadow",
+        "min_samples": 30
+      }
+    }
+  ]
+}

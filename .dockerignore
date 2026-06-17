@@ -1,0 +1,17 @@
+.git/index.lock
+.omega_cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+**/__pycache__/
+**/*.pyc
+omega_traces.db
+omega_traces.db-*
+*.db-journal
+*.db-wal
+*.db-shm
+inbox/traces/
+inbox/sessions/
+reports/
+powershell.cmd

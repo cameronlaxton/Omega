@@ -1,0 +1,4 @@
+agent:
+  display_name: "Omega Failure Budget"
+  short_description: "Enforce Omega stop conditions and bounded recovery."
+  default_prompt: "Use $omega-failure-budget after $omega-session-bootstrap to enforce stop conditions before analysis."

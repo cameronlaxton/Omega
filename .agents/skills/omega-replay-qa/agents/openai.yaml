@@ -1,0 +1,4 @@
+agent:
+  display_name: "Omega Replay QA"
+  short_description: "Audit Omega traces, replay, and calibration boundaries."
+  default_prompt: "Audit this Omega trace or replay bundle for reproducibility."

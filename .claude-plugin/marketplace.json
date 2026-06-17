@@ -1,0 +1,23 @@
+{
+  "name": "omega-local",
+  "owner": {
+    "name": "Cam Laxton",
+    "email": "cameron.laxton@gmail.com",
+    "url": "https://github.com/cameronlaxton/Omega"
+  },
+  "metadata": {
+    "description": "Local marketplace for the Omega sports analytics MCP server and skills.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "omega-llm-interface",
+      "source": "./plugins/omega-llm-interface",
+      "description": "Omega MCP server + omega-mcp-operator and omega-replay-qa skills for bounded LLM operation of the Omega sports analytics engine.",
+      "version": "0.1.0",
+      "category": "analytics",
+      "keywords": ["omega", "sports-analytics", "mcp", "replay", "trace"],
+      "license": "MIT"
+    }
+  ]
+}

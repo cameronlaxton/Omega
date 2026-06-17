@@ -1,0 +1,39 @@
+# Omega MCP Tool Contract
+
+The MCP server lives at `omega/mcp/server.py`. Its domain functions remain
+importable even when the optional MCP package is not installed.
+
+## Tools
+
+- `omega_analyze_game(request, bankroll, session_id)`
+- `omega_analyze_prop(request, bankroll, session_id)`
+- `omega_analyze_slate(request, bankroll, session_id)`
+- `omega_run_batch(entries, bankroll, session_id)` — batch game/prop analysis; resolves odds, runs analyze(), writes export blocks to `var/inbox/traces/`; use for N > 3 analyses
+- `omega_chat_orchestrate(prompt, context=None)`
+- `omega_replay_bundle(bundle, strict=False)`
+- `omega_trace_get(trace_id, db_path=None)`
+- `omega_trace_query(...)`
+- `omega_trace_attach_outcome(trace_id, home_score, away_score, source="mcp", db_path=None)`
+- `omega_calibration_fit_preview(db_path=None, league=None, method="isotonic", limit=1000)`
+- `omega_evidence_retrieve(slots)`
+- `omega_resolve_odds(kind, league, ..., bookmaker="betmgm", line_shopping=False, all_books=False)`
+
+## Resources
+
+- `omega://docs/llm-mcp-interface`
+- `omega://schemas/contracts`
+- `omega://calibration/universal-latest`
+
+## Prompts
+
+- `omega_runtime_prompt`
+- `omega_missing_input_repair`
+- `omega_trace_audit`
+- `omega_replay_review`
+
+## Safety Notes
+
+- Do not compute edge, EV, Kelly, calibration, staking, or grading in the LLM.
+- Do not make replay the quant benchmark path.
+- Do not promote calibration profiles from the preview tool.
+- Do not fetch live evidence in replay.

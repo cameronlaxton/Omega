@@ -1,0 +1,11 @@
+{
+  "session_id": "template-daily-trace-intake",
+  "actions": [
+    {
+      "type": "ingest_traces",
+      "args": {
+        "verbose": true
+      }
+    }
+  ]
+}

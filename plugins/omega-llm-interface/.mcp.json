@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "omega": {
+      "command": "python",
+      "args": ["-m", "omega.mcp.server"],
+      "cwd": "C:\\repos\\Omega"
+    }
+  }
+}
