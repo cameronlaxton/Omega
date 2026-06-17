@@ -43,6 +43,7 @@ import argparse
 import hashlib
 import logging
 import math
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,7 +63,8 @@ from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("cv_calibration_diagnostic")
 
-_MIN_CV_SAMPLES = 60  # need enough that each fold's train split clears the fitter's _MIN_SAMPLES=30
+_MIN_SAMPLES = int(os.environ.get("OMEGA_MIN_SAMPLES", 30))
+_MIN_CV_SAMPLES = _MIN_SAMPLES * 2  # need enough that each fold's train split clears the fitter's min samples
 
 
 @dataclass
@@ -144,6 +146,7 @@ def cross_validate(
     n = len(predictions)
     fold_eces: list[float] = []
     fold_briers: list[float] = []
+    raw_eces: list[float] = []
 
     for r in range(repeats):
         assignment = stratified_folds(outcomes, folds, base_seed + r)
@@ -153,7 +156,7 @@ def cross_validate(
             tr_o = [outcomes[i] for i in range(n) if i not in test_idx]
             te_p = [predictions[i] for i in range(n) if i in test_idx]
             te_o = [outcomes[i] for i in range(n) if i in test_idx]
-            if len(tr_p) < 30 or not te_p:
+            if len(tr_p) < _MIN_SAMPLES or not te_p:
                 continue
             if method == "isotonic":
                 profile = fitter.fit_isotonic(tr_p, tr_o, league=league, market=market)
@@ -164,9 +167,10 @@ def cross_validate(
             m = fitter.evaluate(profile, te_p, te_o)
             fold_eces.append(m["calibration_error"])
             fold_briers.append(m["brier_score"])
+            raw_eces.append(_adaptive_calibration_error(te_p, te_o))
 
-    raw_ece = _adaptive_calibration_error(predictions, outcomes)
     k_total = len(fold_eces)
+    raw_ece = sum(raw_eces) / k_total if k_total else float("nan")
     mean = sum(fold_eces) / k_total if k_total else float("nan")
     var = sum((e - mean) ** 2 for e in fold_eces) / (k_total - 1) if k_total > 1 else 0.0
     std = math.sqrt(var)
@@ -193,12 +197,12 @@ def cross_validate(
 def _load_pairs(args: argparse.Namespace) -> tuple[list[float], list[int]]:
     graded: list[dict] = []
     if not args.historical_only:
-        store = TraceStore(db_path=args.db)
+        store = TraceStore(db_path=args.db, read_only=True)
         log_effective_db(store, logger)
         graded.extend(store.get_graded_traces(league=args.league, limit=100_000))
         store.close()
     if args.historical_only or args.include_historical:
-        hstore = TraceStore(db_path=args.historical_db)
+        hstore = TraceStore(db_path=args.historical_db, read_only=True)
         logger.info("historical DB: %s", args.historical_db)
         graded.extend(
             hstore.query_traces(
@@ -252,6 +256,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--historical-only", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.folds <= 0 or args.repeats <= 0:
+        raise ValueError("Both --folds and --repeats must be positive integers.")
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

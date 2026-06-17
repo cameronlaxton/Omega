@@ -118,12 +118,21 @@ def evaluate_promotion_gates(
     # (fit-per-fold, scored out-of-sample, repeated) is the robust measure. Legacy
     # candidates without CV metrics fall back to the single-split calibration_error.
     cv_ece = candidate.metrics.get("cv_calibration_error")
-    use_cv = cv_ece is not None and candidate.metrics.get("cv_n_folds", 0) > 0
-    ece = cv_ece if use_cv else candidate.metrics.get("calibration_error")
-    src = "cv_calibration_error" if use_cv else "calibration_error"
+    cv_n_folds = candidate.metrics.get("cv_n_folds", 0)
+    use_cv = cv_ece is not None and cv_n_folds > 0
+    if use_cv:
+        ece = cv_ece
+        src = "cv_calibration_error"
+    elif cv_n_folds > 0:
+        ece = None
+        src = "cv_calibration_error"
+    else:
+        ece = candidate.metrics.get("calibration_error")
+        src = "calibration_error"
+
     if ece is None:
         results.append(
-            GateResult("ECE_FLOOR", False, "candidate has no calibration_error metric; cannot verify floor")
+            GateResult("ECE_FLOOR", False, f"candidate has no {src} metric; cannot verify floor")
         )
     else:
         results.append(

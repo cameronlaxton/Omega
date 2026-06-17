@@ -135,12 +135,18 @@ def fit_and_register(
         raise ValueError(f"Unknown method: {method!r}")
 
     metrics = fitter.evaluate(profile, hold_p, hold_o)
-    # Cross-validated ECE on the full (train+holdout) pairs: a robust, lower-variance
-    # estimate of the method's generalization calibration than the single 20% holdout.
+    # Cross-validated ECE: a robust, lower-variance estimate of the method's generalization
+    # calibration. For windowed fits, we compute CV only within the training window (train_p)
+    # to avoid leakage from future holdout data (hold_p). Otherwise, we use the full pairs.
     # The promotion ECE_FLOOR prefers this when present (see promotion.py).
-    cv = fitter.cross_validated_ece(
-        train_p + hold_p, train_o + hold_o, league=league, market=market, method=method
-    )
+    if training_window:
+        cv = fitter.cross_validated_ece(
+            train_p, train_o, league=league, market=market, method=method
+        )
+    else:
+        cv = fitter.cross_validated_ece(
+            train_p + hold_p, train_o + hold_o, league=league, market=market, method=method
+        )
     metrics.update(cv)
     profile.metrics = metrics
     profile.context_slice = context_slice

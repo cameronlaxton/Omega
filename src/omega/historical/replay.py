@@ -124,6 +124,20 @@ def build_team_histories(
     return dict(hist)
 
 
+def _normalize_timestamp(ts: str) -> str:
+    if not ts:
+        return ""
+    s = ts.strip()
+    iso = s[:-1] + "+00:00" if s.endswith("Z") else s
+    from datetime import datetime, timezone
+    dt = datetime.fromisoformat(iso)
+    if not dt.tzinfo:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat()
+
+
 def build_league_rating_index(
     events: list[HistoricalEvent], outcomes: dict[str, HistoricalOutcome]
 ) -> tuple[list[str], list[float]]:
@@ -140,8 +154,9 @@ def build_league_rating_index(
         oc = outcomes.get(ev.event_id)
         if not oc or oc.home_score is None or oc.away_score is None:
             continue
-        entries.append((ev.start_time, float(oc.home_score)))
-        entries.append((ev.start_time, float(oc.away_score)))
+        t_norm = _normalize_timestamp(ev.start_time)
+        entries.append((t_norm, float(oc.home_score)))
+        entries.append((t_norm, float(oc.away_score)))
     entries.sort(key=lambda e: e[0])
     dates = [e[0] for e in entries]
     prefix = [0.0]
@@ -160,7 +175,7 @@ def as_of_league_mean(index: tuple[list[str], list[float]], decision_time: str) 
     import bisect
 
     dates, prefix = index
-    i = bisect.bisect_left(dates, decision_time)
+    i = bisect.bisect_left(dates, _normalize_timestamp(decision_time))
     if i <= 0:
         return None
     return prefix[i] / i
@@ -238,9 +253,10 @@ class ReplayEngine:
         league_mean = as_of_league_mean(
             getattr(self, "_league_index", ([], [0.0])), decision_time
         )
+        is_team_sport = ev.sport_family in ("basketball", "american_football", "baseball", "hockey", "soccer")
         league_baseline = (
             {"off_rating": league_mean, "def_rating": league_mean}
-            if league_mean is not None
+            if (is_team_sport and league_mean is not None)
             else None
         )
         history = MatchupHistory(

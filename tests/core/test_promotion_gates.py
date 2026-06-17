@@ -154,6 +154,26 @@ def test_zero_cv_folds_falls_back_to_single_split(tmp_path):
     assert "calibration_error=" in ece_gate.message  # used the single-split metric
 
 
+def test_missing_cv_ece_with_positive_folds_blocks(tmp_path):
+    """cv_n_folds > 0 but cv_calibration_error is missing -> fail closed."""
+    reg = _registry(tmp_path)
+    reg.register(
+        _profile(
+            "nba_v1",
+            metrics={
+                "brier_score": 0.22,
+                "calibration_error": 0.04,  # passes on single split
+                # cv_calibration_error is omitted/missing!
+                "cv_n_folds": 5,
+                "log_loss": 0.65,
+            },
+        )
+    )
+    with pytest.raises(PromotionGateError) as exc:
+        reg.promote("nba_v1", **_CONFIRMS)
+    assert "ECE_FLOOR" in exc.value.report.failed_gates
+
+
 def test_second_promotion_requires_brier_improvement(tmp_path):
     reg = _registry(tmp_path)
     reg.register(_profile("nba_v1"))

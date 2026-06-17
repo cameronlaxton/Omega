@@ -660,6 +660,9 @@ def stratified_folds(outcomes: list[int], k: int, seed: int) -> list[list[int]]:
     folds so every fold sees ~the same base rate. This matters for the draw plane,
     where positives are only ~20%.
     """
+    if k <= 0:
+        raise ValueError(f"Number of folds k must be a positive integer, got {k}")
+
     import random
 
     rng = random.Random(seed)

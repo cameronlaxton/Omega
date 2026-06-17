@@ -80,6 +80,8 @@ def test_cross_validate_miscalibrated_high_ece():
     )
     assert raw_mean > 0.05
     assert raw_pass == 0.0
+    import math
+    assert math.isclose(res.raw_ece, raw_mean, rel_tol=1e-9)
 
 
 def test_raw_oos_in_range():
