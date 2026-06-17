@@ -185,6 +185,22 @@ def test_fetch_outcomes_excludes_soccer_when_omitted(monkeypatch):
     assert all("--dry-run" in cmd for cmd in calls)
 
 
+def test_fetch_outcomes_accepts_tennis_tours(monkeypatch):
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        "omega.ops.fetch_outcomes_all.subprocess.run", _fake_run_factory(calls)
+    )
+
+    result = omega_fetch_outcomes(leagues=["ATP", "WTA"], dry_run=True)
+
+    assert result["status"] == "success"
+    assert result["ok"] is True
+    assert result["leagues"] == ["atp", "wta"]
+    assert all(cmd[2] == "omega.ops.fetch_outcomes_tennis" for cmd in calls)
+    assert calls[0][-3:] == ["--leagues", "ATP", "--dry-run"]
+    assert calls[1][-3:] == ["--leagues", "WTA", "--dry-run"]
+
+
 def test_fetch_outcomes_reports_subprocess_failure(monkeypatch):
     def _fail_run(cmd, *args, **kwargs):
         return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="boom")

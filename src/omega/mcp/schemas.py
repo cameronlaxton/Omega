@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from omega.ops.fetch_outcomes_all import VALID_LEAGUES as _FETCH_OUTCOMES_VALID_LEAGUES
+
 MCP_SCHEMA_VERSION = 1
 
 
@@ -130,9 +132,6 @@ class PortfolioSummaryRequest(BaseModel):
     db_path: str | None = None
 
 
-_VALID_LEAGUES = {"nba", "wnba", "mlb", "soccer", "props"}
-
-
 class FetchOutcomesRequest(BaseModel):
     """Batch outcome gathering across leagues (wraps fetch_outcomes_all).
 
@@ -143,7 +142,10 @@ class FetchOutcomesRequest(BaseModel):
 
     leagues: list[str] | None = Field(
         default=None,
-        description="Subset of: nba, wnba, mlb, soccer, props. None = all.",
+        description=(
+            "Subset of fetch_outcomes_all targets, e.g. nba, wnba, mlb, soccer, "
+            "nhl, tennis, atp, wta, grand_slam, props. None = all."
+        ),
     )
     since: str | None = Field(default=None, description="Start date YYYY-MM-DD")
     until: str | None = Field(default=None, description="End date YYYY-MM-DD")
@@ -153,11 +155,15 @@ class FetchOutcomesRequest(BaseModel):
     @model_validator(mode="after")
     def _check_leagues(self) -> FetchOutcomesRequest:
         if self.leagues is not None:
-            bad = [lg for lg in self.leagues if lg.lower() not in _VALID_LEAGUES]
+            bad = [
+                lg
+                for lg in self.leagues
+                if lg.lower() not in _FETCH_OUTCOMES_VALID_LEAGUES
+            ]
             if bad:
                 raise ValueError(
                     f"Unknown league(s): {', '.join(bad)}. "
-                    f"Valid: {', '.join(sorted(_VALID_LEAGUES))}"
+                    f"Valid: {', '.join(sorted(_FETCH_OUTCOMES_VALID_LEAGUES))}"
                 )
             self.leagues = [lg.lower() for lg in self.leagues]
         return self
