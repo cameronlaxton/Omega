@@ -39,6 +39,50 @@ from omega.trace.store import TraceStore, log_effective_db
 logger = logging.getLogger("omega.ops.replay_history")
 
 
+def _resolve_frozen_prior_payload(args: argparse.Namespace) -> dict | None:
+    """Resolve a frozen game-level prior_payload from CLI args (once, up front).
+
+    Priority: explicit --rho > --rho-profile lookup > None. The --rho-profile
+    lookup reads the PRODUCTION Dixon-Coles rho (read-only) from --priors-db
+    (default: production trace DB) and freezes the value + provenance, so the
+    replay run is deterministic and independent of later priors-table edits.
+    Raises SystemExit(2) if a named profile has no production row (fail closed).
+    """
+    if args.rho is not None:
+        return {"rho": float(args.rho), "rho_profile_id": "explicit", "rho_as_of_date": None}
+    if not args.rho_profile:
+        return None
+
+    from omega.trace.priors import get_production_dc_profile
+
+    priors_db = args.priors_db or str(default_trace_db_path())
+    store = TraceStore(db_path=priors_db)
+    try:
+        prof = get_production_dc_profile(store, args.rho_profile)
+    finally:
+        store.close()
+    if prof is None:
+        logger.error(
+            "No production Dixon-Coles profile %r in %s; cannot inject rho. "
+            "Fit/promote via omega-fit-dixon-coles first.",
+            args.rho_profile,
+            priors_db,
+        )
+        raise SystemExit(2)
+    logger.info(
+        "Frozen rho prior: profile=%s rho=%s as_of=%s (from %s)",
+        prof.profile_id,
+        prof.rho,
+        prof.as_of_date,
+        priors_db,
+    )
+    return {
+        "rho": prof.rho,
+        "rho_profile_id": prof.profile_id,
+        "rho_as_of_date": prof.as_of_date,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Replay a historical dataset into a dedicated calibration DB."
@@ -62,6 +106,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bankroll", type=float, default=1000.0)
     parser.add_argument("--n-iterations", type=int, default=1000)
     parser.add_argument("--simulation-backend", default="fast_score")
+    parser.add_argument(
+        "--rho-profile",
+        default=None,
+        help=(
+            "Dixon-Coles profile_id (e.g. fifa_intl_v1) to inject as a FROZEN rho "
+            "prior for the soccer bivariate-DC backend. Resolved ONCE from "
+            "--priors-db at replay start and applied to every request. Required "
+            "for soccer_bivariate_poisson_dc replay (else the backend fails closed)."
+        ),
+    )
+    parser.add_argument(
+        "--rho",
+        type=float,
+        default=None,
+        help="Explicit frozen rho value (overrides --rho-profile lookup).",
+    )
+    parser.add_argument(
+        "--priors-db",
+        default=None,
+        help=(
+            "DB to read the production Dixon-Coles rho from for --rho-profile "
+            "(default: the production trace DB). Read-only; never written."
+        ),
+    )
     parser.add_argument(
         "--enable-staking",
         action="store_true",
@@ -111,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
         prop_context=ds_parts.get("prop_context", {}),
     )
 
+    # Resolve a FROZEN game-level prior_payload ONCE (replay must not depend on
+    # live priors-table mutation mid-run). Used by the soccer bivariate-DC backend.
+    prior_payload = _resolve_frozen_prior_payload(args)
+
     config = ReplayConfig(
         dataset_manifest_id=manifest.manifest_id,
         backtest_db_path=args.db,
@@ -120,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         simulation_backend=args.simulation_backend,
         enable_staking=args.enable_staking,
         leakage_policy=args.leakage_policy,
+        prior_payload=prior_payload,
     )
     replay_id = args.replay_id or f"replay_{manifest.manifest_id}"
 

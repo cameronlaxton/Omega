@@ -449,6 +449,31 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "std": 1.3,
         # No Dixon-Coles: insufficient data density for rho estimation
     },
+    # Calibration FIT-LEAGUE / bucket for COMPETITIVE international soccer
+    # (World Cup, Euro, Copa, Nations League, AFCON). It is the canonical
+    # calibration bucket that live FIFA_WORLD_CUP_2026 traces resolve to via
+    # omega/core/calibration/league_buckets.py — NOT a live betting league (no
+    # live request carries league=FIFA_INTL). It exists so historical replay can
+    # produce backend-matched (bivariate-DC) draw traces pooled across the
+    # competitive-international competitions and a single draw profile can be fit
+    # and keyed FIFA_INTL. Friendlies are deliberately excluded (different draw
+    # base-rate; their own bucket). Runs the same bivariate-Poisson-DC backend as
+    # FIFA_WORLD_CUP_2026 so the fitted calibration map matches the live model.
+    "FIFA_INTL": {
+        "sport": "soccer",
+        "archetype": "soccer",
+        "periods": 2,
+        "period_length_min": 45,
+        "scoring": "goals",
+        "avg_total": 2.45,
+        "distribution": "bivariate_poisson",
+        "home_advantage": 0.0,  # pooled mixed/neutral internationals
+        "std": 1.3,
+        "supports_draw": True,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "fifa_intl_v1",
+    },
     "NWSL": {
         "sport": "soccer",
         "archetype": "soccer",

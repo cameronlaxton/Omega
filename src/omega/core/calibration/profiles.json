@@ -1896,6 +1896,83 @@
       "reject_reason": null,
       "incumbent_id": null,
       "promotion_gate_report": null
+    },
+    {
+      "profile_id": "iso_fifa_intl_draw_v1_8ca4e6608f9fbab6",
+      "schema_version": 1,
+      "version": 1,
+      "method": "isotonic",
+      "league": "FIFA_INTL",
+      "context_slice": null,
+      "market": "draw",
+      "status": "candidate",
+      "params": {
+        "calibration_map": {
+          "0.05": 0.15,
+          "0.15": 0.174699,
+          "0.25": 0.231183,
+          "0.35": 0.28702,
+          "0.45": 0.28702,
+          "0.55": 0.28702,
+          "0.65": 0.28702,
+          "0.75": 0.28702,
+          "0.85": 0.28702,
+          "0.95": 0.28702
+        }
+      },
+      "training_window": "fitted_2026-06-17",
+      "sample_size": 2403,
+      "dataset_hash": "8ca4e6608f9fbab6",
+      "metrics": {
+        "brier_score": 0.156468,
+        "calibration_error": 0.034203,
+        "log_loss": 0.491446,
+        "n_eval": 600,
+        "cv_calibration_error": 0.044642,
+        "cv_ece_ci_low": 0.040732,
+        "cv_ece_ci_high": 0.048551,
+        "cv_brier_score": 0.162517,
+        "cv_n_folds": 25
+      },
+      "created_at": "2026-06-17T18:49:22.595453+00:00",
+      "promoted_at": null,
+      "rejected_at": null,
+      "reject_reason": null,
+      "incumbent_id": null,
+      "promotion_gate_report": null
+    },
+    {
+      "profile_id": "shrink_fifa_intl_draw_v1_8ca4e6608f9fbab6",
+      "schema_version": 1,
+      "version": 1,
+      "method": "shrinkage",
+      "league": "FIFA_INTL",
+      "context_slice": null,
+      "market": "draw",
+      "status": "candidate",
+      "params": {
+        "shrink_factor": 1.0
+      },
+      "training_window": "fitted_2026-06-17",
+      "sample_size": 2403,
+      "dataset_hash": "8ca4e6608f9fbab6",
+      "metrics": {
+        "brier_score": 0.158013,
+        "calibration_error": 0.03492,
+        "log_loss": 0.493778,
+        "n_eval": 600,
+        "cv_calibration_error": 0.043545,
+        "cv_ece_ci_low": 0.039396,
+        "cv_ece_ci_high": 0.047694,
+        "cv_brier_score": 0.162567,
+        "cv_n_folds": 25
+      },
+      "created_at": "2026-06-17T18:49:22.783319+00:00",
+      "promoted_at": null,
+      "rejected_at": null,
+      "reject_reason": null,
+      "incumbent_id": null,
+      "promotion_gate_report": null
     }
   ]
 }

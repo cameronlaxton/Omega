@@ -314,6 +314,11 @@ class ReplayEngine:
             home_context=snapshot.home_context,
             away_context=snapshot.away_context,
             game_context=snapshot.game_context,
+            # Frozen game-level priors (e.g. Dixon-Coles rho for the soccer
+            # bivariate-DC backend), resolved once at replay start. None for the
+            # fast_score path. Backends that require a prior fail closed when it
+            # is absent rather than guessing.
+            prior_payload=self.config.prior_payload,
             seed=seed,
             evidence=[],
         )

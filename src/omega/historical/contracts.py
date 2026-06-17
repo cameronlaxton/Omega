@@ -296,6 +296,16 @@ class ReplayConfig(BaseModel):
     )
     code_version: str = Field(default_factory=current_code_version)
     seed_namespace: str = Field(default="omega-historical-replay-v1")
+    prior_payload: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Frozen game-level priors applied to every replayed request's "
+            "prior_payload (e.g. Dixon-Coles {'rho','rho_profile_id',"
+            "'rho_as_of_date'} for the soccer bivariate-DC backend). Resolved "
+            "ONCE at replay start and frozen so replay stays deterministic and "
+            "never depends on live priors-table mutation mid-run."
+        ),
+    )
 
     def config_hash(self) -> str:
         """Stable hash over the determinism-relevant fields (excludes db path)."""
@@ -310,6 +320,7 @@ class ReplayConfig(BaseModel):
                 "leakage_policy": self.leakage_policy,
                 "code_version": self.code_version,
                 "seed_namespace": self.seed_namespace,
+                "prior_payload": self.prior_payload,
             }
         )
 
