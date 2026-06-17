@@ -33,6 +33,7 @@ from omega.historical.contracts import (
 from omega.historical.leakage import evaluate_leakage
 from omega.historical.odds_snapshots import build_odds_snapshot
 from omega.historical.odds_timing import is_selection_safe
+from omega.historical.prop_context import prop_context_key
 from omega.historical.snapshots import (
     MatchupHistory,
     TeamGameRow,
@@ -123,6 +124,63 @@ def build_team_histories(
     return dict(hist)
 
 
+def _normalize_timestamp(ts: str) -> str:
+    if not ts:
+        return ""
+    s = ts.strip()
+    iso = s[:-1] + "+00:00" if s.endswith("Z") else s
+    from datetime import datetime, timezone
+    dt = datetime.fromisoformat(iso)
+    if not dt.tzinfo:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat()
+
+
+def build_league_rating_index(
+    events: list[HistoricalEvent], outcomes: dict[str, HistoricalOutcome]
+) -> tuple[list[str], list[float]]:
+    """Build a date-sorted index of every team-game score for as-of league means.
+
+    Returns ``(dates, prefix_sums)`` where ``dates`` are the ISO start times of
+    each team-game score (two per game — home and away) sorted ascending, and
+    ``prefix_sums[i]`` is the cumulative points over the first ``i`` entries. Used
+    by :func:`as_of_league_mean` to compute the league average score *strictly
+    before* a decision time (no leakage) in O(log n).
+    """
+    entries: list[tuple[str, float]] = []
+    for ev in events:
+        oc = outcomes.get(ev.event_id)
+        if not oc or oc.home_score is None or oc.away_score is None:
+            continue
+        t_norm = _normalize_timestamp(ev.start_time)
+        entries.append((t_norm, float(oc.home_score)))
+        entries.append((t_norm, float(oc.away_score)))
+    entries.sort(key=lambda e: e[0])
+    dates = [e[0] for e in entries]
+    prefix = [0.0]
+    for _, pts in entries:
+        prefix.append(prefix[-1] + pts)
+    return dates, prefix
+
+
+def as_of_league_mean(index: tuple[list[str], list[float]], decision_time: str) -> float | None:
+    """League average team-score over games strictly before ``decision_time``.
+
+    Leak-safe: uses ``bisect_left`` so same-timestamp games are excluded (the
+    conservative choice). Returns None when no prior games exist (early events),
+    so the snapshot falls back to the raw rolling mean for those.
+    """
+    import bisect
+
+    dates, prefix = index
+    i = bisect.bisect_left(dates, _normalize_timestamp(decision_time))
+    if i <= 0:
+        return None
+    return prefix[i] / i
+
+
 def _odds_input_from_snapshot(snapshot) -> OddsInput | None:
     """Map decision quotes to the legacy flat OddsInput fields analyze() reads."""
     if snapshot.missing_odds:
@@ -164,6 +222,9 @@ class ReplayEngine:
     def run(self, dataset: ReplayDataset, *, replay_id: str, league: str) -> ReplayResult:
         events = sorted(dataset.events, key=lambda e: e.start_time)
         team_hist = dataset.history_override or build_team_histories(events, dataset.outcomes)
+        # As-of league-mean index for empirical-Bayes rating shrinkage (team-score
+        # sports). Built from the same events+outcomes; queried leak-safely per event.
+        self._league_index = build_league_rating_index(events, dataset.outcomes)
 
         manifest = ReplayTraceManifest(
             replay_id=replay_id,
@@ -189,13 +250,26 @@ class ReplayEngine:
 
     def _replay_event(self, ev, dataset, team_hist, replay_id):
         decision_time = ev.start_time
+        league_mean = as_of_league_mean(
+            getattr(self, "_league_index", ([], [0.0])), decision_time
+        )
+        is_team_sport = ev.sport_family in ("basketball", "american_football", "baseball", "hockey", "soccer")
+        league_baseline = (
+            {"off_rating": league_mean, "def_rating": league_mean}
+            if (is_team_sport and league_mean is not None)
+            else None
+        )
         history = MatchupHistory(
             home_rows=team_hist.get(ev.home_team, []),
             away_rows=team_hist.get(ev.away_team, []),
+            league_baseline=league_baseline,
         )
         extra = dataset.extra_context.get(ev.event_id, {})
+        # Empirical-Bayes shrink team off/def toward the as-of league mean: tempers
+        # over-dispersed small-sample rolling means (game-plane tail overconfidence).
+        # No-op for tennis/non-team-score families (their context ignores baseline).
         snapshot = build_feature_snapshot(
-            ev, history, decision_time, extra_game_context=extra
+            ev, history, decision_time, extra_game_context=extra, shrink_ratings=True
         )
         obs = dataset.odds.get(ev.event_id, [])
         odds_snapshot = build_odds_snapshot(
@@ -353,7 +427,7 @@ class ReplayEngine:
             po_by_key = {(po.player_name, po.stat_type): po for po in outcome.prop_outcomes}
 
         for m in markets:
-            ctx = dict(dataset.prop_context.get(f"{ev.event_id}|{m.player_name}|{m.stat_type}", {}))
+            ctx = dict(dataset.prop_context.get(prop_context_key(ev.event_id, m.player_name, m.stat_type), {}))
             seed = derive_seed(self.config, f"{ev.event_id}|{m.player_name}|{m.stat_type}")
             request = PlayerPropRequest(
                 player_name=m.player_name,
@@ -365,6 +439,7 @@ class ReplayEngine:
                 line=m.line,
                 odds_over=m.over_price,
                 odds_under=m.under_price,
+                bookmaker=m.book,
                 player_context=ctx,
                 game_context=game_context,
                 seed=seed,

@@ -112,3 +112,55 @@ def test_void_prop_excluded_from_calibration(backtest_store, tmp_path):
     # Only the non-void prop contributes a calibration pair.
     assert len(preds) == 1
     assert outs == [1]
+
+
+def test_missing_prop_context_replay_trace_is_ineligible(backtest_store, tmp_path):
+    ds, tg = _dataset()
+    ds.prop_markets = {
+        tg.event_id: [
+            HistoricalPropMarket(
+                event_key=tg.event_id,
+                player_name="No Context",
+                stat_type="pts",
+                line=7.5,
+                over_price=-110,
+                under_price=-110,
+            )
+        ]
+    }
+    ds.prop_context = {}
+    ds.outcomes[tg.event_id] = ds.outcomes[tg.event_id].model_copy(
+        update={
+            "prop_outcomes": [
+                HistoricalPropOutcome(
+                    player_name="No Context",
+                    stat_type="pts",
+                    stat_value=9.0,
+                )
+            ]
+        }
+    )
+    cfg = ReplayConfig(
+        dataset_manifest_id="m", backtest_db_path=str(tmp_path / "bt.db"), n_iterations=300
+    )
+    ReplayEngine(backtest_store, cfg).run(ds, replay_id="r", league=LG)
+
+    traces = backtest_store.query_traces(
+        execution_mode="historical_replay", has_outcome=True, limit=100
+    )
+    prop_trace = next(t for t in traces if t.get("kind") == "prop")
+    assert prop_trace["input_snapshot"]["player_name"] == "No Context"
+    assert prop_trace["result"]["status"] == "skipped"
+    assert prop_trace["trace_quality"]["calibration_eligible"] is False
+    assert "engine_skipped" in prop_trace["trace_quality"]["calibration_exclusion_reasons"]
+
+    eligible = backtest_store.query_traces(
+        execution_mode="historical_replay",
+        has_outcome=True,
+        calibration_eligible_only=True,
+        limit=100,
+    )
+    assert all(
+        t.get("kind") != "prop" or t["input_snapshot"]["player_name"] != "No Context"
+        for t in eligible
+    )

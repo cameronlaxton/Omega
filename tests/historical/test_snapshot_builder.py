@@ -26,6 +26,26 @@ def _event(league="NFL", family="american_football", **kw) -> HistoricalEvent:
     )
 
 
+def test_rating_shrinkage_opt_in_only():
+    """shrink_ratings defaults off → raw rolling mean; on → EB blend toward baseline."""
+    history = MatchupHistory(
+        home_rows=[TeamGameRow(date="2023-09-01", points_for=40, points_against=10)],
+        away_rows=[TeamGameRow(date="2023-09-10", points_for=24, points_against=21)],
+        league_baseline={"off_rating": 20.0, "def_rating": 20.0},
+    )
+    # Default: raw mean, baseline ignored for a team that has data.
+    raw = build_feature_snapshot(_event(), history, DECISION)
+    assert raw.home_context["off_rating"] == 40.0
+    # Opt-in: n=1 game, n0=5 → (1*40 + 5*20)/6 = 23.333, shrunk toward league mean.
+    # (off_rating is rounded to 3 decimals by the snapshot builder.)
+    shr = build_feature_snapshot(_event(), history, DECISION, shrink_ratings=True)
+    assert shr.home_context["off_rating"] == round((1 * 40 + 5 * 20) / 6, 3)
+    # Shrinkage pulls the extreme rating toward the baseline (less over-dispersed).
+    assert 20.0 < shr.home_context["off_rating"] < 40.0
+    # A team with data is still "provided" — shrinkage does not flip context_source.
+    assert shr.context_source == "provided"
+
+
 def test_post_decision_rows_excluded():
     history = MatchupHistory(
         home_rows=[

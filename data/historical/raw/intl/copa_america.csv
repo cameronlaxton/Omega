@@ -1,0 +1,89 @@
+date,home_team,away_team,home_score,away_score,is_neutral_site,tournament
+2019-06-14,Brazil,Bolivia,3.0,0.0,False,Copa América
+2019-06-15,Venezuela,Peru,0.0,0.0,True,Copa América
+2019-06-15,Argentina,Colombia,0.0,2.0,True,Copa América
+2019-06-16,Paraguay,Qatar,2.0,2.0,True,Copa América
+2019-06-16,Uruguay,Ecuador,4.0,0.0,True,Copa América
+2019-06-17,Japan,Chile,0.0,4.0,True,Copa América
+2019-06-18,Bolivia,Peru,1.0,3.0,True,Copa América
+2019-06-18,Brazil,Venezuela,0.0,0.0,False,Copa América
+2019-06-19,Colombia,Qatar,1.0,0.0,True,Copa América
+2019-06-19,Argentina,Paraguay,1.0,1.0,True,Copa América
+2019-06-20,Uruguay,Japan,2.0,2.0,True,Copa América
+2019-06-21,Ecuador,Chile,1.0,2.0,True,Copa América
+2019-06-22,Bolivia,Venezuela,1.0,3.0,True,Copa América
+2019-06-22,Brazil,Peru,5.0,0.0,False,Copa América
+2019-06-23,Colombia,Paraguay,1.0,0.0,True,Copa América
+2019-06-23,Qatar,Argentina,0.0,2.0,True,Copa América
+2019-06-24,Chile,Uruguay,0.0,1.0,True,Copa América
+2019-06-24,Ecuador,Japan,1.0,1.0,True,Copa América
+2019-06-27,Brazil,Paraguay,0.0,0.0,False,Copa América
+2019-06-28,Colombia,Chile,0.0,0.0,True,Copa América
+2019-06-28,Venezuela,Argentina,0.0,2.0,True,Copa América
+2019-06-29,Uruguay,Peru,0.0,0.0,True,Copa América
+2019-07-02,Brazil,Argentina,2.0,0.0,False,Copa América
+2019-07-03,Chile,Peru,0.0,3.0,True,Copa América
+2019-07-06,Argentina,Chile,2.0,1.0,True,Copa América
+2019-07-07,Brazil,Peru,3.0,1.0,False,Copa América
+2021-06-13,Brazil,Venezuela,3.0,0.0,False,Copa América
+2021-06-13,Colombia,Ecuador,1.0,0.0,True,Copa América
+2021-06-14,Argentina,Chile,1.0,1.0,True,Copa América
+2021-06-14,Paraguay,Bolivia,3.0,1.0,True,Copa América
+2021-06-17,Colombia,Venezuela,0.0,0.0,True,Copa América
+2021-06-17,Brazil,Peru,4.0,0.0,False,Copa América
+2021-06-18,Chile,Bolivia,1.0,0.0,True,Copa América
+2021-06-18,Argentina,Uruguay,1.0,0.0,True,Copa América
+2021-06-20,Venezuela,Ecuador,2.0,2.0,True,Copa América
+2021-06-20,Colombia,Peru,1.0,2.0,True,Copa América
+2021-06-21,Uruguay,Chile,1.0,1.0,True,Copa América
+2021-06-21,Argentina,Paraguay,1.0,0.0,True,Copa América
+2021-06-23,Ecuador,Peru,2.0,2.0,True,Copa América
+2021-06-23,Brazil,Colombia,2.0,1.0,False,Copa América
+2021-06-24,Bolivia,Uruguay,0.0,2.0,True,Copa América
+2021-06-24,Chile,Paraguay,0.0,2.0,True,Copa América
+2021-06-27,Brazil,Ecuador,1.0,1.0,False,Copa América
+2021-06-27,Venezuela,Peru,0.0,1.0,True,Copa América
+2021-06-28,Argentina,Bolivia,4.0,1.0,True,Copa América
+2021-06-28,Uruguay,Paraguay,1.0,0.0,True,Copa América
+2021-07-02,Peru,Paraguay,3.0,3.0,True,Copa América
+2021-07-02,Brazil,Chile,1.0,0.0,False,Copa América
+2021-07-03,Uruguay,Colombia,0.0,0.0,True,Copa América
+2021-07-03,Argentina,Ecuador,3.0,0.0,True,Copa América
+2021-07-05,Brazil,Peru,1.0,0.0,False,Copa América
+2021-07-06,Argentina,Colombia,1.0,1.0,True,Copa América
+2021-07-09,Peru,Colombia,2.0,3.0,True,Copa América
+2021-07-10,Brazil,Argentina,0.0,1.0,False,Copa América
+2024-03-23,Canada,Trinidad and Tobago,2.0,0.0,True,Copa América qualification
+2024-03-23,Costa Rica,Honduras,3.0,1.0,True,Copa América qualification
+2024-06-20,Argentina,Canada,2.0,0.0,True,Copa América
+2024-06-21,Peru,Chile,0.0,0.0,True,Copa América
+2024-06-22,Ecuador,Venezuela,1.0,2.0,True,Copa América
+2024-06-22,Mexico,Jamaica,1.0,0.0,True,Copa América
+2024-06-23,United States,Bolivia,2.0,0.0,False,Copa América
+2024-06-23,Uruguay,Panama,3.0,1.0,True,Copa América
+2024-06-24,Colombia,Paraguay,2.0,1.0,True,Copa América
+2024-06-24,Brazil,Costa Rica,0.0,0.0,True,Copa América
+2024-06-25,Peru,Canada,0.0,1.0,True,Copa América
+2024-06-25,Chile,Argentina,0.0,1.0,True,Copa América
+2024-06-26,Ecuador,Jamaica,3.0,1.0,True,Copa América
+2024-06-26,Venezuela,Mexico,1.0,0.0,True,Copa América
+2024-06-27,United States,Panama,1.0,2.0,False,Copa América
+2024-06-27,Uruguay,Bolivia,5.0,0.0,True,Copa América
+2024-06-28,Colombia,Costa Rica,3.0,0.0,True,Copa América
+2024-06-28,Paraguay,Brazil,1.0,4.0,True,Copa América
+2024-06-29,Argentina,Peru,2.0,0.0,True,Copa América
+2024-06-29,Canada,Chile,0.0,0.0,True,Copa América
+2024-06-30,Mexico,Ecuador,0.0,0.0,True,Copa América
+2024-06-30,Jamaica,Venezuela,0.0,3.0,True,Copa América
+2024-07-01,United States,Uruguay,0.0,1.0,False,Copa América
+2024-07-01,Bolivia,Panama,1.0,3.0,True,Copa América
+2024-07-02,Brazil,Colombia,1.0,1.0,True,Copa América
+2024-07-02,Costa Rica,Paraguay,2.0,1.0,True,Copa América
+2024-07-04,Argentina,Ecuador,1.0,1.0,True,Copa América
+2024-07-05,Venezuela,Canada,1.0,1.0,True,Copa América
+2024-07-06,Uruguay,Brazil,0.0,0.0,True,Copa América
+2024-07-06,Colombia,Panama,5.0,0.0,True,Copa América
+2024-07-09,Argentina,Canada,2.0,0.0,True,Copa América
+2024-07-10,Uruguay,Colombia,0.0,1.0,True,Copa América
+2024-07-13,Canada,Uruguay,2.0,2.0,True,Copa América
+2024-07-14,Argentina,Colombia,1.0,0.0,True,Copa América

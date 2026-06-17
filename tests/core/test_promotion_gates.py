@@ -89,6 +89,91 @@ def test_missing_ece_metric_blocked(tmp_path):
     assert "ECE_FLOOR" in exc.value.report.failed_gates
 
 
+def test_cv_ece_preferred_over_single_split_when_present(tmp_path):
+    """A single-split ECE over the floor must NOT block when the robust CV ECE is
+    under it — this is the whole point of CV-ECE: don't reject on split noise."""
+    reg = _registry(tmp_path)
+    reg.register(
+        _profile(
+            "nba_v1",
+            metrics={
+                "brier_score": 0.22,
+                "calibration_error": 0.0548,  # unlucky single split, over floor
+                "cv_calibration_error": 0.046,  # robust CV estimate, under floor
+                "cv_n_folds": 50,
+                "log_loss": 0.65,
+            },
+        )
+    )
+    report = reg.promote("nba_v1", **_CONFIRMS)
+    assert report.passed
+    ece_gate = next(r for r in report.results if r.name == "ECE_FLOOR")
+    assert ece_gate.passed
+    assert "cv_calibration_error" in ece_gate.message
+
+
+def test_cv_ece_over_floor_blocks_even_if_single_split_passes(tmp_path):
+    """Conversely, a lucky single split under the floor must not promote a model
+    whose robust CV ECE is genuinely over it."""
+    reg = _registry(tmp_path)
+    reg.register(
+        _profile(
+            "nba_v1",
+            metrics={
+                "brier_score": 0.22,
+                "calibration_error": 0.041,  # lucky single split, under floor
+                "cv_calibration_error": 0.096,  # genuine miscalibration
+                "cv_n_folds": 50,
+                "log_loss": 0.65,
+            },
+        )
+    )
+    with pytest.raises(PromotionGateError) as exc:
+        reg.promote("nba_v1", **_CONFIRMS)
+    assert "ECE_FLOOR" in exc.value.report.failed_gates
+
+
+def test_zero_cv_folds_falls_back_to_single_split(tmp_path):
+    """cv_n_folds==0 (too few samples to CV) → fall back to single-split metric."""
+    reg = _registry(tmp_path)
+    reg.register(
+        _profile(
+            "nba_v1",
+            metrics={
+                "brier_score": 0.22,
+                "calibration_error": 0.04,
+                "cv_calibration_error": 0.0,
+                "cv_n_folds": 0,
+                "log_loss": 0.65,
+            },
+        )
+    )
+    report = reg.promote("nba_v1", **_CONFIRMS)
+    ece_gate = next(r for r in report.results if r.name == "ECE_FLOOR")
+    assert ece_gate.passed
+    assert "calibration_error=" in ece_gate.message  # used the single-split metric
+
+
+def test_missing_cv_ece_with_positive_folds_blocks(tmp_path):
+    """cv_n_folds > 0 but cv_calibration_error is missing -> fail closed."""
+    reg = _registry(tmp_path)
+    reg.register(
+        _profile(
+            "nba_v1",
+            metrics={
+                "brier_score": 0.22,
+                "calibration_error": 0.04,  # passes on single split
+                # cv_calibration_error is omitted/missing!
+                "cv_n_folds": 5,
+                "log_loss": 0.65,
+            },
+        )
+    )
+    with pytest.raises(PromotionGateError) as exc:
+        reg.promote("nba_v1", **_CONFIRMS)
+    assert "ECE_FLOOR" in exc.value.report.failed_gates
+
+
 def test_second_promotion_requires_brier_improvement(tmp_path):
     reg = _registry(tmp_path)
     reg.register(_profile("nba_v1"))
