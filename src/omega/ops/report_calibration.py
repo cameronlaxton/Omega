@@ -54,6 +54,7 @@ from omega.strategy.distribution_metrics import (  # noqa: E402
     METRIC_VERSION as DISTRIBUTION_METRIC_VERSION,
 )
 from omega.strategy.distribution_metrics import crps_from_distribution_row  # noqa: E402
+from omega.trace._atomic import atomic_write_text  # noqa: E402
 from omega.trace.clv import compute_clv  # noqa: E402
 from omega.trace.db import require_sqlite_backend  # noqa: E402
 from omega.trace.portfolio import summarize_ledger  # noqa: E402
@@ -1091,7 +1092,7 @@ def main() -> int:
         output_mode_reasons=output_mode_reasons,
     )
 
-    out_path.write_text(rendered, encoding="utf-8")
+    atomic_write_text(out_path, rendered)
     logger.info(
         "Wrote %s (%d traces, %d sessions, %d candidates).",
         out_path,

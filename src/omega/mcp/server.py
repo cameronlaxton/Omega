@@ -458,6 +458,8 @@ def omega_run_batch(
     if gate_failures:
         return _formal_output_blocked("omega_run_batch", gate_failures)
 
+    from omega.trace._atomic import atomic_write_text
+
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     inbox_dir = repo_root() / "var" / "inbox" / "traces"
     inbox_dir.mkdir(parents=True, exist_ok=True)
@@ -614,6 +616,9 @@ def omega_run_batch(
             market_context = {"odds": game_odds}
 
         export_block = {
+            # Top-level session_id so the prediction->session link survives outside
+            # the DB and the export-export validator's strict session_id check passes.
+            "session_id": session_id,
             "trace": trace,
             "bet_record": None,
             "reasoning_inputs": {
@@ -627,10 +632,12 @@ def omega_run_batch(
             "trace_quality": trace.get("trace_quality") or {},
         }
 
-        # --- Write to inbox ---
+        # --- Write to inbox (atomic: a crash mid-write must not leave a truncated
+        # export in var/inbox/traces/ — truncation is the failure class the rest of
+        # the pipeline already hardened against). ---
         dest = inbox_dir / f"{trace_id}.json"
         try:
-            dest.write_text(_json.dumps(export_block, indent=2, default=str), encoding="utf-8")
+            atomic_write_text(dest, _json.dumps(export_block, indent=2, default=str))
         except Exception as exc:  # noqa: BLE001
             errors.append({"index": idx, "identifier": identifier, "error": f"export_write_failed: {exc}"})
             results.append({"index": idx, "status": "error", "identifier": identifier, "trace_id": trace_id, "error": str(exc)})

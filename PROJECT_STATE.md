@@ -1,10 +1,17 @@
 # Omega - Project State
 
-## Current Phase: Phase 6h (Calibration and Runtime Hardening)
+## Current Phase: Phase 7 hardening (multi-sport landed; calibration/provenance hardening)
 
-Omega is currently in Phase 6h. The goal of this phase is to ensure trace persistence, historical replay, and calibration learning are stable and rigorous before any broader multi-sport or advanced risk-management expansion.
+Phase 6h (trace persistence, historical replay, calibration learning) is **complete**, and the
+Phase 7 multi-sport expansion (Milestones 0–4: backend registry, WNBA, Soccer, Tennis, NFL) is
+**merged to `main` with green tests** (3709 passed). Schema is at V18; all sport backends are
+registered. The project is now in a **hardening pass**: making the calibration loop, sidecar/
+provenance attribution, and runtime-artifact policy production-trustworthy before betting goes
+live on the new sports.
 
-Do not relabel the project as Phase 7 yet. Any Phase 7 items (e.g., Tennis) should be documented as deferred or future-facing unless they are already implemented and stable. Soccer game-plane support has been implemented ahead of Phase 7 (see the Soccer section below).
+This supersedes the earlier "do not relabel as Phase 7 / Phase 7 deferred" guidance, which is no
+longer accurate — that work shipped. Remaining production gaps are tracked under the calibration
+caveats below and in the audit remediation plan, not as "deferred Phase 7."
 
 ## Product Doctrine
 
@@ -90,13 +97,37 @@ unless every gate passes: `SAMPLE_SIZE >= 100`, `ECE_FLOOR <= 0.05`, Brier impro
 log-loss no-regression vs incumbent, plus operator-confirmed `BACKTEST_PARITY` /
 `CLV_NON_REG`. There is no `--force` bypass.
 
-**Expected current state: zero PRODUCTION profiles.** The earlier `iso_nba_prop_v1` and
-`shrink_mlb_prop_v2` profiles were promoted under the retired `--force` path and have been
-demoted to `rejected` (they fail SAMPLE_SIZE and ECE_FLOOR). Until a profile is re-fit on
->=100 eligible graded pairs and passes the gate, **no market is ACTIONABLE** — every market
-correctly classifies as `RESEARCH_CANDIDATE`. This is the intended, honest state, not a
-regression. Accumulating graded-trace volume to fit a gate-passing profile is the open work
-for Exit Criterion 1.
+**Current PRODUCTION profiles (as of 2026-06-17, post audit-remediation):** exactly one
+profile in `omega/core/calibration/profiles.json` carries `status: production`:
+
+| profile_id | league / market | n | CV-ECE | promoted |
+|---|---|---|---|---|
+| `iso_mlb_v7_*` | MLB / game | 130 | 0.049 | 2026-06-16 |
+
+MLB game is the one market with a genuinely-applied production profile.
+
+**Demoted in this remediation (were briefly `production`, now `rejected`):**
+- `iso_world_cup_draw_v1_*` (WORLD_CUP/draw, n=1171) and `iso_fifa_friendly_draw_v1_*`
+  (FIFA_FRIENDLY/draw, n=1232). They had good CV-ECE but were **never applied at runtime** and
+  were **backend-mismatched** — see caveats below. They await a backend-matched re-fit under the
+  `FIFA_INTL` bucket. The earlier `iso_nba_prop_v1` / `shrink_mlb_prop_v2` remain `rejected`.
+
+**Why the soccer-draw profiles were demoted (open remediation):**
+1. **League-key mismatch.** They were keyed `WORLD_CUP` / `FIFA_FRIENDLY`, but live World Cup
+   traces carry `league="FIFA_WORLD_CUP_2026"`. `CalibrationRegistry.get_production` now resolves
+   a canonical calibration bucket first (`omega/core/calibration/league_buckets.py`:
+   `FIFA_WORLD_CUP_2026` → `FIFA_INTL`), so once a `FIFA_INTL` draw profile is re-fit it will
+   apply to live World Cup traces automatically.
+2. **Backend mismatch.** `iso_world_cup_draw_v1` was fit from the legacy `fast_score` `WORLD_CUP`
+   replay set; live `FIFA_WORLD_CUP_2026` runs `soccer_bivariate_poisson_dc`. Calibration is
+   per-model, so it must be re-fit on backend-matched data (requires xG-enriched historical
+   replay — see the audit remediation plan, Phase C3).
+3. **Operator-attested gates.** `BACKTEST_PARITY` / `CLV_NON_REG` have no automated check yet —
+   they are `--confirm-*` attestations. "Production" status does not by itself guarantee
+   backtest/CLV safety until those checks are automated or a parity artifact is recorded.
+
+Every market not backed by a genuinely-applied, gate-passing profile correctly classifies as
+`RESEARCH_CANDIDATE`. Closing caveats 1–3 is the open work for Exit Criterion 1.
 
 ## Phase 6h Exit Criteria
 
@@ -127,12 +158,21 @@ from ESPN roster stats. Still open for soccer: unsupported competitions without 
 slug mappings, soccer player-prop odds-resolution/provider-market mappings, and a first
 fitted soccer calibration profile once eligible graded traces accumulate.
 
-## Deferred to Phase 7
+## Shipped in Phase 7 (formerly "deferred")
 
-- Tennis multi-league expansion.
+- **Tennis (ATP/WTA)** — `tennis_markov_iid` game backend + `tennis_prop_serve` prop backend
+  merged and registered; `priors_tennis` / `priors_tennis_pressure` seeded. No production
+  calibration profile yet (expected — rides identity profile until volume accrues).
+- **NFL** — `nfl_neg_binom` game backend + `prop_neg_binom` + teasers merged. `priors_nfl_dispersion`
+  is still empty (fit not yet run), so NFL NB props fall back to the distribution router.
+
+## Still open / deferred
+
 - Expanded soccer player-prop source coverage and odds-resolution mappings beyond the
   ESPN-summary-backed grading subset above.
 - Portfolio/risk guard (simple exposure caps can be documented as temporary operator rules for now).
+- First backend-matched soccer-draw calibration profile under the `FIFA_INTL` bucket (see the
+  calibration caveats above).
 
 ## Superseded / Historical Docs
 

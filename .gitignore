@@ -90,3 +90,7 @@ var/
 /omega_traces.db-shm
 /omega_traces.db-wal
 /omega_odds_api_budget.json
+# Generated dashboard snapshot (derived artifact, regenerable — not source truth)
+/omega-snapshot.html
+# Champion/challenger scratch output (not versioned source data)
+data/cc_phase3d_out.json

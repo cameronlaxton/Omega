@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from omega.core.calibration.league_buckets import resolve_calibration_bucket
 from omega.core.calibration.profiles import (
     CalibrationProfile,
     ProfileStatus,
@@ -113,8 +114,14 @@ class CalibrationRegistry:
 
         Legacy profiles stored before the ``market`` field existed are treated
         as ``market == "game"``.
+
+        The requested league is first resolved to its canonical calibration
+        bucket (:func:`resolve_calibration_bucket`) so backend-homogeneous
+        aliases (e.g. ``PREMIER_LEAGUE`` -> ``EPL``, ``FIFA_WORLD_CUP_2026`` ->
+        ``FIFA_INTL``) share a single fitted profile instead of silently
+        missing on an exact-string mismatch.
         """
-        league_uc = league.upper()
+        league_uc = resolve_calibration_bucket(league)
         resolved = self._resolve_market(league_uc, context_slice, market)
         if resolved is None and market != "game":
             resolved = self._resolve_market(league_uc, context_slice, "game")

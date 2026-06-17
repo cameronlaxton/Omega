@@ -5,7 +5,13 @@ the single source of truth for *what is built*, *what the seams are*, and *exact
 how to implement the remaining milestones*. Read it alongside the locked design
 plan `docs/phase7/MULTI_SPORT_EXPANSION.md` (authoritative for design intent).
 
-Last updated after Milestone 1, plus an **M0 registry-hardening pass (2026-06-01)**.
+> **STATUS UPDATE 2026-06-17:** This handoff was originally written at the M1 boundary and the
+> per-milestone status table below was never advanced. **M2 (Soccer), M3 (Tennis), and M4 (NFL)
+> are all now merged to `main` with green tests** — the "⬜ Not started" labels were stale and
+> have been corrected. See [`PROJECT_STATE.md`](../../PROJECT_STATE.md) for the authoritative
+> current state (including the open soccer-calibration `FIFA_INTL` re-fit and the empty
+> `priors_nfl_dispersion`). The implementation recipes in §5 remain useful as design reference.
+
 All work below is committed to `main`.
 
 ---
@@ -16,12 +22,12 @@ All work below is committed to `main`.
 |-----------|-------|--------|---------|
 | **M0** | Backend registry + shared ETL harness | ✅ Done · hardened (see §2.2–§2.3) | `f2ccf80` |
 | **M1** | WNBA (backend, integration, early-line isolation, wehoop history) | ✅ Done | `80134b3` (A), `f128711` (B), `b709c99` (C) |
-| **M2** | Soccer (World Cup) — bivariate Poisson + Dixon-Coles | ⬜ Not started | — |
-| **M3** | Tennis (ATP/WTA) — IID Markov + pressure coefficients | ⬜ Not started | — |
-| **M4** | NFL — Gamma-Poisson + NB props + Wong teasers | ⬜ Not started | — |
+| **M2** | Soccer (World Cup) — bivariate Poisson + Dixon-Coles | ✅ Done · merged to `main` | (soccer backend + `priors_dixon_coles` + derivatives) |
+| **M3** | Tennis (ATP/WTA) — IID Markov + pressure coefficients | ✅ Done · merged to `main` | (`tennis_markov_iid` + `tennis_prop_serve` + `priors_tennis*`) |
+| **M4** | NFL — Gamma-Poisson + NB props + Wong teasers | ✅ Done · merged to `main` (dispersion fit not yet run) | (`nfl_neg_binom` + `prop_neg_binom` + teasers) |
 
-**Test baseline:** `python -m pytest tests/ -q` → **993 passed** (last green run;
-744 at M1 close, the rest added by later milestones + the M0 hardening pass).
+**Test baseline:** `python -m pytest tests/ -q` → **3709 passed, 6 skipped** (last green run,
+2026-06-17; 993 at the original M1-era writing, the rest added by M2–M4 + later hardening).
 Phase 6 NBA + MLB replay determinism is bit-identical. Do not regress this.
 
 > ⚠️ **Deadline:** M2 (Soccer) has a hard external deadline of **2026-06-11**

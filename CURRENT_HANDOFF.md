@@ -1,4 +1,9 @@
-# Current Handoff - Phase 6h
+# Current Handoff — Phase 7 hardening
+
+> **Scope note (2026-06-17):** Phase 6h is complete and Phase 7 (multi-sport: WNBA/Soccer/Tennis/
+> NFL) is merged to `main`. The MCP-native runtime details below are still current, but for the
+> authoritative phase/calibration/production state read [PROJECT_STATE.md](PROJECT_STATE.md) —
+> it is the single source of truth; this file only covers the runtime entrypoints.
 
 For product doctrine, canonical source-of-truth rules, and artifact authority, refer to [PROJECT_STATE.md](PROJECT_STATE.md).
 

@@ -155,7 +155,24 @@ def render_run_audit(summary: dict) -> str:
     """Render a human-readable RUN_AUDIT.md from a :func:`build_replay_summary` dict."""
     csd = summary.get("context_source_distribution") or {}
     csd_str = ", ".join(f"{k}={v}" for k, v in sorted(csd.items())) or "(none)"
-    lines = [
+    # Derived-artifact front-matter. A replay RUN_AUDIT is a generated, non-canonical
+    # artifact (PROJECT_STATE.md source-of-truth rules), so it carries the same
+    # ``canonical: false`` marker the other generated reports get from
+    # trace/report_header.py — here store-less, built from the summary's provenance.
+    front_matter = [
+        "---",
+        "canonical: false",
+        "artifact: replay_run_audit",
+        f"replay_id: {summary.get('replay_id')!r}",
+        f"dataset_manifest_id: {summary.get('dataset_manifest_id')!r}",
+        f"league: {summary.get('league')!r}",
+        f"code_version: {summary.get('code_version')!r}",
+        f"config_hash: {summary.get('config_hash')!r}",
+        f"created_at: {summary.get('created_at')!r}",
+        "---",
+        "",
+    ]
+    lines = front_matter + [
         f"# Replay Run Audit — {summary.get('replay_id')}",
         "",
         f"- League: {summary.get('league')}",

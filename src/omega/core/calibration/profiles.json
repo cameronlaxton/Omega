@@ -1199,7 +1199,7 @@
       "league": "WORLD_CUP",
       "context_slice": null,
       "market": "draw",
-      "status": "production",
+      "status": "rejected",
       "params": {
         "calibration_map": {
           "0.05": 0.15,
@@ -1230,8 +1230,8 @@
       },
       "created_at": "2026-06-17T01:40:50.606355+00:00",
       "promoted_at": "2026-06-17T01:41:39.072880+00:00",
-      "rejected_at": null,
-      "reject_reason": null,
+      "rejected_at": "2026-06-17T18:07:10.044007+00:00",
+      "reject_reason": "Audit remediation C3: keyed WORLD_CUP but live World Cup traces are FIFA_WORLD_CUP_2026 so exact-match selection never applied it; also fit on fast_score data while live runs soccer_bivariate_poisson_dc (backend mismatch). Awaiting re-fit under FIFA_INTL bucket on backend-matched data.",
       "incumbent_id": null,
       "promotion_gate_report": {
         "schema_version": "promotion_gate_report.v1",
@@ -1708,7 +1708,7 @@
       "league": "FIFA_FRIENDLY",
       "context_slice": null,
       "market": "draw",
-      "status": "production",
+      "status": "rejected",
       "params": {
         "calibration_map": {
           "0.05": 0.231293,
@@ -1739,8 +1739,8 @@
       },
       "created_at": "2026-06-17T01:41:00.621563+00:00",
       "promoted_at": "2026-06-17T01:41:39.638366+00:00",
-      "rejected_at": null,
-      "reject_reason": null,
+      "rejected_at": "2026-06-17T18:07:10.066952+00:00",
+      "reject_reason": "Audit remediation C4: zero matching live FIFA_FRIENDLY traces and fit on fast_score data; friendlies kept as a separate calibration bucket, not pooled into FIFA_INTL.",
       "incumbent_id": null,
       "promotion_gate_report": {
         "schema_version": "promotion_gate_report.v1",
