@@ -58,6 +58,15 @@ logger = logging.getLogger("fetch_outcomes_soccer")
 
 _SOCCER_LEAGUES = tuple(SOCCER_LEAGUE_SLUGS.keys())
 
+# Competitions whose knockout matches are SINGLE-LEG: a match that reaches extra
+# time or penalties was level at 90', so the 3-way (1X2) "draw" market settles as
+# a draw regardless of the ET/shootout winner. Two-legged ties (e.g. UCL knockout
+# rounds) are deliberately excluded — a second leg reaching ET reflects the
+# AGGREGATE, not that leg's 90' result, so the same inference does not hold.
+_SINGLE_LEG_KNOCKOUT_LEAGUES = frozenset(
+    {"WORLD_CUP", "FIFA_WORLD_CUP_2026", "FIFA_INTL", "EURO", "COPA_AMERICA", "NATIONS_LEAGUE"}
+)
+
 
 # ---------------------------------------------------------------------------
 # Matching
@@ -212,6 +221,14 @@ def main(
                 home_score = game.away_score if is_reversed else game.home_score
                 away_score = game.home_score if is_reversed else game.away_score
 
+                # Single-leg knockout decided after regulation -> the 1X2 result
+                # is a regulation draw (sides were level at 90'), even if the ESPN
+                # score shows the ET/shootout winner. Scores are still stored as
+                # provenance; the override only sets the graded 3-way result.
+                result_override = None
+                if game.decided_after_regulation and league.upper() in _SINGLE_LEG_KNOCKOUT_LEAGUES:
+                    result_override = "draw"
+
                 h_team = pair[0] if pair else "Home"
                 a_team = pair[1] if pair else "Away"
 
@@ -233,7 +250,8 @@ def main(
                         trace_id=tid,
                         home_score=home_score,
                         away_score=away_score,
-                        source="api:espn",
+                        source="api:espn:aet" if result_override else "api:espn",
+                        result_override=result_override,
                     )
                     matched_trace_ids.add(tid)
                     attached += 1

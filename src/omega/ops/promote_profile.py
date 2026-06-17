@@ -63,6 +63,31 @@ from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
 logger = logging.getLogger("promote_profile")
 
 
+def _load_report(path: str | None) -> dict | None:
+    """Load a parity/CLV report JSON artifact (or None when not supplied).
+
+    Fails fast (exit 2) on a missing/invalid path so a typo can't silently leave
+    the operator confirmation unbacked.
+    """
+    if not path:
+        return None
+    import json
+
+    p = Path(path)
+    if not p.is_file():
+        logger.error("Parity/CLV report not found: %s", path)
+        raise SystemExit(2)
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        logger.error("Could not parse parity/CLV report %s: %s", path, exc)
+        raise SystemExit(2) from exc
+    if not isinstance(data, dict):
+        logger.error("Parity/CLV report %s must be a JSON object", path)
+        raise SystemExit(2)
+    return data
+
+
 def _print_gates(report: GateReport) -> None:
     for r in report.results:
         flag = "PASS" if r.passed else "FAIL"
@@ -110,15 +135,34 @@ def main() -> int:
     parser.add_argument(
         "--confirm-backtest-parity",
         action="store_true",
-        help="Mark gate BACKTEST_PARITY as passed; operator has manually verified.",
+        help="Confirm gate BACKTEST_PARITY. REQUIRES --parity-report pointing at a "
+        "pass-indicating artifact; a bare confirm is no longer sufficient.",
     )
     parser.add_argument(
         "--confirm-clv-non-regression",
         action="store_true",
-        help="Mark gate CLV_NON_REG as passed; operator has manually verified.",
+        help="Confirm gate CLV_NON_REG. REQUIRES --clv-report pointing at a "
+        "pass-indicating artifact; a bare confirm is no longer sufficient.",
+    )
+    parser.add_argument(
+        "--parity-report",
+        default=None,
+        help="Path to a backtest/historical-live parity report JSON "
+        "(omega-backtest-parity / omega-historical-live-parity output) backing "
+        "--confirm-backtest-parity. Must indicate a pass (state=PASS or "
+        "recommend_promotion=true).",
+    )
+    parser.add_argument(
+        "--clv-report",
+        default=None,
+        help="Path to a CLV / walk-forward non-regression report JSON backing "
+        "--confirm-clv-non-regression (verdict=PASS or non_regression=true).",
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
+
+    parity_evidence = _load_report(args.parity_report)
+    clv_evidence = _load_report(args.clv_report)
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -179,6 +223,8 @@ def main() -> int:
         ece_floor=args.ece_floor,
         confirm_backtest_parity=args.confirm_backtest_parity,
         confirm_clv_non_regression=args.confirm_clv_non_regression,
+        parity_evidence=parity_evidence,
+        clv_evidence=clv_evidence,
     )
     logger.info("Gate status:")
     _print_gates(report)
@@ -197,6 +243,8 @@ def main() -> int:
             candidate.profile_id,
             confirm_backtest_parity=args.confirm_backtest_parity,
             confirm_clv_non_regression=args.confirm_clv_non_regression,
+            parity_evidence=parity_evidence,
+            clv_evidence=clv_evidence,
             min_samples=args.min_samples,
             brier_improvement=args.brier_improvement,
             log_loss_tol=args.log_loss_tol,

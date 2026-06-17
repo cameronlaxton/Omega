@@ -149,6 +149,13 @@ class FinalGame:
     away_score: int
     status: str
     league: str = ""
+    # True when ESPN reports the match was decided after regulation (extra time
+    # or a penalty shootout). For a SINGLE-LEG knockout this means the sides were
+    # level at 90' — i.e. the 3-way (1X2) "draw" market settles as a draw even
+    # though the ESPN score may show the ET/shootout winner. ``status_detail``
+    # keeps the raw ESPN status name for provenance/auditing.
+    decided_after_regulation: bool = False
+    status_detail: str = ""
 
 
 def _normalize(name: str) -> str:
@@ -229,10 +236,18 @@ def parse_scoreboard(payload: dict, league: str = "") -> list[FinalGame]:
         comp = competitions[0]
         status_obj = (comp.get("status") or {}).get("type") or {}
         completed = bool(status_obj.get("completed")) or (status_obj.get("state") == "post")
+        raw_status_name = status_obj.get("name") or ""
         if completed:
             status = "final"
         else:
-            status = (status_obj.get("name") or "").lower().replace("status_", "")
+            status = raw_status_name.lower().replace("status_", "")
+        # Detect extra-time / penalty-shootout finishes (info ESPN otherwise drops
+        # once we normalize to "final"). Match on the status name + detail text.
+        _et_pen_text = f"{raw_status_name} {status_obj.get('detail') or ''} {status_obj.get('description') or ''}".upper()
+        decided_after_regulation = any(
+            tok in _et_pen_text
+            for tok in ("_ET", "EXTRA_TIME", "EXTRATIME", "AET", "PENALT", "SHOOTOUT", "_PEN")
+        )
         home = away = None
         home_score = away_score = 0
         for competitor in comp.get("competitors") or []:
@@ -266,6 +281,8 @@ def parse_scoreboard(payload: dict, league: str = "") -> list[FinalGame]:
                 away_score=away_score,
                 status=status,
                 league=league,
+                decided_after_regulation=decided_after_regulation,
+                status_detail=raw_status_name,
             )
         )
     return results

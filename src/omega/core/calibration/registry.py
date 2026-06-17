@@ -190,6 +190,8 @@ class CalibrationRegistry:
         *,
         confirm_backtest_parity: bool = False,
         confirm_clv_non_regression: bool = False,
+        parity_evidence: dict[str, Any] | None = None,
+        clv_evidence: dict[str, Any] | None = None,
         min_samples: int = DEFAULT_MIN_SAMPLES,
         brier_improvement: float = DEFAULT_BRIER_IMPROVEMENT,
         log_loss_tol: float = DEFAULT_LOG_LOSS_TOL,
@@ -223,6 +225,8 @@ class CalibrationRegistry:
             ece_floor=ece_floor,
             confirm_backtest_parity=confirm_backtest_parity,
             confirm_clv_non_regression=confirm_clv_non_regression,
+            parity_evidence=parity_evidence,
+            clv_evidence=clv_evidence,
         )
         if not report.passed:
             raise PromotionGateError(report)

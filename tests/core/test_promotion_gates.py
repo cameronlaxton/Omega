@@ -36,7 +36,14 @@ def _registry(tmp_path) -> CalibrationRegistry:
     return CalibrationRegistry(path=str(tmp_path / "profiles.json"))
 
 
-_CONFIRMS = {"confirm_backtest_parity": True, "confirm_clv_non_regression": True}
+# A confirmation is now necessary but NOT sufficient: it must be backed by a
+# pass-indicating parity/CLV artifact (audit remediation C6).
+_CONFIRMS = {
+    "confirm_backtest_parity": True,
+    "confirm_clv_non_regression": True,
+    "parity_evidence": {"state": "PASS"},
+    "clv_evidence": {"verdict": "PASS"},
+}
 
 
 def test_clean_first_promotion_succeeds_and_records_report(tmp_path):
@@ -216,7 +223,12 @@ def test_cli_has_no_force_bypass():
 
 def test_evaluate_gates_is_pure_and_complete():
     report = evaluate_promotion_gates(
-        _profile("c"), None, confirm_backtest_parity=True, confirm_clv_non_regression=True
+        _profile("c"),
+        None,
+        confirm_backtest_parity=True,
+        confirm_clv_non_regression=True,
+        parity_evidence={"state": "PASS"},
+        clv_evidence={"verdict": "PASS"},
     )
     assert report.passed
     names = {r.name for r in report.results}
@@ -228,3 +240,41 @@ def test_evaluate_gates_is_pure_and_complete():
         "BACKTEST_PARITY",
         "CLV_NON_REG",
     } <= names
+
+
+def test_confirm_without_evidence_artifact_blocks(tmp_path):
+    """A bare --confirm with no parity/CLV artifact must fail closed (C6)."""
+    reg = _registry(tmp_path)
+    reg.register(_profile("nba_v1"))
+    with pytest.raises(PromotionGateError) as exc:
+        reg.promote("nba_v1", confirm_backtest_parity=True, confirm_clv_non_regression=True)
+    assert "BACKTEST_PARITY" in exc.value.report.failed_gates
+    assert "CLV_NON_REG" in exc.value.report.failed_gates
+    assert reg.get_profile("nba_v1").status == ProfileStatus.CANDIDATE
+
+
+def test_inconclusive_parity_artifact_blocks(tmp_path):
+    """An artifact that does not indicate a pass (INCONCLUSIVE/FAIL) blocks (C6)."""
+    reg = _registry(tmp_path)
+    reg.register(_profile("nba_v1"))
+    with pytest.raises(PromotionGateError) as exc:
+        reg.promote(
+            "nba_v1",
+            confirm_backtest_parity=True,
+            confirm_clv_non_regression=True,
+            parity_evidence={"state": "INCONCLUSIVE"},
+            clv_evidence={"verdict": "PASS"},
+        )
+    assert "BACKTEST_PARITY" in exc.value.report.failed_gates
+    assert "CLV_NON_REG" not in exc.value.report.failed_gates
+
+
+def test_passing_artifact_recorded_in_gate_report(tmp_path):
+    """The pass-indicating evidence detail is recorded for audit."""
+    reg = _registry(tmp_path)
+    reg.register(_profile("nba_v1"))
+    report = reg.promote("nba_v1", **_CONFIRMS)
+    assert report.passed
+    conf = reg.get_profile("nba_v1").promotion_gate_report["confirmations"]
+    assert conf["backtest_parity_evidence"] == "state=PASS"
+    assert conf["clv_evidence"] == "verdict=PASS"

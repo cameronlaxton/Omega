@@ -53,6 +53,8 @@ class GateReport:
     confirm_backtest_parity: bool
     confirm_clv_non_regression: bool
     incumbent_id: str | None
+    parity_evidence: dict[str, Any] | None = None
+    clv_evidence: dict[str, Any] | None = None
     evaluated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     @property
@@ -73,6 +75,12 @@ class GateReport:
             "confirmations": {
                 "backtest_parity": self.confirm_backtest_parity,
                 "clv_non_regression": self.confirm_clv_non_regression,
+                "backtest_parity_evidence": artifact_indicates_pass(self.parity_evidence)[1]
+                if self.confirm_backtest_parity
+                else None,
+                "clv_evidence": artifact_indicates_pass(self.clv_evidence)[1]
+                if self.confirm_clv_non_regression
+                else None,
             },
             "gates": [
                 {"name": r.name, "passed": r.passed, "message": r.message} for r in self.results
@@ -88,6 +96,56 @@ class PromotionGateError(RuntimeError):
         super().__init__("promotion blocked; failed gates: " + ", ".join(report.failed_gates))
 
 
+def artifact_indicates_pass(evidence: dict[str, Any] | None) -> tuple[bool, str]:
+    """Whether a parity/CLV evidence artifact indicates a pass.
+
+    Accepts the shapes emitted by the parity tools:
+      * ``omega-historical-live-parity`` -> ``{"state": "PASS"|"INCONCLUSIVE"|"FAIL"}``
+      * ``omega-backtest-parity`` -> ``{"recommend_promotion": true|false}``
+      * a generic CLV/walk-forward report -> ``{"verdict": "PASS"}`` or
+        ``{"non_regression": true}``.
+    Returns ``(passed, human_detail)``. An empty/unrecognized artifact is NOT a
+    pass — the gate fails closed rather than trusting an unverifiable confirm.
+    """
+    if not evidence:
+        return False, "no artifact provided"
+    state = str(evidence.get("state", "")).upper()
+    if state:
+        return state == "PASS", f"state={state}"
+    if evidence.get("recommend_promotion") is True:
+        return True, "recommend_promotion=true"
+    if evidence.get("recommend_promotion") is False:
+        return False, "recommend_promotion=false"
+    verdict = str(evidence.get("verdict", "")).upper()
+    if verdict:
+        return verdict == "PASS", f"verdict={verdict}"
+    if evidence.get("non_regression") is True:
+        return True, "non_regression=true"
+    return False, "artifact has no recognized pass signal (state/recommend_promotion/verdict/non_regression)"
+
+
+def _evidence_gate(name: str, confirmed: bool, evidence: dict[str, Any] | None) -> GateResult:
+    """Evaluate an evidence-backed operator gate (BACKTEST_PARITY / CLV_NON_REG).
+
+    The operator confirmation flag is necessary but NOT sufficient: it must be
+    backed by a referenced artifact that actually indicates a pass. A bare
+    confirm with no artifact, or an artifact that is INCONCLUSIVE/FAIL, fails
+    closed — this is the enforcement the audit flagged as missing.
+    """
+    if not confirmed:
+        return GateResult(name, False, "not operator-confirmed")
+    if not evidence:
+        return GateResult(
+            name,
+            False,
+            f"{name} confirmation requires a referenced parity/CLV artifact "
+            "(--parity-report / --clv-report); a bare confirm flag is no longer sufficient",
+        )
+    ok, detail = artifact_indicates_pass(evidence)
+    prefix = "artifact PASS: " if ok else "artifact does NOT indicate pass: "
+    return GateResult(name, ok, prefix + detail)
+
+
 def evaluate_promotion_gates(
     candidate: CalibrationProfile,
     incumbent: CalibrationProfile | None,
@@ -98,10 +156,16 @@ def evaluate_promotion_gates(
     ece_floor: float = DEFAULT_ECE_FLOOR,
     confirm_backtest_parity: bool = False,
     confirm_clv_non_regression: bool = False,
+    parity_evidence: dict[str, Any] | None = None,
+    clv_evidence: dict[str, Any] | None = None,
 ) -> GateReport:
     """Evaluate every promotion gate and return a complete GateReport.
 
     Pure and side-effect free: callers decide what to do with ``report.passed``.
+
+    ``parity_evidence`` / ``clv_evidence`` are the parsed parity/CLV report
+    artifacts that back the operator confirmations. A confirmation without a
+    pass-indicating artifact fails closed (see :func:`_evidence_gate`).
     """
     results: list[GateResult] = []
 
@@ -181,21 +245,11 @@ def evaluate_promotion_gates(
                 )
             )
 
-    # Gates 5/6: operator confirmations (no automated check yet).
-    results.append(
-        GateResult(
-            "BACKTEST_PARITY",
-            confirm_backtest_parity,
-            "operator-confirmed" if confirm_backtest_parity else "no automated check — confirm after backtest review",
-        )
-    )
-    results.append(
-        GateResult(
-            "CLV_NON_REG",
-            confirm_clv_non_regression,
-            "operator-confirmed" if confirm_clv_non_regression else "no automated check — confirm after CLV review",
-        )
-    )
+    # Gates 5/6: evidence-backed operator confirmations. The confirm flag is
+    # necessary but not sufficient — it must be backed by a referenced artifact
+    # that indicates a pass (see _evidence_gate).
+    results.append(_evidence_gate("BACKTEST_PARITY", confirm_backtest_parity, parity_evidence))
+    results.append(_evidence_gate("CLV_NON_REG", confirm_clv_non_regression, clv_evidence))
 
     return GateReport(
         results=results,
@@ -207,5 +261,7 @@ def evaluate_promotion_gates(
         },
         confirm_backtest_parity=confirm_backtest_parity,
         confirm_clv_non_regression=confirm_clv_non_regression,
+        parity_evidence=parity_evidence,
+        clv_evidence=clv_evidence,
         incumbent_id=incumbent.profile_id if incumbent else None,
     )

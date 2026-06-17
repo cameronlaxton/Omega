@@ -413,6 +413,7 @@ class PostgresRepository:
         home_score: int,
         away_score: int,
         source: str = "manual",
+        result_override: str | None = None,
     ) -> str:
         self._ensure_writeable()
         with self.Session() as session:
@@ -429,7 +430,9 @@ class PostgresRepository:
                         f"Outcome already attached for trace_id={trace_id!r}; "
                         "delete the existing outcome explicitly before re-grading"
                     )
-                result = "home_win" if home_score > away_score else "away_win" if away_score > home_score else "draw"
+                result = result_override or (
+                    "home_win" if home_score > away_score else "away_win" if away_score > home_score else "draw"
+                )
                 outcome_id = uuid.uuid4().hex[:12]
                 session.execute(
                     sa_insert(OutcomeRow.__table__).values(

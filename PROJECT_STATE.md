@@ -122,9 +122,13 @@ MLB game is the one market with a genuinely-applied production profile.
    replay set; live `FIFA_WORLD_CUP_2026` runs `soccer_bivariate_poisson_dc`. Calibration is
    per-model, so it must be re-fit on backend-matched data (requires xG-enriched historical
    replay — see the audit remediation plan, Phase C3).
-3. **Operator-attested gates.** `BACKTEST_PARITY` / `CLV_NON_REG` have no automated check yet —
-   they are `--confirm-*` attestations. "Production" status does not by itself guarantee
-   backtest/CLV safety until those checks are automated or a parity artifact is recorded.
+3. **Evidence-backed parity/CLV gates (enforced).** `BACKTEST_PARITY` / `CLV_NON_REG` are no
+   longer bare attestations: `promote()` requires the operator confirmation **and** a referenced
+   parity/CLV report artifact that indicates a pass (`omega-promote-profile --parity-report /
+   --clv-report`; `state=PASS`, `recommend_promotion=true`, or `verdict=PASS`). A bare `--confirm`
+   with no artifact, or an INCONCLUSIVE/FAIL artifact, fails closed. NOTE: `iso_mlb_v7` was
+   promoted *before* this enforcement (its `promotion_gate_report` has no parity artifact); it
+   should be re-confirmed against a parity report at its next refit.
 
 Every market not backed by a genuinely-applied, gate-passing profile correctly classifies as
 `RESEARCH_CANDIDATE`. Closing caveats 1–3 is the open work for Exit Criterion 1.

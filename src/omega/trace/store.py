@@ -1252,6 +1252,7 @@ class TraceStore:
         home_score: int,
         away_score: int,
         source: str = "manual",
+        result_override: str | None = None,
     ) -> str:
         """Attach an actual outcome to a persisted trace.
 
@@ -1260,6 +1261,11 @@ class TraceStore:
             home_score: Final home team score.
             away_score: Final away team score.
             source: How the outcome was obtained ("manual", "api", "backtest").
+            result_override: When set ("home_win"|"away_win"|"draw"), use this as
+                the graded 3-way result instead of deriving it from the scores.
+                Used for single-leg knockouts decided after regulation, where the
+                1X2 market settles on the 90' result (a draw) even though the
+                stored scores may reflect the extra-time/shootout winner.
 
         Returns:
             outcome_id of the created record.
@@ -1273,6 +1279,7 @@ class TraceStore:
                 home_score=home_score,
                 away_score=away_score,
                 source=source,
+                result_override=result_override,
             )
         # Verify trace exists
         row = self.conn.execute(
@@ -1290,8 +1297,10 @@ class TraceStore:
                 "delete the existing outcome explicitly before re-grading"
             )
 
-        # Determine result
-        if home_score > away_score:
+        # Determine result (an explicit override wins — see result_override doc).
+        if result_override is not None:
+            result = result_override
+        elif home_score > away_score:
             result = "home_win"
         elif away_score > home_score:
             result = "away_win"
