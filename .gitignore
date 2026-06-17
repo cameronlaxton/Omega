@@ -59,6 +59,11 @@ logs/
 # Alias tables (data/aliases) and Sackmann CSV clones (data/external) ARE versioned.
 data/cache/
 
+# Large re-downloadable raw dataset dumps. The filtered/tournament CSVs derived
+# from them (data/historical/raw/**/*.csv without the _raw suffix) ARE versioned
+# as the reproducible replay inputs; the full multi-MB source dumps are not.
+data/historical/raw/**/*_raw.csv
+
 # Local DB / SQLite + FUSE probe artifacts (see OMEGA_COWORK.md §2b "Disk artifacts").
 # Harmless leftovers from ad-hoc DB probing and deleted-but-open handles.
 *.probe.db
