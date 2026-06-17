@@ -33,6 +33,7 @@ from omega.historical.contracts import (
 from omega.historical.leakage import evaluate_leakage
 from omega.historical.odds_snapshots import build_odds_snapshot
 from omega.historical.odds_timing import is_selection_safe
+from omega.historical.prop_context import prop_context_key
 from omega.historical.snapshots import (
     MatchupHistory,
     TeamGameRow,
@@ -410,7 +411,7 @@ class ReplayEngine:
             po_by_key = {(po.player_name, po.stat_type): po for po in outcome.prop_outcomes}
 
         for m in markets:
-            ctx = dict(dataset.prop_context.get(f"{ev.event_id}|{m.player_name}|{m.stat_type}", {}))
+            ctx = dict(dataset.prop_context.get(prop_context_key(ev.event_id, m.player_name, m.stat_type), {}))
             seed = derive_seed(self.config, f"{ev.event_id}|{m.player_name}|{m.stat_type}")
             request = PlayerPropRequest(
                 player_name=m.player_name,
@@ -422,6 +423,7 @@ class ReplayEngine:
                 line=m.line,
                 odds_over=m.over_price,
                 odds_under=m.under_price,
+                bookmaker=m.book,
                 player_context=ctx,
                 game_context=game_context,
                 seed=seed,

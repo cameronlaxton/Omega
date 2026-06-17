@@ -7,9 +7,17 @@ from omega.historical.contracts import HistoricalEvent, HistoricalOutcome, Histo
 from omega.historical.manifests import load_normalized_dataset, save_normalized_dataset
 
 _CSV = (
-    "date,home_team,away_team,player_name,stat_type,line,over_price,under_price\n"
-    "2024-01-22,Lakers,Heat,LeBron James,pts,24.5,-110,-110\n"
-    "2024-01-22,Lakers,Heat,No Line Guy,pts,,-110,-110\n"  # missing line -> skipped
+    "date,home_team,away_team,player_name,stat_type,line,over_price,under_price,"
+    "book,timestamp,tier_hint\n"
+    "2024-01-22,Lakers,Heat,LeBron James,pts,24.5,-110,-110,"
+    "betmgm,2024-01-21T18:00:00Z,opening\n"
+    "2024-01-22,Lakers,Heat,No Line Guy,pts,,-110,-110,"
+    "betmgm,2024-01-21T18:00:00Z,opening\n"  # missing line -> skipped
+)
+
+_VOID_CSV = (
+    "date,home_team,away_team,player_name,stat_type,stat_value,void\n"
+    "2024-01-22,Lakers,Heat,Bench Guy,pts,,true\n"
 )
 
 
@@ -23,6 +31,20 @@ def test_read_prop_markets_skips_lineless_rows(tmp_path):
     assert m.player_name == "LeBron James"
     assert m.line == 24.5
     assert m.over_price == -110.0
+    assert m.book == "betmgm"
+    assert m.timestamp == "2024-01-21T18:00:00+00:00"
+    assert m.tier_hint == "opening"
+
+
+def test_read_prop_outcomes_preserves_void_rows(tmp_path):
+    csv_path = tmp_path / "outcomes.csv"
+    csv_path.write_text(_VOID_CSV, encoding="utf-8")
+    outcomes = CsvPlayerStatsAdapter("NBA").read_prop_outcomes(str(csv_path))
+    all_outcomes = [o for rows in outcomes.values() for o in rows]
+    assert len(all_outcomes) == 1
+    assert all_outcomes[0].player_name == "Bench Guy"
+    assert all_outcomes[0].stat_value is None
+    assert all_outcomes[0].void is True
 
 
 def test_normalized_dataset_round_trips_props(tmp_path):
