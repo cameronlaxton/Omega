@@ -1,4 +1,0 @@
-agent:
-  display_name: "Omega Session Bootstrap"
-  short_description: "Start Omega sessions with runtime gates."
-  default_prompt: "Use $omega-session-bootstrap to run the Omega startup checklist before analysis."
