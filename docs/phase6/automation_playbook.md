@@ -20,8 +20,10 @@ recommendations, compute protected values, or promote adjustment policies live.
 
 ## Template Semantics
 
-- `daily_trace_intake`: runs `omega-ingest-traces`; review failed files,
-  missing identity warnings, empty evidence warnings, and bet-record counts.
+- `daily_trace_intake`: runs `omega-ingest-traces`, then renders the derived
+  Daily Intake Overview + Trace Ledger under `var/reports/session_reports/`;
+  review failed files, missing identity warnings, empty evidence warnings, and
+  bet-record counts.
 - `bet_closing_line_capture`: runs `omega-fetch-closing-lines` for pending
   confirmed bet records. This is not a bet discovery or recommendation action.
 - `daily_outcome_evidence_loop`: runs outcome attachment, ledger settlement,
@@ -45,7 +47,8 @@ omega-run-action-plan fixtures/action_plans/daily_trace_intake.json
 Operators should record or review these counts after each loop:
 
 - Trace intake: files processed, files failed, traces persisted, empty-evidence
-  warnings, missing identity warnings, bet records recorded.
+  warnings, missing identity warnings, bet records recorded, and the derived
+  intake report path.
 - Bet follow-up: pending bet records found, closing lines attached, records
   skipped, missing API key or budget failures.
 - Outcomes and settlement: game outcomes attached, prop outcomes attached,
@@ -69,6 +72,8 @@ Operators should record or review these counts after each loop:
   fail closed unless `OMEGA_ALLOW_EMPTY_DB=1` is intentionally set.
 - Dry-runs still validate every action and report DB safety warnings, but they
   do not raise for unsafe DB identity.
+- `render_report` is a derived-artifact action. It is non-fatal by default in
+  action plans and must not compute betting recommendations or protected values.
 - Calibration promotion remains an explicit operator action through
   `promote_profile`.
 - `adj_v1_seed` remains in shadow unless a separate validation and promotion

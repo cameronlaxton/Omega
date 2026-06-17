@@ -51,6 +51,15 @@ def test_new_deterministic_actions_validate_to_expected_commands():
                 "args": {"league": "nba", "provenance": "user_confirmed"},
             },
             {"type": "fetch_outcomes", "args": {"leagues": ["soccer", "props"]}},
+            {
+                "type": "render_report",
+                "args": {
+                    "kind": "intake",
+                    "session_id": "sess-test",
+                    "context_mode": "persisted",
+                    "verbose": True,
+                },
+            },
             {"type": "validate_all", "args": {"skip_tests": True}},
         ],
     }
@@ -80,6 +89,8 @@ def test_new_deterministic_actions_validate_to_expected_commands():
     ]
     assert _script_name(cmds["fetch_outcomes"]) == "omega.ops.fetch_outcomes_all"
     assert cmds["fetch_outcomes"][-3:] == ["--leagues", "soccer", "props"]
+    assert _script_name(cmds["render_report"]) == "omega.ops.render_session_report"
+    assert cmds["render_report"][-2:] == ["sess-test", "--verbose"]
     assert _script_name(cmds["validate_all"]) == "omega.ops.validate_all"
     assert cmds["validate_all"][-1] == "--skip-tests"
 
@@ -97,6 +108,9 @@ def test_new_deterministic_actions_validate_to_expected_commands():
         {"type": "settle_bets", "args": {"provenance": "phantom"}},
         {"type": "settle_bets", "args": {"apply": True}},
         {"type": "validate_all", "args": {"skip_tests": "yes"}},
+        {"type": "render_report", "args": {"kind": "intake", "bogus": True}},
+        {"type": "render_report", "args": {"kind": "intake", "context_mode": "persisted+cited"}},
+        {"type": "render_report", "args": {"kind": "foo"}},
     ],
 )
 def test_action_plan_validation_rejects_unsafe_or_invalid_args(action: dict):
@@ -178,3 +192,23 @@ def test_action_plan_dry_run_reports_unsafe_runtime_db_without_raising(tmp_path,
     monkeypatch.setattr(sys, "argv", ["omega-run-action-plan", str(plan), "--dry-run"])
 
     assert run_action_plan.main() == 0
+
+
+def test_render_report_action_is_non_fatal_by_default():
+    action = run_action_plan._validate_all(
+        {"actions": [{"type": "render_report", "args": {"kind": "intake"}}]}
+    )[0]
+
+    assert action.non_fatal is True
+
+
+def test_render_report_action_can_be_fatal():
+    action = run_action_plan._validate_all(
+        {
+            "actions": [
+                {"type": "render_report", "args": {"kind": "intake", "non_fatal": False}}
+            ]
+        }
+    )[0]
+
+    assert action.non_fatal is False

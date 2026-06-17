@@ -6,6 +6,15 @@
       "args": {
         "verbose": true
       }
+    },
+    {
+      "type": "render_report",
+      "args": {
+        "kind": "intake",
+        "context_mode": "persisted",
+        "non_fatal": true,
+        "verbose": true
+      }
     }
   ]
 }

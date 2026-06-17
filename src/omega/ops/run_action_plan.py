@@ -72,6 +72,7 @@ import json
 import logging
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -82,6 +83,17 @@ if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
 logger = logging.getLogger("run_action_plan")
+
+
+@dataclass(frozen=True)
+class ValidatedAction:
+    action_type: str
+    cmd: list[str]
+    non_fatal: bool = False
+
+    def __iter__(self):
+        yield self.action_type
+        yield self.cmd
 
 
 def _module_cmd(module: str, *args: str) -> list[str]:
@@ -340,6 +352,58 @@ def _validate_render_audit(args: dict[str, Any]) -> list[str]:
     return cmd
 
 
+def _validate_render_report(args: dict[str, Any]) -> list[str]:
+    _reject_unknown_args(
+        "render_report",
+        args,
+        {
+            "kind",
+            "session_id",
+            "league",
+            "since",
+            "until",
+            "context_mode",
+            "context_bundle",
+            "non_fatal",
+            "verbose",
+        },
+    )
+    kind = args.get("kind")
+    if kind not in ("intake", "closing-lines", "portfolio", "all"):
+        raise ValueError(f"render_report.args.kind invalid: {kind!r}")
+    session_id = _optional_nonempty_str("render_report", args, "session_id")
+    league = _optional_nonempty_str("render_report", args, "league")
+    since = _optional_date("render_report", args, "since")
+    until = _optional_date("render_report", args, "until")
+    context_mode = args.get("context_mode", "persisted")
+    if context_mode not in ("persisted", "persisted+cited"):
+        raise ValueError(f"render_report.args.context_mode invalid: {context_mode!r}")
+    context_bundle = args.get("context_bundle")
+    if context_bundle is not None and (
+        not isinstance(context_bundle, str) or not context_bundle.strip()
+    ):
+        raise ValueError("render_report.args.context_bundle must be non-empty str")
+    if context_mode == "persisted+cited" and not context_bundle:
+        raise ValueError("render_report.args.context_bundle is required for persisted+cited")
+    _optional_bool("render_report", args, "non_fatal", True)
+    verbose = _optional_bool("render_report", args, "verbose")
+
+    cmd = _module_cmd("render_session_report", "--kind", kind, "--context-mode", context_mode)
+    if session_id:
+        cmd += ["--session-id", session_id]
+    if league:
+        cmd += ["--league", league.upper()]
+    if since:
+        cmd += ["--since", since]
+    if until:
+        cmd += ["--until", until]
+    if context_bundle:
+        cmd += ["--context-bundle", context_bundle]
+    if verbose:
+        cmd.append("--verbose")
+    return cmd
+
+
 def _validate_validate_all(args: dict[str, Any]) -> list[str]:
     _reject_unknown_args("validate_all", args, {"skip_tests"})
     skip_tests = _optional_bool("validate_all", args, "skip_tests")
@@ -362,6 +426,7 @@ _DISPATCH: dict[str, Any] = {
     "score_evidence_signals": _validate_score_evidence_signals,
     "fit_adjustment_policy": _validate_fit_adjustment_policy,
     "render_audit": _validate_render_audit,
+    "render_report": _validate_render_report,
     "validate_all": _validate_validate_all,
 }
 
@@ -376,9 +441,9 @@ def _load_plan(path: Path) -> dict[str, Any]:
     return plan
 
 
-def _validate_all(plan: dict[str, Any]) -> list[tuple[str, list[str]]]:
+def _validate_all(plan: dict[str, Any]) -> list[ValidatedAction]:
     """Validate every action up-front and return (type, cmd) pairs. Raises on bad input."""
-    out: list[tuple[str, list[str]]] = []
+    out: list[ValidatedAction] = []
     for i, action in enumerate(plan["actions"]):
         if not isinstance(action, dict):
             raise ValueError(f"actions[{i}] must be an object")
@@ -392,7 +457,12 @@ def _validate_all(plan: dict[str, Any]) -> list[tuple[str, list[str]]]:
             cmd = _DISPATCH[atype](args)
         except ValueError as exc:
             raise ValueError(f"actions[{i}] ({atype}): {exc}") from exc
-        out.append((atype, cmd))
+        non_fatal = (
+            bool(args.get("non_fatal", True))
+            if atype == "render_report"
+            else False
+        )
+        out.append(ValidatedAction(atype, cmd, non_fatal=non_fatal))
     return out
 
 
@@ -457,12 +527,16 @@ def main() -> int:
         return 0
 
     failures = 0
-    for atype, cmd in validated:
+    for action in validated:
+        atype, cmd = action
         logger.info("Running %s: %s", atype, " ".join(cmd))
         result = subprocess.run(cmd, cwd=_REPO_ROOT)
         if result.returncode != 0:
-            failures += 1
-            logger.error("%s FAILED (exit=%d)", atype, result.returncode)
+            if action.non_fatal:
+                logger.warning("%s FAILED non-fatally (exit=%d)", atype, result.returncode)
+            else:
+                failures += 1
+                logger.error("%s FAILED (exit=%d)", atype, result.returncode)
         else:
             logger.info("%s OK", atype)
 
