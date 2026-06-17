@@ -95,6 +95,23 @@ def test_new_deterministic_actions_validate_to_expected_commands():
     assert cmds["validate_all"][-1] == "--skip-tests"
 
 
+def test_fetch_outcomes_action_plan_accepts_tennis_tours():
+    plan = {
+        "session_id": "test",
+        "actions": [
+            {
+                "type": "fetch_outcomes",
+                "args": {"leagues": ["ATP", "WTA"], "since": "2026-06-15"},
+            },
+        ],
+    }
+
+    cmd = _cmd_by_type(plan)["fetch_outcomes"]
+
+    assert _script_name(cmd) == "omega.ops.fetch_outcomes_all"
+    assert cmd[-4:] == ["atp", "wta", "--since", "2026-06-15"]
+
+
 @pytest.mark.parametrize(
     "action",
     [

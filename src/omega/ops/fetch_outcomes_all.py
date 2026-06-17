@@ -2,14 +2,15 @@
 omega.ops.fetch_outcomes_all â€” attach outcomes for all supported leagues.
 
 Dispatches fetch_outcomes_nba.py, fetch_outcomes_wnba.py, fetch_outcomes_mlb.py,
-fetch_outcomes_soccer.py, and fetch_outcomes_props.py in sequence. All runs are
-idempotent.
+fetch_outcomes_soccer.py, fetch_outcomes_nhl.py, fetch_outcomes_tennis.py, and
+fetch_outcomes_props.py in sequence. All runs are idempotent.
 
 Usage:
     omega-fetch-outcomes-all
     omega-fetch-outcomes-all --since 2026-05-10 --until 2026-05-14
     omega-fetch-outcomes-all --dry-run
     omega-fetch-outcomes-all --leagues nba props
+    omega-fetch-outcomes-all --leagues atp wta
 
 Exit codes:
     0 â€” all dispatched successfully
@@ -40,10 +41,22 @@ _MODULES: dict[str, str] = {
     "mlb": "omega.ops.fetch_outcomes_mlb",
     "soccer": "omega.ops.fetch_outcomes_soccer",
     "nhl": "omega.ops.fetch_outcomes_nhl",
+    "tennis": "omega.ops.fetch_outcomes_tennis",
+    "atp": "omega.ops.fetch_outcomes_tennis",
+    "wta": "omega.ops.fetch_outcomes_tennis",
+    "grand_slam": "omega.ops.fetch_outcomes_tennis",
     "props": "omega.ops.fetch_outcomes_props",
 }
 
-_DEFAULT_LEAGUES = ("nba", "wnba", "mlb", "soccer", "nhl", "props")
+_TENNIS_LEAGUE_ARGS = {
+    "atp": "ATP",
+    "wta": "WTA",
+    "grand_slam": "GRAND_SLAM",
+}
+
+_DEFAULT_LEAGUES = ("nba", "wnba", "mlb", "soccer", "nhl", "tennis", "props")
+VALID_LEAGUES = frozenset(_MODULES)
+DEFAULT_LEAGUES = _DEFAULT_LEAGUES
 _FETCH_OUTCOMES_TIMEOUT_SECONDS = 20 * 60
 
 
@@ -62,6 +75,8 @@ def _build_cmd(
         cmd += ["--since", since]
     if until:
         cmd += ["--until", until]
+    if league in _TENNIS_LEAGUE_ARGS:
+        cmd += ["--leagues", _TENNIS_LEAGUE_ARGS[league]]
     if dry_run:
         cmd.append("--dry-run")
     return cmd
@@ -87,7 +102,8 @@ def run_fetch_outcomes(
     To exclude soccer (future-dated fixtures), pass an explicit ``leagues`` list
     without ``"soccer"``.
     """
-    selected = list(leagues) if leagues is not None else list(_DEFAULT_LEAGUES)
+    selected_raw = list(leagues) if leagues is not None else list(_DEFAULT_LEAGUES)
+    selected = [league.lower() for league in selected_raw]
     unknown = [lg for lg in selected if lg not in _MODULES]
     if unknown:
         raise ValueError(
@@ -190,6 +206,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
 
