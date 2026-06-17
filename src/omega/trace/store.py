@@ -936,7 +936,9 @@ class TraceStore:
         try:
             result = extract_recommended_bet(trace, provenance=BetProvenance.ENGINE_AUTO)
             if result.bet is not None:
-                self.record_ledger_bet(result.bet)
+                # Defer to persist()'s single commit so the trace + its children +
+                # the autologged ledger bet land in ONE transaction.
+                self.record_ledger_bet(result.bet, commit=False)
         except Exception as exc:  # noqa: BLE001 - never let autolog break persist
             logger.warning("bet_ledger autolog skipped for %s: %s", trace_id, exc)
 
@@ -1016,6 +1018,58 @@ class TraceStore:
                 data["distribution_params"] = {}
             result.append(data)
         return result
+
+    def _prop_outcomes_by_traces(self, trace_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Batch-load prop outcomes for many traces (one query per ~900-id chunk).
+
+        Output per trace_id is byte-identical to :meth:`get_prop_outcomes`
+        (same columns, same within-trace ``attached_at`` order) — this is the
+        N+1 elimination for ``query_traces``, not a behavior change.
+        """
+        out: dict[str, list[dict[str, Any]]] = {}
+        for start in range(0, len(trace_ids), 900):
+            chunk = trace_ids[start : start + 900]
+            ph = ",".join("?" * len(chunk))
+            rows = self.conn.execute(
+                f"""SELECT prop_outcome_id, trace_id, player_name, stat_type,
+                           stat_value, line, side, result, source, attached_at
+                    FROM prop_outcomes WHERE trace_id IN ({ph})
+                    ORDER BY trace_id, attached_at""",
+                chunk,
+            ).fetchall()
+            for row in rows:
+                out.setdefault(row["trace_id"], []).append(dict(row))
+        return out
+
+    def _distributions_by_traces(self, trace_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Batch-load V10 distribution rows for many traces (chunked IN query).
+
+        Per-trace output matches :meth:`get_simulation_distributions` exactly
+        (same columns, within-trace ``distribution_id`` order, JSON-decoded
+        ``distribution_params``).
+        """
+        out: dict[str, list[dict[str, Any]]] = {}
+        for start in range(0, len(trace_ids), 900):
+            chunk = trace_ids[start : start + 900]
+            ph = ",".join("?" * len(chunk))
+            rows = self.conn.execute(
+                f"""SELECT distribution_id, trace_id, kind, league, target, market,
+                           stat_key, distribution_type, distribution_params,
+                           params_schema_version, sample_mean, sample_std, p10, p50,
+                           p90, n_iterations, seed, context_hash, component_version,
+                           created_at
+                    FROM simulation_distributions WHERE trace_id IN ({ph})
+                    ORDER BY trace_id, distribution_id""",
+                chunk,
+            ).fetchall()
+            for row in rows:
+                data = dict(row)
+                try:
+                    data["distribution_params"] = json.loads(data["distribution_params"])
+                except (TypeError, json.JSONDecodeError):
+                    data["distribution_params"] = {}
+                out.setdefault(row["trace_id"], []).append(data)
+        return out
 
     def _write_evidence_signals(self, trace_id: str, trace: dict[str, Any]) -> int:
         """Explode input_snapshot.evidence into queryable evidence_signals rows.
@@ -1308,11 +1362,20 @@ class TraceStore:
             result = "draw"
 
         outcome_id = uuid.uuid4().hex[:12]
-        self.conn.execute(
-            """INSERT INTO outcomes (outcome_id, trace_id, home_score, away_score, result, source)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (outcome_id, trace_id, home_score, away_score, result, source),
-        )
+        try:
+            self.conn.execute(
+                """INSERT INTO outcomes (outcome_id, trace_id, home_score, away_score, result, source)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (outcome_id, trace_id, home_score, away_score, result, source),
+            )
+        except sqlite3.IntegrityError as exc:
+            # Lost a concurrent attach race (the UNIQUE(trace_id) index fired after
+            # our existence check passed). Surface the same friendly error as the
+            # check-then-insert path instead of an unhandled IntegrityError.
+            raise ValueError(
+                f"Outcome already attached for trace_id={trace_id!r}; "
+                "delete the existing outcome explicitly before re-grading"
+            ) from exc
         self.conn.commit()
         return outcome_id
 
@@ -1594,11 +1657,15 @@ class TraceStore:
         "exposure_limits_version, sizing_reasons, correlation_group"
     )
 
-    def record_ledger_bet(self, bet: LedgerBet) -> str:
+    def record_ledger_bet(self, bet: LedgerBet, *, commit: bool = True) -> str:
         """Persist a ledger bet. Idempotent on (trace_id, market, selection_descriptor).
 
         session_id is sourced from the linked trace so it stays consistent with
         traces.session_id without the caller plumbing it through.
+
+        ``commit`` lets the autolog path inside :meth:`persist` defer to persist's
+        single commit, so a trace and its dual-written ledger bet land in ONE
+        transaction instead of two (no mid-persist commit).
 
         Provenance upgrade: the unique key omits provenance, so the engine's
         gated autolog (engine_auto) and a later user confirmation of the same
@@ -1684,7 +1751,8 @@ class TraceStore:
                 bet.trace_id,
             ),
         )
-        self.conn.commit()
+        if commit:
+            self.conn.commit()
         stored = self.conn.execute(
             "SELECT ledger_id FROM bet_ledger "
             "WHERE trace_id = ? AND market = ? AND selection_descriptor = ?",
@@ -2157,6 +2225,11 @@ class TraceStore:
         """
         rows = self.conn.execute(sql, params).fetchall()
 
+        # Batch-load the 1:N children once (2 queries) instead of per-row (2N).
+        trace_ids = [row["trace_id"] for row in rows]
+        prop_by_trace = self._prop_outcomes_by_traces(trace_ids)
+        dist_by_trace = self._distributions_by_traces(trace_ids)
+
         results = []
         for row in rows:
             trace = json.loads(row["full_trace"])
@@ -2167,10 +2240,10 @@ class TraceStore:
                     "away_score": row["away_score"],
                     "result": row["result"],
                 }
-            prop_rows = self.get_prop_outcomes(row["trace_id"])
+            prop_rows = prop_by_trace.get(row["trace_id"])
             if prop_rows:
                 trace["_prop_outcomes"] = prop_rows
-            distribution_rows = self.get_simulation_distributions(row["trace_id"])
+            distribution_rows = dist_by_trace.get(row["trace_id"])
             if distribution_rows:
                 trace["_simulation_distributions"] = distribution_rows
             results.append(trace)

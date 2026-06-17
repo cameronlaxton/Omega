@@ -198,17 +198,12 @@ def _section_counts(store: TraceStore, league: str | None, cutoff: str) -> dict[
     }
 
 
-def _section_realized_metrics(
-    store: TraceStore, league: str | None, cutoff: str
-) -> dict[str, float] | None:
-    """Brier / ECE / log_loss on graded traces in the window. Returns None if too few."""
-    rows = store.query_traces(
-        league=league,
-        start=cutoff,
-        has_outcome=True,
-        calibration_eligible_only=True,
-        limit=100_000,
-    )
+def _section_realized_metrics(rows: list[dict[str, Any]]) -> dict[str, float] | None:
+    """Brier / ECE / log_loss on graded traces in the window. Returns None if too few.
+
+    ``rows`` is the eligible+graded rowset fetched ONCE by the caller and shared
+    with the prop section, so the corpus is parsed once per report, not per section.
+    """
     if len(rows) < 10:
         return None
     fitter = CalibrationFitter()
@@ -257,22 +252,14 @@ def _section_realized_metrics(
     }
 
 
-def _section_prop_realized_metrics(
-    store: TraceStore, league: str | None, cutoff: str
-) -> dict[str, float] | None:
+def _section_prop_realized_metrics(rows: list[dict[str, Any]]) -> dict[str, float] | None:
     """Brier / ECE / log_loss on graded prop traces in the window.
 
     Separate from the game plane: prop calibration is a different forecasting
     problem (over/under stat lines, not home/away win). Suppressed when fewer
-    than 10 prop (prediction, outcome) pairs are available.
+    than 10 prop (prediction, outcome) pairs are available. Shares the caller's
+    single eligible+graded rowset with the game section (fetch-once).
     """
-    rows = store.query_traces(
-        league=league,
-        start=cutoff,
-        has_outcome=True,
-        calibration_eligible_only=True,
-        limit=100_000,
-    )
     if not rows:
         return None
     predictions, outcomes = CalibrationFitter.extract_prop_pairs(rows)
@@ -1026,8 +1013,17 @@ def main() -> int:
     report_league: str | None = None
     counts = _section_counts(store, report_league, cutoff)
     portfolio = _section_portfolio(store, cutoff)
-    realized = _section_realized_metrics(store, report_league, cutoff)
-    realized_prop = _section_prop_realized_metrics(store, report_league, cutoff)
+    # Fetch the eligible+graded rowset ONCE and share it between the game and prop
+    # realized-metrics sections (was fetched + JSON-parsed twice).
+    _graded_rows = store.query_traces(
+        league=report_league,
+        start=cutoff,
+        has_outcome=True,
+        calibration_eligible_only=True,
+        limit=100_000,
+    )
+    realized = _section_realized_metrics(_graded_rows)
+    realized_prop = _section_prop_realized_metrics(_graded_rows)
     distribution_crps = _section_distribution_crps(store, report_league, cutoff)
     clv = _section_clv(store, report_league, cutoff)
     sessions = _section_sessions(store, sidecars, report_league)

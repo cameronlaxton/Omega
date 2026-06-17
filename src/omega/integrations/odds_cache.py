@@ -172,6 +172,12 @@ class OddsCache:
         """
         if entry_type not in _TTL_BY_ENTRY_TYPE:
             raise ValueError(f"entry_type must be one of {sorted(_TTL_BY_ENTRY_TYPE)}")
+        # Replay must never write fresh odds into the cache (it only serves frozen
+        # entries). Env-driven guard — unit tests are unaffected unless they set
+        # OMEGA_REPLAY_MODE=1 themselves.
+        from omega.integrations._guards import assert_not_replay_mode
+
+        assert_not_replay_mode("odds cache write")
         current_time = time.time()
         market_data_str = json.dumps(market_data)
         with sqlite3.connect(str(self.db_path)) as conn:

@@ -101,6 +101,9 @@ def test_happy_path_prop_writes_export_block(tmp_path: Path) -> None:
     assert block["trace"]["trace_id"] == "sandbox-prop-001"
     assert "reasoning_inputs" in block
     assert "reasoning_narrative" in block
+    # A4: export block carries a top-level session_id so the prediction->session
+    # link survives outside the DB and passes the strict export validator.
+    assert block["session_id"] == "sess-test"
 
 
 def test_happy_path_game_writes_export_block(tmp_path: Path) -> None:
