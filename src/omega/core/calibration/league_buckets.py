@@ -39,17 +39,15 @@ CALIBRATION_LEAGUE_BUCKETS: dict[str, str] = {
     "PREMIER_LEAGUE": "EPL",
     "LALIGA": "LA_LIGA",
     # --- Competitive international soccer on the bivariate-Poisson-DC backend.
-    # Today only the 2026 World Cup runs that backend, so the FIFA_INTL bucket
-    # currently has one live member. The C3 re-fit registers its draw profile
-    # under league="FIFA_INTL", and this mapping makes it apply to live
-    # FIFA_WORLD_CUP_2026 traces. The historical/legacy WORLD_CUP, EURO, etc.
-    # join here only after Phase C1 puts them on the same backend:
+    # As of C1 all of these run the same backend (soccer_bivariate_poisson_dc),
+    # so they share the FIFA_INTL calibration bucket. The C3 re-fit registers the
+    # draw profile under league="FIFA_INTL"; this mapping makes it apply to every
+    # member's live traces once promoted.
     "FIFA_WORLD_CUP_2026": "FIFA_INTL",
-    # "WORLD_CUP": "FIFA_INTL",        # pending C1 backend flip
-    # "EURO": "FIFA_INTL",             # pending C1 backend flip
-    # "COPA_AMERICA": "FIFA_INTL",     # pending C1 backend flip
-    # "NATIONS_LEAGUE": "FIFA_INTL",   # pending C1 backend flip
-    # "AFCON": "FIFA_INTL",            # pending C1 backend flip
+    "WORLD_CUP": "FIFA_INTL",
+    "EURO": "FIFA_INTL",
+    "COPA_AMERICA": "FIFA_INTL",
+    "NATIONS_LEAGUE": "FIFA_INTL",
     # FIFA_FRIENDLY is deliberately NOT bucketed with FIFA_INTL: different draw
     # base-rate (~26% vs ~22%) and excluded from the fifa_intl fit dataset.
 }

@@ -38,6 +38,27 @@ def test_friendlies_not_bucketed_with_intl():
     assert CALIBRATION_LEAGUE_BUCKETS.get("FIFA_FRIENDLY") != "FIFA_INTL"
 
 
+def test_competitive_intl_resolve_to_fifa_intl():
+    # C1: all competitive internationals share the FIFA_INTL calibration bucket.
+    for lg in ["WORLD_CUP", "EURO", "COPA_AMERICA", "NATIONS_LEAGUE", "FIFA_WORLD_CUP_2026"]:
+        assert resolve_calibration_bucket(lg) == "FIFA_INTL"
+
+
+def test_fifa_intl_bucket_members_share_one_backend():
+    """Backend-parity guard (C1): a calibration map is per-model, so every league
+    pooled into the FIFA_INTL bucket MUST run the same simulation backend
+    (soccer_bivariate_poisson_dc) with draw support. This test fails loudly if a
+    future edit buckets a league on a different/fast_score backend."""
+    from omega.core.config.leagues import get_league_config
+
+    members = [lg for lg, bucket in CALIBRATION_LEAGUE_BUCKETS.items() if bucket == "FIFA_INTL"]
+    assert members, "FIFA_INTL bucket should have members"
+    for lg in [*members, "FIFA_INTL"]:
+        cfg = get_league_config(lg)
+        assert cfg.get("default_game_backend") == "soccer_bivariate_poisson_dc", lg
+        assert cfg.get("supports_draw") is True, lg
+
+
 def test_get_production_resolves_through_bucket(monkeypatch):
     """A FIFA_INTL-keyed draw profile is selected for a FIFA_WORLD_CUP_2026 request."""
     registry = CalibrationRegistry()
@@ -85,5 +106,8 @@ def test_get_production_resolves_through_bucket(monkeypatch):
     assert prof2 is not None
     assert prof2.profile_id == "iso_epl_game_v1"
 
+    # C1: WORLD_CUP now resolves through the FIFA_INTL bucket to the draw profile.
+    assert registry.get_production("WORLD_CUP", market="draw").profile_id == "iso_fifa_intl_draw_v1"
+
     # A league with no bucket + no profile still returns None (static fallback).
-    assert registry.get_production("WORLD_CUP", market="draw") is None
+    assert registry.get_production("MLS", market="draw") is None

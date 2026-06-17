@@ -364,6 +364,9 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "dixon_coles": True,
         "rho": -0.13,
     },
+    # C1: competitive internationals run the same bivariate-Poisson-DC backend as
+    # FIFA_WORLD_CUP_2026 (the static dixon_coles/rho keys were fast_score-only and
+    # are removed — rho now comes from the fitted fifa_intl_v1 production profile).
     "WORLD_CUP": {
         "sport": "soccer",
         "archetype": "soccer",
@@ -371,11 +374,13 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "period_length_min": 45,
         "scoring": "goals",
         "avg_total": 2.5,
-        "distribution": "poisson",
+        "distribution": "bivariate_poisson",
         "home_advantage": 0.15,  # often neutral venue
         "std": 1.3,
-        "dixon_coles": True,
-        "rho": -0.13,
+        "supports_draw": True,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "fifa_intl_v1",
     },
     # Phase 7 M2: the 2026 World Cup runs the bivariate-Poisson backend. rho is
     # NOT configured here — rho_fit_profile selects the fitted production row in
@@ -405,11 +410,13 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "period_length_min": 45,
         "scoring": "goals",
         "avg_total": 2.3,
-        "distribution": "poisson",
+        "distribution": "bivariate_poisson",
         "home_advantage": 0.10,  # neutral/rotating host
         "std": 1.2,
-        "dixon_coles": True,
-        "rho": -0.13,
+        "supports_draw": True,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "fifa_intl_v1",
     },
     "EURO": {
         "sport": "soccer",
@@ -418,11 +425,13 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "period_length_min": 45,
         "scoring": "goals",
         "avg_total": 2.3,
-        "distribution": "poisson",
+        "distribution": "bivariate_poisson",
         "home_advantage": 0.10,  # neutral/rotating host
         "std": 1.2,
-        "dixon_coles": True,
-        "rho": -0.13,
+        "supports_draw": True,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "fifa_intl_v1",
     },
     "NATIONS_LEAGUE": {
         "sport": "soccer",
@@ -431,11 +440,13 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "period_length_min": 45,
         "scoring": "goals",
         "avg_total": 2.6,
-        "distribution": "poisson",
+        "distribution": "bivariate_poisson",
         "home_advantage": 0.25,  # home/away format
         "std": 1.3,
-        "dixon_coles": True,
-        "rho": -0.13,
+        "supports_draw": True,
+        "default_game_backend": "soccer_bivariate_poisson_dc",
+        "default_prop_backend": "prop_distribution_router",
+        "rho_fit_profile": "fifa_intl_v1",
     },
     "FIFA_FRIENDLY": {
         "sport": "soccer",
