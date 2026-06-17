@@ -29,6 +29,14 @@ _DEFAULT_ROLLING_WINDOW = 10
 _DEFAULT_STALENESS_DAYS = 120
 _DEFAULT_REST_DAYS = 7  # used when no prior game is known (flagged via game_context)
 
+# Empirical-Bayes shrinkage strength for team off/def ratings (in "prior games"):
+# a team's rolling mean is blended (n·mean + n0·league_mean)/(n+n0). Small-sample
+# teams regress hard toward the league baseline, which tempers the over-dispersed
+# raw rolling means that drive tail overconfidence on the game/moneyline plane.
+# Opt-in via build_feature_snapshot(shrink_ratings=True) so live/legacy callers are
+# unaffected; the value is only applied when a league_baseline is supplied.
+_RATING_SHRINKAGE_N0 = 5
+
 
 @dataclass
 class TeamGameRow:
@@ -102,10 +110,29 @@ def _default_team_context(league: str, family: str) -> dict[str, float]:
     return ctx
 
 
+def _shrink_rating(value: float, league_value: float | None, n: int, n0: int) -> float:
+    """Empirical-Bayes blend of a team's rolling mean toward the league baseline."""
+    if league_value is None or n <= 0:
+        return value
+    return (n * value + n0 * league_value) / (n + n0)
+
+
 def _team_context(
-    rows: list[TeamGameRow], league: str, family: str, baseline: dict[str, float] | None
+    rows: list[TeamGameRow],
+    league: str,
+    family: str,
+    baseline: dict[str, float] | None,
+    *,
+    shrink: bool = False,
+    shrink_n0: int = _RATING_SHRINKAGE_N0,
 ) -> tuple[dict[str, float], bool]:
-    """Return (context, used_default). Computes archetype-required keys."""
+    """Return (context, used_default). Computes archetype-required keys.
+
+    When ``shrink`` is set and a ``baseline`` with off/def is supplied, the team's
+    rolling off/def ratings are empirical-Bayes shrunk toward the league baseline
+    (see :data:`_RATING_SHRINKAGE_N0`). This does not change ``used_default``: a
+    team with data is still "provided" — the ratings are merely regularized.
+    """
     if family == "tennis":
         serve_rows = [r for r in rows if r.serve_points_total]
         ret_rows = [r for r in rows if r.return_points_total]
@@ -122,9 +149,14 @@ def _team_context(
     scored = [r for r in rows if r.points_for is not None]
     allowed = [r for r in rows if r.points_against is not None]
     if scored and allowed:
+        off = _mean([r.points_for for r in scored])  # type: ignore[misc]
+        deff = _mean([r.points_against for r in allowed])  # type: ignore[misc]
+        if shrink and baseline:
+            off = _shrink_rating(off, baseline.get("off_rating"), len(scored), shrink_n0)
+            deff = _shrink_rating(deff, baseline.get("def_rating"), len(allowed), shrink_n0)
         ctx: dict[str, float] = {
-            "off_rating": round(_mean([r.points_for for r in scored]), 3),  # type: ignore[misc]
-            "def_rating": round(_mean([r.points_against for r in allowed]), 3),  # type: ignore[misc]
+            "off_rating": round(off, 3),
+            "def_rating": round(deff, 3),
         }
         if family == "basketball":
             totals = [
@@ -227,8 +259,14 @@ def build_feature_snapshot(
     extra_game_context: dict | None = None,
     rolling_window: int = _DEFAULT_ROLLING_WINDOW,
     staleness_days: int = _DEFAULT_STALENESS_DAYS,
+    shrink_ratings: bool = False,
 ) -> HistoricalFeatureSnapshot:
-    """Build an as-of-safe :class:`HistoricalFeatureSnapshot` for one event."""
+    """Build an as-of-safe :class:`HistoricalFeatureSnapshot` for one event.
+
+    ``shrink_ratings`` (opt-in) empirical-Bayes shrinks team off/def ratings toward
+    ``history.league_baseline`` to temper over-dispersed small-sample rolling means.
+    Default off, so live/legacy callers see the existing raw-mean behavior.
+    """
     decision_dt = _dt(decision_time)
     extra = dict(extra_game_context or {})
 
@@ -241,10 +279,12 @@ def build_feature_snapshot(
     as_of_iso = parse_datetime_utc(as_of) if as_of else None
 
     home_ctx, home_default = _team_context(
-        home_rows, event.league, event.sport_family, history.league_baseline
+        home_rows, event.league, event.sport_family, history.league_baseline,
+        shrink=shrink_ratings,
     )
     away_ctx, away_default = _team_context(
-        away_rows, event.league, event.sport_family, history.league_baseline
+        away_rows, event.league, event.sport_family, history.league_baseline,
+        shrink=shrink_ratings,
     )
 
     home_last = home_rows[-1].date if home_rows else None

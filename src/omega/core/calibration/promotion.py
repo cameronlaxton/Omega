@@ -112,14 +112,22 @@ def evaluate_promotion_gates(
     )
 
     # Gate 2: absolute ECE quality floor on the candidate itself.
-    ece = candidate.metrics.get("calibration_error")
+    # Prefer the cross-validated ECE when the fitter recorded one (cv_n_folds>0):
+    # a single 20% holdout ECE is high-variance + upward-biased at small n, so a
+    # well-calibrated profile can fail this floor on split noise. The CV estimate
+    # (fit-per-fold, scored out-of-sample, repeated) is the robust measure. Legacy
+    # candidates without CV metrics fall back to the single-split calibration_error.
+    cv_ece = candidate.metrics.get("cv_calibration_error")
+    use_cv = cv_ece is not None and candidate.metrics.get("cv_n_folds", 0) > 0
+    ece = cv_ece if use_cv else candidate.metrics.get("calibration_error")
+    src = "cv_calibration_error" if use_cv else "calibration_error"
     if ece is None:
         results.append(
             GateResult("ECE_FLOOR", False, "candidate has no calibration_error metric; cannot verify floor")
         )
     else:
         results.append(
-            GateResult("ECE_FLOOR", ece <= ece_floor, f"candidate.calibration_error={ece:.4f}, required<={ece_floor:.4f}")
+            GateResult("ECE_FLOOR", ece <= ece_floor, f"candidate.{src}={ece:.4f}, required<={ece_floor:.4f}")
         )
 
     # Gate 3: Brier improvement vs incumbent.

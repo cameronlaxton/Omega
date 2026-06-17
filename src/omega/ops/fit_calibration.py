@@ -135,6 +135,13 @@ def fit_and_register(
         raise ValueError(f"Unknown method: {method!r}")
 
     metrics = fitter.evaluate(profile, hold_p, hold_o)
+    # Cross-validated ECE on the full (train+holdout) pairs: a robust, lower-variance
+    # estimate of the method's generalization calibration than the single 20% holdout.
+    # The promotion ECE_FLOOR prefers this when present (see promotion.py).
+    cv = fitter.cross_validated_ece(
+        train_p + hold_p, train_o + hold_o, league=league, market=market, method=method
+    )
+    metrics.update(cv)
     profile.metrics = metrics
     profile.context_slice = context_slice
     if training_window:

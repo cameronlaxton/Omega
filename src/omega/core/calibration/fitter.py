@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import os
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -29,7 +30,7 @@ UTC = timezone.utc
 logger = logging.getLogger("omega.core.calibration.fitter")
 
 # Minimum samples required for fitting
-_MIN_SAMPLES = 30
+_MIN_SAMPLES = int(os.environ.get("OMEGA_MIN_SAMPLES", 30))
 
 # Epsilon for log loss clipping
 _LOG_EPS = 1e-15
@@ -528,6 +529,82 @@ class CalibrationFitter:
         }
 
     # ------------------------------------------------------------------
+    # Cross-validated evaluation (robust ECE for the promotion gate)
+    # ------------------------------------------------------------------
+
+    def cross_validated_ece(
+        self,
+        predictions: list[float],
+        outcomes: list[int],
+        league: str,
+        market: str,
+        method: str,
+        *,
+        folds: int = 5,
+        repeats: int = 5,
+        seed: int | None = None,
+    ) -> dict[str, float]:
+        """Repeated stratified k-fold cross-validated calibration error.
+
+        A single 80/20 holdout ECE is high-variance and upward-biased at small n
+        (sparse-bin bias), so whether a candidate clears the absolute ECE floor is
+        partly luck-of-the-split. This estimates the *method's* generalization ECE
+        by fitting on each train fold and scoring the held-out fold — every sample
+        is scored out-of-sample exactly ``repeats`` times — and reuses the exact
+        ``fit_*``/``evaluate`` primitives (so the same adaptive-ECE estimator the
+        floor checks against is used end to end).
+
+        Returns aggregates: ``cv_calibration_error`` (mean), ``cv_ece_ci_low`` /
+        ``cv_ece_ci_high`` (95% normal CI), ``cv_brier_score`` (mean), and
+        ``cv_n_folds`` (total folds scored). Empty/degenerate inputs return a
+        ``cv_n_folds`` of 0 so callers can fall back to the single-split metric.
+        """
+        n = len(predictions)
+        if n < _MIN_SAMPLES * 2 or len(set(outcomes)) < 2:
+            return {"cv_calibration_error": 0.0, "cv_brier_score": 0.0, "cv_n_folds": 0}
+
+        if seed is None:
+            seed = _seed_from_pairs(predictions, outcomes, league)
+
+        fold_eces: list[float] = []
+        fold_briers: list[float] = []
+        for r in range(repeats):
+            assignment = stratified_folds(outcomes, folds, seed + r)
+            for f in range(folds):
+                test_idx = set(assignment[f])
+                tr_p = [predictions[i] for i in range(n) if i not in test_idx]
+                tr_o = [outcomes[i] for i in range(n) if i not in test_idx]
+                te_p = [predictions[i] for i in test_idx]
+                te_o = [outcomes[i] for i in test_idx]
+                if len(tr_p) < _MIN_SAMPLES or not te_p:
+                    continue
+                if method == "isotonic":
+                    profile = self.fit_isotonic(tr_p, tr_o, league=league, market=market)
+                elif method == "shrinkage":
+                    profile = self.fit_shrinkage(
+                        tr_p, tr_o, league=league, market=market, eligible_sample_size=len(tr_p)
+                    )
+                else:
+                    raise ValueError(f"Unknown method: {method!r}")
+                m = self.evaluate(profile, te_p, te_o)
+                fold_eces.append(m["calibration_error"])
+                fold_briers.append(m["brier_score"])
+
+        k = len(fold_eces)
+        if k == 0:
+            return {"cv_calibration_error": 0.0, "cv_brier_score": 0.0, "cv_n_folds": 0}
+        mean = sum(fold_eces) / k
+        var = sum((e - mean) ** 2 for e in fold_eces) / (k - 1) if k > 1 else 0.0
+        se = math.sqrt(var) / math.sqrt(k)
+        return {
+            "cv_calibration_error": round(mean, 6),
+            "cv_ece_ci_low": round(mean - 1.96 * se, 6),
+            "cv_ece_ci_high": round(mean + 1.96 * se, 6),
+            "cv_brier_score": round(sum(fold_briers) / k, 6),
+            "cv_n_folds": k,
+        }
+
+    # ------------------------------------------------------------------
     # Comparison
     # ------------------------------------------------------------------
 
@@ -567,6 +644,35 @@ class CalibrationFitter:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _seed_from_pairs(predictions: list[float], outcomes: list[int], league: str) -> int:
+    """Deterministic CV seed from the data + league (repo determinism norm)."""
+    raw = (str(sorted(zip([round(p, 6) for p in predictions], outcomes))) + league).encode()
+    return int(hashlib.sha256(raw).hexdigest()[:8], 16)
+
+
+def stratified_folds(outcomes: list[int], k: int, seed: int) -> list[list[int]]:
+    """Partition indices into ``k`` folds preserving class balance.
+
+    Dependency-free stratified k-fold (the fitter avoids sklearn): split indices
+    by class, deterministically shuffle each class, then deal round-robin across
+    folds so every fold sees ~the same base rate. This matters for the draw plane,
+    where positives are only ~20%.
+    """
+    import random
+
+    rng = random.Random(seed)
+    by_class: dict[int, list[int]] = {}
+    for i, o in enumerate(outcomes):
+        by_class.setdefault(int(o), []).append(i)
+
+    folds: list[list[int]] = [[] for _ in range(k)]
+    for _cls, idxs in sorted(by_class.items()):
+        rng.shuffle(idxs)
+        for pos, idx in enumerate(idxs):
+            folds[pos % k].append(idx)
+    return folds
 
 
 def _pool_adjacent_violators(
