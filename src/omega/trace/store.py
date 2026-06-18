@@ -54,6 +54,7 @@ from omega.trace.schema import (
     SCHEMA_V16,
     SCHEMA_V17,
     SCHEMA_V18,
+    SCHEMA_V19,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
@@ -735,6 +736,16 @@ class TraceStore:
         self._record_version(
             18,
             "Phase 7 M4: priors_nfl_dispersion table (NFL NB dispersion k + shrinkage source)",
+        )
+
+        # V19: governed backend parameter-profile table (Phase 8). One production
+        # profile per (backend_name, competition_bucket); promoted fail-closed
+        # through the shared gate engine. Generalizes the priors_dixon_coles
+        # rho-profile pattern to a backend's full structural-parameter set.
+        self.conn.executescript(SCHEMA_V19)
+        self._record_version(
+            19,
+            "Phase 8: parameter_profiles table (governed backend structural-parameter profiles)",
         )
 
     def _existing_schema_version(self) -> int:

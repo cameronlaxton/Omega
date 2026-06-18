@@ -124,7 +124,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 18
+CURRENT_VERSION = 19
 
 # ---------------------------------------------------------------------------
 # Version lineage (applied in order by TraceStore._ensure_schema)
@@ -158,6 +158,7 @@ CURRENT_VERSION = 18
 #   V16 SCHEMA_V16           priors_xg + priors_dixon_coles (soccer dynamic priors)
 #   V17 SCHEMA_V17           priors_tennis + priors_tennis_pressure (tennis dynamic priors)
 #   V18 SCHEMA_V18           priors_nfl_dispersion (NFL NB dispersion k w/ shrinkage provenance)
+#   V19 SCHEMA_V19           parameter_profiles (governed backend structural-parameter profiles)
 #
 # There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
 # apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
@@ -783,4 +784,50 @@ CREATE TABLE IF NOT EXISTS priors_nfl_dispersion (
 
 CREATE INDEX IF NOT EXISTS idx_priors_nfl_dispersion_entity
     ON priors_nfl_dispersion(entity, stat_type, season);
+"""
+
+
+# V19: backend parameter-profile governance (Phase 8). parameter_profiles holds
+# versioned, attributable, promotable structural-parameter bundles for the
+# deterministic simulation backends (soccer rho/hca/xg-mapping, NFL dispersion/
+# correlation, ...). It generalizes the single-parameter priors_dixon_coles
+# rho-profile pattern to a backend's full param set, and is promoted through the
+# SAME fail-closed gate engine as calibration profiles
+# (omega.core.governance.promotion_gates) — no second promotion path. params_json
+# carries the structural knobs the gatherer injects into prior_payload;
+# priors_as_of_date pins an immutable per-entity priors snapshot so a later refit
+# cannot change what a promoted profile reads; metrics_json carries the RAW
+# (pre-calibration) held-out ECE/Brier/log-loss the gates evaluate. The partial
+# unique index enforces exactly one production profile per (backend_name,
+# competition_bucket); flushing the table degrades a backend to fail-closed
+# (status="skipped"), never to bad numbers (design Part 9).
+SCHEMA_V19 = """
+CREATE TABLE IF NOT EXISTS parameter_profiles (
+    profile_id                TEXT PRIMARY KEY,
+    schema_version            INTEGER NOT NULL DEFAULT 1,
+    version                   INTEGER NOT NULL,
+    backend_name              TEXT NOT NULL,
+    backend_component_version TEXT NOT NULL,
+    competition_bucket        TEXT NOT NULL,
+    params_json               TEXT NOT NULL DEFAULT '{}',
+    priors_as_of_date         TEXT,
+    dataset_manifest_id       TEXT,
+    dataset_hash              TEXT NOT NULL,
+    sample_size               INTEGER NOT NULL DEFAULT 0,
+    metrics_json              TEXT NOT NULL DEFAULT '{}',
+    status                    TEXT NOT NULL DEFAULT 'candidate',
+    incumbent_id              TEXT,
+    promotion_gate_report     TEXT,
+    created_at                TEXT NOT NULL DEFAULT (datetime('now')),
+    promoted_at               TEXT,
+    rejected_at               TEXT,
+    reject_reason             TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_parameter_profiles_production
+    ON parameter_profiles(backend_name, competition_bucket)
+    WHERE status = 'production';
+
+CREATE INDEX IF NOT EXISTS idx_parameter_profiles_lookup
+    ON parameter_profiles(backend_name, competition_bucket, status);
 """
