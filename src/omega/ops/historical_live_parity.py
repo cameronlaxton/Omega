@@ -85,6 +85,7 @@ def evaluate_parity(
         state = "PASS"
 
     return {
+        "schema_version": 1,
         "state": state,
         "historical_n": len(hist_probs),
         "live_n": live_n,

@@ -86,6 +86,7 @@ def test_soccer_end_to_end_replay_with_odds(fixtures_dir, backtest_store, tmp_pa
         backtest_db_path=str(tmp_path / "bt.db"),
         n_iterations=200,
         enable_staking=True,
+        odds_timing_class="decision_time_safe",
     )
     result = ReplayEngine(backtest_store, config).run(dataset, replay_id="epl-1", league="EPL")
     assert result.n_persisted == 8

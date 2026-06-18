@@ -192,11 +192,15 @@ def save_normalized_dataset(
             ),
             encoding="utf-8",
         )
-    if prop_markets:
-        flat = [m.model_dump(mode="json") for ms in prop_markets.values() for m in ms]
-        (base / "prop_markets.json").write_text(json.dumps(flat, indent=2), encoding="utf-8")
-    if prop_context:
-        (base / "prop_context.json").write_text(json.dumps(prop_context, indent=2), encoding="utf-8")
+    flat = (
+        [m.model_dump(mode="json") for ms in prop_markets.values() for m in ms]
+        if prop_markets
+        else []
+    )
+    (base / "prop_markets.json").write_text(json.dumps(flat, indent=2), encoding="utf-8")
+    (base / "prop_context.json").write_text(
+        json.dumps(prop_context or {}, indent=2), encoding="utf-8"
+    )
     return base
 
 

@@ -120,6 +120,7 @@ def _config(tmp_path) -> ReplayConfig:
         dataset_manifest_id="m-test",
         backtest_db_path=str(tmp_path / "base.db"),
         enable_staking=True,
+        odds_timing_class="decision_time_safe",
         n_iterations=200,
     )
 

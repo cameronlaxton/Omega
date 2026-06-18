@@ -335,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
                 "date-windowed fit requires at least --train-end and --holdout-start."
             )
             return 1
-        if args.holdout_start < args.train_end and not args.allow_same_season_shadow:
+        if args.holdout_start <= args.train_end and not args.allow_same_season_shadow:
             logger.error(
                 "holdout-start (%s) precedes train-end (%s): same-season leakage. Pass "
                 "--allow-same-season-shadow for shadow diagnostics only (never promotable).",

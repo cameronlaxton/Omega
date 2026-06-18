@@ -50,6 +50,7 @@ def evaluate_backtest_parity(
     reasons: list[str] = []
     if n_eval == 0:
         return {
+            "schema_version": 1,
             "plane": plane, "n_eval": 0, "candidate": None, "incumbent": None,
             "recommend_promotion": False, "reasons": ["no eval pairs"],
         }
@@ -68,6 +69,7 @@ def evaluate_backtest_parity(
         reasons.append("no_incumbent_baseline")
 
     return {
+        "schema_version": 1,
         "plane": plane,
         "n_eval": n_eval,
         "candidate": candidate,
@@ -106,11 +108,15 @@ def main(argv: list[str] | None = None) -> int:
     if candidate is None:
         logger.error("unknown candidate profile_id=%s", args.candidate_id)
         return 2
-    incumbent = (
-        _find_profile(registry, args.incumbent_id)
-        if args.incumbent_id
-        else registry.gating_incumbent(candidate)
-    )
+    if args.incumbent_id:
+        incumbent = _find_profile(registry, args.incumbent_id)
+        if incumbent is None:
+            logger.warning(
+                "--incumbent-id=%s not found in registry; proceeding without incumbent baseline.",
+                args.incumbent_id,
+            )
+    else:
+        incumbent = registry.gating_incumbent(candidate)
 
     store = TraceStore(db_path=args.historical_db)
     graded = store.query_traces(
