@@ -300,7 +300,7 @@ class ReplayConfig(BaseModel):
     enable_staking: bool = Field(default=False)
     leakage_policy: Literal["skip", "fail"] = Field(default="skip")
     odds_timing_class: str = Field(
-        default="decision_time_safe",
+        default="timing_unknown",
         description="Source odds timing class; gates staking/ROI/CLV, never calibration.",
     )
     code_version: str = Field(default_factory=current_code_version)
