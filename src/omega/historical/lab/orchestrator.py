@@ -77,10 +77,10 @@ def _clv_artifact(wf_report: Any) -> dict[str, Any]:
     dataset); otherwise PASS iff the placed bets beat the close on average
     (avg_clv >= 0) and did not lose money (roi >= 0), else FAIL.
 
-    ``basis="absolute_floor"``: this is an absolute non-loss/positive-CLV check on
-    the profile's realized betting, not a candidate-vs-incumbent delta. A true
-    incumbent delta needs a per-profile re-replay (the engine applies calibration
-    at selection time), which is left as a follow-up.
+    ``basis="absolute_floor"``: this is the fallback absolute non-loss/positive-CLV
+    check used when the odds-bearing per-profile replay path is unavailable. A true
+    incumbent delta is produced separately by ``compare_profiles`` when the replay
+    dataset carries odds.
     """
     if wf_report is None or wf_report.aggregate_betting is None:
         return {"verdict": "INCONCLUSIVE", "reason": "walk_forward_betting_unavailable", "n_bets": 0}

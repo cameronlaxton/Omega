@@ -24,11 +24,11 @@ from omega.core.calibration.probability import calibration_registry_override
 from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus
 from omega.core.calibration.registry import CalibrationRegistry
 from omega.historical.contracts import BettingBlock, ReplayConfig
+from omega.historical.lab.schemas import Window
 from omega.historical.metrics import betting_metrics
 from omega.historical.replay import ReplayDataset, ReplayEngine
-from omega.historical.lab.schemas import Window
-from omega.trace.store import TraceStore
 from omega.ops.fit_calibration import _in_window
+from omega.trace.store import TraceStore
 
 
 def _isolated_registry(path: Path, profile: CalibrationProfile | None) -> None:
@@ -107,9 +107,9 @@ def compare_profiles(
 ) -> dict[str, Any]:
     """Replay the holdout under candidate vs incumbent; return a CLV/ROI verdict.
 
-    ``non_regression`` (and PASS) requires the candidate's holdout ROI and avg CLV
-    to not fall below the incumbent's beyond the tolerances. INCONCLUSIVE when the
-    candidate places no graded bets (e.g. no decision odds in the window).
+    ``non_regression`` (and PASS) requires measured candidate ROI/CLV and, when
+    the incumbent placed bets, measured incumbent ROI/CLV. INCONCLUSIVE when the
+    candidate places no graded bets or closing-line CLV is unavailable.
     """
     filtered = _filter_max_date(dataset, holdout_window.end)
     cand = replay_window_betting(
@@ -142,10 +142,32 @@ def compare_profiles(
             "incumbent": inc.model_dump(),
         }
 
-    cr = cand.roi if cand.roi is not None else 0.0
-    ir = inc.roi if inc.roi is not None else 0.0
-    cc = cand.avg_clv if cand.avg_clv is not None else 0.0
-    ic = inc.avg_clv if inc.avg_clv is not None else 0.0
+    if cand.roi is None or cand.avg_clv is None:
+        return {
+            "verdict": "INCONCLUSIVE",
+            "basis": "per_profile_replay",
+            "reason": "candidate_betting_metrics_unavailable",
+            "n_bets": cand.n_bets,
+            "incumbent_present": incumbent is not None,
+            "candidate": cand.model_dump(),
+            "incumbent": inc.model_dump(),
+        }
+
+    if inc.n_bets > 0 and (inc.roi is None or inc.avg_clv is None):
+        return {
+            "verdict": "INCONCLUSIVE",
+            "basis": "per_profile_replay",
+            "reason": "incumbent_betting_metrics_unavailable",
+            "n_bets": cand.n_bets,
+            "incumbent_present": incumbent is not None,
+            "candidate": cand.model_dump(),
+            "incumbent": inc.model_dump(),
+        }
+
+    cr = cand.roi
+    ir = inc.roi if inc.n_bets > 0 and inc.roi is not None else 0.0
+    cc = cand.avg_clv
+    ic = inc.avg_clv if inc.n_bets > 0 and inc.avg_clv is not None else 0.0
     non_regression = (cr >= ir - roi_tol) and (cc >= ic - clv_tol)
     return {
         "verdict": "PASS" if non_regression else "FAIL",

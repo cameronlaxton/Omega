@@ -11,6 +11,7 @@ from omega.core.calibration.probability import (
 from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus
 from omega.core.calibration.registry import CalibrationRegistry
 from omega.historical.contracts import (
+    BettingBlock,
     HistoricalEvent,
     HistoricalOutcome,
     OddsObservation,
@@ -154,3 +155,47 @@ def test_compare_is_deterministic(tmp_path):
     b = compare_profiles(_dataset(), work_dir=tmp_path / "b", **kw)
     assert a["verdict"] == b["verdict"]
     assert a["candidate"] == b["candidate"]
+
+
+def test_compare_inconclusive_when_candidate_clv_missing(tmp_path, monkeypatch):
+    import omega.historical.lab.per_profile_replay as ppr
+
+    def _fake_replay_window_betting(*args, tag, **kwargs):
+        if tag == "candidate":
+            return BettingBlock(n_bets=3, roi=0.12, avg_clv=None)
+        return BettingBlock(n_bets=3, roi=0.0, avg_clv=0.01)
+
+    monkeypatch.setattr(ppr, "replay_window_betting", _fake_replay_window_betting)
+    art = ppr.compare_profiles(
+        _dataset(),
+        league=LEAGUE,
+        base_config=_config(tmp_path),
+        candidate=_profile("none", {}),
+        incumbent=_profile("shrinkage", {"shrink_factor": 0.3}),
+        holdout_window=_HOLDOUT,
+        work_dir=tmp_path / "ppr",
+    )
+    assert art["verdict"] == "INCONCLUSIVE"
+    assert art["reason"] == "candidate_betting_metrics_unavailable"
+
+
+def test_compare_inconclusive_when_betting_incumbent_clv_missing(tmp_path, monkeypatch):
+    import omega.historical.lab.per_profile_replay as ppr
+
+    def _fake_replay_window_betting(*args, tag, **kwargs):
+        if tag == "candidate":
+            return BettingBlock(n_bets=3, roi=0.12, avg_clv=0.02)
+        return BettingBlock(n_bets=3, roi=0.0, avg_clv=None)
+
+    monkeypatch.setattr(ppr, "replay_window_betting", _fake_replay_window_betting)
+    art = ppr.compare_profiles(
+        _dataset(),
+        league=LEAGUE,
+        base_config=_config(tmp_path),
+        candidate=_profile("none", {}),
+        incumbent=_profile("shrinkage", {"shrink_factor": 0.3}),
+        holdout_window=_HOLDOUT,
+        work_dir=tmp_path / "ppr",
+    )
+    assert art["verdict"] == "INCONCLUSIVE"
+    assert art["reason"] == "incumbent_betting_metrics_unavailable"
