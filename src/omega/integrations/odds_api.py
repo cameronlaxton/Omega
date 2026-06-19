@@ -393,9 +393,10 @@ class OddsApiClient:
         event_id: str,
         regions: str = "us",
         bookmakers: str | None = None,
+        sport_key: str | None = None,
     ) -> list[EventMarketAvailability]:
         """Fetch recently seen market keys per bookmaker for one event."""
-        sport_key = _require_sport_key(league)
+        sport_key = sport_key or _require_sport_key(league)
         params = _event_params(regions=regions, bookmakers=bookmakers)
         payload = self._get_json(f"/sports/{sport_key}/events/{event_id}/markets", params)
         return parse_event_markets(payload)
@@ -424,9 +425,10 @@ class OddsApiClient:
         regions: str = "us",
         markets: str = DEFAULT_MARKETS,
         bookmakers: str | None = None,
+        sport_key: str | None = None,
     ) -> EventOdds:
         """Fetch current odds for one event, including props/additional markets."""
-        sport_key = _require_sport_key(league)
+        sport_key = sport_key or _require_sport_key(league)
         params = _odds_params(regions=regions, markets=markets, bookmakers=bookmakers)
         payload = self._get_json(f"/sports/{sport_key}/events/{event_id}/odds", params)
         events = parse_events([payload] if isinstance(payload, dict) else payload)

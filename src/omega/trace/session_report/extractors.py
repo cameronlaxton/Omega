@@ -347,6 +347,7 @@ def extract_intake_report(
                     sidecar=sidecar,
                     bundle_entries=bundle_entries,
                 ),
+                reasoning_narrative=_cell(trace.get("reasoning_narrative")),
                 trace_quality_status=_trace_quality_status(trace),
                 sidecar_status=_sidecar_status(session_id, sidecar),
                 evidence_status=str(tq.get("evidence_status") or "unknown"),

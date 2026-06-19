@@ -7,6 +7,8 @@ Calibrates model probabilities to fix unrealistic extremes (>90% or <10% too fre
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 try:
@@ -15,6 +17,34 @@ except ImportError:
     np = None
 
 logger = logging.getLogger("omega.core.calibration.probability")
+
+# ---------------------------------------------------------------------------
+# Active-registry override (single, shared selection path stays intact)
+# ---------------------------------------------------------------------------
+# When set, production-profile lookups read this isolated registry file instead
+# of the default ``profiles.json``. Default (None) preserves the exact production
+# lookup, so this is behavior-preserving for the live path. It exists so the
+# historical lab can replay a window with a SPECIFIC candidate/incumbent profile
+# active — the only honest way to compute a candidate-vs-incumbent betting delta
+# (the engine applies calibration at selection time) — without touching or
+# polluting the production registry. ContextVar → thread/async-safe.
+_REGISTRY_PATH_OVERRIDE: ContextVar[str | None] = ContextVar(
+    "omega_calibration_registry_path", default=None
+)
+
+
+@contextmanager
+def calibration_registry_override(path: str | None):
+    """Temporarily point active-profile lookups at an isolated registry file.
+
+    ``path=None`` is a no-op (restores the default production registry). Nesting
+    is supported; the previous value is restored on exit.
+    """
+    token = _REGISTRY_PATH_OVERRIDE.set(path)
+    try:
+        yield
+    finally:
+        _REGISTRY_PATH_OVERRIDE.reset(token)
 
 
 def shrinkage_calibration(raw_prob: float, shrink_factor: float = 0.7) -> float:
@@ -337,7 +367,8 @@ def _get_active_profile(league: str, context_slice: str | None = None, market: s
     try:
         from omega.core.calibration.registry import CalibrationRegistry
 
-        registry = CalibrationRegistry()
+        override = _REGISTRY_PATH_OVERRIDE.get()
+        registry = CalibrationRegistry(path=override) if override else CalibrationRegistry()
         return registry.get_production(league, context_slice=context_slice, market=market)
     except Exception:
         return None
