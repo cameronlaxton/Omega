@@ -23,7 +23,7 @@ from omega.historical.adapters.nba_csv import NbaCsvAdapter
 from omega.historical.adapters.nflfast_csv import NflfastCsvAdapter
 from omega.historical.adapters.soccer_football_data import SoccerFootballDataAdapter
 from omega.historical.adapters.tennis_atp_csv import TennisAtpCsvAdapter
-from omega.historical.contracts import HistoricalEvent, HistoricalOutcome, OddsObservation
+from omega.historical.contracts import HistoricalEvent, HistoricalOutcome, HistoricalPropMarket, OddsObservation
 from omega.historical.dataset_manifest import compute_manifest
 from omega.historical.manifests import save_dataset_manifest, save_normalized_dataset
 from omega.historical.normalize import sport_family_for
@@ -47,6 +47,13 @@ class IngestBundle:
     prop_context: dict[str, dict[str, Any]] = field(default_factory=dict)
     files: list[str] = field(default_factory=list)
     row_counts: dict[str, int] = field(default_factory=dict)
+
+
+def _apply_clean_events(bundle: IngestBundle, clean_events: list[HistoricalEvent]) -> None:
+    kept_event_ids = {event.event_id for event in clean_events}
+    bundle.events = clean_events
+    bundle.outcomes = [outcome for outcome in bundle.outcomes if outcome.event_id in kept_event_ids]
+    bundle.odds = [odds for odds in bundle.odds if odds.event_key in kept_event_ids]
 
 
 def _merge_prop_outcomes(
@@ -171,10 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     clean_events, rejected = partition_events(bundle.events)
     if rejected:
         path = write_rejected(rejected, args.league, root=args.quarantine_root)
-        rejected_ids = {r["event_id"] for r in rejected}
-        bundle.events = clean_events
-        bundle.outcomes = [o for o in bundle.outcomes if o.event_id not in rejected_ids]
-        bundle.odds = [o for o in bundle.odds if o.event_key not in rejected_ids]
+        _apply_clean_events(bundle, clean_events)
         logger.warning("Quarantined %d row(s) -> %s", len(rejected), path)
     if not bundle.events:
         logger.error("no clean events after quarantine for %s", args.games)
@@ -204,6 +208,7 @@ def main(argv: list[str] | None = None) -> int:
         bundle.files.append(args.prop_context)
 
     family = sport_family_for(args.league)
+    timing = args.odds_timing_class or timing_class_for_source(args.source).value
     manifest = compute_manifest(
         bundle.files,
         source_name=args.source,
@@ -212,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         row_counts=bundle.row_counts,
         date_range=_date_range(bundle.events),
         limitations=args.limitations,
+        odds_timing_class=timing,
     )
     timing = args.odds_timing_class or timing_class_for_source(args.source).value
     manifest = manifest.model_copy(update={"odds_timing_class": timing})

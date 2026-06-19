@@ -34,8 +34,28 @@ def test_manifest_id_is_deterministic(tmp_path: Path):
         row_counts={str(f): 1},
     )
     assert m1.manifest_id == m2.manifest_id
+    assert m1.schema_version == 1
     assert m1.total_rows == 1
     assert m1.files[0].sha256 == m2.files[0].sha256
+
+
+def test_manifest_id_changes_with_odds_timing_class(tmp_path: Path):
+    f = _write(tmp_path / "games.csv", "a,b\n1,2\n")
+    m1 = compute_manifest(
+        [f],
+        source_name="s",
+        league="NFL",
+        sport_family="american_football",
+        odds_timing_class="decision_time_safe",
+    )
+    m2 = compute_manifest(
+        [f],
+        source_name="s",
+        league="NFL",
+        sport_family="american_football",
+        odds_timing_class="closing_only",
+    )
+    assert m1.manifest_id != m2.manifest_id
 
 
 def test_manifest_id_changes_with_content(tmp_path: Path):
@@ -68,6 +88,20 @@ def test_verify_refresh_returns_new_manifest(tmp_path: Path):
     refreshed = verify_manifest(m, [f], refresh=True)
     assert refreshed.manifest_id != m.manifest_id
     assert refreshed.files[0].sha256 != m.files[0].sha256
+
+
+def test_verify_refresh_preserves_odds_timing_class(tmp_path: Path):
+    f = _write(tmp_path / "games.csv", "a,b\n1,2\n")
+    m = compute_manifest(
+        [f],
+        source_name="s",
+        league="NFL",
+        sport_family="american_football",
+        odds_timing_class="closing_only",
+    )
+    _write(f, "a,b\n9,9\n")
+    refreshed = verify_manifest(m, [f], refresh=True)
+    assert refreshed.odds_timing_class == "closing_only"
 
 
 def test_manifest_persistence_roundtrip(tmp_path: Path):

@@ -193,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
         enable_staking=args.enable_staking,
         leakage_policy=args.leakage_policy,
         prior_payload=prior_payload,
+        odds_timing_class=manifest.odds_timing_class or "decision_time_safe",
     )
     replay_id = args.replay_id or f"replay_{manifest.manifest_id}"
 
@@ -211,13 +212,23 @@ def main(argv: list[str] | None = None) -> int:
                 limit=1_000_000,
             )
         )
+        eligible_denominator = len(
+            store.query_traces(
+                execution_mode="historical_replay",
+                has_outcome=True,
+                limit=1_000_000,
+            )
+        )
     finally:
         store.close()
 
     save_replay_manifest(result.manifest, root=args.root)
     save_selections(replay_id, result.selections, root=args.root)
     summary = build_replay_summary(
-        result.manifest, eligible_count=eligible_count, league=manifest.league
+        result.manifest,
+        eligible_count=eligible_count,
+        eligible_denominator=eligible_denominator,
+        league=manifest.league,
     )
     save_replay_summary(replay_id, summary, root=args.root)
     save_run_audit(replay_id, render_run_audit(summary), root=args.root)

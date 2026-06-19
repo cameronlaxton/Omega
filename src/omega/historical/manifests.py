@@ -192,6 +192,8 @@ def save_normalized_dataset(
             ),
             encoding="utf-8",
         )
+    # Unconditional writes: even when empty, the files must exist so
+    # load_normalized_dataset never hits FileNotFoundError on them.
     flat = (
         [m.model_dump(mode="json") for ms in prop_markets.values() for m in ms]
         if prop_markets

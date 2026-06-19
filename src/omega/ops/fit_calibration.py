@@ -1,5 +1,5 @@
 """
-omega-fit-calibration â€” fit calibration profile candidates from graded traces.
+omega-fit-calibration — fit calibration profile candidates from graded traces.
 
 Loads graded traces from var/omega_traces.db, splits deterministically into train/holdout,
 fits the requested method(s) on the train split, evaluates each on the holdout, and
@@ -11,7 +11,7 @@ Determinism: the train/holdout split is seeded from the deterministic dataset_ha
 (sha256 of sorted prediction+outcome pairs), so re-running on the same DB snapshot
 produces the same split and the same metrics. This satisfies the CLAUDE.md required
 invariant: "the same frozen quant artifact must always produce the same simulation
-seed" â€” extended here to "same data â†’ same calibration fit".
+seed" — extended here to "same data → same calibration fit".
 
 Usage:
     omega-fit-calibration --league NBA
@@ -21,8 +21,8 @@ Usage:
     omega-fit-calibration --league NBA --dry-run
 
 Exit codes:
-    0 â€” at least one candidate registered (or dry-run completed)
-    1 â€” fatal error or no candidates met --min-samples
+    0 — at least one candidate registered (or dry-run completed)
+    1 — fatal error or no candidates met --min-samples
 """
 
 from __future__ import annotations
@@ -217,22 +217,26 @@ def _load_graded_traces(args: argparse.Namespace) -> list[dict[str, Any]]:
     graded: list[dict[str, Any]] = []
     if not args.historical_only:
         store = TraceStore(db_path=args.db)
-        log_effective_db(store, logger)
-        graded.extend(store.get_graded_traces(league=args.league, limit=100_000))
-        store.close()
+        try:
+            log_effective_db(store, logger)
+            graded.extend(store.get_graded_traces(league=args.league, limit=100_000))
+        finally:
+            store.close()
     if args.historical_only or args.include_historical:
         hstore = TraceStore(db_path=args.historical_db)
-        logger.info("historical DB: %s", args.historical_db)
-        graded.extend(
-            hstore.query_traces(
-                league=args.league,
-                execution_mode="historical_replay",
-                has_outcome=True,
-                calibration_eligible_only=True,
-                limit=1_000_000,
+        try:
+            logger.info("historical DB: %s", args.historical_db)
+            graded.extend(
+                hstore.query_traces(
+                    league=args.league,
+                    execution_mode="historical_replay",
+                    has_outcome=True,
+                    calibration_eligible_only=True,
+                    limit=1_000_000,
+                )
             )
-        )
-        hstore.close()
+        finally:
+            hstore.close()
     return graded
 
 
@@ -506,5 +510,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

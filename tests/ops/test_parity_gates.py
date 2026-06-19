@@ -77,14 +77,15 @@ def _graded(n=40):
     return graded
 
 
-def test_backtest_parity_recommends_without_incumbent():
+def test_backtest_parity_refuses_without_incumbent():
     graded = _graded()
     fitter = CalibrationFitter()
     preds, outs = fitter.extract_pairs(graded)
     cand = fitter.fit_isotonic(preds, outs, league="TEST", market="game")
     r = evaluate_backtest_parity(graded, cand, None, plane="game")
     assert r["n_eval"] == len(preds) > 0
-    assert r["recommend_promotion"] is True
+    assert r["recommend_promotion"] is False
+    assert "no_incumbent_baseline" in r["reasons"]
     assert r["candidate"]["brier_score"] is not None
 
 
