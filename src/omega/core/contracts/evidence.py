@@ -156,6 +156,13 @@ class SignalSpec:
     requires_stat_key: bool = False
     default_window: SignalWindow = "season"
     value_kind: ValueKind = "scalar"
+    # Co-occurrence group (Issue #22). Signals that share a non-None
+    # ``damping_family`` measure overlapping phenomena, so when several fire
+    # together their factors are damped as one family instead of stacking
+    # independently. ``None`` means the signal is its own singleton family.
+    # Consumed only when ``AdjustmentPolicy.enable_correlation_damping`` is set;
+    # declaring it here is inert until that flag is wired.
+    damping_family: str | None = None
     description: str = ""
 
 
@@ -176,6 +183,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             requires_stat_key=True,
             default_window="last_5",
             value_kind="series",
+            damping_family="player_recency",
             description="Recent per-game stat values vs the season baseline.",
         ),
         _spec(
@@ -184,6 +192,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             "player",
             requires_stat_key=True,
             default_window="series",
+            damping_family="player_recency",
             description="Player's average for this stat in the current playoff series.",
         ),
         _spec(
@@ -200,6 +209,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             "situational",
             "player",
             requires_stat_key=True,
+            damping_family="player_recency",
             description="Player's home-vs-away performance delta for this stat.",
         ),
         _spec(
@@ -214,6 +224,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             "situational",
             "both",
             default_window="matchup",
+            damping_family="rest_fatigue",
             description="Net rest-days advantage relative to the opponent.",
         ),
         _spec(
@@ -302,6 +313,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             applies_to_sports=frozenset({"basketball", "hockey"}),
             default_window="matchup",
             value_kind="bool",
+            damping_family="rest_fatigue",
             description="Back-to-back fatigue (played the previous night).",
         ),
         _spec(
@@ -310,6 +322,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             "both",
             applies_to_sports=frozenset({"basketball", "hockey", "soccer"}),
             default_window="matchup",
+            damping_family="pace",
             description="Matchup expected to run faster than league baseline.",
         ),
         _spec(
@@ -318,6 +331,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             "both",
             applies_to_sports=frozenset({"basketball", "hockey", "soccer"}),
             default_window="matchup",
+            damping_family="pace",
             description="Matchup expected to run slower than league baseline.",
         ),
         # --- Defensive matchup (team sports) ---
@@ -329,6 +343,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
                 {"basketball", "american_football", "hockey", "soccer"}
             ),
             requires_stat_key=True,
+            damping_family="def_matchup",
             description=(
                 "Opponent is a weak defender of this stat for props, or weak against "
                 "the directional team offense for Markov game analysis."
@@ -342,6 +357,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
                 {"basketball", "american_football", "hockey", "soccer"}
             ),
             requires_stat_key=True,
+            damping_family="def_matchup",
             description=(
                 "Opponent is a strong defender of this stat for props, or strong against "
                 "the directional team offense for Markov game analysis."
@@ -475,3 +491,14 @@ def signal_applies(signal_type: str, archetype: str | None) -> bool:
 def signal_applies_to_league(signal_type: str, league: str) -> bool:
     """Convenience: ``signal_applies`` resolved straight from a league code."""
     return signal_applies(signal_type, resolve_archetype(league))
+
+
+def damping_family_for(signal_type: str) -> str | None:
+    """Return the ``damping_family`` for a signal type, or None for a singleton.
+
+    Unknown signal types return None — they are treated as their own family so
+    correlation damping (when enabled) leaves them untouched. See
+    ``omega/core/simulation/evidence_aggregation.py`` for how families are damped.
+    """
+    spec = SIGNAL_REGISTRY.get(signal_type)
+    return spec.damping_family if spec is not None else None

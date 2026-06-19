@@ -32,6 +32,7 @@ from omega.core.contracts.evidence import (
     resolve_archetype,
     signal_applies,
 )
+from omega.core.simulation.evidence_aggregation import cap_factor as _cap_factor
 
 # Environment override for the rollout gate. When unset, the policy's own
 # ``mode`` field governs. Accepts "shadow" or "live" (case-insensitive).
@@ -118,12 +119,9 @@ def resolve_evidence_mode(policy: AdjustmentPolicy | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _cap_factor(factor: float, cap: float) -> float:
-    """Clamp ``factor`` to ``[1 - cap, 1 + cap]``. ``cap`` is a fraction (0..1)."""
-    if cap <= 0:
-        return 1.0
-    lo, hi = 1.0 - cap, 1.0 + cap
-    return max(lo, min(hi, factor))
+# ``_cap_factor`` is the canonical ``evidence_aggregation.cap_factor`` (imported
+# above). Re-exported under the legacy private name so existing call sites and
+# tests keep working while the cap semantics live in exactly one place.
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:

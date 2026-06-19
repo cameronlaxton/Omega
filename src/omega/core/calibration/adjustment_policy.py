@@ -71,6 +71,26 @@ class AdjustmentPolicy(BaseModel):
         description="signal_type -> handler param dict (always includes 'cap').",
     )
 
+    # Feature flags (Issue #22). All default False so a policy persisted before
+    # these fields existed parses unchanged and behaves bit-identically: pydantic
+    # fills the defaults on load, and no engine path reads a flag until the phase
+    # that wires it lands. Each flag gates one behaviour-changing layer.
+    enable_confidence_weighting: bool = Field(
+        default=False,
+        description="Scale each signal's family-capped factor by the agent's "
+        "stated confidence before plane aggregation (sequence step 6).",
+    )
+    enable_correlation_damping: bool = Field(
+        default=False,
+        description="Damp correlated signals that share a damping_family so "
+        "co-occurring evidence cannot stack unbounded (sequence step 4).",
+    )
+    enable_competition_strength_index: bool = Field(
+        default=False,
+        description="Apply the structural soccer competition_strength_index to "
+        "team-context inputs before Bivariate Poisson lambda derivation.",
+    )
+
     # Training provenance (empty for the hand-seeded v1 priors)
     training_window: str = ""
     sample_size: int = Field(default=0, ge=0)
