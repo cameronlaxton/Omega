@@ -1,4 +1,4 @@
-﻿"""omega-replay-history â€” replay a historical dataset into a DEDICATED calibration DB.
+"""omega-replay-history â€” replay a historical dataset into a DEDICATED calibration DB.
 
 Calibration-oriented sibling of ``replay_historical_slate``. It runs the same
 deterministic :class:`~omega.historical.replay.ReplayEngine` but is purpose-built
@@ -55,7 +55,10 @@ def _resolve_frozen_prior_payload(args: argparse.Namespace) -> dict | None:
 
     from omega.trace.priors import get_production_dc_profile
 
-    priors_db = args.priors_db or str(default_trace_db_path())
+    if not args.priors_db:
+        logger.error("Must provide --priors-db when using --rho-profile to ensure replay isolation.")
+        raise SystemExit(2)
+    priors_db = args.priors_db
     store = TraceStore(db_path=priors_db)
     try:
         prof = get_production_dc_profile(store, args.rho_profile)
@@ -193,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         enable_staking=args.enable_staking,
         leakage_policy=args.leakage_policy,
         prior_payload=prior_payload,
-        odds_timing_class=manifest.odds_timing_class or "decision_time_safe",
+        odds_timing_class=manifest.odds_timing_class or "timing_unknown",
     )
     replay_id = args.replay_id or f"replay_{manifest.manifest_id}"
 

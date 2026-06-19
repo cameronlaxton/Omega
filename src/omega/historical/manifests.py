@@ -120,6 +120,8 @@ def load_selections(
 def save_replay_summary(replay_id: str, summary: dict, root: str | Path | None = None) -> Path:
     """Persist the machine-readable replay summary beside the replay manifest."""
     out = replays_dir(root) / replay_id / "replay_summary.json"
+    if "schema_version" not in summary and "version" not in summary:
+        raise ValueError("Replay summary must contain a schema version field")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return out
@@ -197,9 +199,11 @@ def save_normalized_dataset(
         if prop_markets
         else []
     )
-    (base / "prop_markets.json").write_text(json.dumps(flat, indent=2), encoding="utf-8")
+    (base / "prop_markets.json").write_text(
+        json.dumps({"version": 1, "data": flat}, indent=2), encoding="utf-8"
+    )
     (base / "prop_context.json").write_text(
-        json.dumps(prop_context or {}, indent=2), encoding="utf-8"
+        json.dumps({"version": 1, "data": prop_context or {}}, indent=2), encoding="utf-8"
     )
     return base
 
@@ -241,14 +245,27 @@ def load_normalized_dataset(manifest_id: str, root: str | Path | None = None) ->
     prop_markets: dict[str, list[HistoricalPropMarket]] = {}
     pm_path = base / "prop_markets.json"
     if pm_path.exists():
-        for d in json.loads(pm_path.read_text(encoding="utf-8")):
+        pm_payload = json.loads(pm_path.read_text(encoding="utf-8"))
+        if isinstance(pm_payload, dict) and "version" in pm_payload:
+            if pm_payload["version"] != 1:
+                raise ValueError(f"Unsupported prop_markets version {pm_payload['version']}")
+            pm_data = pm_payload["data"]
+        else:
+            pm_data = pm_payload
+        for d in pm_data:
             m = HistoricalPropMarket.model_validate(d)
             prop_markets.setdefault(m.event_key, []).append(m)
 
     pc_path = base / "prop_context.json"
-    prop_context = (
-        json.loads(pc_path.read_text(encoding="utf-8")) if pc_path.exists() else {}
-    )
+    prop_context = {}
+    if pc_path.exists():
+        pc_payload = json.loads(pc_path.read_text(encoding="utf-8"))
+        if isinstance(pc_payload, dict) and "version" in pc_payload:
+            if pc_payload["version"] != 1:
+                raise ValueError(f"Unsupported prop_context version {pc_payload['version']}")
+            prop_context = pc_payload.get("data", {})
+        else:
+            prop_context = pc_payload
 
     return {
         "events": events,

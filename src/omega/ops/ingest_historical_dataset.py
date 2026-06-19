@@ -23,7 +23,12 @@ from omega.historical.adapters.nba_csv import NbaCsvAdapter
 from omega.historical.adapters.nflfast_csv import NflfastCsvAdapter
 from omega.historical.adapters.soccer_football_data import SoccerFootballDataAdapter
 from omega.historical.adapters.tennis_atp_csv import TennisAtpCsvAdapter
-from omega.historical.contracts import HistoricalEvent, HistoricalOutcome, OddsObservation
+from omega.historical.contracts import (
+    HistoricalEvent,
+    HistoricalOutcome,
+    HistoricalPropMarket,
+    OddsObservation,
+)
 from omega.historical.dataset_manifest import compute_manifest
 from omega.historical.manifests import save_dataset_manifest, save_normalized_dataset
 from omega.historical.normalize import sport_family_for
@@ -200,9 +205,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.prop_context:
         try:
             bundle.prop_context = json.loads(Path(args.prop_context).read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, OSError) as exc:
             logger.error(
-                "Invalid JSON in prop-context file %s: %s", args.prop_context, exc
+                "Invalid JSON or file error in prop-context file %s: %s", args.prop_context, exc
             )
             return 1
         bundle.files.append(args.prop_context)

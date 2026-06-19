@@ -136,6 +136,7 @@ def build_replay_summary(
     eligible_denominator = n_persisted if eligible_denominator is None else eligible_denominator
 
     return {
+        "schema_version": 1,
         "replay_id": manifest.replay_id,
         "dataset_manifest_id": manifest.dataset_manifest_id,
         "league": league or manifest.league,
