@@ -85,6 +85,7 @@ def evaluate_parity(
         state = "PASS"
 
     return {
+        "schema_version": 1,
         "state": state,
         "historical_n": len(hist_probs),
         "live_n": live_n,
@@ -113,17 +114,21 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     hstore = TraceStore(db_path=args.historical_db)
-    historical = hstore.query_traces(
-        league=args.league, execution_mode="historical_replay",
-        has_outcome=True, calibration_eligible_only=True, limit=1_000_000,
-    )
-    hstore.close()
+    try:
+        historical = hstore.query_traces(
+            league=args.league, execution_mode="historical_replay",
+            has_outcome=True, calibration_eligible_only=True, limit=1_000_000,
+        )
+    finally:
+        hstore.close()
 
     lstore = TraceStore(db_path=args.live_db)
-    live = lstore.get_graded_traces(league=args.league, limit=1_000_000)
-    # Live = non-replay graded traces only.
-    live = [t for t in live if t.get("execution_mode") != "historical_replay"]
-    lstore.close()
+    try:
+        live = lstore.get_graded_traces(league=args.league, limit=1_000_000)
+        # Live = non-replay graded traces only.
+        live = [t for t in live if t.get("execution_mode") != "historical_replay"]
+    finally:
+        lstore.close()
 
     report = evaluate_parity(historical, live, min_live_n=args.min_live_n)
     report["league"] = args.league

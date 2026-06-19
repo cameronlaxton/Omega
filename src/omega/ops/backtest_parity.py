@@ -50,6 +50,7 @@ def evaluate_backtest_parity(
     reasons: list[str] = []
     if n_eval == 0:
         return {
+            "schema_version": 1,
             "plane": plane, "n_eval": 0, "candidate": None, "incumbent": None,
             "recommend_promotion": False, "reasons": ["no eval pairs"],
         }
@@ -65,9 +66,11 @@ def evaluate_backtest_parity(
             recommend = False
             reasons.append("ece_regressed")
     else:
+        recommend = False
         reasons.append("no_incumbent_baseline")
 
     return {
+        "schema_version": 1,
         "plane": plane,
         "n_eval": n_eval,
         "candidate": candidate,
@@ -106,18 +109,24 @@ def main(argv: list[str] | None = None) -> int:
     if candidate is None:
         logger.error("unknown candidate profile_id=%s", args.candidate_id)
         return 2
-    incumbent = (
-        _find_profile(registry, args.incumbent_id)
-        if args.incumbent_id
-        else registry.gating_incumbent(candidate)
-    )
+    if args.incumbent_id:
+        incumbent = _find_profile(registry, args.incumbent_id)
+        if incumbent is None:
+            logger.warning(
+                "--incumbent-id=%s not found in registry; proceeding without incumbent baseline.",
+                args.incumbent_id,
+            )
+    else:
+        incumbent = registry.gating_incumbent(candidate)
 
     store = TraceStore(db_path=args.historical_db)
-    graded = store.query_traces(
-        league=args.league, execution_mode="historical_replay",
-        has_outcome=True, calibration_eligible_only=True, limit=1_000_000,
-    )
-    store.close()
+    try:
+        graded = store.query_traces(
+            league=args.league, execution_mode="historical_replay",
+            has_outcome=True, calibration_eligible_only=True, limit=1_000_000,
+        )
+    finally:
+        store.close()
 
     report = evaluate_backtest_parity(graded, candidate, incumbent, plane=args.plane)
     print(json.dumps(report, indent=2))

@@ -35,6 +35,7 @@ def test_parity_pass_when_distributions_match():
     hist = [_trace(0.6) for _ in range(250)]
     live = [_trace(0.6) for _ in range(250)]
     r = evaluate_parity(hist, live, min_live_n=200)
+    assert r["schema_version"] == 1
     assert r["state"] == "PASS"
     assert r["promotable_historical_only"] is True
 
@@ -43,6 +44,7 @@ def test_parity_fail_on_shift():
     hist = [_trace(0.9) for _ in range(250)]
     live = [_trace(0.2) for _ in range(250)]
     r = evaluate_parity(hist, live, min_live_n=200)
+    assert r["schema_version"] == 1
     assert r["state"] == "FAIL"
     assert r["promotable_historical_only"] is False
 
@@ -51,6 +53,7 @@ def test_parity_inconclusive_on_small_live_n():
     hist = [_trace(0.6) for _ in range(250)]
     live = [_trace(0.6) for _ in range(10)]
     r = evaluate_parity(hist, live, min_live_n=200)
+    assert r["schema_version"] == 1
     assert r["state"] == "INCONCLUSIVE"
 
 
@@ -59,6 +62,7 @@ def test_parity_ignores_advisory_book_mix():
     hist = [_trace(0.6, book="dk") for _ in range(250)]
     live = [_trace(0.6, book="fanduel") for _ in range(250)]
     r = evaluate_parity(hist, live, min_live_n=200)
+    assert r["schema_version"] == 1
     assert r["state"] == "PASS"
     assert r["advisory"]["book"] > 0.25  # the book mix really did shift
 
@@ -77,14 +81,16 @@ def _graded(n=40):
     return graded
 
 
-def test_backtest_parity_recommends_without_incumbent():
+def test_backtest_parity_refuses_without_incumbent():
     graded = _graded()
     fitter = CalibrationFitter()
     preds, outs = fitter.extract_pairs(graded)
     cand = fitter.fit_isotonic(preds, outs, league="TEST", market="game")
     r = evaluate_backtest_parity(graded, cand, None, plane="game")
+    assert r["schema_version"] == 1
     assert r["n_eval"] == len(preds) > 0
-    assert r["recommend_promotion"] is True
+    assert r["recommend_promotion"] is False
+    assert "no_incumbent_baseline" in r["reasons"]
     assert r["candidate"]["brier_score"] is not None
 
 
@@ -95,5 +101,6 @@ def test_backtest_parity_refuses_when_no_brier_improvement():
     prof = fitter.fit_isotonic(preds, outs, league="TEST", market="game")
     # Same profile as candidate and incumbent -> no Brier improvement -> refuse.
     r = evaluate_backtest_parity(graded, prof, prof, plane="game")
+    assert r["schema_version"] == 1
     assert r["recommend_promotion"] is False
     assert "brier_not_improved" in r["reasons"]

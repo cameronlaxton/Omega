@@ -1,4 +1,4 @@
-"""Replay engine: historical events → normal TraceStore traces.
+﻿"""Replay engine: historical events → normal TraceStore traces.
 
 For each historical event the engine builds an as-of feature snapshot and an
 as-of odds snapshot, runs the leakage guard, calls the **normal** ``analyze()``
@@ -46,6 +46,7 @@ from omega.trace.store import TraceStore
 # Schema version for the replay record provenance block. Bump when the shape of
 # the persisted replay metadata (source_provenance, hashes) changes.
 ARTIFACT_SCHEMA_VERSION = 1
+
 
 
 class LeakageError(RuntimeError):

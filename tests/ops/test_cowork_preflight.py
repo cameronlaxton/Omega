@@ -1,11 +1,24 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import errno
+import os
 import importlib.metadata
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from omega.ops import cowork_preflight
+
+
+@pytest.fixture(autouse=True)
+def _clear_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Strip GIT_* env vars so git subprocesses (in helpers and in production
+    code under test) always discover the correct temp-repo .git, not the
+    hook-inherited real-repo GIT_DIR."""
+    for key in list(os.environ):
+        if key.startswith("GIT_"):
+            monkeypatch.delenv(key, raising=False)
 
 
 def test_python_below_310_fails():
@@ -95,7 +108,8 @@ def test_cowork_local_workspace_guard_passes_expected_workspace(monkeypatch, tmp
 
 
 def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True, env=env)
 
 
 def _init_repo(tmp_path: Path) -> Path:

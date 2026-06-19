@@ -217,22 +217,26 @@ def _load_graded_traces(args: argparse.Namespace) -> list[dict[str, Any]]:
     graded: list[dict[str, Any]] = []
     if not args.historical_only:
         store = TraceStore(db_path=args.db)
-        log_effective_db(store, logger)
-        graded.extend(store.get_graded_traces(league=args.league, limit=100_000))
-        store.close()
+        try:
+            log_effective_db(store, logger)
+            graded.extend(store.get_graded_traces(league=args.league, limit=100_000))
+        finally:
+            store.close()
     if args.historical_only or args.include_historical:
         hstore = TraceStore(db_path=args.historical_db)
-        logger.info("historical DB: %s", args.historical_db)
-        graded.extend(
-            hstore.query_traces(
-                league=args.league,
-                execution_mode="historical_replay",
-                has_outcome=True,
-                calibration_eligible_only=True,
-                limit=1_000_000,
+        try:
+            logger.info("historical DB: %s", args.historical_db)
+            graded.extend(
+                hstore.query_traces(
+                    league=args.league,
+                    execution_mode="historical_replay",
+                    has_outcome=True,
+                    calibration_eligible_only=True,
+                    limit=1_000_000,
+                )
             )
-        )
-        hstore.close()
+        finally:
+            hstore.close()
     return graded
 
 
@@ -335,7 +339,7 @@ def main(argv: list[str] | None = None) -> int:
                 "date-windowed fit requires at least --train-end and --holdout-start."
             )
             return 1
-        if args.holdout_start < args.train_end and not args.allow_same_season_shadow:
+        if args.holdout_start <= args.train_end and not args.allow_same_season_shadow:
             logger.error(
                 "holdout-start (%s) precedes train-end (%s): same-season leakage. Pass "
                 "--allow-same-season-shadow for shadow diagnostics only (never promotable).",
@@ -506,5 +510,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 

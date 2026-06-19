@@ -94,6 +94,7 @@ def _config(tmp_path) -> ReplayConfig:
         backtest_db_path=str(tmp_path / "backtest.db"),
         session_id="hist-test",
         enable_staking=True,
+        odds_timing_class="decision_time_safe",
         n_iterations=200,
     )
 

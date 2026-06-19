@@ -14,6 +14,7 @@ import logging
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from omega.historical.adapters.csv_games import CsvGamesAdapter
 from omega.historical.adapters.csv_odds import CsvOddsAdapter
@@ -22,7 +23,12 @@ from omega.historical.adapters.nba_csv import NbaCsvAdapter
 from omega.historical.adapters.nflfast_csv import NflfastCsvAdapter
 from omega.historical.adapters.soccer_football_data import SoccerFootballDataAdapter
 from omega.historical.adapters.tennis_atp_csv import TennisAtpCsvAdapter
-from omega.historical.contracts import HistoricalEvent, HistoricalOutcome, OddsObservation
+from omega.historical.contracts import (
+    HistoricalEvent,
+    HistoricalOutcome,
+    HistoricalPropMarket,
+    OddsObservation,
+)
 from omega.historical.dataset_manifest import compute_manifest
 from omega.historical.manifests import save_dataset_manifest, save_normalized_dataset
 from omega.historical.normalize import sport_family_for
@@ -42,10 +48,17 @@ class IngestBundle:
     odds: list[OddsObservation] = field(default_factory=list)
     extra_context: dict[str, dict] = field(default_factory=dict)
     history_override: dict[str, list[TeamGameRow]] | None = None
-    prop_markets: dict[str, list] = field(default_factory=dict)
-    prop_context: dict[str, dict] = field(default_factory=dict)
+    prop_markets: dict[str, list[HistoricalPropMarket]] = field(default_factory=dict)
+    prop_context: dict[str, dict[str, Any]] = field(default_factory=dict)
     files: list[str] = field(default_factory=list)
     row_counts: dict[str, int] = field(default_factory=dict)
+
+
+def _apply_clean_events(bundle: IngestBundle, clean_events: list[HistoricalEvent]) -> None:
+    kept_event_ids = {event.event_id for event in clean_events}
+    bundle.events = clean_events
+    bundle.outcomes = [outcome for outcome in bundle.outcomes if outcome.event_id in kept_event_ids]
+    bundle.odds = [odds for odds in bundle.odds if odds.event_key in kept_event_ids]
 
 
 def _merge_prop_outcomes(
@@ -53,11 +66,19 @@ def _merge_prop_outcomes(
 ) -> list[HistoricalOutcome]:
     """Attach prop outcomes onto matching event outcomes (or create new ones)."""
     by_id = {o.event_id: o for o in outcomes}
+    orphan_count = 0
     for ek, pos in po_by_event.items():
         if ek in by_id:
             by_id[ek] = by_id[ek].model_copy(update={"prop_outcomes": pos})
         else:
+            orphan_count += 1
             by_id[ek] = HistoricalOutcome(event_id=ek, prop_outcomes=pos)
+    if orphan_count:
+        logger.warning(
+            "%d prop-outcome event(s) have no matching game outcome — "
+            "created HistoricalOutcome records with prop_outcomes only.",
+            orphan_count,
+        )
     return list(by_id.values())
 
 
@@ -162,10 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     clean_events, rejected = partition_events(bundle.events)
     if rejected:
         path = write_rejected(rejected, args.league, root=args.quarantine_root)
-        rejected_ids = {r["event_id"] for r in rejected}
-        bundle.events = clean_events
-        bundle.outcomes = [o for o in bundle.outcomes if o.event_id not in rejected_ids]
-        bundle.odds = [o for o in bundle.odds if o.event_key not in rejected_ids]
+        _apply_clean_events(bundle, clean_events)
         logger.warning("Quarantined %d row(s) -> %s", len(rejected), path)
     if not bundle.events:
         logger.error("no clean events after quarantine for %s", args.games)
@@ -185,9 +203,17 @@ def main(argv: list[str] | None = None) -> int:
             bundle.files.append(args.prop_markets)
             bundle.row_counts[args.prop_markets] = pa.row_count(args.prop_markets)
     if args.prop_context:
-        bundle.prop_context = json.loads(Path(args.prop_context).read_text(encoding="utf-8"))
+        try:
+            bundle.prop_context = json.loads(Path(args.prop_context).read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.error(
+                "Invalid JSON or file error in prop-context file %s: %s", args.prop_context, exc
+            )
+            return 1
+        bundle.files.append(args.prop_context)
 
     family = sport_family_for(args.league)
+    timing = args.odds_timing_class or timing_class_for_source(args.source).value
     manifest = compute_manifest(
         bundle.files,
         source_name=args.source,
@@ -196,9 +222,8 @@ def main(argv: list[str] | None = None) -> int:
         row_counts=bundle.row_counts,
         date_range=_date_range(bundle.events),
         limitations=args.limitations,
+        odds_timing_class=timing,
     )
-    timing = args.odds_timing_class or timing_class_for_source(args.source).value
-    manifest = manifest.model_copy(update={"odds_timing_class": timing})
     save_dataset_manifest(manifest, root=args.root)
     save_normalized_dataset(
         manifest.manifest_id,

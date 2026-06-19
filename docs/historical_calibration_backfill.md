@@ -5,7 +5,7 @@ real Omega engine **outcome-blind**, attaching the actual result, and fitting
 **candidate** profiles from the enlarged pool — without contaminating the
 production trace DB or leaking post-game data into pre-game context.
 
-```
+```text
 source CSV → ingest (manifest+normalize+quarantine) → validate → replay (dedicated DB)
           → fit candidate (historical) → parity gates → promote (fail-closed)
 ```

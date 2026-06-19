@@ -1,4 +1,4 @@
-"""omega-replay-history — replay a historical dataset into a DEDICATED calibration DB.
+"""omega-replay-history â€” replay a historical dataset into a DEDICATED calibration DB.
 
 Calibration-oriented sibling of ``replay_historical_slate``. It runs the same
 deterministic :class:`~omega.historical.replay.ReplayEngine` but is purpose-built
@@ -13,7 +13,7 @@ for the calibration backfill loop:
 Replayed traces are synthetic: they live in their own DB and only enter the
 calibration fitter when an operator explicitly passes ``--historical-db`` /
 ``--include-historical`` to ``omega-fit-calibration``. Production
-``var/omega_traces.db`` is never touched. No network — local files only.
+``var/omega_traces.db`` is never touched. No network â€” local files only.
 """
 
 from __future__ import annotations
@@ -55,7 +55,10 @@ def _resolve_frozen_prior_payload(args: argparse.Namespace) -> dict | None:
 
     from omega.trace.priors import get_production_dc_profile
 
-    priors_db = args.priors_db or str(default_trace_db_path())
+    if not args.priors_db:
+        logger.error("Must provide --priors-db when using --rho-profile to ensure replay isolation.")
+        raise SystemExit(2)
+    priors_db = args.priors_db
     store = TraceStore(db_path=priors_db)
     try:
         prof = get_production_dc_profile(store, args.rho_profile)
@@ -193,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         enable_staking=args.enable_staking,
         leakage_policy=args.leakage_policy,
         prior_payload=prior_payload,
+        odds_timing_class=manifest.odds_timing_class or "timing_unknown",
     )
     replay_id = args.replay_id or f"replay_{manifest.manifest_id}"
 
@@ -211,13 +215,23 @@ def main(argv: list[str] | None = None) -> int:
                 limit=1_000_000,
             )
         )
+        eligible_denominator = len(
+            store.query_traces(
+                execution_mode="historical_replay",
+                has_outcome=True,
+                limit=1_000_000,
+            )
+        )
     finally:
         store.close()
 
     save_replay_manifest(result.manifest, root=args.root)
     save_selections(replay_id, result.selections, root=args.root)
     summary = build_replay_summary(
-        result.manifest, eligible_count=eligible_count, league=manifest.league
+        result.manifest,
+        eligible_count=eligible_count,
+        eligible_denominator=eligible_denominator,
+        league=manifest.league,
     )
     save_replay_summary(replay_id, summary, root=args.root)
     save_run_audit(replay_id, render_run_audit(summary), root=args.root)
