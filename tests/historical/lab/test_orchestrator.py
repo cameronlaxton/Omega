@@ -34,6 +34,7 @@ def _persist(store: TraceStore, i: int, p_home: float, home_win: bool, dt: str) 
             "decision_time": dt,
             "historical_replay": True,
             "execution_mode": "historical_replay",
+            "replay_id": "r1",
             "league": "FIFA_INTL",
             "kind": "game",
             "matchup": "X @ Y",

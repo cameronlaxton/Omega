@@ -31,7 +31,7 @@ class FakeOddsClient:
         self.market_available = market_available
         self.event_odds_bookmakers: list[str | None] = []
 
-    def fetch_events(self, league, commence_time_from=None, commence_time_to=None):
+    def fetch_events(self, league, commence_time_from=None, commence_time_to=None, **kwargs):
         return [
             HistoricalEvent(
                 event_id="evt-1",
@@ -42,11 +42,11 @@ class FakeOddsClient:
             )
         ]
 
-    def fetch_event_markets(self, league, event_id, regions="us", bookmakers=None):
+    def fetch_event_markets(self, league, event_id, regions="us", bookmakers=None, **kwargs):
         markets = ["player_points"] if self.market_available else ["player_rebounds"]
         return [EventMarketAvailability(bookmaker=bookmakers or "betmgm", markets=markets)]
 
-    def fetch_current_event_odds(self, league, event_id, regions="us", markets="", bookmakers=None):
+    def fetch_current_event_odds(self, league, event_id, regions="us", markets="", bookmakers=None, **kwargs):
         self.event_odds_bookmakers.append(bookmakers)
         books = [
             BookOdds(
@@ -121,6 +121,7 @@ class FakeEventListClient:
         commence_time_to=None,
         *,
         request_cost=0,
+        **kwargs,
     ):
         self.calls += 1
         if self.events is not None:
@@ -154,7 +155,7 @@ class FakeSoccerOddsClient:
     def __init__(self):
         self.event_odds_bookmakers: list[str | None] = []
 
-    def fetch_events(self, league, commence_time_from=None, commence_time_to=None):
+    def fetch_events(self, league, commence_time_from=None, commence_time_to=None, **kwargs):
         return [
             HistoricalEvent(
                 event_id="evt-soc-1",
@@ -165,10 +166,10 @@ class FakeSoccerOddsClient:
             )
         ]
 
-    def fetch_event_markets(self, league, event_id, regions="us", bookmakers=None):
+    def fetch_event_markets(self, league, event_id, regions="us", bookmakers=None, **kwargs):
         return [EventMarketAvailability(bookmaker=bookmakers or "betmgm", markets=["h2h"])]
 
-    def fetch_current_event_odds(self, league, event_id, regions="us", markets="", bookmakers=None):
+    def fetch_current_event_odds(self, league, event_id, regions="us", markets="", bookmakers=None, **kwargs):
         self.event_odds_bookmakers.append(bookmakers)
         books = [
             BookOdds(
