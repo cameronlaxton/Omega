@@ -201,7 +201,14 @@ def test_renderer_is_pure_and_uses_narrow_tables(store):
 
     assert "TraceStore" not in inspect.getsource(render_intake_markdown)
     assert "## Persisted Recommendation Cards" in rendered
+    in_audit_section = False
     for line in rendered.splitlines():
+        if line.startswith("## Bet-Level Trust Audit"):
+            in_audit_section = True
+        elif line.startswith("## ") and in_audit_section:
+            in_audit_section = False
+        if in_audit_section:
+            continue
         if line.startswith("|") and line.endswith("|"):
             columns = len([part for part in line.split("|")[1:-1]])
             assert columns <= 5

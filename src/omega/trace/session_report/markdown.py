@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from omega.trace.session_report.models import ContextBullet, IntakeReportData, TraceReportCard
+from omega.trace.session_report.models import AuditRow, ContextBullet, IntakeReportData, TraceReportCard
 
 
 def _clean(value: object) -> str:
@@ -119,6 +119,59 @@ def _render_card(card: TraceReportCard) -> list[str]:
     return lines
 
 
+_AUDIT_HEADERS = [
+    "trace_id", "league", "matchup", "market", "selection",
+    "line", "odds", "bookmaker", "odds_at",
+    "output_mode", "tier", "calib_elig", "quality",
+    "evidence", "prior_status", "fallback", "ledger",
+]
+
+
+def _audit_row_cells(row: AuditRow) -> list[str]:
+    warnings_tag = f"⚠ {len(row.resolver_warnings)}" if row.resolver_warnings else "—"
+    return [
+        f"`{row.trace_id}`",
+        _clean(row.league),
+        _clean(row.matchup),
+        _clean(row.market_type),
+        _clean(row.selection),
+        _clean(row.line),
+        _clean(row.odds),
+        _clean(row.bookmaker),
+        _clean(row.odds_resolved_at),
+        _clean(row.output_mode),
+        _clean(row.confidence_tier),
+        _clean(row.calibration_eligible),
+        _clean(row.aggregate_quality),
+        str(row.evidence_count),
+        _clean(row.prior_coverage_status),
+        warnings_tag if row.fallback_usage else "—",
+        _clean(row.ledger_status),
+    ]
+
+
+def _render_audit_table(rows: list[AuditRow]) -> list[str]:
+    """Render the bet-level trust audit table as Markdown."""
+    header = "| " + " | ".join(_AUDIT_HEADERS) + " |"
+    sep = "|" + "|".join("---" for _ in _AUDIT_HEADERS) + "|"
+    lines = ["## Bet-Level Trust Audit", "", header, sep]
+    if not rows:
+        placeholder = "| " + " | ".join("not captured" for _ in _AUDIT_HEADERS) + " |"
+        lines.append(placeholder)
+    else:
+        for row in rows:
+            cells = _audit_row_cells(row)
+            lines.append("| " + " | ".join(cells) + " |")
+    lines.extend([
+        "",
+        "_Legend: `odds_at` = timestamp of the odds snapshot used; "
+        "`prior_status` = data_provenance event from prior injection; "
+        "`fallback` = ⚠ N means N resolver warnings present._",
+        "",
+    ])
+    return lines
+
+
 def render_intake_markdown(data: IntakeReportData) -> str:
     """Render an intake report without DB access or recomputation."""
     lines: list[str] = [_frontmatter(data)]
@@ -162,6 +215,7 @@ def render_intake_markdown(data: IntakeReportData) -> str:
         lines.append("| none | not captured | not captured | not captured | not captured |")
     lines.append("")
 
+    lines.extend(_render_audit_table(data.audit_rows))
     lines.extend(["## Appendix", ""])
     if data.unmatched_ledger_rows:
         lines.append("### Unmatched Ledger Rows")

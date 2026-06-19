@@ -11,6 +11,7 @@ from typing import Any
 from omega.paths import session_inbox_dir
 from omega.trace.session_report.context_bundle import ReportContextBundle, ReportContextEntry
 from omega.trace.session_report.models import (
+    AuditRow,
     ContextBullet,
     CoverageRow,
     EngineView,
@@ -272,6 +273,87 @@ def _coverage_rows(traces: list[dict[str, Any]]) -> list[CoverageRow]:
     return [CoverageRow(label=k, count=v) for k, v in sorted(counts.items())]
 
 
+def _build_audit_row(
+    trace: dict[str, Any],
+    *,
+    ledger_rows: list[dict[str, Any]],
+    evidence_rows: list[dict[str, Any]],
+) -> AuditRow:
+    """Build one AuditRow from a trace + its associated ledger/evidence rows."""
+    tq = _first_dict(trace.get("trace_quality"))
+    result = _first_dict(trace.get("result"))
+    best = _first_dict(result.get("best_bet"))
+    recs = trace.get("recommendations")
+    rec = recs[0] if isinstance(recs, list) and recs and isinstance(recs[0], dict) else {}
+    edge = _first_dict(best, rec, result)
+    first_ledger = ledger_rows[0] if ledger_rows else {}
+    snap = _first_dict(trace.get("input_snapshot"))
+    odds_input = _first_dict(snap.get("odds") or snap.get("request_patch") or {})
+
+    # Resolver warnings: pulled from skipped_reasons on the input snapshot
+    resolver_warnings: list[str] = []
+    snap_skip = snap.get("skipped_reasons")
+    if isinstance(snap_skip, list):
+        resolver_warnings = [str(s) for s in snap_skip]
+    # Also check resolver_warnings stored directly on the trace
+    tw = trace.get("resolver_warnings")
+    if isinstance(tw, list):
+        resolver_warnings.extend(str(s) for s in tw)
+
+    # Prior coverage: look for data_provenance events in the sidecar-embedded audit
+    prior_coverage_status: str | None = None
+    fallback_usage: str | None = None
+    prior_events = trace.get("data_provenance_events") or []
+    if isinstance(prior_events, list):
+        for ev in prior_events:
+            if isinstance(ev, dict) and "prior" in str(ev.get("step", "")):
+                prior_coverage_status = ev.get("status")
+                notes = ev.get("notes") or ""
+                if "fallback" in notes.lower() or "missing" in notes.lower():
+                    fallback_usage = notes[:120]
+                break
+
+    # Odds metadata: pulled from the odds resolver output embedded in snapshot
+    line_val = (
+        _cell(odds_input.get("line"))
+        or _cell(first_ledger.get("line"))
+    )
+    odds_val = (
+        _cell(odds_input.get("odds_over"))
+        or _cell(odds_input.get("moneyline_home"))
+        or _cell(first_ledger.get("price"))
+    )
+    odds_ts = (
+        _cell(snap.get("last_update"))
+        or _cell(odds_input.get("last_update"))
+        or _cell(first_ledger.get("recorded_at"))
+    )
+
+    return AuditRow(
+        trace_id=str(trace.get("trace_id") or ""),
+        sport=_cell(trace.get("sport") or trace.get("league")),
+        league=_cell(trace.get("league")),
+        event_id=_cell(snap.get("event_id") or odds_input.get("event_id")),
+        matchup=_cell(trace.get("matchup")),
+        market_type=_cell(first_ledger.get("market") or trace.get("kind")),
+        selection=_cell(first_ledger.get("selection") or best.get("selection") or rec.get("selection")),
+        line=line_val,
+        odds=odds_val,
+        bookmaker=_cell(first_ledger.get("bookmaker") or snap.get("bookmaker")),
+        odds_resolved_at=odds_ts,
+        output_mode=_cell(tq.get("output_mode") or trace.get("output_mode")),
+        confidence_tier=_cell(edge.get("confidence_tier")),
+        calibration_eligible=_cell(tq.get("calibration_eligible")),
+        aggregate_quality=_cell(tq.get("aggregate_quality") or tq.get("status")),
+        context_source=_cell(snap.get("context_source") or snap.get("context_mode")),
+        evidence_count=len(evidence_rows),
+        prior_coverage_status=prior_coverage_status,
+        fallback_usage=fallback_usage,
+        resolver_warnings=resolver_warnings,
+        ledger_status=_cell(first_ledger.get("status")) if first_ledger else "no ledger row",
+    )
+
+
 def extract_intake_report(
     store: TraceStore,
     *,
@@ -305,6 +387,7 @@ def extract_intake_report(
 
     ignored_context_entries: list[IgnoredContextEntry] = []
     cards: list[TraceReportCard] = []
+    audit_rows: list[AuditRow] = []
     linkage_counter: Counter[str] = Counter()
     provenance_counter: Counter[str] = Counter()
 
@@ -328,6 +411,9 @@ def extract_intake_report(
         )
         decision = _decision_fields(trace, ledgers)
         tq = _first_dict(trace.get("trace_quality"))
+        audit_rows.append(
+            _build_audit_row(trace, ledger_rows=ledgers, evidence_rows=evidence)
+        )
         cards.append(
             TraceReportCard(
                 trace_id=trace_id,
@@ -371,6 +457,7 @@ def extract_intake_report(
         ledger_linkage=[CoverageRow(label=k, count=v) for k, v in sorted(linkage_counter.items())],
         provenance_split=[CoverageRow(label=k, count=v) for k, v in sorted(provenance_counter.items())],
         cards=cards,
+        audit_rows=audit_rows,
         unmatched_ledger_rows=unmatched,
         ignored_context_entries=ignored_context_entries,
     )

@@ -82,6 +82,39 @@ class IgnoredContextEntry(BaseModel):
     reason: str
 
 
+class AuditRow(BaseModel):
+    """Per-bet trust audit row for the end-of-session bet-level audit table.
+
+    Every recommended bet (or research candidate) gets one row so the operator
+    can assess at a glance which bets are clean, which are weak, and which are
+    research-only without reading individual cards.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    trace_id: str
+    sport: str | None = None
+    league: str | None = None
+    event_id: str | None = None
+    matchup: str | None = None
+    market_type: str | None = None
+    selection: str | None = None
+    line: str | None = None
+    odds: str | None = None
+    bookmaker: str | None = None
+    odds_resolved_at: str | None = None
+    output_mode: str | None = None
+    confidence_tier: str | None = None
+    calibration_eligible: str | None = None
+    aggregate_quality: str | None = None
+    context_source: str | None = None
+    evidence_count: int = 0
+    prior_coverage_status: str | None = None
+    fallback_usage: str | None = None
+    resolver_warnings: list[str] = Field(default_factory=list)
+    ledger_status: str | None = None
+
+
 class IntakeReportData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -99,5 +132,6 @@ class IntakeReportData(BaseModel):
     ledger_linkage: list[CoverageRow]
     provenance_split: list[CoverageRow]
     cards: list[TraceReportCard]
+    audit_rows: list[AuditRow] = Field(default_factory=list)
     unmatched_ledger_rows: list[str] = Field(default_factory=list)
     ignored_context_entries: list[IgnoredContextEntry] = Field(default_factory=list)

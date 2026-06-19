@@ -29,6 +29,7 @@ from omega.integrations.odds_api import (
     OddsApiBudgetExceeded,
     OddsApiClient,
     OddsApiKeyMissing,
+    TENNIS_TOUR_KEY_PREFIXES,
     resolve_tennis_sport_keys,
 )
 from omega.integrations.odds_cache import OddsCache
@@ -82,6 +83,38 @@ PROP_MARKET_MAP: dict[str, dict[str, str]] = {
         "saves": "player_saves",
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Structured skip reason codes — stable, machine-readable identifiers
+# ---------------------------------------------------------------------------
+
+SKIP_NO_API_KEY = "no_api_key"
+SKIP_NO_EVENT_MATCH = "no_event_match"
+SKIP_MARKET_UNAVAILABLE = "market_unavailable"
+SKIP_NO_PROVIDER_MAPPING = "no_provider_mapping"
+SKIP_NO_QUOTES_MATCH = "no_quotes_match"
+SKIP_MISSING_PARAMETERS = "missing_parameters"
+SKIP_UNKNOWN = "unknown"
+
+
+def _classify_skip_code(skipped: list[str]) -> str:
+    """Map the first skip reason string to a stable machine-readable code."""
+    first = next(iter(skipped), "")
+    low = first.lower()
+    if "omega_odds_api_key" in first or "api_key" in low or "OddsApiKeyMissing" in first:
+        return SKIP_NO_API_KEY
+    if "no exact event match" in first or "event_id or exact" in first:
+        return SKIP_NO_EVENT_MATCH
+    if "no provider market mapping" in first:
+        return SKIP_NO_PROVIDER_MAPPING
+    if "does not list market" in first or ("market" in low and "unavailable" in low):
+        return SKIP_MARKET_UNAVAILABLE
+    if "no exact betmgm" in low or "no exact market match" in low:
+        return SKIP_NO_QUOTES_MATCH
+    if "player_name and prop_type" in first:
+        return SKIP_MISSING_PARAMETERS
+    return SKIP_UNKNOWN
 
 
 def provider_market_for_prop(league: str, prop_type: str) -> str | None:
@@ -300,6 +333,114 @@ def _event_to_row(event: HistoricalEvent, league: str) -> dict[str, Any]:
     }
 
 
+def _list_tennis_events(
+    *,
+    league: str,
+    commence_time_from: str | None,
+    commence_time_to: str | None,
+    client: OddsApiClient,
+    cache: OddsCache,
+) -> dict[str, Any]:
+    """Collect events across all active per-tournament sport keys for an ATP/WTA tour.
+
+    Tennis provider keys churn through the season (tennis_atp_wimbledon,
+    tennis_wta_french_open, …), so a single static key never works.  This
+    helper resolves the active key list, fetches events from each, and merges
+    them into one payload so the caller sees a single league-level event list.
+
+    Graceful degradation:
+    * key-resolution failure with a stale cache → serves the cache;
+    * no active keys → returns ``status="empty"`` with an explicit note;
+    * individual key fetch errors → skipped with a warning, not fatal.
+    """
+    tour = league.upper()
+    try:
+        sport_keys = resolve_tennis_sport_keys(client, tour)
+    except OddsApiKeyMissing as exc:
+        return {
+            "status": "unavailable",
+            "kind": "event_list",
+            "league": tour,
+            "commence_time_from": commence_time_from,
+            "commence_time_to": commence_time_to,
+            "sport_keys": [],
+            "events": [],
+            "metadata": [],
+            "quota": {},
+            "skipped_reasons": [str(exc)],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "unavailable",
+            "kind": "event_list",
+            "league": tour,
+            "commence_time_from": commence_time_from,
+            "commence_time_to": commence_time_to,
+            "sport_keys": [],
+            "events": [],
+            "metadata": [],
+            "quota": {},
+            "skipped_reasons": [f"tennis sport-key resolution failed: {exc}"],
+        }
+
+    if not sport_keys:
+        return {
+            "status": "empty",
+            "kind": "event_list",
+            "league": tour,
+            "commence_time_from": commence_time_from,
+            "commence_time_to": commence_time_to,
+            "sport_keys": [],
+            "events": [],
+            "metadata": [f"no_active_{tour.lower()}_tournament_keys"],
+            "quota": dict(client.last_quota_headers),
+            "skipped_reasons": [f"no active {tour} tournament keys found; season may be off"],
+        }
+
+    all_events: list[dict[str, Any]] = []
+    key_warnings: list[str] = []
+    for sport_key in sport_keys:
+        try:
+            key_events = client.fetch_events(
+                league,
+                commence_time_from=commence_time_from,
+                commence_time_to=commence_time_to,
+                sport_key=sport_key,
+                request_cost=0,
+            )
+            all_events.extend(_event_to_row(e, league) for e in key_events)
+        except OddsApiKeyMissing:
+            raise  # re-raise budget/key errors — these are not per-key issues
+        except Exception as exc:  # noqa: BLE001
+            key_warnings.append(f"skipped {sport_key}: {exc}")
+
+    payload = {
+        "status": "success" if all_events else "empty",
+        "kind": "event_list",
+        "league": tour,
+        "commence_time_from": commence_time_from,
+        "commence_time_to": commence_time_to,
+        "sport_keys": sport_keys,
+        "events": all_events,
+        "metadata": [
+            "source: live_api",
+            "cache_kind: event_list",
+            f"tennis_sport_keys_checked: {len(sport_keys)}",
+        ],
+        "quota": dict(client.last_quota_headers),
+        "skipped_reasons": key_warnings if not all_events else [],
+    }
+    # Cache as a normal event-list entry using a synthetic league key so the
+    # cache lookup in list_events() can short-circuit on repeated calls.
+    key = cache.compute_event_list_cache_key(
+        league,
+        commence_time_from=commence_time_from,
+        commence_time_to=commence_time_to,
+    )
+    cache.set(key, league, "events", payload, entry_type="event_list")
+    return payload
+
+
 def list_events(
     *,
     league: str,
@@ -308,7 +449,12 @@ def list_events(
     client: OddsApiClient | None = None,
     cache: OddsCache | None = None,
 ) -> dict[str, Any]:
-    """List current events for a league with a hard local TTL cache."""
+    """List current events for a league with a hard local TTL cache.
+
+    For tennis tours (ATP, WTA, GRAND_SLAM) the provider's sport keys churn
+    per tournament; pass the tour code here and the function resolves active
+    keys dynamically via :func:`resolve_tennis_sport_keys`.
+    """
     assert_not_replay_mode("Odds event listing")
     cache = cache or OddsCache()
     key = cache.compute_event_list_cache_key(
@@ -321,6 +467,18 @@ def list_events(
         return cached
 
     client = client or OddsApiClient()
+
+    # Tennis tours are not in the static SPORT_KEY_MAP — dispatch to the
+    # dedicated helper that iterates active per-tournament keys.
+    if league.upper() in TENNIS_TOUR_KEY_PREFIXES or league.upper() == "GRAND_SLAM":
+        return _list_tennis_events(
+            league=league,
+            commence_time_from=commence_time_from,
+            commence_time_to=commence_time_to,
+            client=client,
+            cache=cache,
+        )
+
     try:
         events, event_skips, reason_codes = _fetch_events_for_resolution(
             client,
@@ -677,15 +835,18 @@ def resolve_odds(
     # 2. Cache Miss - Execute external resolution
     client = client or OddsApiClient()
     skipped: list[str] = []
-    resolved_event_id, resolved_sport_key, event_skips, event_skip_codes = _resolve_event_id(
-        client,
-        league,
-        event_id=event_id,
-        home_team=home_team,
-        away_team=away_team,
-        commence_time_from=commence_time_from,
-        commence_time_to=commence_time_to,
-    )
+    try:
+        resolved_event_id, resolved_sport_key, event_skips, event_skip_codes = _resolve_event_id(
+            client,
+            league,
+            event_id=event_id,
+            home_team=home_team,
+            away_team=away_team,
+            commence_time_from=commence_time_from,
+            commence_time_to=commence_time_to,
+        )
+    except OddsApiKeyMissing as exc:
+        return _fail(_unavailable(kind, league, bookmaker, [str(exc)], client))
     skipped.extend(event_skips)
     if not resolved_event_id:
         return _fail(_unavailable(kind, league, bookmaker, skipped, client))
@@ -847,6 +1008,7 @@ def _unavailable(
         "request_patch": None,
         "quotes": quotes or [],
         "skipped_reasons": skipped,
+        "skip_code": _classify_skip_code(skipped),
         "quota": dict(client.last_quota_headers),
     }
 
