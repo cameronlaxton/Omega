@@ -1,9 +1,0 @@
-tourney_date,surface,best_of,round,winner_name,loser_name,w_svpt,w_1stWon,w_2ndWon,l_svpt,l_1stWon,l_2ndWon
-20230102,Hard,3,QF,Novak Djokovic,Jannik Sinner,88,52,16,92,46,14
-20230102,Hard,3,QF,Carlos Alcaraz,Daniil Medvedev,90,55,15,85,44,12
-20230213,Hard,3,SF,Jannik Sinner,Daniil Medvedev,84,50,14,89,43,15
-20230213,Hard,3,SF,Carlos Alcaraz,Novak Djokovic,95,58,17,91,48,13
-20230306,Hard,5,F,Novak Djokovic,Daniil Medvedev,120,72,22,118,60,20
-20230306,Hard,5,F,Carlos Alcaraz,Jannik Sinner,115,70,21,112,58,19
-20230410,Clay,3,F,Carlos Alcaraz,Novak Djokovic,98,60,18,96,50,14
-20230410,Clay,3,SF,Jannik Sinner,Daniil Medvedev,86,51,15,90,45,13
