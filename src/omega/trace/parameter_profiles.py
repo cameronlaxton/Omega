@@ -282,3 +282,113 @@ def reject_parameter_profile(
     result = get_parameter_profile(store, profile_id)
     assert result is not None
     return result
+
+
+# ---------------------------------------------------------------------------
+# Trace-level parameter-profile provenance (P8.0.3)
+# ---------------------------------------------------------------------------
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _candidate_result_dicts(trace: dict[str, Any]):
+    """Yield dicts within a trace that may carry simulation provenance fields.
+
+    The persisted simulation result can sit at a few nesting points depending on
+    the caller (top level, ``result``, ``simulation``, ``result.simulation``), so
+    the extractor searches each rather than assuming one shape.
+    """
+    yield trace
+    for key in ("result", "simulation"):
+        val = trace.get(key)
+        if isinstance(val, dict):
+            yield val
+            inner = val.get("simulation")
+            if isinstance(inner, dict):
+                yield inner
+
+
+def extract_parameter_profile_ref(trace: dict[str, Any]) -> dict[str, Any] | None:
+    """Pull the governed parameter-profile provenance ref from a trace dict.
+
+    Resolution order:
+
+    1. An explicit ``parameter_profile_ref`` dict stamped by the gatherer when it
+       injects a governed :class:`BackendParameterProfile` (P8.2+), at the top
+       level or on the simulation result.
+    2. Legacy soccer Dixon-Coles provenance the soccer backend already echoes onto
+       its result (``rho_profile_id`` / ``rho_as_of_date``), synthesized into a
+       partial ref so today's rho provenance becomes queryable with no backend
+       change.
+
+    Returns None when a trace carries no governed-parameter provenance (the
+    ``freshness=unpinned`` case).
+    """
+    if not isinstance(trace, dict):
+        return None
+    for d in _candidate_result_dicts(trace):
+        ref = d.get("parameter_profile_ref")
+        if isinstance(ref, dict) and ref:
+            return ref
+    for d in _candidate_result_dicts(trace):
+        rho_profile = d.get("rho_profile_id")
+        if rho_profile:
+            return {
+                "backend_name": d.get("backend_name"),
+                "backend_component_version": d.get("component_version"),
+                "param_profile_id": rho_profile,
+                "priors_as_of_date": d.get("rho_as_of_date"),
+                "source": "legacy_dc_rho",
+            }
+    return None
+
+
+def get_parameter_profile_ref(store: TraceStore, trace_id: str) -> dict[str, Any] | None:
+    """Return the stored parameter_profile_ref for a trace, or None (unpinned)."""
+    row = store.conn.execute(
+        "SELECT parameter_profile_ref FROM traces WHERE trace_id = ?", (trace_id,)
+    ).fetchone()
+    if row is None or row[0] is None:
+        return None
+    return json.loads(row[0])
+
+
+def parameter_pin_status(
+    store: TraceStore, trace_id: str
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Return ``(ref, data_provenance_event)`` for a replay/lab pin attempt.
+
+    A trace with a stored ref is *pinned*: any re-derivation of its parameters must
+    use the ref, not a live-table read, so replay stays reproducible. A trace
+    without one is *unpinned* (it predates parameter-profile governance or used an
+    ungoverned backend): the event is a loud ``freshness=unpinned`` warning so a
+    non-reproducible live re-read is never silent. Consumed by the lab (P8.1) and
+    the soccer pilot (P8.2); the event shape matches the gatherer's other
+    ``data_provenance`` sidecar events.
+    """
+    ref = get_parameter_profile_ref(store, trace_id)
+    if ref is not None:
+        return ref, {
+            "ts": _utc_now_iso(),
+            "event_type": "data_provenance",
+            "step": "parameter_profile:pin",
+            "status": "ok",
+            "notes": (
+                f"pinned trace {trace_id} to param_profile_id={ref.get('param_profile_id')!r}"
+            ),
+            "outputs": {"parameter_profile_ref": ref},
+        }
+    return None, {
+        "ts": _utc_now_iso(),
+        "event_type": "data_provenance",
+        "step": "parameter_profile:pin",
+        "status": "warn",
+        "notes": (
+            f"trace {trace_id} has no parameter_profile_ref (freshness=unpinned); it "
+            "predates parameter-profile governance or used an ungoverned backend, so any "
+            "re-derivation reads live priors tables and is not guaranteed reproducible"
+        ),
+        "outputs": {"freshness": "unpinned"},
+    }

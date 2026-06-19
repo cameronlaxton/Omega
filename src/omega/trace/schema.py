@@ -124,7 +124,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 19
+CURRENT_VERSION = 20
 
 # ---------------------------------------------------------------------------
 # Version lineage (applied in order by TraceStore._ensure_schema)
@@ -159,6 +159,7 @@ CURRENT_VERSION = 19
 #   V17 SCHEMA_V17           priors_tennis + priors_tennis_pressure (tennis dynamic priors)
 #   V18 SCHEMA_V18           priors_nfl_dispersion (NFL NB dispersion k w/ shrinkage provenance)
 #   V19 SCHEMA_V19           parameter_profiles (governed backend structural-parameter profiles)
+#   V20 apply_v20_migration  traces.parameter_profile_ref column (trace-level param provenance)
 #
 # There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
 # apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
@@ -831,3 +832,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_parameter_profiles_production
 CREATE INDEX IF NOT EXISTS idx_parameter_profiles_lookup
     ON parameter_profiles(backend_name, competition_bucket, status);
 """
+
+
+# V20: trace-level parameter-profile provenance (Phase 8). Adds a queryable
+# traces.parameter_profile_ref column holding the BackendParameterProfile.trace_ref()
+# JSON for the governed param set that priced a trace (backend, component version,
+# param_profile_id, competition bucket, pinned priors_as_of_date, dataset_hash).
+# The full_trace blob already carries these values; surfacing them as a single
+# typed column makes a probability attributable to its exact parameter set and lets
+# a replay/lab pin from the ref (or emit a loud freshness=unpinned audit when it is
+# absent) instead of trusting a live re-read. ALTER ADD COLUMN is non-idempotent in
+# SQLite, so apply via the helper which probes PRAGMA table_info first.
+V20_ADD_COLUMN_SQL = "ALTER TABLE traces ADD COLUMN parameter_profile_ref TEXT"
+
+
+def apply_v20_migration(conn) -> None:
+    """Idempotently apply V20: add traces.parameter_profile_ref.
+
+    Probes PRAGMA table_info first (SQLite has no ADD COLUMN IF NOT EXISTS) so
+    re-running on a V20 DB is a no-op. No index: the column holds a JSON ref blob,
+    not a query key, so an index would not help equality lookups inside the JSON.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(traces)").fetchall()}
+    if "parameter_profile_ref" not in cols:
+        conn.execute(V20_ADD_COLUMN_SQL)
+    conn.commit()

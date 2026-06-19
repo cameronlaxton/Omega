@@ -85,10 +85,10 @@ class TestV9Tables:
         assert "idx_signal_performance_key" in names
         store.close()
 
-    def test_current_version_is_nineteen(self):
+    def test_current_version_is_twenty(self):
         store = TraceStore(db_path=_tmp_db_path())
-        assert CURRENT_VERSION == 19
-        assert store.schema_version() == 19
+        assert CURRENT_VERSION == 20
+        assert store.schema_version() == 20
         store.close()
 
     def test_reopening_store_converges_to_current_version(self):

@@ -47,12 +47,12 @@ def test_fresh_and_reopened_db_have_v16_tables():
             "priors_tennis_pressure",
             "priors_nfl_dispersion",
         } <= tables
-        assert store.schema_version() == 19
+        assert store.schema_version() == 20
     finally:
         store.close()
     reopened = TraceStore(db_path=path)
     try:
-        assert reopened.schema_version() == 19
+        assert reopened.schema_version() == 20
     finally:
         reopened.close()
 
@@ -81,7 +81,7 @@ def test_reopening_up_to_date_db_skips_schema_replay(monkeypatch):
     reopened = TraceStore(db_path=path)
     try:
         assert calls["n"] == 0  # fast path: no DDL replay on an up-to-date DB
-        assert reopened.schema_version() == 19
+        assert reopened.schema_version() == 20
     finally:
         reopened.close()
 

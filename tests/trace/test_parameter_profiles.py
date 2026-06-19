@@ -20,9 +20,12 @@ from omega.core.simulation.parameter_profile import (
     make_parameter_profile_id,
 )
 from omega.trace.parameter_profiles import (
+    extract_parameter_profile_ref,
     get_parameter_profile,
+    get_parameter_profile_ref,
     get_production_parameter_profile,
     list_parameter_profiles,
+    parameter_pin_status,
     promote_parameter_profile,
     register_parameter_profile,
     reject_parameter_profile,
@@ -76,7 +79,7 @@ def test_fresh_db_has_v19_table_and_version():
             ).fetchall()
         }
         assert "parameter_profiles" in tables
-        assert store.schema_version() == 19
+        assert store.schema_version() == 20
     finally:
         store.close()
 
@@ -257,3 +260,102 @@ def test_trace_ref_shape():
     assert ref["param_profile_id"] == prof.profile_id
     assert ref["competition_bucket"] == "FIFA_INTL"
     assert "dataset_hash" in ref
+
+
+# ---------------------------------------------------------------------------
+# P8.0.3 — trace parameter_profile_ref provenance + unpinned audit
+# ---------------------------------------------------------------------------
+
+
+def _persist_trace(store: TraceStore, trace_id: str, **extra) -> None:
+    blob = {
+        "trace_id": trace_id,
+        "run_id": "r-" + trace_id,
+        "timestamp": "2026-06-18T12:00:00Z",
+        "prompt": "x",
+        "league": "FIFA_WORLD_CUP_2026",
+        "matchup": "France @ Brazil",
+        "execution_mode": "native_sim",
+        "kind": "game",
+    }
+    blob.update(extra)
+    store.persist(blob)
+
+
+def test_persist_stamps_explicit_parameter_profile_ref():
+    store = _store()
+    try:
+        ref = _profile().trace_ref()
+        _persist_trace(store, "t-explicit", parameter_profile_ref=ref)
+        got = get_parameter_profile_ref(store, "t-explicit")
+        assert got is not None
+        assert got["param_profile_id"] == ref["param_profile_id"]
+        assert got["backend_name"] == "soccer_bivariate_poisson_dc"
+    finally:
+        store.close()
+
+
+def test_persist_synthesizes_legacy_soccer_rho_ref():
+    """Today's soccer rho provenance (echoed onto the sim result) becomes a
+    queryable ref with no backend change."""
+    store = _store()
+    try:
+        _persist_trace(
+            store,
+            "t-soccer",
+            result={
+                "backend_name": "soccer_bivariate_poisson_dc",
+                "component_version": "soccer_bvp_dc_v1",
+                "rho_profile_id": "fifa_intl_v1",
+                "rho_as_of_date": "2026-06-10",
+                "dc_rho": -0.11,
+            },
+        )
+        got = get_parameter_profile_ref(store, "t-soccer")
+        assert got is not None
+        assert got["param_profile_id"] == "fifa_intl_v1"
+        assert got["priors_as_of_date"] == "2026-06-10"
+        assert got["source"] == "legacy_dc_rho"
+    finally:
+        store.close()
+
+
+def test_trace_without_provenance_is_unpinned():
+    store = _store()
+    try:
+        _persist_trace(store, "t-bare", result={"status": "success"})
+        assert get_parameter_profile_ref(store, "t-bare") is None
+        ref, event = parameter_pin_status(store, "t-bare")
+        assert ref is None
+        assert event["status"] == "warn"
+        assert event["outputs"]["freshness"] == "unpinned"
+        assert event["event_type"] == "data_provenance"
+    finally:
+        store.close()
+
+
+def test_parameter_pin_status_ok_for_pinned_trace():
+    store = _store()
+    try:
+        ref = _profile().trace_ref()
+        _persist_trace(store, "t-pinned", parameter_profile_ref=ref)
+        got, event = parameter_pin_status(store, "t-pinned")
+        assert got is not None
+        assert event["status"] == "ok"
+        assert event["outputs"]["parameter_profile_ref"]["param_profile_id"] == ref["param_profile_id"]
+    finally:
+        store.close()
+
+
+def test_extract_parameter_profile_ref_pure():
+    """The extractor is a pure dict function (no store) — its three resolution
+    tiers, exercised directly."""
+    assert extract_parameter_profile_ref({}) is None
+    assert extract_parameter_profile_ref({"result": {"status": "success"}}) is None
+    explicit = {"param_profile_id": "p1", "backend_name": "b"}
+    assert extract_parameter_profile_ref({"parameter_profile_ref": explicit}) == explicit
+    legacy = extract_parameter_profile_ref(
+        {"result": {"rho_profile_id": "epl_v1", "component_version": "soccer_bvp_dc_v1"}}
+    )
+    assert legacy["param_profile_id"] == "epl_v1"
+    assert legacy["source"] == "legacy_dc_rho"
