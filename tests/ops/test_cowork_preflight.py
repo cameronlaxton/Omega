@@ -6,7 +6,19 @@ import importlib.metadata
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from omega.ops import cowork_preflight
+
+
+@pytest.fixture(autouse=True)
+def _clear_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Strip GIT_* env vars so git subprocesses (in helpers and in production
+    code under test) always discover the correct temp-repo .git, not the
+    hook-inherited real-repo GIT_DIR."""
+    for key in list(os.environ):
+        if key.startswith("GIT_"):
+            monkeypatch.delenv(key, raising=False)
 
 
 def test_python_below_310_fails():
