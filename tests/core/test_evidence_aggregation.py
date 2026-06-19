@@ -207,6 +207,8 @@ def test_signal_application_as_dict_carries_every_traceability_field():
     assert required.issubset(d.keys())
     assert d["family_role"] == "primary"
     assert d["damping_family"] == "player_recency"
+    # 'factor' is the stable legacy alias of final_applied_factor.
+    assert d["factor"] == pytest.approx(d["final_applied_factor"])
 
 
 def test_is_finite_factor():

@@ -47,15 +47,24 @@ __all__ = [
     "FamilyMember",
     "FamilyDampingResult",
     "SignalApplication",
+    "DEFAULT_CONFIDENCE",
     "cap_factor",
     "reliability_adjusted_factor",
     "confidence_adjusted_factor",
+    "resolve_confidence",
     "per_signal_capped_factor",
     "damp_family",
     "plane_aggregate",
 ]
 
 FamilyRole = Literal["primary", "secondary", "singleton"]
+
+# Confidence assumed when a legacy persisted dict / replay reconstruction is
+# missing the field. 1.0 makes confidence weighting a no-op, so replaying a
+# pre-confidence trace reproduces the pre-confidence engine exactly — no silent
+# inflation. The defaulting is flagged (confidence_defaulted) so the feedback
+# report can treat such signals cautiously.
+DEFAULT_CONFIDENCE = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +117,20 @@ def confidence_adjusted_factor(factor: float, confidence: float) -> float:
     coefficients applied at different stages, and stay separately traceable.
     """
     return 1.0 + confidence * (factor - 1.0)
+
+
+def resolve_confidence(value: float | None) -> tuple[float, bool]:
+    """Resolve a signal's confidence, flagging legacy defaulting.
+
+    Live ``EvidenceSignal`` validation requires confidence, so the live engine
+    path always passes a value and the second element is ``False``. Only legacy
+    persisted dicts / replay reconstructions can be missing it; those fall back
+    to :data:`DEFAULT_CONFIDENCE` (a confidence-weighting no-op) and are flagged
+    so downstream feedback can treat them cautiously.
+    """
+    if value is None:
+        return DEFAULT_CONFIDENCE, True
+    return float(value), False
 
 
 def plane_aggregate(factors: list[float]) -> float:
@@ -246,11 +269,18 @@ class SignalApplication:
     final_applied_factor: float
 
     def as_dict(self) -> dict[str, Any]:
-        """Serialize to the per-signal application dict persisted in trace JSON."""
+        """Serialize to the per-signal application dict persisted in trace JSON.
+
+        ``factor`` is kept as a stable alias of ``final_applied_factor`` because
+        existing consumers (the V9 ``evidence_signals`` explode, the analyze
+        envelope, replay tooling) read ``factor`` for the effective applied
+        value. New fields are purely additive.
+        """
         return {
             "signal_type": self.signal_type,
             "target": self.target,
             "applied": self.applied,
+            "factor": self.final_applied_factor,
             "reason": self.reason,
             "policy_version": self.policy_version,
             "evidence_mode": self.evidence_mode,

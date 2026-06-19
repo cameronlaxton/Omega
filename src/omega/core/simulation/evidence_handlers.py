@@ -29,8 +29,15 @@ from typing import Any
 from omega.core.calibration.adjustment_policy import AdjustmentPolicy
 from omega.core.contracts.evidence import (
     EvidenceSignal,
+    damping_family_for,
     resolve_archetype,
     signal_applies,
+)
+from omega.core.simulation.evidence_aggregation import (
+    SignalApplication,
+    confidence_adjusted_factor,
+    reliability_adjusted_factor,
+    resolve_confidence,
 )
 from omega.core.simulation.evidence_aggregation import cap_factor as _cap_factor
 
@@ -48,9 +55,15 @@ _ENV_MODE_VAR = "OMEGA_EVIDENCE_MODE"
 class AdjustmentRecord:
     """Per-signal record of what the engine did (or would do) with one signal.
 
-    ``factor`` is always the computed, capped factor — even in shadow mode — so
-    retrospective scoring can backtest counterfactually. ``applied`` is True only
-    when the engine actually multiplied the factor into the live prediction.
+    ``factor`` is always the computed, capped (and — when the policy enables it —
+    confidence-weighted) factor, even in shadow mode, so retrospective scoring
+    can backtest counterfactually. ``applied`` is True only when the engine
+    actually multiplied the factor into the live prediction.
+
+    The remaining fields decompose the Issue #22 factor sequence so the trace can
+    attribute each stage independently and never falsely credit grouped family
+    math to one signal. They default to a singleton no-op, so a skip record built
+    with only the seven core fields still serializes as identity.
     """
 
     signal_type: str
@@ -61,17 +74,50 @@ class AdjustmentRecord:
     policy_version: str
     evidence_mode: str
 
+    # Factor-sequence attribution (defaults = singleton identity)
+    raw_factor: float = 1.0
+    reliability_weight: float = 1.0
+    reliability_adjusted_factor: float = 1.0
+    per_signal_capped_factor: float = 1.0
+    damping_family: str | None = None
+    family_size: int = 1
+    family_role: str = "singleton"
+    family_damped_factor: float = 1.0
+    family_capped_factor: float = 1.0
+    confidence: float = 1.0
+    confidence_defaulted: bool = False
+    confidence_adjusted_factor: float = 1.0
+    final_applied_factor: float = 1.0
+
     def as_application(self) -> dict[str, Any]:
-        """Serialize to the per-signal dict the trace store persists (V9)."""
-        return {
-            "signal_type": self.signal_type,
-            "target": self.target,
-            "applied": self.applied,
-            "factor": self.factor,
-            "reason": self.reason,
-            "policy_version": self.policy_version,
-            "evidence_mode": self.evidence_mode,
-        }
+        """Serialize to the per-signal dict the trace store persists (V9).
+
+        Routed through the shared :class:`SignalApplication` so the persisted
+        schema lives in exactly one place. ``final_applied_factor`` mirrors
+        ``factor`` for computed records; for bare skip records it stays at the
+        1.0 default, matching ``factor``.
+        """
+        return SignalApplication(
+            signal_type=self.signal_type,
+            target=self.target,
+            applied=self.applied,
+            reason=self.reason,
+            policy_version=self.policy_version,
+            evidence_mode=self.evidence_mode,
+            raw_factor=self.raw_factor,
+            reliability_weight=self.reliability_weight,
+            reliability_adjusted_factor=self.reliability_adjusted_factor,
+            per_signal_capped_factor=self.per_signal_capped_factor,
+            damping_family=self.damping_family,
+            family_size=self.family_size,
+            family_role=self.family_role,
+            family_damped_factor=self.family_damped_factor,
+            family_capped_factor=self.family_capped_factor,
+            confidence=self.confidence,
+            confidence_defaulted=self.confidence_defaulted,
+            confidence_adjusted_factor=self.confidence_adjusted_factor,
+            final_applied_factor=self.final_applied_factor,
+        ).as_dict()
 
 
 @dataclass
@@ -282,6 +328,29 @@ HANDLER_REGISTRY: dict[str, Handler] = {
 # ---------------------------------------------------------------------------
 
 
+def _skip_record(
+    signal: EvidenceSignal, reason: str, policy_version: str, evidence_mode: str
+) -> AdjustmentRecord:
+    """An unapplied, identity record for a signal the engine cannot act on.
+
+    Still records the signal's declared ``damping_family`` and (defaulted-aware)
+    confidence so the trace stays complete for retrospective scoring.
+    """
+    confidence, confidence_defaulted = resolve_confidence(getattr(signal, "confidence", None))
+    return AdjustmentRecord(
+        signal_type=signal.signal_type,
+        target="skip",
+        factor=1.0,
+        applied=False,
+        reason=reason,
+        policy_version=policy_version,
+        evidence_mode=evidence_mode,
+        damping_family=damping_family_for(signal.signal_type),
+        confidence=confidence,
+        confidence_defaulted=confidence_defaulted,
+    )
+
+
 def _evaluate_signal(
     signal: EvidenceSignal,
     *,
@@ -292,21 +361,24 @@ def _evaluate_signal(
 ) -> AdjustmentRecord:
     """Evaluate one signal into a capped, attributable AdjustmentRecord.
 
-    Pure given (signal, policy, archetype, baseline, evidence_mode).
+    Pure given (signal, policy, archetype, baseline, evidence_mode). Walks the
+    Issue #22 factor sequence: reliability adjust (2) -> per-signal cap (3) ->
+    family steps (4-5, identity until Phase 3 wires correlation damping) ->
+    confidence weighting (6, gated on ``policy.enable_confidence_weighting``).
+    The plane product + plane cap (7-8) happen in the plane orchestrators.
     """
     policy_version = policy.policy_id
     handler = HANDLER_REGISTRY.get(signal.signal_type)
     coeffs = policy.coeffs_for(signal.signal_type)
 
     if handler is None or not coeffs:
-        return AdjustmentRecord(
-            signal.signal_type, "skip", 1.0, False,
-            "no handler or coefficients for signal_type", policy_version, evidence_mode,
+        return _skip_record(
+            signal, "no handler or coefficients for signal_type",
+            policy_version, evidence_mode,
         )
     if not signal_applies(signal.signal_type, archetype):
-        return AdjustmentRecord(
-            signal.signal_type, "skip", 1.0, False,
-            f"signal does not apply to sport archetype {archetype!r}",
+        return _skip_record(
+            signal, f"signal does not apply to sport archetype {archetype!r}",
             policy_version, evidence_mode,
         )
 
@@ -317,15 +389,55 @@ def _evaluate_signal(
     # 1.0 no-op for signals that scored as noise. Absent => 1.0 (full trust),
     # so the hand-seeded v1 policy behaves exactly as the raw handler.
     reliability = max(0.0, min(1.0, float(coeffs.get("reliability_weight", 1.0))))
-    damped_factor = 1.0 + reliability * (raw_factor - 1.0)
-    factor = _cap_factor(damped_factor, float(coeffs.get("cap", 0.0)))
-    applied = evidence_mode == "live" and target != "skip" and factor != 1.0
+    reliability_adjusted = reliability_adjusted_factor(raw_factor, reliability)  # step 2
+    per_signal_capped = _cap_factor(
+        reliability_adjusted, float(coeffs.get("cap", 0.0))
+    )  # step 3
+
+    # Steps 4-5 (correlation damping) are wired in Phase 3. Until then every
+    # signal is processed as its own singleton family, so these are identity.
+    family_damped = per_signal_capped
+    family_capped = per_signal_capped
+
+    # Step 6 — confidence weighting, gated. When disabled the factor is the
+    # legacy per-signal-capped value (bit-identical to before this phase).
+    confidence, confidence_defaulted = resolve_confidence(
+        getattr(signal, "confidence", None)
+    )
+    if policy.enable_confidence_weighting:
+        confidence_adjusted = confidence_adjusted_factor(family_capped, confidence)
+    else:
+        confidence_adjusted = family_capped
+
+    final = confidence_adjusted
+    applied = evidence_mode == "live" and target != "skip" and final != 1.0
     reason = (
-        f"{signal.signal_type}: {target} x{factor:.4f} "
-        f"(raw {raw_factor:.4f}, mode={evidence_mode})"
+        f"{signal.signal_type}: {target} x{final:.4f} "
+        f"(raw {raw_factor:.4f}, mode={evidence_mode}"
+        + (f", conf={confidence:.2f}" if policy.enable_confidence_weighting else "")
+        + ")"
     )
     return AdjustmentRecord(
-        signal.signal_type, target, factor, applied, reason, policy_version, evidence_mode
+        signal_type=signal.signal_type,
+        target=target,
+        factor=final,
+        applied=applied,
+        reason=reason,
+        policy_version=policy_version,
+        evidence_mode=evidence_mode,
+        raw_factor=raw_factor,
+        reliability_weight=reliability,
+        reliability_adjusted_factor=reliability_adjusted,
+        per_signal_capped_factor=per_signal_capped,
+        damping_family=damping_family_for(signal.signal_type),
+        family_size=1,
+        family_role="singleton",
+        family_damped_factor=family_damped,
+        family_capped_factor=family_capped,
+        confidence=confidence,
+        confidence_defaulted=confidence_defaulted,
+        confidence_adjusted_factor=confidence_adjusted,
+        final_applied_factor=final,
     )
 
 
@@ -371,8 +483,8 @@ def compute_player_adjustment(
     for signal in evidence:
         if signal.plane != "player":
             records.append(
-                AdjustmentRecord(
-                    signal.signal_type, "skip", 1.0, False,
+                _skip_record(
+                    signal,
                     "game-plane signal not applied on a player-prop analysis",
                     policy.policy_id, evidence_mode,
                 )
@@ -414,8 +526,8 @@ def compute_game_adjustment(
     for signal in evidence:
         if signal.plane != "game":
             records.append(
-                AdjustmentRecord(
-                    signal.signal_type, "skip", 1.0, False,
+                _skip_record(
+                    signal,
                     "player-plane signal not applied on a game analysis",
                     policy.policy_id, evidence_mode,
                 )
