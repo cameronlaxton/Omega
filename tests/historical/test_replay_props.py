@@ -87,7 +87,7 @@ def test_prop_replay_eligible_and_decision_time_line(backtest_store, tmp_path):
         calibration_eligible_only=True, limit=100,
     )
     prop_traces = [t for t in props if t.get("kind") == "prop"]
-    assert len(prop_traces) == 1  # pass recommendations are not graded as phantom sides
+    assert len(prop_traces) == 2  # both prop predictions are eligible traces
 
     lebron = next(
         t for t in prop_traces

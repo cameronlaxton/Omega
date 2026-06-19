@@ -1,4 +1,4 @@
-"""Replay engine: historical events → normal TraceStore traces.
+﻿"""Replay engine: historical events → normal TraceStore traces.
 
 For each historical event the engine builds an as-of feature snapshot and an
 as-of odds snapshot, runs the leakage guard, calls the **normal** ``analyze()``
@@ -47,10 +47,6 @@ from omega.trace.store import TraceStore
 # the persisted replay metadata (source_provenance, hashes) changes.
 ARTIFACT_SCHEMA_VERSION = 1
 
-
-def _recommended_prop_side(envelope: dict) -> str | None:
-    recommendation = str((envelope.get("result") or {}).get("recommendation") or "").lower()
-    return recommendation if recommendation in {"over", "under"} else None
 
 
 class LeakageError(RuntimeError):
@@ -480,8 +476,7 @@ class ReplayEngine:
                 trace_id = self.store.persist(record)
 
             po = po_by_key.get((m.player_name, m.stat_type))
-            side = _recommended_prop_side(envelope)
-            if po is not None and side is not None:
+            if po is not None:
                 try:
                     self.store.attach_prop_outcome(
                         trace_id,
@@ -491,7 +486,7 @@ class ReplayEngine:
                         # still float()s the arg — pass 0.0 rather than None.
                         stat_value=po.stat_value if po.stat_value is not None else 0.0,
                         line=m.line,
-                        side=side,
+                        side="over",
                         source="historical_replay",
                         void=po.void,
                     )
