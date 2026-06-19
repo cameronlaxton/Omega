@@ -124,9 +124,9 @@ def register_parameter_profile(store: TraceStore, profile: BackendParameterProfi
             profile.incumbent_id,
             None,
             profile.created_at,
-            profile.promoted_at,
-            profile.rejected_at,
-            profile.reject_reason,
+            None,  # promoted_at — a freshly registered candidate carries no lifecycle stamps
+            None,  # rejected_at
+            None,  # reject_reason
         ),
     )
     store.conn.commit()
@@ -268,7 +268,9 @@ def reject_parameter_profile(
     candidate = get_parameter_profile(store, profile_id)
     if candidate is None:
         raise ValueError(f"no parameter profile {profile_id!r}")
-    if candidate.status not in {ParameterProfileStatus.CANDIDATE, ParameterProfileStatus.REJECTED}:
+    if candidate.status == ParameterProfileStatus.REJECTED:
+        return candidate  # idempotent: keep the original rejected_at + reason
+    if candidate.status != ParameterProfileStatus.CANDIDATE:
         raise ValueError(
             f"parameter profile {profile_id!r} is {candidate.status.value!r}; only candidates "
             "can be rejected"

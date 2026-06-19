@@ -17,6 +17,7 @@ These helpers only touch ``store.conn``; they add no state to ``TraceStore``.
 from __future__ import annotations
 
 import math
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -530,7 +531,12 @@ def _merge_parameter_profile(
     is promoted.
 
     Replay-safe: a recorded request that already carries ``parameter_profile_ref``
-    is left untouched (never re-read from the live table).
+    is left untouched (never re-read from the live table), and in replay mode
+    (``OMEGA_REPLAY_MODE=1``) the live table is never read at all.
+
+    Contract: a profile is found only if it was promoted with
+    ``competition_bucket == resolve_calibration_bucket(league)``. Promoting under a
+    different bucket (e.g. the raw league code) makes it silently invisible here.
     """
     from omega.core.calibration.league_buckets import resolve_calibration_bucket
     from omega.core.config.leagues import get_league_config
@@ -538,6 +544,11 @@ def _merge_parameter_profile(
 
     if payload.get("parameter_profile_ref") is not None:
         return payload["parameter_profile_ref"]
+    # In replay mode a recorded request carries its own embedded ref (handled
+    # above); without one we must NOT re-read the live table — a post-hoc promotion
+    # must never leak into a historical replay.
+    if os.environ.get("OMEGA_REPLAY_MODE") == "1":
+        return None
     backend_name = get_league_config(league.upper()).get("default_game_backend")
     if not backend_name:
         return None
@@ -576,7 +587,14 @@ def build_game_prior_payload(
     if not profile_id:
         return existing_payload, None
     if existing_payload and existing_payload.get("rho") is not None:
-        return existing_payload, None
+        # Caller already supplied rho (recorded/replayed request): don't re-read the
+        # live rho table. Still merge a promoted backend parameter profile so a live
+        # request that happens to pre-supply rho is not silently denied its
+        # structural knobs; _merge_parameter_profile is replay-safe (skips the live
+        # lookup under OMEGA_REPLAY_MODE and never overwrites an embedded ref).
+        merged = dict(existing_payload)
+        _merge_parameter_profile(league, merged, store)
+        return merged, None
 
     prod = get_production_dc_profile(store, str(profile_id))
     if prod is None:

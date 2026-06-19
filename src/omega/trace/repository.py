@@ -117,6 +117,10 @@ class PostgresRepository:
         session_id = trace.get("session_id")
         session_id = str(session_id) or None if session_id is not None else None
 
+        # V20 (Phase 8): mirror the SQLite parameter_profile_ref provenance column
+        # so a Postgres persist does not silently drop backend-parameter provenance.
+        from omega.trace.parameter_profiles import extract_parameter_profile_ref
+
         values = {
             "trace_id": trace_id,
             "run_id": run_id,
@@ -134,6 +138,7 @@ class PostgresRepository:
             "full_trace": json.dumps(trace, default=str),
             "schema_version": CURRENT_VERSION,
             "session_id": session_id,
+            "parameter_profile_ref": _json_or_none(extract_parameter_profile_ref(trace)),
         }
 
         with self.Session() as session:

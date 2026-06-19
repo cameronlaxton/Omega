@@ -130,9 +130,13 @@ class BackendParameterProfile(BaseModel):
     sample_size: int = Field(ge=0, description="Held-out eval sample size (drives SAMPLE_SIZE gate)")
 
     # RAW (pre-calibration) held-out quality — drives ECE_FLOOR/BRIER/LOG_LOSS gates
-    metrics: dict[str, float] = Field(
+    metrics: dict[str, Any] = Field(
         default_factory=dict,
-        description="Raw (uncalibrated) brier_score, calibration_error, log_loss, n_eval, cv_*",
+        description=(
+            "Raw (uncalibrated) brier_score, calibration_error, log_loss, n_eval, cv_*. "
+            "dict[str, Any] (not float) so integer-semantic metrics (cv_n_folds, n_eval) "
+            "keep their int type instead of being coerced to float."
+        ),
     )
 
     status: ParameterProfileStatus = ParameterProfileStatus.CANDIDATE

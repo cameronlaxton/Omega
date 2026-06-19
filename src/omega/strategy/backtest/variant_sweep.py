@@ -50,7 +50,8 @@ class VariantScore(BaseModel):
     profile_id: str
     validation: MetricBlock
     holdout: MetricBlock | None = None  # scored only for the winner (sealed holdout)
-    n_validation: int
+    n_validation: int  # events SCORED (the common intersection across all candidates)
+    n_simulated: int = 0  # events this candidate individually simulated (skip transparency)
     n_holdout: int = 0
     selection_value: float | None = None  # the ranked raw metric; None = not scorable
     eligible: bool = True
@@ -66,6 +67,8 @@ class VariantSweepReport(BaseModel):
     selection_metric: str
     scores: list[VariantScore] = Field(default_factory=list)
     winner_profile_id: str | None = None
+    selection_inconclusive: bool = False  # candidates indistinguishable on the scored plane
+    selection_note: str | None = None  # why there is no winner, when there isn't
     n_candidates: int = 0
     validation_start: str
     holdout_start: str
@@ -100,7 +103,7 @@ def _artifact_records(
     return records
 
 
-def _eval_variant(
+def _simulate_pairs(
     engine: OmegaSimulationEngine,
     backend,
     params: dict | None,
@@ -109,16 +112,18 @@ def _eval_variant(
     n_iterations: int,
     seed: int,
     exact: bool,
-) -> tuple[MetricBlock, int]:
-    """Simulate every record with this variant and score RAW home-win calibration.
+) -> dict[int, tuple[float, int]]:
+    """Simulate each record with this variant; return ``{record_index: (raw, y)}``.
 
     Outcome-blind: the engine is called with no outcome; the ``(raw, y)`` pair is
     formed only after. ``y`` mirrors the calibration game plane (``_game_pair``):
-    home win -> 1, otherwise 0.
+    home win -> 1, otherwise 0. Records the variant skips (sim unsuccessful, or no
+    graded outcome) are simply ABSENT from the map — callers then score every
+    candidate on the INTERSECTION of indices all candidates produced, so a variant
+    that skips more games cannot win on a smaller, easier subset.
     """
-    raw: list[float] = []
-    outs: list[int] = []
-    for r in records:
+    pairs: dict[int, tuple[float, int]] = {}
+    for idx, r in enumerate(records):
         a: FrozenArtifact = r["art"]
         sim = engine.run_fast_game_simulation(
             home_team=a.home_team,
@@ -140,11 +145,19 @@ def _eval_variant(
         hs, as_ = oc.get("home_score"), oc.get("away_score")
         if hs is None or as_ is None:
             continue
-        raw.append(sim["home_win_prob"] / 100.0)
-        outs.append(1 if hs > as_ else 0)
-    # probability_metrics(raw, raw, outs): passing raw as both raw + "calibrated"
-    # yields the raw-only metrics from the single shared evaluator (identity cal).
-    return probability_metrics(raw, raw, outs), len(raw)
+        pairs[idx] = (sim["home_win_prob"] / 100.0, 1 if hs > as_ else 0)
+    return pairs
+
+
+def _score_pairs(pairs: dict[int, tuple[float, int]], indices: list[int]) -> MetricBlock:
+    """Raw-only metrics over ``indices`` via the single shared evaluator.
+
+    ``probability_metrics(raw, raw, outs)`` passes raw as both raw + "calibrated",
+    so the identity calibration yields the raw-only block.
+    """
+    raw = [pairs[i][0] for i in indices]
+    outs = [pairs[i][1] for i in indices]
+    return probability_metrics(raw, raw, outs)
 
 
 def sweep_backend_variants(
@@ -158,6 +171,7 @@ def sweep_backend_variants(
     exact: bool = True,
     selection_metric: str = "raw_ece",
     min_validation_samples: int = 20,
+    min_selection_margin: float = 1e-4,
     dataset_manifest_id: str | None = None,
     dataset_hash: str | None = None,
 ) -> VariantSweepReport:
@@ -204,19 +218,30 @@ def sweep_backend_variants(
 
     engine = OmegaSimulationEngine()
 
-    scores: list[VariantScore] = []
-    for c in candidates:
-        block, n_val = _eval_variant(
+    # Simulate every candidate over the validation set, then score them all on the
+    # INTERSECTION of events every candidate produced — so a variant cannot win on a
+    # smaller, easier subset (e.g. one whose lambda_scale skipped hard games).
+    val_pairs = {
+        c.profile_id: _simulate_pairs(
             engine, backend, c.params, validation_recs,
             n_iterations=n_iterations, seed=seed, exact=exact,
         )
+        for c in candidates
+    }
+    common = sorted(set.intersection(*[set(p) for p in val_pairs.values()])) if val_pairs else []
+
+    scores: list[VariantScore] = []
+    for c in candidates:
+        pairs = val_pairs[c.profile_id]
+        block = _score_pairs(pairs, common)
         sel = getattr(block, selection_metric)
-        eligible = n_val >= min_validation_samples and sel is not None
+        eligible = len(common) >= min_validation_samples and sel is not None
         scores.append(
             VariantScore(
                 profile_id=c.profile_id,
                 validation=block,
-                n_validation=n_val,
+                n_validation=len(common),
+                n_simulated=len(pairs),
                 selection_value=sel if eligible else None,
                 eligible=eligible,
             )
@@ -224,17 +249,40 @@ def sweep_backend_variants(
 
     eligible_scores = [s for s in scores if s.eligible and s.selection_value is not None]
     winner_id: str | None = None
-    if eligible_scores:
-        winner = min(eligible_scores, key=lambda s: s.selection_value)
-        winner_id = winner.profile_id
+    inconclusive = False
+    note: str | None = None
+    if not eligible_scores:
+        note = (
+            f"no candidate reached min_validation_samples={min_validation_samples} on the "
+            f"{len(common)}-event common set"
+        )
+    elif len(eligible_scores) == 1:
+        winner_id = eligible_scores[0].profile_id
+    else:
+        ranked = sorted(eligible_scores, key=lambda s: s.selection_value)
+        margin = ranked[1].selection_value - ranked[0].selection_value
+        if margin < min_selection_margin:
+            # The swept knobs do not move the scored plane enough to separate the top
+            # candidates (e.g. first_half_share is ~invisible to home-win ECE). Refuse
+            # to promote on noise rather than pick arbitrarily.
+            inconclusive = True
+            note = (
+                f"top candidates within {min_selection_margin} on {selection_metric} "
+                f"(margin={margin:.6f}); no discriminating signal on the scored plane"
+            )
+        else:
+            winner_id = ranked[0].profile_id
+
+    if winner_id is not None:
         # Seal: score ONLY the winner on the holdout, exactly once.
+        winner_score = next(s for s in scores if s.profile_id == winner_id)
         winner_candidate = next(c for c in candidates if c.profile_id == winner_id)
-        holdout_block, n_hold = _eval_variant(
+        holdout_pairs = _simulate_pairs(
             engine, backend, winner_candidate.params, holdout_recs,
             n_iterations=n_iterations, seed=seed, exact=exact,
         )
-        winner.holdout = holdout_block
-        winner.n_holdout = n_hold
+        winner_score.holdout = _score_pairs(holdout_pairs, sorted(holdout_pairs))
+        winner_score.n_holdout = len(holdout_pairs)
 
     return VariantSweepReport(
         backend_name=backend_name,
@@ -242,6 +290,8 @@ def sweep_backend_variants(
         selection_metric=selection_metric,
         scores=scores,
         winner_profile_id=winner_id,
+        selection_inconclusive=inconclusive,
+        selection_note=note,
         n_candidates=len(candidates),
         validation_start=validation_start,
         holdout_start=holdout_start,
