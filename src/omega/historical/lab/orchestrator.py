@@ -166,6 +166,7 @@ def run_lab_from_store(
         calibration_eligible_only=True,
         limit=1_000_000,
     )
+    graded = [t for t in graded if t.get("replay_id") == replay_id]
     runner.record("load_graded", "ok", outputs={"n": len(graded)})
 
     ledger = grid_mod.run_grid(
@@ -247,6 +248,7 @@ def run_lab_from_store(
         and replay_config is not None
         and getattr(dataset, "odds", None)
         and seal.winner_profile is not None
+        and plane in ("game", "draw")
     ):
         clv_artifact = compare_profiles(
             dataset,

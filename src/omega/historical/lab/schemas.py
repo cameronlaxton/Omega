@@ -56,15 +56,15 @@ class Window(BaseModel):
     end: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def _ordered(self) -> "Window":
+    def _ordered(self) -> Window:
         if self.end < self.start:
             raise ValueError(f"window end {self.end!r} precedes start {self.start!r}")
         return self
 
 
 def windows_overlap(a: Window, b: Window) -> bool:
-    """True when two inclusive windows share any point (adjacency is not overlap)."""
-    return a.start < b.end and b.start < a.end
+    """True when two inclusive windows share any point (including boundary dates)."""
+    return a.start <= b.end and b.start <= a.end
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +148,7 @@ class AttemptedVariantLedger(BaseModel):
         return sum(1 for v in self.variants if v.touched_holdout)
 
     @model_validator(mode="after")
-    def _seal_invariants(self) -> "AttemptedVariantLedger":
+    def _seal_invariants(self) -> AttemptedVariantLedger:
         selected = [v for v in self.variants if v.status == "selected"]
         if len(selected) > 1:
             raise ValueError(
@@ -289,7 +289,7 @@ class HistoricalLabRun(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _market_matches_plane(self) -> "HistoricalLabRun":
+    def _market_matches_plane(self) -> HistoricalLabRun:
         expected = calibration_market_for_plane(self.plane)
         if self.market != expected:
             raise ValueError(
@@ -299,7 +299,7 @@ class HistoricalLabRun(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _windows_chronological(self) -> "HistoricalLabRun":
+    def _windows_chronological(self) -> HistoricalLabRun:
         # train ≤ validation ≤ holdout, no overlap (adjacency permitted).
         if self.validation_window.start < self.train_window.end:
             raise ValueError("validation_window must start at/after train_window end")
@@ -308,7 +308,7 @@ class HistoricalLabRun(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _holdout_access_bound(self) -> "HistoricalLabRun":
+    def _holdout_access_bound(self) -> HistoricalLabRun:
         if self.holdout_sealed and self.holdout_access_count > 1:
             raise ValueError(
                 f"sealed holdout must be accessed at most once; "

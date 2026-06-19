@@ -677,7 +677,7 @@ def resolve_odds(
     # 2. Cache Miss - Execute external resolution
     client = client or OddsApiClient()
     skipped: list[str] = []
-    resolved_event_id, event_skips = _resolve_event_id(
+    resolved_event_id, resolved_sport_key, event_skips, event_skip_codes = _resolve_event_id(
         client,
         league,
         event_id=event_id,
@@ -717,6 +717,7 @@ def resolve_odds(
             bookmaker,
             line_shopping=line_shopping,
             all_books=all_books,
+            sport_key=resolved_sport_key,
         )
         if not available:
             return _fail(_unavailable(kind, league, bookmaker, availability_skips, client))
@@ -731,6 +732,7 @@ def resolve_odds(
             resolved_event_id,
             markets=markets,
             bookmakers=_bookmakers(bookmaker, line_shopping, all_books),
+            sport_key=resolved_sport_key,
         )
     except OddsApiBudgetExceeded:
         raise
