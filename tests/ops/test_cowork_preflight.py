@@ -1,6 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import errno
+import os
 import importlib.metadata
 import subprocess
 from pathlib import Path
@@ -95,7 +96,8 @@ def test_cowork_local_workspace_guard_passes_expected_workspace(monkeypatch, tmp
 
 
 def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True, env=env)
 
 
 def _init_repo(tmp_path: Path) -> Path:
