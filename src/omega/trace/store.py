@@ -54,11 +54,14 @@ from omega.trace.schema import (
     SCHEMA_V16,
     SCHEMA_V17,
     SCHEMA_V18,
+    SCHEMA_V19,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
     apply_v15_migration,
+    apply_v20_migration,
 )
+from omega.trace.parameter_profiles import extract_parameter_profile_ref
 
 if TYPE_CHECKING:
     from omega.trace.session_sidecar import TraceQaVerdict
@@ -737,6 +740,26 @@ class TraceStore:
             "Phase 7 M4: priors_nfl_dispersion table (NFL NB dispersion k + shrinkage source)",
         )
 
+        # V19: governed backend parameter-profile table (Phase 8). One production
+        # profile per (backend_name, competition_bucket); promoted fail-closed
+        # through the shared gate engine. Generalizes the priors_dixon_coles
+        # rho-profile pattern to a backend's full structural-parameter set.
+        self.conn.executescript(SCHEMA_V19)
+        self._record_version(
+            19,
+            "Phase 8: parameter_profiles table (governed backend structural-parameter profiles)",
+        )
+
+        # V20: trace-level parameter-profile provenance column. ALTER ADD COLUMN,
+        # so apply via the probe-first helper. Surfaces the governed param set that
+        # priced a trace into a queryable column, so a probability is attributable
+        # to its exact parameters and a replay/lab can pin from the ref.
+        apply_v20_migration(self.conn)
+        self._record_version(
+            20,
+            "Phase 8: traces.parameter_profile_ref column (trace-level parameter provenance)",
+        )
+
     def _existing_schema_version(self) -> int:
         """Highest applied schema version, or 0 if the DB is brand new."""
         try:
@@ -877,13 +900,19 @@ class TraceStore:
         if session_id is not None:
             session_id = str(session_id) or None
 
+        # Trace-level parameter-profile provenance (V20): the governed param set
+        # that priced this trace, surfaced from the full_trace blob into a queryable
+        # column so a probability is attributable and a replay/lab can pin from it.
+        param_ref = extract_parameter_profile_ref(trace)
+        param_ref_json = json.dumps(param_ref, default=str) if param_ref else None
+
         cur = self.conn.execute(
             """INSERT OR IGNORE INTO traces
                (trace_id, run_id, timestamp, prompt, league, matchup,
                 execution_mode, simulation_seed, aggregate_quality,
                 predictions, recommendations, odds_snapshot, downgrades,
-                full_trace, schema_version, session_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                full_trace, schema_version, session_id, parameter_profile_ref)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 trace_id,
                 run_id,
@@ -907,6 +936,7 @@ class TraceStore:
                 full_trace,
                 CURRENT_VERSION,
                 session_id,
+                param_ref_json,
             ),
         )
         # Explode evidence into queryable rows only on a genuine first insert.

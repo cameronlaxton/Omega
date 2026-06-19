@@ -149,9 +149,17 @@ class SoccerPoissonBackend:
         home_lambda = _expected_against_allowed_rate(home_xg, away_xga, league_avg_gpg)
         away_lambda = _expected_against_allowed_rate(away_xg, home_xga, league_avg_gpg)
 
-        hca = config.get("home_advantage", 0.0)
+        # Structural knobs (Phase 8 backend parameter profile). Each defaults to
+        # the historical constant, so output is bit-identical when no governed
+        # profile is injected via prior_payload; a promoted profile overrides them.
+        hca = float(prior.get("home_advantage", config.get("home_advantage", 0.0)))
         home_lambda += hca / 2.0
         away_lambda -= hca / 2.0
+
+        lambda_scale = float(prior.get("lambda_scale", 1.0))
+        if lambda_scale != 1.0:
+            home_lambda *= lambda_scale
+            away_lambda *= lambda_scale
 
         # Poisson(0.5) floor: lower floors hallucinate structurally unrealistic
         # 0-0 rates (see _sim_soccer).
@@ -216,6 +224,8 @@ class SoccerPoissonBackend:
             result["rho_profile_id"] = prior["rho_profile_id"]
         if prior.get("rho_as_of_date") is not None:
             result["rho_as_of_date"] = prior["rho_as_of_date"]
+        if prior.get("parameter_profile_ref") is not None:
+            result["parameter_profile_ref"] = prior["parameter_profile_ref"]
 
         # Soccer-derivative distribution rows beyond the standard score/total/
         # spread set, consumed downstream by the soccer edge logic.
@@ -243,10 +253,11 @@ class SoccerPoissonBackend:
 
         totals = [float(h + a) for h, a in zip(home_scores, away_scores)]
 
+        first_half_share = float(prior.get("first_half_share", _FIRST_HALF_GOAL_SHARE))
         # First-half totals via independent thinning (drawn after the score
         # sample on the same seeded rng, so replays stay bit-identical).
         fh_totals = rng.binomial(
-            [int(t) for t in totals], _FIRST_HALF_GOAL_SHARE
+            [int(t) for t in totals], first_half_share
         ).tolist()
 
         result["simulation_distributions"].extend(
@@ -348,6 +359,8 @@ class SoccerPoissonBackend:
             result["rho_profile_id"] = prior["rho_profile_id"]
         if prior.get("rho_as_of_date") is not None:
             result["rho_as_of_date"] = prior["rho_as_of_date"]
+        if prior.get("parameter_profile_ref") is not None:
+            result["parameter_profile_ref"] = prior["parameter_profile_ref"]
 
         # Exact soccer-derivative rows + pmfs (consumed by soccer_derivatives.py).
         ctx_hash = _context_hash(request.home_context, request.away_context)
@@ -370,7 +383,8 @@ class SoccerPoissonBackend:
         p_away_cs = float(home_marg[0])
         p_btts = float(1.0 - home_marg[0] - away_marg[0] + grid[0, 0])
 
-        fh_pmf = exact_eval.thinned_total_pmf(grid, _FIRST_HALF_GOAL_SHARE)
+        first_half_share = float(prior.get("first_half_share", _FIRST_HALF_GOAL_SHARE))
+        fh_pmf = exact_eval.thinned_total_pmf(grid, first_half_share)
         fh_vals = np.array(sorted(int(k) for k in fh_pmf), dtype=float)
         fh_probs = np.array([fh_pmf[str(int(v))] for v in fh_vals], dtype=float)
 

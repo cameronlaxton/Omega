@@ -17,6 +17,7 @@ These helpers only touch ``store.conn``; they add no state to ``TraceStore``.
 from __future__ import annotations
 
 import math
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -515,6 +516,54 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _merge_parameter_profile(
+    league: str, payload: dict[str, Any], store: TraceStore
+) -> dict[str, Any] | None:
+    """Merge the production backend parameter profile's params into *payload*.
+
+    Looks up the production :class:`BackendParameterProfile` for the league's
+    default game backend + calibration bucket (Phase 8). When present, merges its
+    ``params`` (structural knobs the backend reads with safe defaults) WITHOUT
+    overwriting any caller-supplied value, stamps ``parameter_profile_ref`` for
+    trace provenance, and returns that ref. When absent, *payload* is unchanged and
+    ``None`` is returned — the backend falls back to its historical-constant
+    defaults, so this injection is purely additive and bit-identical until a profile
+    is promoted.
+
+    Replay-safe: a recorded request that already carries ``parameter_profile_ref``
+    is left untouched (never re-read from the live table), and in replay mode
+    (``OMEGA_REPLAY_MODE=1``) the live table is never read at all.
+
+    Contract: a profile is found only if it was promoted with
+    ``competition_bucket == resolve_calibration_bucket(league)``. Promoting under a
+    different bucket (e.g. the raw league code) makes it silently invisible here.
+    """
+    from omega.core.calibration.league_buckets import resolve_calibration_bucket
+    from omega.core.config.leagues import get_league_config
+    from omega.trace.parameter_profiles import get_production_parameter_profile
+
+    if payload.get("parameter_profile_ref") is not None:
+        return payload["parameter_profile_ref"]
+    # In replay mode a recorded request carries its own embedded ref (handled
+    # above); without one we must NOT re-read the live table — a post-hoc promotion
+    # must never leak into a historical replay.
+    if os.environ.get("OMEGA_REPLAY_MODE") == "1":
+        return None
+    backend_name = get_league_config(league.upper()).get("default_game_backend")
+    if not backend_name:
+        return None
+    prof = get_production_parameter_profile(
+        store, str(backend_name), resolve_calibration_bucket(league)
+    )
+    if prof is None:
+        return None
+    for key, value in prof.params.items():
+        payload.setdefault(key, value)
+    ref = prof.trace_ref()
+    payload["parameter_profile_ref"] = ref
+    return ref
+
+
 def build_game_prior_payload(
     league: str,
     existing_payload: dict[str, Any] | None,
@@ -538,7 +587,14 @@ def build_game_prior_payload(
     if not profile_id:
         return existing_payload, None
     if existing_payload and existing_payload.get("rho") is not None:
-        return existing_payload, None
+        # Caller already supplied rho (recorded/replayed request): don't re-read the
+        # live rho table. Still merge a promoted backend parameter profile so a live
+        # request that happens to pre-supply rho is not silently denied its
+        # structural knobs; _merge_parameter_profile is replay-safe (skips the live
+        # lookup under OMEGA_REPLAY_MODE and never overwrites an embedded ref).
+        merged = dict(existing_payload)
+        _merge_parameter_profile(league, merged, store)
+        return merged, None
 
     prod = get_production_dc_profile(store, str(profile_id))
     if prod is None:
@@ -560,17 +616,27 @@ def build_game_prior_payload(
         rho_profile_id=prod.profile_id,
         rho_as_of_date=prod.as_of_date,
     )
+    # Phase 8: also merge the production backend parameter profile's structural
+    # knobs (home_advantage, first_half_share, lambda_scale, ...) into the same
+    # payload. No production profile -> unchanged + the backend uses its
+    # historical-constant defaults (bit-identical until one is promoted).
+    param_ref = _merge_parameter_profile(league, merged, store)
+    notes = f"injected Dixon-Coles rho for {league.upper()} from {prod.profile_id}"
+    outputs: dict[str, Any] = {
+        "rho": prod.rho,
+        "rho_profile_id": prod.profile_id,
+        "rho_as_of_date": prod.as_of_date,
+    }
+    if param_ref is not None:
+        notes += f"; backend params from {param_ref.get('param_profile_id')}"
+        outputs["parameter_profile_ref"] = param_ref
     return merged, {
         "ts": _utc_now_iso(),
         "event_type": "data_provenance",
         "step": "dixon_coles_prior:inject",
         "status": "ok",
-        "notes": f"injected Dixon-Coles rho for {league.upper()} from {prod.profile_id}",
-        "outputs": {
-            "rho": prod.rho,
-            "rho_profile_id": prod.profile_id,
-            "rho_as_of_date": prod.as_of_date,
-        },
+        "notes": notes,
+        "outputs": outputs,
     }
 
 

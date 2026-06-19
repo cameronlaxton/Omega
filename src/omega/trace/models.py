@@ -40,6 +40,10 @@ class TraceRow(Base):
     schema_version = mapped_column(Integer, nullable=False, server_default=text("1"))
     created_at = mapped_column(Text, nullable=False, server_default=text(SQLITE_NOW_DEFAULT))
     session_id = mapped_column(Text)
+    # V20 (Phase 8): governed backend parameter-profile provenance, mirroring the
+    # SQLite traces.parameter_profile_ref column so the two backends stay at parity
+    # and provenance is not silently dropped on a Postgres persist.
+    parameter_profile_ref = mapped_column(Text)
 
     __table_args__ = (
         Index("idx_traces_league", "league"),
