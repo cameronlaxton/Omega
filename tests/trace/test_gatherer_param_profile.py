@@ -101,6 +101,40 @@ def test_gatherer_no_param_profile_is_additive():
         store.close()
 
 
+def test_gatherer_merges_param_profile_even_when_rho_pre_supplied(monkeypatch):
+    """Fix for the rho-coupling finding: a live request that pre-supplies rho still
+    receives the promoted structural knobs, not only freshly-fetched-rho requests."""
+    monkeypatch.delenv("OMEGA_REPLAY_MODE", raising=False)
+    store = _store()
+    try:
+        _promote_rho(store)
+        prof = _promote_param_profile(store, {"home_advantage": 0.5, "lambda_scale": 1.1})
+        merged, event = build_game_prior_payload("EPL", {"rho": -0.05}, store)
+        assert merged["rho"] == -0.05  # caller's rho preserved
+        assert merged["home_advantage"] == 0.5  # param profile still merged
+        assert merged["lambda_scale"] == 1.1
+        assert merged["parameter_profile_ref"]["param_profile_id"] == prof.profile_id
+        assert event is None  # caller-supplied-rho path stays quiet
+    finally:
+        store.close()
+
+
+def test_gatherer_replay_mode_skips_live_param_lookup(monkeypatch):
+    """Under OMEGA_REPLAY_MODE the live parameter_profiles table is never read, so a
+    post-hoc promotion cannot leak into a historical replay."""
+    store = _store()
+    try:
+        _promote_rho(store)
+        _promote_param_profile(store, {"home_advantage": 0.5})
+        monkeypatch.setenv("OMEGA_REPLAY_MODE", "1")
+        merged, _ = build_game_prior_payload("EPL", {"rho": -0.05}, store)
+        assert merged["rho"] == -0.05
+        assert "home_advantage" not in merged  # live lookup skipped in replay
+        assert "parameter_profile_ref" not in merged
+    finally:
+        store.close()
+
+
 def test_gatherer_replay_safe_does_not_overwrite_pinned_ref():
     """A recorded request that already carries a parameter_profile_ref is left
     untouched — replay must not re-read the live table."""

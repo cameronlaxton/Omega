@@ -359,3 +359,31 @@ def test_extract_parameter_profile_ref_pure():
     )
     assert legacy["param_profile_id"] == "epl_v1"
     assert legacy["source"] == "legacy_dc_rho"
+
+
+def test_reject_is_idempotent():
+    store = _store()
+    try:
+        prof = _profile()
+        register_parameter_profile(store, prof)
+        first = reject_parameter_profile(store, prof.profile_id, "reason A")
+        again = reject_parameter_profile(store, prof.profile_id, "reason B")
+        # The original rejection record is preserved, not clobbered by the re-reject.
+        assert first.reject_reason == "reason A"
+        assert again.reject_reason == "reason A"
+        assert again.rejected_at == first.rejected_at
+    finally:
+        store.close()
+
+
+def test_register_clears_stale_lifecycle_stamps():
+    store = _store()
+    try:
+        prof = _profile(promoted_at="2026-01-01T00:00:00Z", reject_reason="stale")
+        register_parameter_profile(store, prof)
+        got = get_parameter_profile(store, prof.profile_id)
+        assert got.promoted_at is None
+        assert got.rejected_at is None
+        assert got.reject_reason is None
+    finally:
+        store.close()

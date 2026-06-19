@@ -49,8 +49,14 @@ class _BiasBackend:
     evidence_mode = "plane_adjustment"
 
     def run(self, request: GameSimulationInput) -> dict:
-        bias = float((request.prior_payload or {}).get("home_bias", 0.0))
-        base = float((request.home_context or {}).get("base_home_prob", 50.0))
+        prior = request.prior_payload or {}
+        ctx = request.home_context or {}
+        # Test knob: a variant carrying skip_skippable drops every artifact flagged
+        # skippable -> lets a test exercise the intersection scoring.
+        if prior.get("skip_skippable") and ctx.get("skippable"):
+            return {"success": False, "skip_reason": "skipped by test knob"}
+        bias = float(prior.get("home_bias", 0.0))
+        base = float(ctx.get("base_home_prob", 50.0))
         hwp = max(1.0, min(99.0, base + bias))
         return {
             "success": True,
@@ -75,7 +81,7 @@ if resolve_game_backend(_TEST_BACKEND) is None:
     register_game_backend(_TEST_BACKEND, _BiasBackend())
 
 
-def _artifact(i: int, date: str, home_win: bool) -> FrozenArtifact:
+def _artifact(i: int, date: str, home_win: bool, skippable: bool = False) -> FrozenArtifact:
     ht, at = f"H{i}", f"A{i}"
     return FrozenArtifact(
         artifact_id=compute_artifact_id(ht, at, "NBA", date),
@@ -83,7 +89,7 @@ def _artifact(i: int, date: str, home_win: bool) -> FrozenArtifact:
         away_team=at,
         league="NBA",
         date=date,
-        home_context={"base_home_prob": 50.0},
+        home_context={"base_home_prob": 50.0, "skippable": skippable},
         odds={"moneyline_home": -110, "moneyline_away": -110},
         outcome={"home_score": 2 if home_win else 0, "away_score": 0 if home_win else 2},
     )
@@ -102,8 +108,7 @@ def _artifacts() -> list[FrozenArtifact]:
     return arts
 
 
-def _candidate(bias: float, version: int) -> BackendParameterProfile:
-    params = {"home_bias": bias}
+def _candidate_params(params: dict, version: int) -> BackendParameterProfile:
     return BackendParameterProfile(
         profile_id=make_parameter_profile_id(_TEST_BACKEND, "TEST", version, params),
         version=version,
@@ -114,6 +119,23 @@ def _candidate(bias: float, version: int) -> BackendParameterProfile:
         dataset_hash="h",
         sample_size=0,
     )
+
+
+def _candidate(bias: float, version: int) -> BackendParameterProfile:
+    return _candidate_params({"home_bias": bias}, version)
+
+
+def _artifacts_with_skippable() -> list[FrozenArtifact]:
+    """Like _artifacts() but flags 10 of the 40 validation games skippable."""
+    arts: list[FrozenArtifact] = []
+    for i in range(40):
+        month = 1 if i < 20 else 2
+        arts.append(
+            _artifact(i, f"2026-{month:02d}-{(i % 20) + 1:02d}", home_win=(i % 2 == 0), skippable=(i % 4 == 0))
+        )
+    for i in range(40, 60):
+        arts.append(_artifact(i, f"2026-03-{(i - 40) + 1:02d}", home_win=(i % 2 == 0)))
+    return arts
 
 
 _KW = {"validation_start": "2026-01-01", "holdout_start": "2026-03-01", "n_iterations": 1}
@@ -176,3 +198,46 @@ def test_holdout_after_validation_required():
             _artifacts(), [_candidate(0.0, 1)],
             validation_start="2026-03-01", holdout_start="2026-01-01", n_iterations=1,
         )
+
+
+def test_intersection_scoring_equalizes_event_sets():
+    """A variant that skips some games is scored on the SAME common set as one that
+    doesn't — no winning on a smaller, easier subset."""
+    full = _candidate_params({"home_bias": 0.0}, 1)
+    skipper = _candidate_params({"home_bias": 0.0, "skip_skippable": True}, 2)
+    report = sweep_backend_variants(_artifacts_with_skippable(), [full, skipper], **_KW)
+    by_id = {s.profile_id: s for s in report.scores}
+    # 10 of 40 validation games skippable -> common = 30 for BOTH candidates.
+    assert by_id[full.profile_id].n_validation == 30
+    assert by_id[skipper.profile_id].n_validation == 30
+    # ...but they individually simulated different counts (transparency).
+    assert by_id[full.profile_id].n_simulated == 40
+    assert by_id[skipper.profile_id].n_simulated == 30
+
+
+def test_tie_is_inconclusive_no_winner():
+    """Two candidates indistinguishable on the scored plane -> no winner promoted on
+    noise (this is the first_half_share blind-spot guard)."""
+    a = _candidate_params({"home_bias": 0.0}, 1)
+    b = _candidate_params({"home_bias": 0.0}, 2)  # identical params, different id
+    report = sweep_backend_variants(_artifacts(), [a, b], **_KW)
+    assert report.winner_profile_id is None
+    assert report.selection_inconclusive is True
+    assert report.selection_note is not None
+
+
+def test_single_candidate_wins_without_discrimination_guard():
+    a = _candidate(0.0, 1)
+    report = sweep_backend_variants(_artifacts(), [a], **_KW)
+    assert report.winner_profile_id == a.profile_id
+    assert report.selection_inconclusive is False
+    assert report.scores[0].holdout is not None
+
+
+def test_all_ineligible_returns_no_winner_with_note():
+    report = sweep_backend_variants(
+        _artifacts(), [_candidate(0.0, 1)], **{**_KW, "min_validation_samples": 1000}
+    )
+    assert report.winner_profile_id is None
+    assert report.selection_inconclusive is False
+    assert "min_validation_samples" in (report.selection_note or "")
