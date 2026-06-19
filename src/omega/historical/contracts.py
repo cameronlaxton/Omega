@@ -334,6 +334,22 @@ class ReplayConfig(BaseModel):
             }
         )
 
+    def seed_hash(self) -> str:
+        """Stable hash over fields that affect simulation results (excludes staking/timing)."""
+        return stable_hash(
+            {
+                "dataset_manifest_id": self.dataset_manifest_id,
+                "bankroll": self.bankroll,
+                "n_iterations": self.n_iterations,
+                "simulation_backend": self.simulation_backend,
+                "decision_odds_policy": self.decision_odds_policy,
+                "leakage_policy": self.leakage_policy,
+                "code_version": self.code_version,
+                "seed_namespace": self.seed_namespace,
+                "prior_payload": self.prior_payload,
+            }
+        )
+
     @field_validator("backtest_db_path")
     @classmethod
     def _reject_production_db(cls, v: str) -> str:

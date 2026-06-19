@@ -66,6 +66,7 @@ def evaluate_backtest_parity(
             recommend = False
             reasons.append("ece_regressed")
     else:
+        recommend = False
         reasons.append("no_incumbent_baseline")
 
     return {

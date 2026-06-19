@@ -67,17 +67,6 @@ class PlayerStatObservation:
     season: str | None = None
 
 
-class PropMarketRow(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    date: str
-    home_team: str
-    away_team: str
-    player_name: str
-    stat_type: str
-    line: Any
-    over_price: Any | None = None
-    under_price: Any | None = None
 
 
 class CsvPlayerStatsAdapter(CsvAdapterBase):
@@ -202,26 +191,4 @@ class CsvPlayerStatsAdapter(CsvAdapterBase):
             )
         return dict(grouped)
 
-    def read_prop_markets(
-        self, path: str | Path, **kwargs: Any
-    ) -> dict[str, list[HistoricalPropMarket]]:
-        """Group decision-time prop markets by ``event_key``. Rows lacking a line are skipped."""
-        table = kwargs.get("alias_table") or load_alias_table(self.league)
-        grouped: dict[str, list[HistoricalPropMarket]] = defaultdict(list)
-        for raw in self._read_csv(path):
-            row = PropMarketRow.model_validate(raw)
-            line = to_float_or_none(row.line)
-            if line is None:
-                continue
-            ek = self._event_key_for(row, table)
-            grouped[ek].append(
-                HistoricalPropMarket(
-                    event_key=ek,
-                    player_name=row.player_name,
-                    stat_type=row.stat_type,
-                    line=line,
-                    over_price=to_float_or_none(row.over_price),
-                    under_price=to_float_or_none(row.under_price),
-                )
-            )
-        return dict(grouped)
+

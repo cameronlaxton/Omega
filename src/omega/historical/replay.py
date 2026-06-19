@@ -95,7 +95,7 @@ class ReplayResult:
 def derive_seed(config: ReplayConfig, event_id: str) -> int:
     """Deterministic per-event simulation seed (32-bit)."""
     raw = "|".join(
-        [config.dataset_manifest_id, config.config_hash(), config.code_version, event_id]
+        [config.dataset_manifest_id, config.seed_hash(), config.code_version, event_id]
     )
     return int(hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8], 16)
 
@@ -458,6 +458,7 @@ class ReplayEngine:
             envelope = analyze(
                 request, session_id=self.config.session_id, bankroll=self.config.bankroll
             )
+            print(f"DEBUG_REC {m.player_name}: seed={seed}, rec={envelope.get('result', {}).get('recommendation')}")
             record = PersistableTrace.from_analyze_output(envelope).to_store_record()
             record.update(
                 {
@@ -481,7 +482,7 @@ class ReplayEngine:
 
             po = po_by_key.get((m.player_name, m.stat_type))
             side = _recommended_prop_side(envelope)
-            if po is not None and side is not None:
+            if po is not None:
                 try:
                     self.store.attach_prop_outcome(
                         trace_id,
@@ -491,7 +492,7 @@ class ReplayEngine:
                         # still float()s the arg — pass 0.0 rather than None.
                         stat_value=po.stat_value if po.stat_value is not None else 0.0,
                         line=m.line,
-                        side=side,
+                        side=side or "over",
                         source="historical_replay",
                         void=po.void,
                     )
