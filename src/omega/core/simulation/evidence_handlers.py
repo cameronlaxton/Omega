@@ -29,9 +29,19 @@ from typing import Any
 from omega.core.calibration.adjustment_policy import AdjustmentPolicy
 from omega.core.contracts.evidence import (
     EvidenceSignal,
+    damping_family_for,
     resolve_archetype,
     signal_applies,
 )
+from omega.core.simulation.evidence_aggregation import (
+    FamilyMember,
+    SignalApplication,
+    confidence_adjusted_factor,
+    damp_family,
+    reliability_adjusted_factor,
+    resolve_confidence,
+)
+from omega.core.simulation.evidence_aggregation import cap_factor as _cap_factor
 
 # Environment override for the rollout gate. When unset, the policy's own
 # ``mode`` field governs. Accepts "shadow" or "live" (case-insensitive).
@@ -47,9 +57,15 @@ _ENV_MODE_VAR = "OMEGA_EVIDENCE_MODE"
 class AdjustmentRecord:
     """Per-signal record of what the engine did (or would do) with one signal.
 
-    ``factor`` is always the computed, capped factor — even in shadow mode — so
-    retrospective scoring can backtest counterfactually. ``applied`` is True only
-    when the engine actually multiplied the factor into the live prediction.
+    ``factor`` is always the computed, capped (and — when the policy enables it —
+    confidence-weighted) factor, even in shadow mode, so retrospective scoring
+    can backtest counterfactually. ``applied`` is True only when the engine
+    actually multiplied the factor into the live prediction.
+
+    The remaining fields decompose the Issue #22 factor sequence so the trace can
+    attribute each stage independently and never falsely credit grouped family
+    math to one signal. They default to a singleton no-op, so a skip record built
+    with only the seven core fields still serializes as identity.
     """
 
     signal_type: str
@@ -60,17 +76,50 @@ class AdjustmentRecord:
     policy_version: str
     evidence_mode: str
 
+    # Factor-sequence attribution (defaults = singleton identity)
+    raw_factor: float = 1.0
+    reliability_weight: float = 1.0
+    reliability_adjusted_factor: float = 1.0
+    per_signal_capped_factor: float = 1.0
+    damping_family: str | None = None
+    family_size: int = 1
+    family_role: str = "singleton"
+    family_damped_factor: float = 1.0
+    family_capped_factor: float = 1.0
+    confidence: float = 1.0
+    confidence_defaulted: bool = False
+    confidence_adjusted_factor: float = 1.0
+    final_applied_factor: float = 1.0
+
     def as_application(self) -> dict[str, Any]:
-        """Serialize to the per-signal dict the trace store persists (V9)."""
-        return {
-            "signal_type": self.signal_type,
-            "target": self.target,
-            "applied": self.applied,
-            "factor": self.factor,
-            "reason": self.reason,
-            "policy_version": self.policy_version,
-            "evidence_mode": self.evidence_mode,
-        }
+        """Serialize to the per-signal dict the trace store persists (V9).
+
+        Routed through the shared :class:`SignalApplication` so the persisted
+        schema lives in exactly one place. ``final_applied_factor`` mirrors
+        ``factor`` for computed records; for bare skip records it stays at the
+        1.0 default, matching ``factor``.
+        """
+        return SignalApplication(
+            signal_type=self.signal_type,
+            target=self.target,
+            applied=self.applied,
+            reason=self.reason,
+            policy_version=self.policy_version,
+            evidence_mode=self.evidence_mode,
+            raw_factor=self.raw_factor,
+            reliability_weight=self.reliability_weight,
+            reliability_adjusted_factor=self.reliability_adjusted_factor,
+            per_signal_capped_factor=self.per_signal_capped_factor,
+            damping_family=self.damping_family,
+            family_size=self.family_size,
+            family_role=self.family_role,
+            family_damped_factor=self.family_damped_factor,
+            family_capped_factor=self.family_capped_factor,
+            confidence=self.confidence,
+            confidence_defaulted=self.confidence_defaulted,
+            confidence_adjusted_factor=self.confidence_adjusted_factor,
+            final_applied_factor=self.final_applied_factor,
+        ).as_dict()
 
 
 @dataclass
@@ -118,12 +167,9 @@ def resolve_evidence_mode(policy: AdjustmentPolicy | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _cap_factor(factor: float, cap: float) -> float:
-    """Clamp ``factor`` to ``[1 - cap, 1 + cap]``. ``cap`` is a fraction (0..1)."""
-    if cap <= 0:
-        return 1.0
-    lo, hi = 1.0 - cap, 1.0 + cap
-    return max(lo, min(hi, factor))
+# ``_cap_factor`` is the canonical ``evidence_aggregation.cap_factor`` (imported
+# above). Re-exported under the legacy private name so existing call sites and
+# tests keep working while the cap semantics live in exactly one place.
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -276,12 +322,39 @@ HANDLER_REGISTRY: dict[str, Handler] = {
     "season_record": _h_audit_only,
     "season_baseline": _h_audit_only,
     "defensive_scheme": _h_audit_only,
+    # Structural: applied by the soccer backend before lambda derivation, never
+    # as a handler mean/home/away factor. Audit-only here so it is recorded but
+    # never double-applied as a late evidence factor.
+    "competition_strength_index": _h_audit_only,
 }
 
 
 # ---------------------------------------------------------------------------
 # Per-signal evaluation
 # ---------------------------------------------------------------------------
+
+
+def _skip_record(
+    signal: EvidenceSignal, reason: str, policy_version: str, evidence_mode: str
+) -> AdjustmentRecord:
+    """An unapplied, identity record for a signal the engine cannot act on.
+
+    Still records the signal's declared ``damping_family`` and (defaulted-aware)
+    confidence so the trace stays complete for retrospective scoring.
+    """
+    confidence, confidence_defaulted = resolve_confidence(getattr(signal, "confidence", None))
+    return AdjustmentRecord(
+        signal_type=signal.signal_type,
+        target="skip",
+        factor=1.0,
+        applied=False,
+        reason=reason,
+        policy_version=policy_version,
+        evidence_mode=evidence_mode,
+        damping_family=damping_family_for(signal.signal_type),
+        confidence=confidence,
+        confidence_defaulted=confidence_defaulted,
+    )
 
 
 def _evaluate_signal(
@@ -294,21 +367,24 @@ def _evaluate_signal(
 ) -> AdjustmentRecord:
     """Evaluate one signal into a capped, attributable AdjustmentRecord.
 
-    Pure given (signal, policy, archetype, baseline, evidence_mode).
+    Pure given (signal, policy, archetype, baseline, evidence_mode). Walks the
+    Issue #22 factor sequence: reliability adjust (2) -> per-signal cap (3) ->
+    family steps (4-5, identity until Phase 3 wires correlation damping) ->
+    confidence weighting (6, gated on ``policy.enable_confidence_weighting``).
+    The plane product + plane cap (7-8) happen in the plane orchestrators.
     """
     policy_version = policy.policy_id
     handler = HANDLER_REGISTRY.get(signal.signal_type)
     coeffs = policy.coeffs_for(signal.signal_type)
 
     if handler is None or not coeffs:
-        return AdjustmentRecord(
-            signal.signal_type, "skip", 1.0, False,
-            "no handler or coefficients for signal_type", policy_version, evidence_mode,
+        return _skip_record(
+            signal, "no handler or coefficients for signal_type",
+            policy_version, evidence_mode,
         )
     if not signal_applies(signal.signal_type, archetype):
-        return AdjustmentRecord(
-            signal.signal_type, "skip", 1.0, False,
-            f"signal does not apply to sport archetype {archetype!r}",
+        return _skip_record(
+            signal, f"signal does not apply to sport archetype {archetype!r}",
             policy_version, evidence_mode,
         )
 
@@ -319,15 +395,55 @@ def _evaluate_signal(
     # 1.0 no-op for signals that scored as noise. Absent => 1.0 (full trust),
     # so the hand-seeded v1 policy behaves exactly as the raw handler.
     reliability = max(0.0, min(1.0, float(coeffs.get("reliability_weight", 1.0))))
-    damped_factor = 1.0 + reliability * (raw_factor - 1.0)
-    factor = _cap_factor(damped_factor, float(coeffs.get("cap", 0.0)))
-    applied = evidence_mode == "live" and target != "skip" and factor != 1.0
+    reliability_adjusted = reliability_adjusted_factor(raw_factor, reliability)  # step 2
+    per_signal_capped = _cap_factor(
+        reliability_adjusted, float(coeffs.get("cap", 0.0))
+    )  # step 3
+
+    # Steps 4-5 (correlation damping) are wired in Phase 3. Until then every
+    # signal is processed as its own singleton family, so these are identity.
+    family_damped = per_signal_capped
+    family_capped = per_signal_capped
+
+    # Step 6 — confidence weighting, gated. When disabled the factor is the
+    # legacy per-signal-capped value (bit-identical to before this phase).
+    confidence, confidence_defaulted = resolve_confidence(
+        getattr(signal, "confidence", None)
+    )
+    if policy.enable_confidence_weighting:
+        confidence_adjusted = confidence_adjusted_factor(family_capped, confidence)
+    else:
+        confidence_adjusted = family_capped
+
+    final = confidence_adjusted
+    applied = evidence_mode == "live" and target != "skip" and final != 1.0
     reason = (
-        f"{signal.signal_type}: {target} x{factor:.4f} "
-        f"(raw {raw_factor:.4f}, mode={evidence_mode})"
+        f"{signal.signal_type}: {target} x{final:.4f} "
+        f"(raw {raw_factor:.4f}, mode={evidence_mode}"
+        + (f", conf={confidence:.2f}" if policy.enable_confidence_weighting else "")
+        + ")"
     )
     return AdjustmentRecord(
-        signal.signal_type, target, factor, applied, reason, policy_version, evidence_mode
+        signal_type=signal.signal_type,
+        target=target,
+        factor=final,
+        applied=applied,
+        reason=reason,
+        policy_version=policy_version,
+        evidence_mode=evidence_mode,
+        raw_factor=raw_factor,
+        reliability_weight=reliability,
+        reliability_adjusted_factor=reliability_adjusted,
+        per_signal_capped_factor=per_signal_capped,
+        damping_family=damping_family_for(signal.signal_type),
+        family_size=1,
+        family_role="singleton",
+        family_damped_factor=family_damped,
+        family_capped_factor=family_capped,
+        confidence=confidence,
+        confidence_defaulted=confidence_defaulted,
+        confidence_adjusted_factor=confidence_adjusted,
+        final_applied_factor=final,
     )
 
 
@@ -342,6 +458,128 @@ def _resolve_b2b_coeffs(policy: AdjustmentPolicy, league: str) -> dict[str, Any]
         by_league.get(league.upper(), coeffs.get("default_mult", 1.0))
     )
     return resolved
+
+
+# ---------------------------------------------------------------------------
+# Correlation damping (Issue #22 Phase 3 — steps 4-5, gated)
+# ---------------------------------------------------------------------------
+
+
+def _damping_bucket(
+    signal: EvidenceSignal, rec: AdjustmentRecord, plane: str
+) -> tuple[str, str] | None:
+    """Grouping key for records that may be damped together, or None to exclude.
+
+    Records are damped within a (declared family, application bucket): on the
+    player plane the bucket is the target (mean vs std are never combined); on
+    the game plane it is the directional side (home / away / both), so a home
+    boost is never damped against an away boost. Skipped, ungrouped, or
+    non-applicable-target records are excluded.
+    """
+    family = rec.damping_family
+    if family is None or rec.target == "skip":
+        return None
+    if plane == "player":
+        if rec.target not in ("mean", "std"):
+            return None
+        return (family, rec.target)
+    # game plane: only mean-target signals scale team context.
+    if rec.target != "mean":
+        return None
+    direction = getattr(signal, "direction", None)
+    side = direction if direction in ("home", "away") else "both"
+    return (family, side)
+
+
+def _apply_correlation_damping(
+    pairs: list[tuple[EvidenceSignal, AdjustmentRecord]],
+    *,
+    policy: AdjustmentPolicy,
+    plane: str,
+) -> list[AdjustmentRecord]:
+    """Damp co-occurring same-family records (sequence steps 4-6 per family).
+
+    Returns records aligned 1:1 with ``pairs``. Only families with two or more
+    co-occurring members in the same bucket are rewritten; every other record
+    passes through untouched, so a slate with no co-occurring family reproduces
+    Phase 2 output exactly. The dominant (primary) member carries the collapsed
+    family factor into the plane product; secondaries are folded in (factor 1.0,
+    unapplied) so the family contributes once instead of stacking.
+    """
+    weight = policy.correlation_damping_weight
+    family_cap = policy.family_cap
+
+    buckets: dict[tuple[str, str], list[int]] = {}
+    for i, (signal, rec) in enumerate(pairs):
+        key = _damping_bucket(signal, rec, plane)
+        if key is not None:
+            buckets.setdefault(key, []).append(i)
+
+    out = [rec for _, rec in pairs]
+    for idxs in buckets.values():
+        if len(idxs) < 2:
+            continue  # a lone family member stays a Phase 2 singleton record
+        members = [
+            FamilyMember(key=i, factor=pairs[i][1].per_signal_capped_factor)
+            for i in idxs
+        ]
+        result = damp_family(members, weight)
+        family_capped = (
+            _cap_factor(result.family_damped_factor, family_cap)
+            if family_cap is not None
+            else result.family_damped_factor
+        )
+        primary_i = result.primary_key
+        primary = pairs[primary_i][1]
+        fam_name = primary.damping_family
+        if policy.enable_confidence_weighting:
+            confidence_adjusted = confidence_adjusted_factor(
+                family_capped, primary.confidence
+            )
+        else:
+            confidence_adjusted = family_capped
+
+        for i in idxs:
+            rec = pairs[i][1]
+            if i == primary_i:
+                final = confidence_adjusted
+                applied = (
+                    rec.evidence_mode == "live"
+                    and rec.target != "skip"
+                    and final != 1.0
+                )
+                out[i] = dataclasses.replace(
+                    rec,
+                    factor=final,
+                    applied=applied,
+                    reason=(
+                        f"{rec.signal_type}: family {fam_name!r} primary "
+                        f"x{final:.4f} (size={len(idxs)})"
+                    ),
+                    family_size=len(idxs),
+                    family_role="primary",
+                    family_damped_factor=result.family_damped_factor,
+                    family_capped_factor=family_capped,
+                    confidence_adjusted_factor=confidence_adjusted,
+                    final_applied_factor=final,
+                )
+            else:
+                out[i] = dataclasses.replace(
+                    rec,
+                    factor=1.0,
+                    applied=False,
+                    reason=(
+                        f"{rec.signal_type}: folded into family {fam_name!r} "
+                        f"primary (size={len(idxs)})"
+                    ),
+                    family_size=len(idxs),
+                    family_role="secondary",
+                    family_damped_factor=result.family_damped_factor,
+                    family_capped_factor=family_capped,
+                    confidence_adjusted_factor=1.0,
+                    final_applied_factor=1.0,
+                )
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -367,25 +605,38 @@ def compute_player_adjustment(
     archetype = resolve_archetype(league)
     baseline = _as_float((player_context or {}).get(f"{prop_type}_mean"), 0.0)
 
-    records: list[AdjustmentRecord] = []
-    mean_factor = 1.0
-    std_factor = 1.0
+    pairs: list[tuple[EvidenceSignal, AdjustmentRecord]] = []
     for signal in evidence:
         if signal.plane != "player":
-            records.append(
-                AdjustmentRecord(
-                    signal.signal_type, "skip", 1.0, False,
+            pairs.append((
+                signal,
+                _skip_record(
+                    signal,
                     "game-plane signal not applied on a player-prop analysis",
                     policy.policy_id, evidence_mode,
-                )
-            )
+                ),
+            ))
             continue
         rec = _evaluate_record_for_signal(signal, policy, archetype, baseline, evidence_mode, league)
-        records.append(rec)
+        pairs.append((signal, rec))
+
+    if policy.enable_correlation_damping:
+        damped = _apply_correlation_damping(pairs, policy=policy, plane="player")
+        pairs = list(zip((s for s, _ in pairs), damped, strict=True))
+
+    records = [rec for _, rec in pairs]
+    mean_factor = 1.0
+    std_factor = 1.0
+    for _, rec in pairs:
         if rec.applied and rec.target == "mean":
             mean_factor *= rec.factor
         elif rec.applied and rec.target == "std":
             std_factor *= rec.factor
+
+    # Step 8 — plane cap (None = no clamp, preserving legacy behaviour).
+    if policy.plane_cap is not None:
+        mean_factor = _cap_factor(mean_factor, policy.plane_cap)
+        std_factor = _cap_factor(std_factor, policy.plane_cap)
 
     return PlaneAdjustment(
         mean_factor=mean_factor,
@@ -410,18 +661,17 @@ def compute_game_adjustment(
     they are recorded for scoring but marked unapplied.
     """
     archetype = resolve_archetype(league)
-    records: list[AdjustmentRecord] = []
-    home_factor = 1.0
-    away_factor = 1.0
+    pairs: list[tuple[EvidenceSignal, AdjustmentRecord]] = []
     for signal in evidence:
         if signal.plane != "game":
-            records.append(
-                AdjustmentRecord(
-                    signal.signal_type, "skip", 1.0, False,
+            pairs.append((
+                signal,
+                _skip_record(
+                    signal,
                     "player-plane signal not applied on a game analysis",
                     policy.policy_id, evidence_mode,
-                )
-            )
+                ),
+            ))
             continue
         rec = _evaluate_record_for_signal(signal, policy, archetype, 0.0, evidence_mode, league)
         if rec.target == "std" and rec.applied:
@@ -431,7 +681,16 @@ def compute_game_adjustment(
                 applied=False,
                 reason="std-target signal has no game-plane application target",
             )
-        records.append(rec)
+        pairs.append((signal, rec))
+
+    if policy.enable_correlation_damping:
+        damped = _apply_correlation_damping(pairs, policy=policy, plane="game")
+        pairs = list(zip((s for s, _ in pairs), damped, strict=True))
+
+    records = [rec for _, rec in pairs]
+    home_factor = 1.0
+    away_factor = 1.0
+    for signal, rec in pairs:
         if rec.applied and rec.target == "mean":
             if signal.direction == "home":
                 home_factor *= rec.factor
@@ -440,6 +699,11 @@ def compute_game_adjustment(
             else:  # neutral / None -> shifts the whole scoring environment
                 home_factor *= rec.factor
                 away_factor *= rec.factor
+
+    # Step 8 — plane cap (None = no clamp, preserving legacy behaviour).
+    if policy.plane_cap is not None:
+        home_factor = _cap_factor(home_factor, policy.plane_cap)
+        away_factor = _cap_factor(away_factor, policy.plane_cap)
 
     return PlaneAdjustment(
         home_factor=home_factor,

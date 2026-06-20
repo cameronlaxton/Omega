@@ -79,6 +79,12 @@ class GameSimulationInput:
     # (path-dependent Markov, tennis set-chains) ignore the flag and stay on MC.
     exact: bool = False
     dispersion: DispersionPolicy | None = None
+    # Structural soccer competition-strength index by side, e.g.
+    # ``{"home": 1.08, "away": 0.95}`` (Issue #22 Feature 1). The soccer backend
+    # multiplies a side's attack rate and divides its concede rate by its index
+    # BEFORE lambda derivation. None (the default) leaves every backend's output
+    # bit-identical; non-soccer backends ignore it.
+    competition_strength_index: dict[str, float] | None = None
 
 
 class GameSimulationBackend(Protocol):

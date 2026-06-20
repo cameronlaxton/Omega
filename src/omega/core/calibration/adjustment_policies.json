@@ -51,7 +51,8 @@
         "starter_era": { "per_unit": 0.04, "cap": 0.12 },
         "season_record": { "cap": 0.01 },
         "season_baseline": { "cap": 0.01 },
-        "defensive_scheme": { "map": {}, "cap": 0.01 }
+        "defensive_scheme": { "map": {}, "cap": 0.01 },
+        "competition_strength_index": { "cap": 0.01 }
       },
       "training_window": "",
       "sample_size": 0,

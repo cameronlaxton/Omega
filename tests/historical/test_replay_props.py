@@ -1,4 +1,4 @@
-﻿"""Player-prop replay: eligible prop traces, decision-time lines, void exclusion.
+"""Player-prop replay: eligible prop traces, decision-time lines, void exclusion.
 
 Props stay league-scoped player-stat markets. The decision-time line/prices drive
 the prediction; the realized stat_value is attached only as the outcome; void/DNP

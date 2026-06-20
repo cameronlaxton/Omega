@@ -85,6 +85,20 @@ def _identity(name: str) -> str | None:
 def _load_canonicalizer(league: str) -> Callable[[str], str | None]:
     """Per-league team-name canonicalizer. Falls back to identity when no
     omega.integrations.espn_{league} module ships a ``canonical_team``."""
+    league_upper = league.upper()
+    if league_upper in ("ATP", "WTA", "GRAND_SLAM"):
+        try:
+            from omega.integrations._etl import load_alias_table, resolve_entity
+            from omega.integrations.espn_boxscore import normalize_player_name
+            alias_table = load_alias_table("TENNIS")
+            return lambda name: resolve_entity(name, alias_table) or normalize_player_name(name)
+        except (ImportError, FileNotFoundError, OSError) as exc:
+            logger.warning(
+                "Tennis canonicalizer unavailable for %s (%s); "
+                "falling back to identity canonicalization",
+                league,
+                exc,
+            )
     league_lc = league.lower()
     candidates = [
         f"omega.integrations.espn_{league_lc}",
@@ -270,21 +284,34 @@ def _process_league(
 ) -> tuple[int, list[str]]:
     """Fetch one snapshot for `league`, attach closing lines for `bets`.
     Returns ``(attached_count, skipped_messages)``."""
-    sport_key = sport_key_for(league)
-    if sport_key is None:
-        return 0, [f"{b['bet_id']} (league {league!r} has no sport_key mapping)" for b in bets]
+    if league.upper() in ("ATP", "WTA", "GRAND_SLAM"):
+        from omega.integrations.odds_api import resolve_tennis_sport_keys
+        try:
+            sport_keys = resolve_tennis_sport_keys(client, league)
+        except Exception as exc:
+            return 0, [f"{b['bet_id']} (tennis sport-key resolution failed: {exc})" for b in bets]
+        if not sport_keys:
+            return 0, [f"{b['bet_id']} (no active tournament keys found)" for b in bets]
+    else:
+        sport_key = sport_key_for(league)
+        if sport_key is None:
+            return 0, [f"{b['bet_id']} (league {league!r} has no sport_key mapping)" for b in bets]
+        sport_keys = [sport_key]
 
-    try:
-        events = client.fetch_event_odds(league)
-    except OddsApiKeyMissing:
-        logger.error("OMEGA_ODDS_API_KEY not set; cannot fetch %s closing lines.", league)
-        return 0, [f"{b['bet_id']} (api key missing)" for b in bets]
-    except OddsApiBudgetExceeded as exc:
-        logger.error("the-odds-api budget exceeded for %s: %s", league, exc)
-        return 0, [f"{b['bet_id']} (budget exceeded)" for b in bets]
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Odds API fetch failed for %s: %s", league, exc)
-        return 0, [f"{b['bet_id']} (api fetch failed: {exc})" for b in bets]
+    events = []
+    for skey in sport_keys:
+        try:
+            events.extend(client.fetch_event_odds(league, sport_key=skey))
+        except OddsApiKeyMissing:
+            logger.error("OMEGA_ODDS_API_KEY not set; cannot fetch %s closing lines.", league)
+            return 0, [f"{b['bet_id']} (api key missing)" for b in bets]
+        except OddsApiBudgetExceeded as exc:
+            logger.error("the-odds-api budget exceeded for %s: %s", league, exc)
+            return 0, [f"{b['bet_id']} (budget exceeded)" for b in bets]
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Odds API fetch failed for %s (sport_key=%s): %s", league, skey, exc)
+            if len(sport_keys) == 1:
+                return 0, [f"{b['bet_id']} (api fetch failed: {exc})" for b in bets]
 
     logger.info(
         "[%s] fetched %d events; remaining budget=%d",
@@ -294,13 +321,12 @@ def _process_league(
     )
 
     canonicalize = _load_canonicalizer(league)
-    events_by_pair: dict[tuple[str, str], EventOdds] = {}
+    events_by_pair: dict[tuple[str, str], list[EventOdds]] = {}
     for e in events:
         key = _event_key(e.home_team, e.away_team, canonicalize)
-        events_by_pair[key] = e
+        events_by_pair.setdefault(key, []).append(e)
         rev_key = (key[1], key[0])
-        if rev_key not in events_by_pair:
-            events_by_pair[rev_key] = e
+        events_by_pair.setdefault(rev_key, []).append(e)
 
     attached = 0
     skipped: list[str] = []
@@ -323,53 +349,61 @@ def _process_league(
             skipped.append(f"{bet['bet_id']} (cannot resolve event teams from trace)")
             continue
 
-        event = events_by_pair.get((home, away))
-        if event is None:
+        matched_events = events_by_pair.get((home, away), [])
+        if not matched_events:
             skipped.append(f"{bet['bet_id']} ({away} @ {home}: not in {league} snapshot)")
             continue
 
         persisted_book = str(bet["book"]).lower()
-        if bet["market"].startswith("player_prop:"):
-            stat_key = bet["market"].split(":", 1)[1]
-            provider_market = provider_market_for_prop(league, stat_key)
-            if not provider_market:
-                skipped.append(f"{bet['bet_id']} (no provider prop mapping for {stat_key})")
-                continue
-            book_query = persisted_book
-            if book_query == "consensus":
-                book_query = "betmgm"
-            try:
-                event = client.fetch_current_event_odds(
-                    league,
-                    event.event_id,
-                    markets=provider_market,
-                    bookmakers=book_query,
+        outcome = None
+        for candidate_event in matched_events:
+            if bet["market"].startswith("player_prop:"):
+                stat_key = bet["market"].split(":", 1)[1]
+                provider_market = provider_market_for_prop(league, stat_key)
+                if not provider_market:
+                    continue
+                book_query = persisted_book
+                if book_query == "consensus":
+                    book_query = "betmgm"
+                try:
+                    event = client.fetch_current_event_odds(
+                        league,
+                        candidate_event.event_id,
+                        markets=provider_market,
+                        bookmakers=book_query,
+                        sport_key=candidate_event.sport_key or None,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    continue
+                bet_with_league = {**bet, "league": league}
+                candidate_outcome = _match_prop_outcome(bet_with_league, event.books)
+                if candidate_outcome is not None:
+                    outcome = candidate_outcome
+                    break
+            else:
+                is_reversed = False
+                if candidate_event.home_team and candidate_event.away_team:
+                    api_home_canon = canonicalize(candidate_event.home_team) or candidate_event.home_team
+                    api_away_canon = canonicalize(candidate_event.away_team) or candidate_event.away_team
+                    if api_home_canon.lower() == away.lower() or api_away_canon.lower() == home.lower():
+                        is_reversed = True
+
+                match_home = candidate_event.away_team if is_reversed else candidate_event.home_team
+                match_away = candidate_event.home_team if is_reversed else candidate_event.away_team
+
+                candidate_outcome = _match_outcome(
+                    bet_market=bet["market"],
+                    descriptor=bet["selection_descriptor"],
+                    home=match_home,
+                    away=match_away,
+                    books=candidate_event.books,
+                    book_preference=bet["book"],
+                    line_taken=bet.get("line_taken"),
                 )
-            except Exception as exc:  # noqa: BLE001
-                skipped.append(f"{bet['bet_id']} (prop event odds fetch failed: {exc})")
-                continue
-            bet = {**bet, "league": league}
-            outcome = _match_prop_outcome(bet, event.books)
-        else:
-            is_reversed = False
-            if event.home_team and event.away_team:
-                api_home_canon = canonicalize(event.home_team) or event.home_team
-                api_away_canon = canonicalize(event.away_team) or event.away_team
-                if api_home_canon.lower() == away.lower() or api_away_canon.lower() == home.lower():
-                    is_reversed = True
+                if candidate_outcome is not None:
+                    outcome = candidate_outcome
+                    break
 
-            match_home = event.away_team if is_reversed else event.home_team
-            match_away = event.home_team if is_reversed else event.away_team
-
-            outcome = _match_outcome(
-                bet_market=bet["market"],
-                descriptor=bet["selection_descriptor"],
-                home=match_home,
-                away=match_away,
-                books=event.books,
-                book_preference=bet["book"],
-                line_taken=bet.get("line_taken"),
-            )
         if outcome is None:
             skipped.append(f"{bet['bet_id']} (no book matched market+descriptor)")
             continue

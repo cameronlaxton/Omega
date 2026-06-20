@@ -71,6 +71,50 @@ class AdjustmentPolicy(BaseModel):
         description="signal_type -> handler param dict (always includes 'cap').",
     )
 
+    # Feature flags (Issue #22). All default False so a policy persisted before
+    # these fields existed parses unchanged and behaves bit-identically: pydantic
+    # fills the defaults on load, and no engine path reads a flag until the phase
+    # that wires it lands. Each flag gates one behaviour-changing layer.
+    enable_confidence_weighting: bool = Field(
+        default=False,
+        description="Scale each signal's family-capped factor by the agent's "
+        "stated confidence before plane aggregation (sequence step 6).",
+    )
+    enable_correlation_damping: bool = Field(
+        default=False,
+        description="Damp correlated signals that share a damping_family so "
+        "co-occurring evidence cannot stack unbounded (sequence step 4).",
+    )
+    enable_competition_strength_index: bool = Field(
+        default=False,
+        description="Apply the structural soccer competition_strength_index to "
+        "team-context inputs before Bivariate Poisson lambda derivation.",
+    )
+
+    # Damping / cap parameters (Issue #22). Only consulted on the paths the flags
+    # above enable, so defaults are behaviour-preserving: correlation_damping_weight
+    # is unused unless enable_correlation_damping is set, and the two caps are
+    # skipped entirely while None (no clamp = legacy behaviour).
+    correlation_damping_weight: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Weight applied to each secondary signal's signed delta when "
+        "damping a co-occurring family (0 = keep only the primary, 1 = no damping).",
+    )
+    family_cap: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="Max absolute fractional deviation of a damped family's factor "
+        "from 1.0 (sequence step 5). None = no family cap; must be >= 0 when set.",
+    )
+    plane_cap: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="Max absolute fractional deviation of the aggregated plane "
+        "factor from 1.0 (sequence step 8). None = no plane cap; must be >= 0 when set.",
+    )
+
     # Training provenance (empty for the hand-seeded v1 priors)
     training_window: str = ""
     sample_size: int = Field(default=0, ge=0)

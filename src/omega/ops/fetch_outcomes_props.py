@@ -399,9 +399,18 @@ def main(
                     player_key = normalize_player_name(fields["player_name"])
                     player_stats = stats_by_player.get(player_key)
                     if not player_stats:
+                        # Absence from the parsed box score is NOT proof of a DNP.
+                        # It is equally consistent with an alias/name mismatch, a
+                        # parser omission, or an uncovered ESPN payload shape.
+                        # Auto-voiding here would silently settle a genuine prop as
+                        # void and drop it from settlement/calibration. ESPN's
+                        # box-score parse exposes no explicit DNP / no-action flag,
+                        # so leave the trace UNMATCHED for manual triage
+                        # (omega-backfill-outcomes-manual / omega_trace_void_prop)
+                        # rather than guessing.
                         unmatched.append(
-                            f"{trace.get('trace_id', '?')} (player "
-                            f"{fields['player_name']!r} not in box score)"
+                            f"{trace.get('trace_id', '?')} ({fields['player_name']} "
+                            f"not found in box score; possible DNP or name mismatch)"
                         )
                         continue
                     if fields["prop_type"] not in player_stats:

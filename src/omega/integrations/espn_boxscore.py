@@ -101,6 +101,7 @@ MLB_BATTING_KEYS: dict[str, tuple[str, ...]] = {
     "rbis": ("RBI", "RBIs"),
     "hr": ("HR", "homeRuns"),
     "home_runs": ("HR", "homeRuns"),
+    "hrs": ("HR", "homeRuns"),
     "sb": ("SB", "stolenBases"),
     "stolen_bases": ("SB", "stolenBases"),
     "bb": ("BB", "walks"),
