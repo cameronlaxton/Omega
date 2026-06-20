@@ -37,12 +37,14 @@
     "South Africa",
     "South Korea",
     "Spain",
+    "Sweden",
     "Switzerland",
     "Tunisia",
     "United States",
     "Uruguay",
     "Uzbekistan",
-    "Wales"
+    "Wales",
+    "Curaçao"
   ],
   "aliases": {
     "Cote d'Ivoire": "Ivory Coast",
@@ -57,6 +59,7 @@
     "U.S.A.": "United States",
     "USA": "United States",
     "USMNT": "United States",
-    "United States of America": "United States"
+    "United States of America": "United States",
+    "Curacao": "Curaçao"
   }
 }

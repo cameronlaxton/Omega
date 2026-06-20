@@ -251,7 +251,7 @@ def repair_source_integrity(repo_root: Path) -> list[str]:
                 failures.append(f"Cannot repair null bytes in {py_file}: {e}")
                 continue
 
-        source = py_file.read_text(encoding="utf-8", errors="replace")
+        source = py_file.read_text(encoding="utf-8-sig", errors="replace")
         try:
             ast.parse(source, filename=str(py_file))
         except SyntaxError as e:
@@ -381,7 +381,7 @@ def _syntax_corrupt_tracked_files(repo_root: Path, tracked_files: list[str]) -> 
         if not abs_path.exists():
             continue
         try:
-            source = abs_path.read_text(encoding="utf-8", errors="replace")
+            source = abs_path.read_text(encoding="utf-8-sig", errors="replace")
             ast.parse(source, filename=str(abs_path))
         except (OSError, SyntaxError):
             corrupt.append(rel_path)
@@ -396,7 +396,7 @@ def _sync_filesystem() -> None:
 
 def _ast_parse_file(path: Path) -> str | None:
     try:
-        source = path.read_text(encoding="utf-8", errors="replace")
+        source = path.read_text(encoding="utf-8-sig", errors="replace")
         ast.parse(source, filename=str(path))
     except (OSError, SyntaxError) as exc:
         return str(exc)
