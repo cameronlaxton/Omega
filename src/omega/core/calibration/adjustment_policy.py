@@ -91,6 +91,28 @@ class AdjustmentPolicy(BaseModel):
         "team-context inputs before Bivariate Poisson lambda derivation.",
     )
 
+    # Damping / cap parameters (Issue #22). Only consulted on the paths the flags
+    # above enable, so defaults are behaviour-preserving: correlation_damping_weight
+    # is unused unless enable_correlation_damping is set, and the two caps are
+    # skipped entirely while None (no clamp = legacy behaviour).
+    correlation_damping_weight: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Weight applied to each secondary signal's signed delta when "
+        "damping a co-occurring family (0 = keep only the primary, 1 = no damping).",
+    )
+    family_cap: float | None = Field(
+        default=None,
+        description="Max absolute fractional deviation of a damped family's factor "
+        "from 1.0 (sequence step 5). None = no family cap.",
+    )
+    plane_cap: float | None = Field(
+        default=None,
+        description="Max absolute fractional deviation of the aggregated plane "
+        "factor from 1.0 (sequence step 8). None = no plane cap.",
+    )
+
     # Training provenance (empty for the hand-seeded v1 priors)
     training_window: str = ""
     sample_size: int = Field(default=0, ge=0)

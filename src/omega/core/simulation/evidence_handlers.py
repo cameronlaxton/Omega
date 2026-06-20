@@ -34,8 +34,10 @@ from omega.core.contracts.evidence import (
     signal_applies,
 )
 from omega.core.simulation.evidence_aggregation import (
+    FamilyMember,
     SignalApplication,
     confidence_adjusted_factor,
+    damp_family,
     reliability_adjusted_factor,
     resolve_confidence,
 )
@@ -455,6 +457,128 @@ def _resolve_b2b_coeffs(policy: AdjustmentPolicy, league: str) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
+# Correlation damping (Issue #22 Phase 3 — steps 4-5, gated)
+# ---------------------------------------------------------------------------
+
+
+def _damping_bucket(
+    signal: EvidenceSignal, rec: AdjustmentRecord, plane: str
+) -> tuple[str, str] | None:
+    """Grouping key for records that may be damped together, or None to exclude.
+
+    Records are damped within a (declared family, application bucket): on the
+    player plane the bucket is the target (mean vs std are never combined); on
+    the game plane it is the directional side (home / away / both), so a home
+    boost is never damped against an away boost. Skipped, ungrouped, or
+    non-applicable-target records are excluded.
+    """
+    family = rec.damping_family
+    if family is None or rec.target == "skip":
+        return None
+    if plane == "player":
+        if rec.target not in ("mean", "std"):
+            return None
+        return (family, rec.target)
+    # game plane: only mean-target signals scale team context.
+    if rec.target != "mean":
+        return None
+    direction = getattr(signal, "direction", None)
+    side = direction if direction in ("home", "away") else "both"
+    return (family, side)
+
+
+def _apply_correlation_damping(
+    pairs: list[tuple[EvidenceSignal, AdjustmentRecord]],
+    *,
+    policy: AdjustmentPolicy,
+    plane: str,
+) -> list[AdjustmentRecord]:
+    """Damp co-occurring same-family records (sequence steps 4-6 per family).
+
+    Returns records aligned 1:1 with ``pairs``. Only families with two or more
+    co-occurring members in the same bucket are rewritten; every other record
+    passes through untouched, so a slate with no co-occurring family reproduces
+    Phase 2 output exactly. The dominant (primary) member carries the collapsed
+    family factor into the plane product; secondaries are folded in (factor 1.0,
+    unapplied) so the family contributes once instead of stacking.
+    """
+    weight = policy.correlation_damping_weight
+    family_cap = policy.family_cap
+
+    buckets: dict[tuple[str, str], list[int]] = {}
+    for i, (signal, rec) in enumerate(pairs):
+        key = _damping_bucket(signal, rec, plane)
+        if key is not None:
+            buckets.setdefault(key, []).append(i)
+
+    out = [rec for _, rec in pairs]
+    for idxs in buckets.values():
+        if len(idxs) < 2:
+            continue  # a lone family member stays a Phase 2 singleton record
+        members = [
+            FamilyMember(key=i, factor=pairs[i][1].per_signal_capped_factor)
+            for i in idxs
+        ]
+        result = damp_family(members, weight)
+        family_capped = (
+            _cap_factor(result.family_damped_factor, family_cap)
+            if family_cap is not None
+            else result.family_damped_factor
+        )
+        primary_i = result.primary_key
+        primary = pairs[primary_i][1]
+        fam_name = primary.damping_family
+        if policy.enable_confidence_weighting:
+            confidence_adjusted = confidence_adjusted_factor(
+                family_capped, primary.confidence
+            )
+        else:
+            confidence_adjusted = family_capped
+
+        for i in idxs:
+            rec = pairs[i][1]
+            if i == primary_i:
+                final = confidence_adjusted
+                applied = (
+                    rec.evidence_mode == "live"
+                    and rec.target != "skip"
+                    and final != 1.0
+                )
+                out[i] = dataclasses.replace(
+                    rec,
+                    factor=final,
+                    applied=applied,
+                    reason=(
+                        f"{rec.signal_type}: family {fam_name!r} primary "
+                        f"x{final:.4f} (size={len(idxs)})"
+                    ),
+                    family_size=len(idxs),
+                    family_role="primary",
+                    family_damped_factor=result.family_damped_factor,
+                    family_capped_factor=family_capped,
+                    confidence_adjusted_factor=confidence_adjusted,
+                    final_applied_factor=final,
+                )
+            else:
+                out[i] = dataclasses.replace(
+                    rec,
+                    factor=1.0,
+                    applied=False,
+                    reason=(
+                        f"{rec.signal_type}: folded into family {fam_name!r} "
+                        f"primary (size={len(idxs)})"
+                    ),
+                    family_size=len(idxs),
+                    family_role="secondary",
+                    family_damped_factor=result.family_damped_factor,
+                    family_capped_factor=family_capped,
+                    confidence_adjusted_factor=1.0,
+                    final_applied_factor=1.0,
+                )
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Plane orchestration
 # ---------------------------------------------------------------------------
 
@@ -477,25 +601,38 @@ def compute_player_adjustment(
     archetype = resolve_archetype(league)
     baseline = _as_float((player_context or {}).get(f"{prop_type}_mean"), 0.0)
 
-    records: list[AdjustmentRecord] = []
-    mean_factor = 1.0
-    std_factor = 1.0
+    pairs: list[tuple[EvidenceSignal, AdjustmentRecord]] = []
     for signal in evidence:
         if signal.plane != "player":
-            records.append(
+            pairs.append((
+                signal,
                 _skip_record(
                     signal,
                     "game-plane signal not applied on a player-prop analysis",
                     policy.policy_id, evidence_mode,
-                )
-            )
+                ),
+            ))
             continue
         rec = _evaluate_record_for_signal(signal, policy, archetype, baseline, evidence_mode, league)
-        records.append(rec)
+        pairs.append((signal, rec))
+
+    if policy.enable_correlation_damping:
+        damped = _apply_correlation_damping(pairs, policy=policy, plane="player")
+        pairs = list(zip((s for s, _ in pairs), damped))
+
+    records = [rec for _, rec in pairs]
+    mean_factor = 1.0
+    std_factor = 1.0
+    for _, rec in pairs:
         if rec.applied and rec.target == "mean":
             mean_factor *= rec.factor
         elif rec.applied and rec.target == "std":
             std_factor *= rec.factor
+
+    # Step 8 — plane cap (None = no clamp, preserving legacy behaviour).
+    if policy.plane_cap is not None:
+        mean_factor = _cap_factor(mean_factor, policy.plane_cap)
+        std_factor = _cap_factor(std_factor, policy.plane_cap)
 
     return PlaneAdjustment(
         mean_factor=mean_factor,
@@ -520,18 +657,17 @@ def compute_game_adjustment(
     they are recorded for scoring but marked unapplied.
     """
     archetype = resolve_archetype(league)
-    records: list[AdjustmentRecord] = []
-    home_factor = 1.0
-    away_factor = 1.0
+    pairs: list[tuple[EvidenceSignal, AdjustmentRecord]] = []
     for signal in evidence:
         if signal.plane != "game":
-            records.append(
+            pairs.append((
+                signal,
                 _skip_record(
                     signal,
                     "player-plane signal not applied on a game analysis",
                     policy.policy_id, evidence_mode,
-                )
-            )
+                ),
+            ))
             continue
         rec = _evaluate_record_for_signal(signal, policy, archetype, 0.0, evidence_mode, league)
         if rec.target == "std" and rec.applied:
@@ -541,7 +677,16 @@ def compute_game_adjustment(
                 applied=False,
                 reason="std-target signal has no game-plane application target",
             )
-        records.append(rec)
+        pairs.append((signal, rec))
+
+    if policy.enable_correlation_damping:
+        damped = _apply_correlation_damping(pairs, policy=policy, plane="game")
+        pairs = list(zip((s for s, _ in pairs), damped))
+
+    records = [rec for _, rec in pairs]
+    home_factor = 1.0
+    away_factor = 1.0
+    for signal, rec in pairs:
         if rec.applied and rec.target == "mean":
             if signal.direction == "home":
                 home_factor *= rec.factor
@@ -550,6 +695,11 @@ def compute_game_adjustment(
             else:  # neutral / None -> shifts the whole scoring environment
                 home_factor *= rec.factor
                 away_factor *= rec.factor
+
+    # Step 8 — plane cap (None = no clamp, preserving legacy behaviour).
+    if policy.plane_cap is not None:
+        home_factor = _cap_factor(home_factor, policy.plane_cap)
+        away_factor = _cap_factor(away_factor, policy.plane_cap)
 
     return PlaneAdjustment(
         home_factor=home_factor,

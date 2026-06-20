@@ -49,6 +49,10 @@ class TestFeatureFlagDefaults:
         assert policy.enable_confidence_weighting is False
         assert policy.enable_correlation_damping is False
         assert policy.enable_competition_strength_index is False
+        # Phase 3 damping/cap params also default to behaviour-preserving values.
+        assert policy.correlation_damping_weight == 0.5
+        assert policy.family_cap is None
+        assert policy.plane_cap is None
 
     def test_flags_round_trip_through_model_dump(self):
         policy = AdjustmentPolicy(
