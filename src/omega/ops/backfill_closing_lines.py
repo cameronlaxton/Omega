@@ -80,8 +80,13 @@ def _load_canonicalizer(league: str) -> Callable[[str], str | None]:
             from omega.integrations.espn_boxscore import normalize_player_name
             alias_table = load_alias_table("TENNIS")
             return lambda name: resolve_entity(name, alias_table) or normalize_player_name(name)
-        except Exception:
-            pass
+        except (ImportError, FileNotFoundError, OSError) as exc:
+            logger.warning(
+                "Tennis canonicalizer unavailable for %s (%s); "
+                "falling back to identity canonicalization",
+                league,
+                exc,
+            )
 
     try:
         from omega.integrations.espn_soccer import SOCCER_LEAGUE_SLUGS, canonical_team
@@ -381,6 +386,7 @@ def _process_league(
                             date=ts,
                             markets=provider_market,
                             bookmakers=book_preference,
+                            sport_key=candidate_event.sport_key or None,
                         )
                         event = prop_snapshot.events[0] if prop_snapshot.events else None
                         if event is None:
@@ -422,6 +428,14 @@ def _process_league(
                 )
                 continue
 
+            # Use the matched book's own snapshot timestamp rather than a single
+            # bucket-wide ``actual_ts``: with multiple sport_keys (tennis) the
+            # events come from distinct historical fetches, so a shared
+            # ``actual_ts`` would mis-tag every event with the last fetch's
+            # timestamp. ``BookOdds.snapshot_timestamp`` is stamped per fetch in
+            # parse_historical_snapshot; fall back to ``actual_ts`` when absent.
+            close_ts = outcome.snapshot_timestamp or actual_ts
+
             if dry_run:
                 logger.info(
                     "DRY [%s] %s -> %s %s @ %s pt=%s (snapshot=%s)",
@@ -431,7 +445,7 @@ def _process_league(
                     outcome.market,
                     outcome.price,
                     outcome.point,
-                    actual_ts,
+                    close_ts,
                 )
                 attached += 1
                 continue
@@ -442,7 +456,7 @@ def _process_league(
                 selection_descriptor=bet["selection_descriptor"],
                 closing_odds=outcome.price,
                 closing_line=outcome.point,
-                closing_timestamp=actual_ts,
+                closing_timestamp=close_ts,
                 source=f"the-odds-api-historical:{persisted_book}",
             )
             attached += 1
@@ -453,7 +467,7 @@ def _process_league(
                 outcome.price,
                 bet["market"],
                 outcome.point,
-                actual_ts,
+                close_ts,
                 outcome.bookmaker,
             )
 

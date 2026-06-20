@@ -92,8 +92,13 @@ def _load_canonicalizer(league: str) -> Callable[[str], str | None]:
             from omega.integrations.espn_boxscore import normalize_player_name
             alias_table = load_alias_table("TENNIS")
             return lambda name: resolve_entity(name, alias_table) or normalize_player_name(name)
-        except Exception:
-            pass
+        except (ImportError, FileNotFoundError, OSError) as exc:
+            logger.warning(
+                "Tennis canonicalizer unavailable for %s (%s); "
+                "falling back to identity canonicalization",
+                league,
+                exc,
+            )
     league_lc = league.lower()
     candidates = [
         f"omega.integrations.espn_{league_lc}",
@@ -366,6 +371,7 @@ def _process_league(
                         candidate_event.event_id,
                         markets=provider_market,
                         bookmakers=book_query,
+                        sport_key=candidate_event.sport_key or None,
                     )
                 except Exception as exc:  # noqa: BLE001
                     continue

@@ -505,9 +505,15 @@ class OddsApiClient:
         regions: str = "us",
         markets: str = "h2h,spreads,totals",
         bookmakers: str | None = None,
+        sport_key: str | None = None,
     ) -> HistoricalSnapshot:
-        """Fetch historical odds for one event, including prop/additional markets."""
-        sport_key = _require_sport_key(league)
+        """Fetch historical odds for one event, including prop/additional markets.
+
+        ``sport_key`` overrides the static SPORT_KEY_MAP lookup when provided —
+        required for tennis, whose provider keys are per-tournament (see
+        :func:`resolve_tennis_sport_keys`).
+        """
+        sport_key = sport_key or _require_sport_key(league)
         params = _odds_params(regions=regions, markets=markets, bookmakers=bookmakers)
         params["date"] = date
         payload = self._get_json(
