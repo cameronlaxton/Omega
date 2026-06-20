@@ -15,9 +15,17 @@ Design rules:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+from omega.core.simulation.evidence_aggregation import (
+    FamilyMember,
+    damp_family,
+    resolve_confidence,
+)
 
 if TYPE_CHECKING:
+    from omega.core.calibration.adjustment_policy import AdjustmentPolicy
     from omega.core.contracts.evidence import EvidenceSignal
 
 _log = logging.getLogger(__name__)
@@ -109,77 +117,171 @@ def _validate_registry_membership() -> None:
 _validate_registry_membership()
 
 
+@dataclass(frozen=True)
+class TransitionModifierAdjustment:
+    """Rich result of mapping evidence signals to Markov transition modifiers.
+
+    ``modifiers`` is the clamped per-key scalar dict the backend consumes — it is
+    bit-identical to the legacy ``signals_to_transition_modifiers`` output when
+    the policy flags are off. ``applications`` carries one *real* per-signal
+    record (replacing the service layer's fabricated ``factor=None`` rows).
+    ``aggregation_records`` describes the per-modifier-key cumulative math so a
+    clamped or damped key effect is never misattributed to a single signal.
+    """
+
+    modifiers: dict[str, float]
+    applications: list[dict[str, Any]]
+    aggregation_records: list[dict[str, Any]]
+
+
+def compute_transition_modifier_adjustment(
+    signals: list[EvidenceSignal],
+    home_team: str,
+    *,
+    policy: AdjustmentPolicy | None = None,
+) -> TransitionModifierAdjustment:
+    """Map EvidenceSignals to Markov transition modifiers with full attribution.
+
+    The modifier math is the legacy one (per-key product, clamped to
+    ±MAX_CUMULATIVE_SHIFT) unless a policy enables the Issue #22 guardrails:
+
+    - ``enable_confidence_weighting`` scales each signal's scalar deviation from
+      1.0 by the agent's confidence before aggregation.
+    - ``enable_correlation_damping`` collapses the multiple signals on one
+      modifier key with the sign-preserving family damper instead of a raw
+      product (the modifier key is the natural correlation group here).
+
+    With no policy, or both flags off, ``modifiers`` is bit-identical to the
+    legacy output. Directional signals (home/away) resolve to the correct side.
+    """
+    enable_confidence = bool(getattr(policy, "enable_confidence_weighting", False))
+    enable_damping = bool(getattr(policy, "enable_correlation_damping", False))
+    damping_weight = float(getattr(policy, "correlation_damping_weight", 0.5))
+
+    applications: list[dict[str, Any]] = []
+    key_contribs: dict[str, list[tuple[int, float]]] = {}
+
+    for idx, sig in enumerate(signals):
+        signal_type = str(getattr(sig, "signal_type", ""))
+        entry = _SIGNAL_TO_MODIFIER.get(signal_type)
+        if entry is None:
+            applications.append(
+                {
+                    "signal_type": signal_type,
+                    "target": "skip",
+                    "applied": False,
+                    "factor": 1.0,
+                    "reason": "no Markov transition mapping for signal_type",
+                    "policy_version": "markov_state_v1",
+                    "evidence_mode": "markov_transition",
+                }
+            )
+            continue
+
+        modifier_key, base_scalar = entry
+        direction = getattr(sig, "direction", None)
+        effective_key, effective_scalar = modifier_key, base_scalar
+        if direction in ("home", "away"):
+            effective_key, effective_scalar = _resolve_direction(
+                modifier_key, base_scalar, direction
+            )
+        raw_scalar = effective_scalar
+        confidence, confidence_defaulted = resolve_confidence(
+            getattr(sig, "confidence", None)
+        )
+        if enable_confidence:
+            effective_scalar = 1.0 + confidence * (raw_scalar - 1.0)
+
+        key_contribs.setdefault(effective_key, []).append((idx, effective_scalar))
+        applications.append(
+            {
+                "signal_type": signal_type,
+                "target": "markov_transition",
+                "modifier_key": effective_key,
+                "applied": True,
+                "raw_scalar": raw_scalar,
+                "effective_scalar": effective_scalar,
+                "factor": effective_scalar,  # real factor, replacing the legacy None
+                "direction": direction,
+                "confidence": confidence,
+                "confidence_defaulted": confidence_defaulted,
+                "reason": "mapped_to_markov_transition_modifiers",
+                "policy_version": "markov_state_v1",
+                "evidence_mode": "markov_transition",
+            }
+        )
+
+    modifiers, aggregation_records = _aggregate_modifier_keys(
+        key_contribs, enable_damping=enable_damping, damping_weight=damping_weight
+    )
+    return TransitionModifierAdjustment(
+        modifiers=modifiers,
+        applications=applications,
+        aggregation_records=aggregation_records,
+    )
+
+
+def _aggregate_modifier_keys(
+    key_contribs: dict[str, list[tuple[int, float]]],
+    *,
+    enable_damping: bool,
+    damping_weight: float,
+) -> tuple[dict[str, float], list[dict[str, Any]]]:
+    """Collapse per-key contributions into clamped modifiers + aggregation records.
+
+    Each key's contributions are combined by a raw product (legacy) or, when
+    correlation damping is enabled and two or more signals share the key, by the
+    sign-preserving family damper. The result is clamped to
+    [1/MAX_CUMULATIVE_SHIFT, MAX_CUMULATIVE_SHIFT].
+    """
+    lo = 1.0 / _MAX_CUMULATIVE_SHIFT
+    hi = _MAX_CUMULATIVE_SHIFT
+    modifiers: dict[str, float] = {}
+    aggregation_records: list[dict[str, Any]] = []
+    for key, contribs in key_contribs.items():
+        damped = enable_damping and len(contribs) > 1
+        if damped:
+            members = [FamilyMember(key=i, factor=s) for i, s in contribs]
+            raw_value = damp_family(members, damping_weight).family_damped_factor
+        else:
+            raw_value = 1.0
+            for _, scalar in contribs:
+                raw_value *= scalar
+        clamped = max(lo, min(hi, raw_value))
+        if clamped != raw_value:
+            _log.warning(
+                "cumulative modifier %r=%r clamped to %r (cap ±%.0f%%)",
+                key, raw_value, clamped, (_MAX_CUMULATIVE_SHIFT - 1) * 100,
+            )
+        modifiers[key] = clamped
+        aggregation_records.append(
+            {
+                "modifier_key": key,
+                "family_size": len(contribs),
+                "damped": damped,
+                "raw_value": raw_value,
+                "clamped_value": clamped,
+                "cap": _MAX_CUMULATIVE_SHIFT,
+            }
+        )
+    return modifiers, aggregation_records
+
+
 def signals_to_transition_modifiers(
     signals: list[EvidenceSignal],
     home_team: str,
 ) -> dict[str, float]:
     """Map a list of EvidenceSignals to a Markov transition_modifiers dict.
 
-    Args:
-        signals: Evidence signals from the orchestrator (may be empty).
-        home_team: Home team name, used to resolve home/away directional signals.
-
-    Returns:
-        A dict of modifier_key → cumulative scalar, clamped to ±MAX_CUMULATIVE_SHIFT.
-        Signals without a known mapping are silently skipped.
-
-    Rules:
-        - Multiple signals for the same key are multiplied (compounding effect).
-        - The cumulative scalar for each key is then clamped to
-          [1/MAX_CUMULATIVE_SHIFT, MAX_CUMULATIVE_SHIFT].
-        - Directional signals with direction="away" invert the home/away side.
+    Thin backward-compatible wrapper over
+    :func:`compute_transition_modifier_adjustment` returning only the modifier
+    dict. Bit-identical to the legacy implementation: multiple signals on one key
+    compound (product) and each key is clamped to ±MAX_CUMULATIVE_SHIFT;
+    directional signals resolve home/away; unmapped types are skipped.
     """
     if not signals:
         return {}
-
-    raw_accum: dict[str, float] = {}
-
-    for sig in signals:
-        entry = _SIGNAL_TO_MODIFIER.get(sig.signal_type)
-        if entry is None:
-            continue
-
-        modifier_key, base_scalar = entry
-
-        # For directional signals, invert the scalar when signal targets the away side.
-        # Example: rest_advantage with direction="away" benefits the away team, so we
-        # apply the boost to away_score_rate_scalar instead.
-        effective_key = modifier_key
-        effective_scalar = base_scalar
-        if hasattr(sig, "direction") and sig.direction in ("home", "away"):
-            effective_key, effective_scalar = _resolve_direction(
-                modifier_key, base_scalar, sig.direction
-            )
-
-        if effective_key not in raw_accum:
-            raw_accum[effective_key] = 1.0
-        raw_accum[effective_key] *= effective_scalar
-
-        _log.debug(
-            "signal %r (dir=%r) → %r × %s (running %s)",
-            sig.signal_type,
-            getattr(sig, "direction", None),
-            effective_key,
-            effective_scalar,
-            raw_accum[effective_key],
-        )
-
-    # Clamp each key's cumulative product to [1/MAX, MAX]
-    lo = 1.0 / _MAX_CUMULATIVE_SHIFT
-    hi = _MAX_CUMULATIVE_SHIFT
-    clamped: dict[str, float] = {}
-    for key, product in raw_accum.items():
-        if not (lo <= product <= hi):
-            clamped_val = max(lo, min(hi, product))
-            _log.warning(
-                "cumulative modifier %r=%r clamped to %r (cap ±%.0f%%)",
-                key, product, clamped_val, (_MAX_CUMULATIVE_SHIFT - 1) * 100,
-            )
-            clamped[key] = clamped_val
-        else:
-            clamped[key] = product
-
-    return clamped
+    return compute_transition_modifier_adjustment(signals, home_team).modifiers
 
 
 def _resolve_direction(

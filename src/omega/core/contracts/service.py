@@ -65,8 +65,7 @@ from omega.core.simulation.evidence_handlers import (
     resolve_evidence_mode,
 )
 from omega.core.simulation.evidence_to_modifier import (
-    MAPPED_SIGNAL_TYPES,
-    signals_to_transition_modifiers,
+    compute_transition_modifier_adjustment,
 )
 from omega.core.simulation.validation import validate_sim_context
 from omega.trace.eligibility import (
@@ -94,6 +93,10 @@ class EvidenceExecutionPlan:
     transition_modifiers: dict[str, float] | None = None
     evidence_mode: str = "shadow"
     evidence_application: list[dict[str, Any]] = field(default_factory=list)
+    # Per-modifier-key (Markov) or per-family (plane) aggregate math, kept apart
+    # from the per-signal applications so grouped/clamped effects are not
+    # misattributed to one signal (Issue #22).
+    aggregation_records: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _stable_input_hash(request: Any) -> str | None:
@@ -287,9 +290,11 @@ def analyze(
     # trace store can explode it into the evidence_signals table (V9).
     evidence_mode = "shadow"
     evidence_application: list[dict[str, Any]] = []
+    evidence_aggregation: list[dict[str, Any]] = []
     if evidence_plan is not None:
         evidence_mode = evidence_plan.evidence_mode
         evidence_application = evidence_plan.evidence_application
+        evidence_aggregation = evidence_plan.aggregation_records
 
     # Assemble trace_quality last — pure audit metadata, never influences math above.
     result_downgrades = _result_downgrades(result)
@@ -372,6 +377,7 @@ def analyze(
         "context_labels": context_labels,
         "evidence_mode": evidence_mode,
         "evidence_application": evidence_application,
+        "evidence_aggregation": evidence_aggregation,
         "trace_quality": engine_trace_quality,
     }
 
@@ -566,41 +572,26 @@ def _player_evidence_plan_for(request: PlayerPropRequest) -> EvidenceExecutionPl
     )
 
 
-def _markov_evidence_applications(
+def _merge_markov_applications(
     evidence: list[Any],
-    active_indices: set[int],
     suppressed_indices: set[int],
+    active_applications: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    applications: list[dict[str, Any]] = []
+    """Realign Markov per-signal applications onto the full evidence list.
+
+    Suppressed signals get a suppression record; every other signal pulls its
+    real application (mapped or skip) from
+    ``compute_transition_modifier_adjustment``, which already ran over the active
+    (non-suppressed) evidence in order — so the iterator stays aligned.
+    """
+    out: list[dict[str, Any]] = []
+    active = iter(active_applications)
     for idx, sig in enumerate(evidence):
-        signal_type = str(getattr(sig, "signal_type", ""))
         if idx in suppressed_indices:
-            applications.append(_suppression_record(sig, "markov_transition").as_application())
-        elif idx in active_indices and signal_type in MAPPED_SIGNAL_TYPES:
-            applications.append(
-                {
-                    "signal_type": signal_type,
-                    "target": "markov_transition",
-                    "applied": True,
-                    "factor": None,
-                    "reason": "mapped_to_markov_transition_modifiers",
-                    "policy_version": "markov_state_v1",
-                    "evidence_mode": "markov_transition",
-                }
-            )
+            out.append(_suppression_record(sig, "markov_transition").as_application())
         else:
-            applications.append(
-                {
-                    "signal_type": signal_type,
-                    "target": "skip",
-                    "applied": False,
-                    "factor": 1.0,
-                    "reason": "no Markov transition mapping for signal_type",
-                    "policy_version": "markov_state_v1",
-                    "evidence_mode": "markov_transition",
-                }
-            )
-    return applications
+            out.append(next(active))
+    return out
 
 
 def _effective_game_backend_name(request: GameAnalysisRequest) -> str:
@@ -639,17 +630,23 @@ def _game_evidence_plan_for(request: GameAnalysisRequest) -> EvidenceExecutionPl
     suppressed = _suppressed_player_signal_indices(evidence)
     backend = resolve_game_backend(_effective_game_backend_name(request))
     if _uses_transition_modifiers(backend):
-        active_indices = {idx for idx in range(len(evidence)) if idx not in suppressed}
-        active_evidence = [sig for idx, sig in enumerate(evidence) if idx in active_indices]
-        transition_modifiers = signals_to_transition_modifiers(
-            active_evidence, home_team=request.home_team
+        active_evidence = [
+            sig for idx, sig in enumerate(evidence) if idx not in suppressed
+        ]
+        markov = compute_transition_modifier_adjustment(
+            active_evidence,
+            home_team=request.home_team,
+            policy=_load_adjustment_policy(),
         )
-        applications = _markov_evidence_applications(evidence, active_indices, suppressed)
+        applications = _merge_markov_applications(
+            evidence, suppressed, markov.applications
+        )
         return EvidenceExecutionPlan(
             adjustment=None,
-            transition_modifiers=transition_modifiers or None,
+            transition_modifiers=markov.modifiers or None,
             evidence_mode="markov_transition",
             evidence_application=applications,
+            aggregation_records=markov.aggregation_records,
         )
 
     policy = _load_adjustment_policy()

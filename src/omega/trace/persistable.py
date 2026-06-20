@@ -40,6 +40,10 @@ class PersistableTrace(BaseModel):
     # into the evidence_signals table.
     evidence_mode: str | None = None
     evidence_application: list[dict[str, Any]] = Field(default_factory=list)
+    # Per-key/per-family aggregate math (Issue #22). Stored in the full_trace JSON
+    # blob only — no DB column — so grouped effects stay auditable for the
+    # qualitative feedback report without a schema migration.
+    evidence_aggregation: list[dict[str, Any]] = Field(default_factory=list)
     simulation_distributions: list[dict[str, Any]] = Field(default_factory=list)
 
     prompt: str = ""
@@ -91,6 +95,7 @@ class PersistableTrace(BaseModel):
             downgrades=downgrades,
             evidence_mode=analyze_out.get("evidence_mode"),
             evidence_application=analyze_out.get("evidence_application") or [],
+            evidence_aggregation=analyze_out.get("evidence_aggregation") or [],
             simulation_distributions=(result.get("simulation_distributions") or []),
             prompt=_derive_prompt(kind, input_snap, str(league or ""), matchup),
             league=league,
