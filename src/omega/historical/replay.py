@@ -1,4 +1,4 @@
-﻿"""Replay engine: historical events → normal TraceStore traces.
+"""Replay engine: historical events → normal TraceStore traces.
 
 For each historical event the engine builds an as-of feature snapshot and an
 as-of odds snapshot, runs the leakage guard, calls the **normal** ``analyze()``
