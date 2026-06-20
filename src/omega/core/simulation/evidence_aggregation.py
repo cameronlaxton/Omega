@@ -47,6 +47,7 @@ __all__ = [
     "FamilyMember",
     "FamilyDampingResult",
     "SignalApplication",
+    "SIGNAL_APPLICATION_SCHEMA_VERSION",
     "DEFAULT_CONFIDENCE",
     "cap_factor",
     "reliability_adjusted_factor",
@@ -65,6 +66,11 @@ FamilyRole = Literal["primary", "secondary", "singleton"]
 # inflation. The defaulting is flagged (confidence_defaulted) so the feedback
 # report can treat such signals cautiously.
 DEFAULT_CONFIDENCE = 1.0
+
+# Version of the per-signal application dict emitted by SignalApplication.as_dict.
+# Bump when the payload shape changes so replay / feedback consumers can detect
+# the format (AGENTS.md: every persistence format must be versioned).
+SIGNAL_APPLICATION_SCHEMA_VERSION = 1
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +283,7 @@ class SignalApplication:
         value. New fields are purely additive.
         """
         return {
+            "schema_version": SIGNAL_APPLICATION_SCHEMA_VERSION,
             "signal_type": self.signal_type,
             "target": self.target,
             "applied": self.applied,

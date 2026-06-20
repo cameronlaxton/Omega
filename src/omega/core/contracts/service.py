@@ -691,6 +691,8 @@ def _competition_strength_index(
     for sig in getattr(request, "evidence", None) or []:
         if getattr(sig, "signal_type", None) != "competition_strength_index":
             continue
+        if getattr(sig, "plane", None) != "game":
+            continue  # structural index is game-plane only; ignore misclassified signals
         try:
             value = float(sig.value)
         except (TypeError, ValueError):

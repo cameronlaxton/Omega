@@ -206,7 +206,56 @@ def test_render_report_markdown_labels_insufficient():
         [_enriched_prop_trace(), _legacy_trace(), _no_evidence_trace()]
     )
     md = render_report_markdown(report)
+    assert "schema_version=" in md  # machine-detectable format marker
     assert "# Qualitative Signal Feedback" in md
     assert "Insufficient" in md
     assert "t-old" in md  # the labeled, excluded trace id is surfaced
     assert "usage_spike" in md
+
+
+# ---------------------------------------------------------------------------
+# Readiness-gap edge cases (review fixes)
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_present_but_no_applications_is_insufficient():
+    # A trace that supplied evidence but recorded no application records is a
+    # readiness gap (INSUFFICIENT), not NO_EVIDENCE — it must be labeled/listed.
+    trace = {
+        "trace_id": "t-evidence-no-apps",
+        "kind": "prop",
+        "input_snapshot": {"evidence": [{"signal_type": "usage_spike"}]},
+        "evidence_application": [],
+    }
+    c = classify_trace(trace)
+    assert c.status == INSUFFICIENT
+    report = build_report([trace])
+    assert report.insufficient == 1
+    assert "t-evidence-no-apps" in report.insufficient_trace_ids
+
+
+def test_all_unmapped_markov_trace_is_sufficient():
+    # A Markov trace whose only signal is unmapped still carries the no-op
+    # enrichment markers, so it must classify as SUFFICIENT (not insufficient).
+    trace = {
+        "trace_id": "t-markov-unmapped",
+        "kind": "game",
+        "evidence_mode": "markov_transition",
+        "result": {"simulation": {"simulation_backend": "markov_state_v1"}},
+        "input_snapshot": {"evidence": [{"signal_type": "season_record"}]},
+        "evidence_application": [
+            {
+                "signal_type": "season_record",
+                "target": "skip",
+                "applied": False,
+                "factor": 1.0,
+                "effective_scalar": 1.0,
+                "confidence": 0.5,
+                "confidence_defaulted": False,
+                "reason": "no Markov transition mapping for signal_type",
+                "policy_version": "markov_state_v1",
+                "evidence_mode": "markov_transition",
+            }
+        ],
+    }
+    assert classify_trace(trace).status == SUFFICIENT

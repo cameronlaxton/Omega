@@ -48,6 +48,10 @@ SUFFICIENT = "sufficient"
 INSUFFICIENT = "insufficient"
 NO_EVIDENCE = "no_evidence"
 
+# Version of the rendered report format. Emitted as a machine-detectable marker
+# so the report shape can evolve without breaking any future parser.
+REPORT_SCHEMA_VERSION = 1
+
 
 def _as_float_or_none(value: Any) -> float | None:
     try:
@@ -142,6 +146,7 @@ def classify_trace(trace: dict[str, Any]) -> TraceFeedback:
     outcome_resolved = _outcome_resolved(trace)
 
     apps = trace.get("evidence_application") or []
+    input_evidence = (trace.get("input_snapshot") or {}).get("evidence") or []
     base = dict(
         trace_id=trace_id,
         evidence_mode=evidence_mode,
@@ -152,9 +157,21 @@ def classify_trace(trace: dict[str, Any]) -> TraceFeedback:
     )
 
     if not apps:
+        # A trace that supplied evidence but carries no application records is a
+        # readiness gap (pre-enrichment / unrecorded), not a no-evidence trace —
+        # surface it as INSUFFICIENT so it is labeled, not silently hidden.
+        if input_evidence:
+            return TraceFeedback(
+                status=INSUFFICIENT,
+                reason=(
+                    "evidence present in input_snapshot but no evidence_application "
+                    "records (pre-enrichment or unrecorded application)"
+                ),
+                **base,
+            )
         return TraceFeedback(
             status=NO_EVIDENCE,
-            reason="no evidence_application recorded on the trace",
+            reason="no evidence supplied and no evidence_application recorded",
             **base,
         )
     if not _has_enrichment(apps):
@@ -293,6 +310,7 @@ def build_report(traces: list[dict[str, Any]]) -> QualitativeFeedbackReport:
 def render_report_markdown(report: QualitativeFeedbackReport) -> str:
     """Render a deterministic Markdown summary of the feedback gate."""
     lines = [
+        f"<!-- omega:qualitative_feedback_report schema_version={REPORT_SCHEMA_VERSION} -->",
         "# Qualitative Signal Feedback",
         "",
         "## Trace readiness",

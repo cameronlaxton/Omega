@@ -84,9 +84,13 @@ The registry workflow already exists (`AdjustmentPolicyRegistry`):
 - Create a candidate by copying the seed policy and setting the desired flags
   (and `family_cap` / `plane_cap` / `correlation_damping_weight`), then
   `register()` it as `CANDIDATE`.
-- Promote with the existing gated path (`promote()` archives the incumbent;
-  fail-closed — no `--force`). Flip the handler path live with
-  `set_mode(policy_id, "live")` as a separate, auditable step.
+- `promote()` performs only the mechanical, fail-closed transition: it requires
+  the target to be a `CANDIDATE`, archives the current incumbent, and marks the
+  candidate `PRODUCTION`. It does **not** itself evaluate the promotion gates
+  above — running the focused tests, replay parity, and calibration backtest, and
+  the decision to promote, all happen separately *before* this call. Then
+  `set_mode(policy_id, "live")` makes the handler path live as a separate,
+  auditable step.
 
 ## Rollback
 

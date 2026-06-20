@@ -90,6 +90,8 @@ def _resolve_competition_strength_index(
         away = float(csi.get("away", 1.0))
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(home) or not math.isfinite(away):
+        return None  # nan/inf would silently contaminate the lambdas
     if home <= 0 or away <= 0 or (home == 1.0 and away == 1.0):
         return None
     return home, away

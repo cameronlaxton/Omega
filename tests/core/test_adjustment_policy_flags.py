@@ -68,6 +68,18 @@ class TestFeatureFlagDefaults:
         reloaded = AdjustmentPolicy(**dumped)
         assert reloaded == policy
 
+    @pytest.mark.parametrize("field", ["family_cap", "plane_cap"])
+    def test_negative_caps_are_rejected(self, field):
+        import pydantic
+
+        with pytest.raises(pydantic.ValidationError):
+            AdjustmentPolicy(policy_id="bad", version=1, **{field: -0.1})
+
+    @pytest.mark.parametrize("field", ["family_cap", "plane_cap"])
+    def test_zero_and_positive_caps_accepted(self, field):
+        assert AdjustmentPolicy(policy_id="ok", version=1, **{field: 0.0})
+        assert AdjustmentPolicy(policy_id="ok2", version=1, **{field: 0.2})
+
 
 # ---------------------------------------------------------------------------
 # No-behavior-change: the seed policy still computes the legacy factor

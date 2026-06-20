@@ -146,7 +146,10 @@ class TestResolveHelper:
     @pytest.mark.parametrize(
         "value",
         [None, {}, {"home": 1.0, "away": 1.0}, {"home": 0.0, "away": 1.2},
-         {"home": "x"}],
+         {"home": "x"},
+         # non-finite must be rejected — nan/inf slip past the <=0 / ==1 guards
+         {"home": float("nan"), "away": 1.2},
+         {"home": 1.2, "away": float("inf")}],
     )
     def test_noop_cases_return_none(self, value):
         assert _resolve_competition_strength_index(value) is None
@@ -206,6 +209,23 @@ class TestServiceExtraction:
 
     def test_no_signal_returns_none(self):
         req = _game_request([])
+        assert _competition_strength_index(req, _flag_on()) is None
+
+    def test_player_plane_signal_is_ignored(self):
+        # A misclassified player-plane CSI signal must not alter the game lambdas.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sig = EvidenceSignal(
+                signal_type=_SIG,
+                category="situational",
+                plane="player",
+                value=1.2,
+                source="agent_reasoning",
+                confidence=0.6,
+                window="matchup",
+                direction="home",
+            )
+        req = _game_request([sig])
         assert _competition_strength_index(req, _flag_on()) is None
 
     def test_neutral_value_returns_none(self):

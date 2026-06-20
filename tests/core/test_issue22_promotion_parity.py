@@ -33,7 +33,14 @@ from omega.core.simulation.evidence_to_modifier import (
     signals_to_transition_modifiers,
 )
 
-_SEED = AdjustmentPolicyRegistry().get_production_policy()
+
+@pytest.fixture
+def seed_policy() -> AdjustmentPolicy:
+    """Resolve the production policy at test time (not import) so the test is not
+    sensitive to registry state established earlier in the session."""
+    policy = AdjustmentPolicyRegistry().get_production_policy()
+    assert policy is not None, "a production adjustment policy must exist"
+    return policy
 
 
 def _game_sig(signal_type: str, direction=None, confidence: float = 0.5) -> EvidenceSignal:
@@ -71,11 +78,10 @@ def _usage_sig(confidence: float = 0.7) -> EvidenceSignal:
 # ---------------------------------------------------------------------------
 
 
-def test_seed_production_policy_has_all_guardrail_flags_off():
-    assert _SEED is not None
-    assert _SEED.enable_confidence_weighting is False
-    assert _SEED.enable_correlation_damping is False
-    assert _SEED.enable_competition_strength_index is False
+def test_seed_production_policy_has_all_guardrail_flags_off(seed_policy):
+    assert seed_policy.enable_confidence_weighting is False
+    assert seed_policy.enable_correlation_damping is False
+    assert seed_policy.enable_competition_strength_index is False
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +90,7 @@ def test_seed_production_policy_has_all_guardrail_flags_off():
 
 
 class TestReplayParityFlagsOff:
-    def test_markov_modifiers_match_legacy_under_seed_policy(self):
+    def test_markov_modifiers_match_legacy_under_seed_policy(self, seed_policy):
         sigs = [
             _game_sig("rest_advantage", direction="home"),
             _game_sig("pace_down"),
@@ -92,17 +98,17 @@ class TestReplayParityFlagsOff:
         ]
         legacy = signals_to_transition_modifiers(sigs, home_team="Lakers")
         seed = compute_transition_modifier_adjustment(
-            sigs, "Lakers", policy=_SEED
+            sigs, "Lakers", policy=seed_policy
         ).modifiers
         assert seed == legacy
 
-    def test_handler_factor_ignores_confidence_under_seed_policy(self):
+    def test_handler_factor_ignores_confidence_under_seed_policy(self, seed_policy):
         adj = compute_player_adjustment(
             player_context={"pts_mean": 25.0},
             evidence=[_usage_sig(confidence=0.7)],
             league="NBA",
             prop_type="pts",
-            policy=_SEED,
+            policy=seed_policy,
             evidence_mode="live",
         )
         # raw 1.20 within cap; confidence weighting NOT applied (flag off).
@@ -116,9 +122,9 @@ class TestReplayParityFlagsOff:
 
 
 class TestFlagsAreTheLever:
-    def test_confidence_flag_changes_markov_modifiers(self):
+    def test_confidence_flag_changes_markov_modifiers(self, seed_policy):
         sigs = [_game_sig("rest_advantage", direction="home", confidence=0.5)]
-        off = compute_transition_modifier_adjustment(sigs, "Lakers", policy=_SEED).modifiers
+        off = compute_transition_modifier_adjustment(sigs, "Lakers", policy=seed_policy).modifiers
         on_policy = AdjustmentPolicy(
             policy_id="on", version=1, enable_confidence_weighting=True
         )

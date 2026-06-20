@@ -165,12 +165,21 @@ def compute_transition_modifier_adjustment(
         signal_type = str(getattr(sig, "signal_type", ""))
         entry = _SIGNAL_TO_MODIFIER.get(signal_type)
         if entry is None:
+            # Carry the no-op enrichment markers so a trace whose signals are all
+            # unmapped is still recognized as enriched-pipeline output by the
+            # qualitative-feedback gate (not misclassified as insufficient).
+            confidence, confidence_defaulted = resolve_confidence(
+                getattr(sig, "confidence", None)
+            )
             applications.append(
                 {
                     "signal_type": signal_type,
                     "target": "skip",
                     "applied": False,
                     "factor": 1.0,
+                    "effective_scalar": 1.0,
+                    "confidence": confidence,
+                    "confidence_defaulted": confidence_defaulted,
                     "reason": "no Markov transition mapping for signal_type",
                     "policy_version": "markov_state_v1",
                     "evidence_mode": "markov_transition",

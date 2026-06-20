@@ -622,7 +622,7 @@ def compute_player_adjustment(
 
     if policy.enable_correlation_damping:
         damped = _apply_correlation_damping(pairs, policy=policy, plane="player")
-        pairs = list(zip((s for s, _ in pairs), damped))
+        pairs = list(zip((s for s, _ in pairs), damped, strict=True))
 
     records = [rec for _, rec in pairs]
     mean_factor = 1.0
@@ -685,7 +685,7 @@ def compute_game_adjustment(
 
     if policy.enable_correlation_damping:
         damped = _apply_correlation_damping(pairs, policy=policy, plane="game")
-        pairs = list(zip((s for s, _ in pairs), damped))
+        pairs = list(zip((s for s, _ in pairs), damped, strict=True))
 
     records = [rec for _, rec in pairs]
     home_factor = 1.0

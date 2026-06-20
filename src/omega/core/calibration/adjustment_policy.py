@@ -104,13 +104,15 @@ class AdjustmentPolicy(BaseModel):
     )
     family_cap: float | None = Field(
         default=None,
+        ge=0.0,
         description="Max absolute fractional deviation of a damped family's factor "
-        "from 1.0 (sequence step 5). None = no family cap.",
+        "from 1.0 (sequence step 5). None = no family cap; must be >= 0 when set.",
     )
     plane_cap: float | None = Field(
         default=None,
+        ge=0.0,
         description="Max absolute fractional deviation of the aggregated plane "
-        "factor from 1.0 (sequence step 8). None = no plane cap.",
+        "factor from 1.0 (sequence step 8). None = no plane cap; must be >= 0 when set.",
     )
 
     # Training provenance (empty for the hand-seeded v1 priors)
