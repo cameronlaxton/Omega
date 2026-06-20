@@ -322,6 +322,10 @@ HANDLER_REGISTRY: dict[str, Handler] = {
     "season_record": _h_audit_only,
     "season_baseline": _h_audit_only,
     "defensive_scheme": _h_audit_only,
+    # Structural: applied by the soccer backend before lambda derivation, never
+    # as a handler mean/home/away factor. Audit-only here so it is recorded but
+    # never double-applied as a late evidence factor.
+    "competition_strength_index": _h_audit_only,
 }
 
 

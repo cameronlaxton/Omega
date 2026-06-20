@@ -378,6 +378,12 @@ class SimulationResult(BaseModel):
     baseline_used: bool = Field(default=False)
     simulation_backend: str | None = None
     component_version: str | None = None
+    competition_strength_adjustment: dict[str, Any] | None = Field(
+        default=None,
+        description="Structural soccer competition-strength index debug payload "
+        "(raw/adjusted attack-concede rates, applied index by side, final "
+        "home/away lambdas); None when the index was not applied. Issue #22.",
+    )
 
 
 class EdgeDetail(BaseModel):

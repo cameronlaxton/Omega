@@ -424,6 +424,19 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             description="Tactical formation advantage for one side.",
         ),
         _spec(
+            "competition_strength_index",
+            "situational",
+            "game",
+            applies_to_sports=frozenset({"soccer"}),
+            default_window="matchup",
+            description="Structural cross-league / confederation strength index "
+            "(neutral 1.0; >1 stronger, <1 weaker). Adjusts soccer team-context "
+            "attack/defense inputs BEFORE Bivariate Poisson lambda derivation, by "
+            "side via direction. Deliberately NOT a late home/away factor: the "
+            "soccer backend applies it; the evidence-handler path is audit-only. "
+            "Gated on AdjustmentPolicy.enable_competition_strength_index.",
+        ),
+        _spec(
             "surface_edge",
             "matchup",
             "game",

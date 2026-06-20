@@ -97,6 +97,9 @@ class EvidenceExecutionPlan:
     # from the per-signal applications so grouped/clamped effects are not
     # misattributed to one signal (Issue #22).
     aggregation_records: list[dict[str, Any]] = field(default_factory=list)
+    # Structural soccer competition-strength index by side (Issue #22 Feature 1),
+    # routed to the soccer backend separately from any plane home/away factor.
+    competition_strength_index: dict[str, float] | None = None
 
 
 def _stable_input_hash(request: Any) -> str | None:
@@ -664,7 +667,47 @@ def _game_evidence_plan_for(request: GameAnalysisRequest) -> EvidenceExecutionPl
         adjustment=adjustment,
         evidence_mode=adjustment.evidence_mode,
         evidence_application=adjustment.applications(),
+        competition_strength_index=_competition_strength_index(request, policy),
     )
+
+
+def _competition_strength_index(
+    request: GameAnalysisRequest, policy: AdjustmentPolicy
+) -> dict[str, float] | None:
+    """Resolve the structural soccer competition-strength index by side.
+
+    Returns ``{"home": h, "away": a}`` from ``competition_strength_index``
+    evidence signals (directional: home/away set that side; neutral sets both),
+    or None when the flag is off, the sport is not soccer, no such signal is
+    present, or the net effect is neutral (both 1.0). None leaves the backend
+    bit-identical, so this never inflates output unless explicitly enabled.
+    """
+    if not getattr(policy, "enable_competition_strength_index", False):
+        return None
+    if get_archetype_name(request.league) != "soccer":
+        return None
+    home_idx = away_idx = 1.0
+    found = False
+    for sig in getattr(request, "evidence", None) or []:
+        if getattr(sig, "signal_type", None) != "competition_strength_index":
+            continue
+        try:
+            value = float(sig.value)
+        except (TypeError, ValueError):
+            continue
+        if value <= 0:
+            continue
+        found = True
+        direction = getattr(sig, "direction", None)
+        if direction == "home":
+            home_idx = value
+        elif direction == "away":
+            away_idx = value
+        else:  # neutral / None -> the whole competition environment
+            home_idx = away_idx = value
+    if not found or (home_idx == 1.0 and away_idx == 1.0):
+        return None
+    return {"home": home_idx, "away": away_idx}
 
 
 def _player_adjustment_for(request: PlayerPropRequest) -> PlaneAdjustment | None:
@@ -991,6 +1034,10 @@ def analyze_game(
             transition_modifiers,
         )
 
+    competition_strength_index = (
+        evidence_plan.competition_strength_index if evidence_plan else None
+    )
+
     try:
         sim_result = _engine.run_fast_game_simulation(
             home_team=request.home_team,
@@ -1006,6 +1053,7 @@ def analyze_game(
             transition_modifiers=transition_modifiers,
             prior_payload=request.prior_payload,
             backend=backend,
+            competition_strength_index=competition_strength_index,
         )
     except Exception as exc:
         logger.warning("Simulation error for %s: %s", matchup, exc)
@@ -1042,6 +1090,9 @@ def analyze_game(
         baseline_used=bool(sim_result.get("baseline_used", False)),
         simulation_backend=sim_result.get("simulation_backend"),
         component_version=sim_result.get("component_version"),
+        competition_strength_adjustment=sim_result.get(
+            "competition_strength_adjustment"
+        ),
     )
 
     # Edge analysis -- requires odds

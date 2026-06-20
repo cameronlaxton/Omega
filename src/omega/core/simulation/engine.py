@@ -2135,6 +2135,7 @@ class OmegaSimulationEngine:
         prior_payload: dict | None = None,
         backend: GameSimulationBackend | None = None,
         exact: bool = False,
+        competition_strength_index: dict | None = None,
     ) -> dict:
         """
         Run a fast game simulation using team stats dispatched by sport archetype.
@@ -2171,6 +2172,7 @@ class OmegaSimulationEngine:
             transition_modifiers=transition_modifiers,
             prior_payload=prior_payload,
             exact=exact,
+            competition_strength_index=competition_strength_index,
         )
         return enforce_game_backend_contract(active.run(request))
 

@@ -74,6 +74,72 @@ def _missing_soccer_inputs(context: dict[str, Any] | None, side: str) -> list[st
     return missing
 
 
+def _resolve_competition_strength_index(
+    csi: dict[str, Any] | None,
+) -> tuple[float, float] | None:
+    """Validate a per-side competition-strength index into ``(home, away)``.
+
+    Returns None — a no-op leaving lambdas bit-identical — when the index is
+    absent, malformed, non-positive, or neutral (both 1.0). Guarding here keeps
+    the backend safe even if a caller passes the field directly in a backtest.
+    """
+    if not csi:
+        return None
+    try:
+        home = float(csi.get("home", 1.0))
+        away = float(csi.get("away", 1.0))
+    except (TypeError, ValueError):
+        return None
+    if home <= 0 or away <= 0 or (home == 1.0 and away == 1.0):
+        return None
+    return home, away
+
+
+def _competition_strength_debug(
+    home_ctx: dict[str, Any],
+    away_ctx: dict[str, Any],
+    index: tuple[float, float],
+    raw_rates: tuple[float, float, float, float],
+    adj_rates: tuple[float, float, float, float],
+    home_lambda: float,
+    away_lambda: float,
+) -> dict[str, Any]:
+    """Trace/debug payload for one applied competition-strength adjustment.
+
+    Carries raw and adjusted attack/concede rates (plus the raw xG / off-def
+    context values where present), the applied index by side, and the final
+    home/away lambdas, so the structural adjustment is fully auditable.
+    """
+    h_idx, a_idx = index
+    raw_home_xg, raw_away_xg, raw_home_xga, raw_away_xga = raw_rates
+    adj_home_xg, adj_away_xg, adj_home_xga, adj_away_xga = adj_rates
+    return {
+        "index": {"home": h_idx, "away": a_idx},
+        "raw": {
+            "home_xg_for": home_ctx.get("xg_for"),
+            "away_xg_for": away_ctx.get("xg_for"),
+            "home_xg_against": home_ctx.get("xg_against"),
+            "away_xg_against": away_ctx.get("xg_against"),
+            "home_off_rating": home_ctx.get("off_rating"),
+            "away_off_rating": away_ctx.get("off_rating"),
+            "home_def_rating": home_ctx.get("def_rating"),
+            "away_def_rating": away_ctx.get("def_rating"),
+            "home_attack_rate": round(raw_home_xg, 4),
+            "away_attack_rate": round(raw_away_xg, 4),
+            "home_concede_rate": round(raw_home_xga, 4),
+            "away_concede_rate": round(raw_away_xga, 4),
+        },
+        "adjusted": {
+            "home_attack_rate": round(adj_home_xg, 4),
+            "away_attack_rate": round(adj_away_xg, 4),
+            "home_concede_rate": round(adj_home_xga, 4),
+            "away_concede_rate": round(adj_away_xga, 4),
+        },
+        "home_lambda": round(home_lambda, 4),
+        "away_lambda": round(away_lambda, 4),
+    }
+
+
 class SoccerPoissonBackend:
     """Bivariate Poisson + Dixon-Coles backend; fail-closed on the rho prior."""
 
@@ -146,6 +212,18 @@ class SoccerPoissonBackend:
         home_xga = home_ctx.get("xg_against", home_ctx.get("def_rating", league_avg_gpg))
         away_xga = away_ctx.get("xg_against", away_ctx.get("def_rating", league_avg_gpg))
 
+        # Structural competition-strength index (Issue #22 Feature 1): scale each
+        # side's attack rate up and concede rate down by its index BEFORE lambda
+        # derivation. Not a late home/away factor; None leaves lambdas unchanged.
+        csi = _resolve_competition_strength_index(request.competition_strength_index)
+        csi_raw_rates = (home_xg, away_xg, home_xga, away_xga)
+        if csi is not None:
+            h_idx, a_idx = csi
+            home_xg *= h_idx
+            home_xga /= h_idx
+            away_xg *= a_idx
+            away_xga /= a_idx
+
         home_lambda = _expected_against_allowed_rate(home_xg, away_xga, league_avg_gpg)
         away_lambda = _expected_against_allowed_rate(away_xg, home_xga, league_avg_gpg)
 
@@ -184,8 +262,22 @@ class SoccerPoissonBackend:
                 missing_requirements=["valid_rho_prior"],
             )
 
+        csi_debug = (
+            _competition_strength_debug(
+                home_ctx,
+                away_ctx,
+                csi,
+                csi_raw_rates,
+                (home_xg, away_xg, home_xga, away_xga),
+                home_lambda,
+                away_lambda,
+            )
+            if csi is not None
+            else None
+        )
+
         if request.exact:
-            return self._run_exact(
+            result = self._run_exact(
                 request,
                 league,
                 home_lambda,
@@ -193,6 +285,9 @@ class SoccerPoissonBackend:
                 rho,
                 prior,
             )
+            if csi_debug is not None:
+                result["competition_strength_adjustment"] = csi_debug
+            return result
 
         rng = np.random.default_rng(request.seed)
         home_scores, away_scores = _dixon_coles_scores(
@@ -220,6 +315,8 @@ class SoccerPoissonBackend:
 
         # Provenance for trace/sidecar audit: which fitted profile priced this.
         result["dc_rho"] = rho
+        if csi_debug is not None:
+            result["competition_strength_adjustment"] = csi_debug
         if prior.get("rho_profile_id") is not None:
             result["rho_profile_id"] = prior["rho_profile_id"]
         if prior.get("rho_as_of_date") is not None:
