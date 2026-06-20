@@ -411,9 +411,10 @@ class OddsApiClient:
         regions: str = "us",
         markets: str = "h2h,spreads,totals",
         bookmakers: str | None = None,
+        sport_key: str | None = None,
     ) -> list[EventOdds]:
         """Fetch current event odds for a league across books."""
-        sport_key = _require_sport_key(league)
+        sport_key = sport_key or _require_sport_key(league)
         params = _odds_params(regions=regions, markets=markets, bookmakers=bookmakers)
         payload = self._get_json(f"/sports/{sport_key}/odds", params)
         return parse_events(payload)
@@ -458,6 +459,7 @@ class OddsApiClient:
         regions: str = "us",
         markets: str = "h2h,spreads,totals",
         bookmakers: str | None = None,
+        sport_key: str | None = None,
     ) -> HistoricalSnapshot:
         """Fetch a sport-level historical featured-market snapshot.
 
@@ -465,7 +467,7 @@ class OddsApiClient:
         ``date``. This endpoint is the preferred CLV/backtest source for
         featured markets because it covers every event in one call.
         """
-        sport_key = _require_sport_key(league)
+        sport_key = sport_key or _require_sport_key(league)
         params = _odds_params(regions=regions, markets=markets, bookmakers=bookmakers)
         params["date"] = date
         payload = self._get_json(

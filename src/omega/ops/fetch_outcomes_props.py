@@ -399,10 +399,33 @@ def main(
                     player_key = normalize_player_name(fields["player_name"])
                     player_stats = stats_by_player.get(player_key)
                     if not player_stats:
-                        unmatched.append(
-                            f"{trace.get('trace_id', '?')} (player "
-                            f"{fields['player_name']!r} not in box score)"
-                        )
+                        if args.dry_run:
+                            logger.info(
+                                "DRY %s -> %s DNP (void)",
+                                trace["trace_id"],
+                                fields["player_name"],
+                            )
+                            attached += 1
+                            continue
+                        try:
+                            store.attach_prop_outcome(
+                                trace_id=trace["trace_id"],
+                                player_name=fields["player_name"],
+                                stat_type=fields["prop_type"],
+                                stat_value=0.0,
+                                line=float(fields["line"]),
+                                side=fields["side"],
+                                source="api:espn_boxscore",
+                                void=True,
+                            )
+                            attached += 1
+                            logger.info(
+                                "VOIDED (DNP) %s -> %s",
+                                trace["trace_id"],
+                                fields["player_name"],
+                            )
+                        except Exception as exc:
+                            logger.warning("Failed to void %s: %s", trace.get("trace_id"), exc)
                         continue
                     if fields["prop_type"] not in player_stats:
                         unmatched.append(

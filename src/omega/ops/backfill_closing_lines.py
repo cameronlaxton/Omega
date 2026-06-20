@@ -73,6 +73,16 @@ def _load_canonicalizer(league: str) -> Callable[[str], str | None]:
     # espn_<league> module. Resolve them there first; otherwise they fall through
     # to _identity and team names are never normalized against the Odds API
     # snapshot (e.g. "USA" vs "United States"), so no soccer event ever matches.
+    league_upper = league.upper()
+    if league_upper in ("ATP", "WTA", "GRAND_SLAM"):
+        try:
+            from omega.integrations._etl import load_alias_table, resolve_entity
+            from omega.integrations.espn_boxscore import normalize_player_name
+            alias_table = load_alias_table("TENNIS")
+            return lambda name: resolve_entity(name, alias_table) or normalize_player_name(name)
+        except Exception:
+            pass
+
     try:
         from omega.integrations.espn_soccer import SOCCER_LEAGUE_SLUGS, canonical_team
 
@@ -270,9 +280,19 @@ def _process_league(
     close_offset_hours: int,
     dry_run: bool,
 ) -> tuple[int, list[str]]:
-    sport_key = sport_key_for(league)
-    if sport_key is None:
-        return 0, [f"{b['bet_id']} (league {league!r} has no sport_key mapping)" for b in bets]
+    if league.upper() in ("ATP", "WTA", "GRAND_SLAM"):
+        from omega.integrations.odds_api import resolve_tennis_sport_keys
+        try:
+            sport_keys = resolve_tennis_sport_keys(client, league)
+        except Exception as exc:
+            return 0, [f"{b['bet_id']} (tennis sport-key resolution failed: {exc})" for b in bets]
+        if not sport_keys:
+            return 0, [f"{b['bet_id']} (no active tournament keys found)" for b in bets]
+    else:
+        sport_key = sport_key_for(league)
+        if sport_key is None:
+            return 0, [f"{b['bet_id']} (league {league!r} has no sport_key mapping)" for b in bets]
+        sport_keys = [sport_key]
 
     canonicalize = _load_canonicalizer(league)
     attached = 0
@@ -287,35 +307,38 @@ def _process_league(
 
     for ts, ts_bets in sorted(by_ts.items()):
         logger.info("[%s] fetching historical snapshot at %s (%d bet(s))", league, ts, len(ts_bets))
-        try:
-            snapshot = client.fetch_historical_odds(league, date=ts)
-        except OddsApiKeyMissing:
-            logger.error("OMEGA_ODDS_API_KEY not set.")
-            return attached, skipped + [f"{b['bet_id']} (api key missing)" for b in ts_bets]
-        except OddsApiBudgetExceeded as exc:
-            logger.error("Budget exceeded: %s", exc)
-            return attached, skipped + [f"{b['bet_id']} (budget exceeded)" for b in ts_bets]
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Historical fetch failed for %s at %s: %s", league, ts, exc)
-            skipped.extend(f"{b['bet_id']} (api fetch failed: {exc})" for b in ts_bets)
-            continue
+        events = []
+        actual_ts = ts
+        for skey in sport_keys:
+            try:
+                snapshot = client.fetch_historical_odds(league, date=ts, sport_key=skey)
+                if snapshot.events:
+                    events.extend(snapshot.events)
+                actual_ts = snapshot.timestamp or actual_ts
+            except OddsApiKeyMissing:
+                logger.error("OMEGA_ODDS_API_KEY not set.")
+                return attached, skipped + [f"{b['bet_id']} (api key missing)" for b in ts_bets]
+            except OddsApiBudgetExceeded as exc:
+                logger.error("Budget exceeded: %s", exc)
+                return attached, skipped + [f"{b['bet_id']} (budget exceeded)" for b in ts_bets]
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Historical fetch failed for %s (sport_key=%s) at %s: %s", league, skey, ts, exc)
+                if len(sport_keys) == 1:
+                    skipped.extend(f"{b['bet_id']} (api fetch failed: {exc})" for b in ts_bets)
 
-        actual_ts = snapshot.timestamp or ts
         logger.info(
-            "[%s] snapshot timestamp=%s, events=%d, remaining budget=%d",
+            "[%s] combined events=%d, remaining budget=%d",
             league,
-            actual_ts,
-            len(snapshot.events),
+            len(events),
             client.remaining_budget(),
         )
 
-        events_by_pair: dict[tuple[str, str], EventOdds] = {}
-        for e in snapshot.events:
+        events_by_pair: dict[tuple[str, str], list[EventOdds]] = {}
+        for e in events:
             h = canonicalize(e.home_team) or e.home_team
             a = canonicalize(e.away_team) or e.away_team
-            events_by_pair[(h, a)] = e
-            if (a, h) not in events_by_pair:
-                events_by_pair[(a, h)] = e
+            events_by_pair.setdefault((h, a), []).append(e)
+            events_by_pair.setdefault((a, h), []).append(e)
 
         for bet in ts_bets:
             if not _is_supported_market(bet["market"]):
@@ -334,8 +357,8 @@ def _process_league(
                 skipped.append(f"{bet['bet_id']} (cannot resolve event teams from trace)")
                 continue
 
-            event = events_by_pair.get((home, away))
-            if event is None:
+            matched_events = events_by_pair.get((home, away), [])
+            if not matched_events:
                 skipped.append(f"{bet['bet_id']} ({away} @ {home}: not in snapshot at {actual_ts})")
                 continue
 
@@ -344,51 +367,54 @@ def _process_league(
             if book_preference == "consensus":
                 book_preference = "betmgm"
 
-            if bet["market"].startswith("player_prop:"):
-                stat_key = bet["market"].split(":", 1)[1]
-                provider_market = provider_market_for_prop(league, stat_key)
-                if not provider_market:
-                    skipped.append(f"{bet['bet_id']} (no provider prop mapping for {stat_key})")
-                    continue
-                try:
-                    prop_snapshot = client.fetch_historical_event_odds(
-                        league,
-                        event_id=event.event_id,
-                        date=ts,
-                        markets=provider_market,
-                        bookmakers=book_preference,
-                    )
-                    event = prop_snapshot.events[0] if prop_snapshot.events else None
-                    if event is None:
-                        skipped.append(
-                            f"{bet['bet_id']} (historical event odds returned no events)"
-                        )
+            outcome = None
+            for candidate_event in matched_events:
+                if bet["market"].startswith("player_prop:"):
+                    stat_key = bet["market"].split(":", 1)[1]
+                    provider_market = provider_market_for_prop(league, stat_key)
+                    if not provider_market:
                         continue
-                except Exception as exc:  # noqa: BLE001
-                    skipped.append(f"{bet['bet_id']} (prop historical fetch failed: {exc})")
-                    continue
-                bet = {**bet, "league": league}
-                outcome = _match_prop_outcome(bet, event.books)
-            else:
-                is_reversed = False
-                if event.home_team and event.away_team:
-                    api_home_canon = canonicalize(event.home_team) or event.home_team
-                    api_away_canon = canonicalize(event.away_team) or event.away_team
-                    if api_home_canon.lower() == away.lower() or api_away_canon.lower() == home.lower():
-                        is_reversed = True
+                    try:
+                        prop_snapshot = client.fetch_historical_event_odds(
+                            league,
+                            event_id=candidate_event.event_id,
+                            date=ts,
+                            markets=provider_market,
+                            bookmakers=book_preference,
+                        )
+                        event = prop_snapshot.events[0] if prop_snapshot.events else None
+                        if event is None:
+                            continue
+                    except Exception as exc:  # noqa: BLE001
+                        continue
+                    bet_with_league = {**bet, "league": league}
+                    candidate_outcome = _match_prop_outcome(bet_with_league, event.books)
+                    if candidate_outcome is not None:
+                        outcome = candidate_outcome
+                        break
+                else:
+                    is_reversed = False
+                    if candidate_event.home_team and candidate_event.away_team:
+                        api_home_canon = canonicalize(candidate_event.home_team) or candidate_event.home_team
+                        api_away_canon = canonicalize(candidate_event.away_team) or candidate_event.away_team
+                        if api_home_canon.lower() == away.lower() or api_away_canon.lower() == home.lower():
+                            is_reversed = True
 
-                match_home = event.away_team if is_reversed else event.home_team
-                match_away = event.home_team if is_reversed else event.away_team
+                    match_home = candidate_event.away_team if is_reversed else candidate_event.home_team
+                    match_away = candidate_event.home_team if is_reversed else candidate_event.away_team
 
-                outcome = _match_outcome(
-                    bet_market=bet["market"],
-                    descriptor=bet["selection_descriptor"],
-                    home=match_home,
-                    away=match_away,
-                    books=event.books,
-                    book_preference=book_preference,
-                    line_taken=bet.get("line_taken"),
-                )
+                    candidate_outcome = _match_outcome(
+                        bet_market=bet["market"],
+                        descriptor=bet["selection_descriptor"],
+                        home=match_home,
+                        away=match_away,
+                        books=candidate_event.books,
+                        book_preference=book_preference,
+                        line_taken=bet.get("line_taken"),
+                    )
+                    if candidate_outcome is not None:
+                        outcome = candidate_outcome
+                        break
 
             if outcome is None:
                 skipped.append(
