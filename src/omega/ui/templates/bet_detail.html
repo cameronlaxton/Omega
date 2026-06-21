@@ -17,7 +17,18 @@
                    'selection','selection_descriptor','line','odds','stake_amount',
                    'payout_amount','net_pnl','bankroll_at_open','status','provenance',
                    'decision_timestamp','graded_at','session_id','created_at'] %}
-    <tr><th>{{ key }}</th><td>{{ detail.ledger.get(key) if detail.ledger.get(key) is not none else '—' }}</td></tr>
+    <tr>
+      <th>{{ key }}</th>
+      <td>
+        {% if key == 'trace_id' and detail.ledger.get(key) %}
+          <a href="/traces/{{ detail.ledger.get(key) }}"><code>{{ detail.ledger.get(key) }}</code></a>
+        {% elif key == 'session_id' and detail.ledger.get(key) %}
+          <a href="/sessions/{{ detail.ledger.get(key) }}"><code>{{ detail.ledger.get(key) }}</code></a>
+        {% else %}
+          {{ detail.ledger.get(key) if detail.ledger.get(key) is not none else '—' }}
+        {% endif %}
+      </td>
+    </tr>
     {% endfor %}
   </table>
 </section>

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, warning_chips, provenance_legend %}
+{% block title %}Diagnostics · Omega Console{% endblock %}
+{% block content %}
+<h1>Diagnostics</h1>
+<p class="lede">System health — runtime DB, calibration registry, and signal-scoring
+freshness. Read-only; every number is DB- or registry-sourced.</p>
+
+{{ warning_chips(data.warnings) }}
+
+<section class="block">
+  <h2>Runtime {{ src_badge('runtime') }}
+    <span class="qa-{{ 'pass' if data.status == 'ok' else 'fail' }}">{{ data.status }}</span></h2>
+  <div class="tiles">
+    <div class="tile"><span class="tlabel">traces</span><span class="tval">{{ data.trace_count }}</span></div>
+    <div class="tile"><span class="tlabel">sessions</span><span class="tval">{{ data.session_count }}</span></div>
+    <div class="tile"><span class="tlabel">bets {{ src_badge('bet_ledger') }}</span><span class="tval">{{ data.bet_count }}{% if data.bet_count_capped %}+{% endif %}</span></div>
+    <div class="tile"><span class="tlabel">schema</span><span class="tval">v{{ data.schema_version }}</span></div>
+  </div>
+  <table class="kv">
+    <tr><th>db_path</th><td><code>{{ data.db_path }}</code></td></tr>
+    <tr><th>db_source</th><td>{{ data.db_source }}</td></tr>
+    <tr><th>latest trace</th><td class="nowrap">{{ data.latest_trace_ts or '—' }}</td></tr>
+    <tr><th>generated</th><td class="nowrap">{{ data.generated_at }}</td></tr>
+  </table>
+</section>
+
+<section class="block">
+  <h2>Calibration registry {{ src_badge('calibration_registry') }}</h2>
+  {% if data.calibration.registry_available %}
+  <div class="tiles">
+    <div class="tile"><span class="tlabel">profiles</span><span class="tval">{{ data.calibration.total_profiles }}</span></div>
+    <div class="tile"><span class="tlabel">production</span><span class="tval pos">{{ data.calibration.production }}</span></div>
+    <div class="tile"><span class="tlabel">candidate</span><span class="tval">{{ data.calibration.candidate }}</span></div>
+    <div class="tile"><span class="tlabel">archived</span><span class="tval muted">{{ data.calibration.archived }}</span></div>
+    <div class="tile"><span class="tlabel">rejected</span><span class="tval muted">{{ data.calibration.rejected }}</span></div>
+  </div>
+  <p class="muted">Leagues with a production profile:
+    {{ data.calibration.leagues_with_production | join(', ') or '—' }}</p>
+  <p><a href="/calibration">View calibration status →</a></p>
+  {% else %}<p class="muted">Calibration registry unavailable or unreadable.</p>{% endif %}
+</section>
+
+<section class="block">
+  <h2>Signal scoring {{ src_badge('signal_performance') }}</h2>
+  {% if data.signal_scoring.last_scored_at %}
+  <table class="kv">
+    <tr><th>last scored</th><td class="nowrap">{{ data.signal_scoring.last_scored_at }}</td></tr>
+    <tr><th>rows (latest run)</th><td>{{ data.signal_scoring.rows_in_latest_run }}</td></tr>
+    <tr><th>leagues</th><td>{{ data.signal_scoring.league_count }}</td></tr>
+  </table>
+  {% else %}<p class="muted">No signal-performance scoring run recorded yet.</p>{% endif %}
+</section>
+
+{{ provenance_legend(data.field_sources) }}
+{% endblock %}

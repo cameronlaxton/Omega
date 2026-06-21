@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, warning_chips, filter_chips %}
+{% block title %}Signal Performance · Omega Console{% endblock %}
+{% block content %}
+<h1>Signal Performance</h1>
+<p class="lede">Retrospective scoring of evidence signals from the most recent run.
+Read-only; sourced from {{ src_badge('signal_performance') }}.{% if data.last_scored_at %}
+Last scored: <strong>{{ data.last_scored_at }}</strong>.{% endif %}</p>
+
+<form class="filters" method="get" action="/signals">
+  <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="e.g. NBA" autocomplete="off"></label>
+  <button type="submit">Filter</button>
+  <a class="clearbtn" href="/signals">Clear</a>
+</form>
+
+{{ filter_chips(request, data.filters, '/signals') }}
+{{ warning_chips(data.warnings) }}
+
+<table class="grid">
+  <thead>
+    <tr>
+      <th>signal_type</th><th>source</th><th>window</th><th>league</th><th>samples</th>
+      <th>dir. acc</th><th>hit rate</th><th>cal. gap</th><th>brier</th><th>mean conf</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in data.rows %}
+    <tr>
+      <td>{{ r.signal_type or '—' }}</td>
+      <td>{{ r.source or '—' }}</td>
+      <td>{{ r.obs_window or '—' }}</td>
+      <td>{{ r.league or '—' }}</td>
+      <td>{{ r.sample_size if r.sample_size is not none else '—' }}</td>
+      <td>{{ '%.3f' % r.direction_accuracy if r.direction_accuracy is not none else '—' }}</td>
+      <td>{{ '%.3f' % r.realized_hit_rate if r.realized_hit_rate is not none else '—' }}</td>
+      <td>{{ '%.3f' % r.calibration_gap if r.calibration_gap is not none else '—' }}</td>
+      <td>{{ '%.4f' % r.brier if r.brier is not none else '—' }}</td>
+      <td>{{ '%.3f' % r.mean_confidence if r.mean_confidence is not none else '—' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="10" class="empty">No signal-performance scoring run recorded yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

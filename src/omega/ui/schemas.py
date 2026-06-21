@@ -35,6 +35,9 @@ class Source:
     SIMULATION_DISTRIBUTIONS = "simulation_distributions"  # simulation_distributions table
     CLOSING_LINES = "closing_lines"  # closing_lines table
     TRACE_QA_VERDICTS = "trace_qa_verdicts"  # trace_qa_verdicts audit table
+    CALIBRATION_REGISTRY = "calibration_registry"  # calibration profiles.json registry
+    SIGNAL_PERFORMANCE = "signal_performance"  # signal_performance scoring table
+    RUNTIME = "runtime"  # console runtime/store metadata (db path, schema, counts)
     SIDECAR_PROCESS = "sidecar_process"  # session sidecar narrative; NON-canonical
 
 
@@ -59,6 +62,129 @@ class Pagination(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Normalized read views (Milestone B.1)
+#
+# Pydantic mirrors of the read-only dataclasses in ``omega.ui.normalizers``. The
+# normalizer owns ALL interpretation/derivation; these models only carry its
+# output over the JSON API and into templates with strict, JSON-safe typing (no
+# arbitrary types). Conversion is dataclass -> asdict -> model_validate in the
+# service layer — normalizers must not import these view models (it already
+# imports ``Source`` from this module, so the dependency stays one-directional).
+# ---------------------------------------------------------------------------
+
+# Scalar union for an extracted display value. ``bool`` first so a real bool is
+# not coerced to int under Pydantic's union handling.
+ScalarValue = bool | int | float | str | None
+
+
+class ExtractedFieldModel(BaseModel):
+    """One extracted scalar with provenance (mirror of ``ExtractedField``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: ScalarValue = None
+    source: str
+    source_path: str | None = None
+    computed: bool = False
+    display: str | None = None
+
+
+class OperatorWarningModel(BaseModel):
+    """Operator-facing warning (mirror of ``OperatorWarning``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    severity: str  # "info" | "warn" | "fail" | "unknown"
+    message: str
+    source_path: str | None = None
+    suggested_action: str | None = None
+
+
+class NormalizedRecommendationModel(BaseModel):
+    """One normalized recommendation (mirror of ``NormalizedRecommendation``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    is_primary: bool
+    rank: int | None = None
+    market: ExtractedFieldModel
+    selection: ExtractedFieldModel
+    line: ExtractedFieldModel
+    odds: ExtractedFieldModel
+    raw_probability: ExtractedFieldModel
+    calibrated_probability: ExtractedFieldModel
+    implied_probability: ExtractedFieldModel
+    engine_edge: ExtractedFieldModel
+    computed_edge: ExtractedFieldModel
+    kelly_fraction: ExtractedFieldModel
+    recommended_units: ExtractedFieldModel
+    raw_confidence_tier: ExtractedFieldModel
+    display_confidence_band: ExtractedFieldModel
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+
+
+class EvidenceCoverageModel(BaseModel):
+    """Evidence coverage metrics (mirror of ``EvidenceCoverage``) — counts only."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_signals: int
+    applied_signals: int
+    shadow_signals: int
+    signals_with_confidence: int
+    avg_confidence: float | None = None
+    signal_types_present: list[str] = Field(default_factory=list)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+
+
+class EvidenceCoverageSummary(BaseModel):
+    """Compact per-row evidence counts for the traces table (not a score)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_signals: int = 0
+    applied_signals: int = 0
+    shadow_signals: int = 0
+
+
+class TraceRecommendationViewModel(BaseModel):
+    """Complete normalized recommendation view (mirror of ``TraceRecommendationView``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trace_id: str
+    kind: str
+    recommendations: list[NormalizedRecommendationModel] = Field(default_factory=list)
+    evidence_coverage: EvidenceCoverageModel
+    raw_payload_available: bool = False
+
+
+class SessionHealthViewModel(BaseModel):
+    """Computed session health (mirror of ``SessionHealthView``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    quality_gate_status: str
+    total_traces: int
+    traces_with_outcomes: int
+    traces_with_bets: int
+    traces_with_evidence: int
+    traces_zero_evidence: int
+    total_evidence_signals: int
+    avg_evidence_signals_per_trace: float
+    evidence_coverage_ratio: float
+    sidecar_valid: bool
+    assumption_count: int
+    bug_count: int
+    audit_event_count: int
+    failed_audit_events: int
+    pipeline_steps_failed: list[str] = Field(default_factory=list)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Traces
 # ---------------------------------------------------------------------------
 
@@ -78,6 +204,9 @@ class TraceRow(BaseModel):
     confidence_tiers: list[str] = Field(default_factory=list)
     markets: list[str] = Field(default_factory=list)
     has_outcome: bool = False
+    # Compact evidence counts (Milestone B.1). Populated only for the visible
+    # (paginated) window of the trace list; None elsewhere. Backward compatible.
+    evidence_coverage: EvidenceCoverageSummary | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
 
 
@@ -114,6 +243,11 @@ class TraceDetail(BaseModel):
     bets: list[dict[str, Any]] = Field(default_factory=list)
     closing_lines: list[dict[str, Any]] = Field(default_factory=list)
     qa_verdict: dict[str, Any] | None = None
+    # Normalized recommendation read view (Milestone B.1). New key only; all the
+    # raw fields above are unchanged for backward compatibility. Carries the
+    # selection-aware recommendations and evidence coverage. None when the
+    # normalizer produced nothing (e.g. malformed payload).
+    recommendation_view: TraceRecommendationViewModel | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
 
 
@@ -234,6 +368,10 @@ class SessionDetail(BaseModel):
     quality_gate_status: str = "unknown"
     # Canonical numbers come from these DB traces, never from the sidecar prose.
     db_traces: list[TraceRow] = Field(default_factory=list)
+    # Computed session health beyond quality_gate_status (Milestone B.1). New key
+    # only; aggregated from DB-backed per-trace facts + sidecar counts/flags
+    # (never sidecar prose numbers).
+    health: SessionHealthViewModel | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
 
 
@@ -253,3 +391,213 @@ class HealthResponse(BaseModel):
     schema_version: int
     sessions_dir: str
     milestone: str = "phase8-A"
+
+
+# ---------------------------------------------------------------------------
+# Diagnostics + Calibration Status (Milestone B.2)
+#
+# Read-only operator views over runtime/registry/scoring health. All numbers are
+# DB- or registry-sourced; warnings reuse OperatorWarningModel; provenance is
+# labelled via the Source.* constants above.
+# ---------------------------------------------------------------------------
+
+
+class CalibrationSummary(BaseModel):
+    """Counts of calibration profiles by lifecycle status (registry-sourced)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    registry_available: bool = False
+    total_profiles: int = 0
+    production: int = 0
+    candidate: int = 0
+    archived: int = 0
+    rejected: int = 0
+    leagues_with_production: list[str] = Field(default_factory=list)
+
+
+class SignalScoringSummary(BaseModel):
+    """Freshness of the most recent signal-performance scoring run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    last_scored_at: str | None = None
+    rows_in_latest_run: int = 0
+    league_count: int = 0
+
+
+class DiagnosticsView(BaseModel):
+    """System-health snapshot: runtime DB, calibration registry, signal scoring."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = "ok"  # "ok" | "degraded"
+    db_path: str
+    db_source: str
+    schema_version: int
+    trace_count: int
+    session_count: int
+    bet_count: int
+    bet_count_capped: bool = False
+    latest_trace_ts: str | None = None
+    calibration: CalibrationSummary
+    signal_scoring: SignalScoringSummary
+    generated_at: str
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    field_sources: dict[str, str] = Field(default_factory=dict)
+    schema_version_response: int = 1
+
+
+class CalibrationProfileRow(BaseModel):
+    """One calibration profile, flattened for display (registry-sourced)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile_id: str
+    league: str
+    version: int
+    method: str
+    market: str = "game"
+    context_slice: str | None = None
+    status: str  # candidate | production | archived | rejected
+    is_active: bool = False  # matches registry.get_production() for its (league, slice, market)
+    sample_size: int = 0
+    brier: float | None = None
+    calibration_error: float | None = None
+    log_loss: float | None = None
+    n_eval: int | None = None
+    training_window: str | None = None
+    created_at: str | None = None
+    promoted_at: str | None = None
+    field_sources: dict[str, str] = Field(default_factory=dict)
+
+
+class CalibrationStatusView(BaseModel):
+    """All calibration profiles with the active one marked (registry-sourced)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    registry_available: bool = False
+    rows: list[CalibrationProfileRow] = Field(default_factory=list)
+    filters: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1
+
+
+# ---------------------------------------------------------------------------
+# Signal Performance + Review Queue + Market Movement/CLV (Milestone B.3)
+# ---------------------------------------------------------------------------
+
+
+class SignalPerformanceRow(BaseModel):
+    """One row of the latest signal-performance scoring run (DB-sourced)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    signal_type: str | None = None
+    source: str | None = None
+    obs_window: str | None = None
+    league: str | None = None
+    sample_size: int | None = None
+    direction_correct: int | None = None
+    direction_accuracy: float | None = None
+    mean_confidence: float | None = None
+    realized_hit_rate: float | None = None
+    calibration_gap: float | None = None
+    brier: float | None = None
+    scored_at: str | None = None
+
+
+class SignalPerformanceView(BaseModel):
+    """The most recent signal-performance scoring run (signal_performance table)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rows: list[SignalPerformanceRow] = Field(default_factory=list)
+    last_scored_at: str | None = None
+    filters: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1
+
+
+class ReviewItem(BaseModel):
+    """A single sample item inside a review bucket (link + label only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str  # "trace" | "bet" | "session"
+    id: str
+    label: str | None = None
+    detail: str | None = None
+    href: str | None = None
+
+
+class ReviewBucket(BaseModel):
+    """A category of items needing operator attention (bounded-scan count)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    title: str
+    severity: str  # "info" | "warn" | "fail"
+    count: int
+    scan_capped: bool = False
+    source: str
+    items: list[ReviewItem] = Field(default_factory=list)  # bounded sample
+
+
+class ReviewQueueView(BaseModel):
+    """Operator work buckets aggregated from existing DB/sidecar reads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    buckets: list[ReviewBucket] = Field(default_factory=list)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1
+
+
+class ClvRow(BaseModel):
+    """One bet's closing-line value (taken price vs closing price)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ledger_id: str
+    trace_id: str | None = None
+    bet_date: str | None = None
+    league: str | None = None
+    matchup: str | None = None
+    market: str | None = None
+    selection: str | None = None
+    status: str | None = None
+    taken_odds: float | None = None
+    closing_odds: float | None = None
+    taken_implied: float | None = None  # computed: raw implied (incl. vig)
+    closing_implied: float | None = None  # computed: raw implied (incl. vig)
+    clv_points: float | None = None  # computed: closing_implied - taken_implied
+    beat_close: bool | None = None
+    closing_source: str | None = None
+    field_sources: dict[str, str] = Field(default_factory=dict)
+
+
+class ClvSummary(BaseModel):
+    """CLV coverage + aggregate across the scanned bets."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    bets_scanned: int = 0
+    with_closing_line: int = 0
+    beat_close: int = 0
+    avg_clv_points: float | None = None
+
+
+class ClvView(BaseModel):
+    """Closing-line-value report joining bet_ledger with closing_lines."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rows: list[ClvRow] = Field(default_factory=list)
+    summary: ClvSummary
+    filters: dict[str, Any] = Field(default_factory=dict)
+    scan_capped: bool = False
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1

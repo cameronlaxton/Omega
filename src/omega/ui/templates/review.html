@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge %}
+{% block title %}Review Queue · Omega Console{% endblock %}
+{% block content %}
+<h1>Review Queue</h1>
+<p class="lede">Work that needs attention, aggregated from DB and session reads.
+Read-only — the console never grades, settles, or repairs; it only points you at
+items to act on elsewhere.</p>
+
+{% for b in data.buckets %}
+<section class="block bucket bucket-{{ b.severity }}">
+  <h2>{{ b.title }} {{ src_badge(b.source) }}
+    <span class="bucket-count sev-{{ b.severity }}">{{ b.count }}</span>
+    {% if b.scan_capped %}<span class="warn" title="bounded read scan; older rows may exist beyond the window">scan-capped</span>{% endif %}
+  </h2>
+  {# Use subscript access: ``b.items`` would resolve to the dict's items() method. #}
+  {% set sample = b['items'] %}
+  {% if sample %}
+  <ul class="linklist">
+    {% for it in sample %}
+    <li><a href="{{ it.href }}"><code>{{ it.label or it.id }}</code></a>{% if it.detail %} <span class="muted">— {{ it.detail }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% if b.count > (sample | length) %}<p class="muted">… and {{ b.count - (sample | length) }} more.</p>{% endif %}
+  {% else %}<p class="muted">Nothing here — all clear.</p>{% endif %}
+</section>
+{% endfor %}
+{% endblock %}

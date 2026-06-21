@@ -83,7 +83,7 @@ h3 { font-size: 0.96rem; margin: 0.9rem 0 0.3rem; color: var(--muted); }
 
 .srcnote { color: var(--muted); font-size: 0.86rem; margin: 0.3rem 0 0.7rem; }
 
-table.grid { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+table.grid { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 table.grid th, table.grid td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
 table.grid thead th { background: var(--panel2); color: var(--muted); font-weight: 600; font-size: 0.82rem; position: sticky; top: 46px; }
 table.grid tbody tr:hover { background: #1b2230; }
@@ -160,6 +160,105 @@ details summary { cursor: pointer; color: var(--accent); }
   font-size: 0.78rem; color: var(--muted); padding: 3px 6px;
 }
 
+/* -- Normalized recommendation cards (Milestone B.1) ---------------------- */
+.recs .reccard {
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 0.6rem 0.8rem; margin: 0.6rem 0;
+}
+.recs .reccard.primary { border-left: 3px solid var(--accent); }
+.rechead { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
+.recsel { font-weight: 700; }
+.recmkt { color: var(--muted); }
+.pill {
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line);
+}
+.pill.primary { background: #102236; color: var(--accent); border-color: #1d3a59; }
+.pill.alt { background: var(--panel); color: var(--muted); }
+.band { margin-left: auto; color: var(--ink); font-size: 0.86rem; }
+table.kv.reckv { width: 100%; }
+table.kv.reckv th { width: 1%; }
+table.kv.reckv td { width: 49%; }
+
+/* Extracted-field value + provenance + computed badge */
+.fv { cursor: help; }
+.fv.computed { color: var(--accent); }
+.cbadge {
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  background: #16263a; color: var(--accent); border: 1px solid #1d3a59;
+  padding: 0 4px; border-radius: 3px; vertical-align: middle;
+}
+.small { font-size: 0.8rem; }
+.rawdetails { margin-top: 0.6rem; }
+
+/* Warning chips by severity */
+.warnchips { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.5rem 0 0.2rem; }
+.wchip {
+  font-size: 0.8rem; padding: 3px 8px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--panel);
+}
+.wchip strong { text-transform: uppercase; font-size: 0.66rem; letter-spacing: 0.04em; margin-right: 4px; }
+.wchip.sev-info { border-color: #2a3a4d; color: var(--muted); }
+.wchip.sev-warn { border-color: #5a4a1d; background: #241d0e; color: #f1d489; }
+.wchip.sev-fail { border-color: #5a2420; background: #271312; color: #f3a39c; }
+.wchip.sev-unknown { border-color: var(--line); color: var(--muted); }
+
+/* Evidence coverage */
+.evcov { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; margin: 0.2rem 0; }
+.evstat { color: var(--muted); }
+.evstat strong { color: var(--ink); }
+.evcol { text-align: right; white-space: nowrap; }
+
+/* Session health card */
+.health { border-left: 3px solid var(--accent); }
+.hstats { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; margin: 0.3rem 0; }
+.hstats.sub { color: var(--muted); font-size: 0.86rem; }
+.hstat em { font-style: normal; font-weight: 700; color: var(--ink); }
+.hstat.neg { color: var(--neg); }
+
+/* -- Diagnostics tiles + calibration status (Milestone B.2) --------------- */
+.tiles { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.4rem 0 0.7rem; }
+.tile {
+  display: flex; flex-direction: column; gap: 2px; min-width: 6.5rem;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+}
+.tlabel { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.tval { font-size: 1.3rem; font-weight: 700; }
+.tval.pos { color: var(--pos); }
+.tval.muted { color: var(--muted); }
+
+/* Calibration profile status badges */
+.pstatus {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line);
+}
+.pstatus-production { background: #11241a; color: var(--pos); border-color: #1d4a34; }
+.pstatus-candidate { background: #102236; color: var(--accent); border-color: #1d3a59; }
+.pstatus-archived { background: var(--panel2); color: var(--muted); }
+.pstatus-rejected { background: #271312; color: var(--neg); border-color: #5a2420; }
+
+/* Active production row highlight + inline badge */
+table.grid tr.profile.active { background: #11201a; }
+table.grid tr.profile.active:hover { background: #16271f; }
+.badge-prod {
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  background: #11241a; color: var(--pos); border: 1px solid #1d4a34;
+  padding: 0 5px; border-radius: 3px; vertical-align: middle;
+}
+
+/* -- Review Queue buckets (Milestone B.3) --------------------------------- */
+.bucket.bucket-info { border-left: 3px solid var(--accent); }
+.bucket.bucket-warn { border-left: 3px solid var(--warn); }
+.bucket.bucket-fail { border-left: 3px solid var(--neg); }
+.bucket-count {
+  display: inline-block; min-width: 1.4rem; text-align: center;
+  font-weight: 700; font-size: 0.82rem; padding: 0 6px; border-radius: 999px;
+  background: var(--panel2); border: 1px solid var(--line); color: var(--ink);
+}
+.bucket-count.sev-warn { color: var(--warn); border-color: #5a4a1d; }
+.bucket-count.sev-fail { color: var(--neg); border-color: #5a2420; }
+
 /* -- Print ---------------------------------------------------------------- */
 @media print {
   :root { --bg: #fff; --ink: #000; --panel: #f8f8f8; --panel2: #f0f0f0; --muted: #555; --line: #ccc; }
@@ -174,4 +273,7 @@ details summary { cursor: pointer; color: var(--accent); }
   pre.json, pre.prose { max-height: none; overflow: visible; border: 1px solid #ccc; }
   .foot { border-top: 1px solid #ccc; }
   .src { background: #eee; color: #333; border-color: #ccc; }
+  .reccard, .wchip { break-inside: avoid; }
+  .cbadge { background: #eee; color: #333; border-color: #ccc; }
+  .wchip.sev-warn, .wchip.sev-fail { background: #f4f4f4; color: #000; }
 }

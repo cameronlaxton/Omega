@@ -30,6 +30,8 @@ FORBIDDEN_CALLS = {
     # calibration / promotion / ingest / quarantine / seeding
     "promote",
     "promote_profile",
+    "register",  # CalibrationRegistry.register (write)
+    "_save",  # CalibrationRegistry._save (write)
     "ingest",
     "quarantine_sidecar",
     "quarantine",
@@ -162,7 +164,11 @@ APPROVED_OMEGA_IMPORTS = {
     "omega.ui.api",
     "omega.ui.service",
     "omega.ui.schemas",
+    "omega.ui.normalizers",
+    "omega.ui.clv",
     "omega.core.config.leagues",
+    # Read-only calibration registry access (list_profiles/get_production only).
+    "omega.core.calibration.registry",
 }
 
 

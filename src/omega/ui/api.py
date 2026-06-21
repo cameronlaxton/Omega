@@ -15,9 +15,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from omega.ui.schemas import (
     BetDetail,
     BetListResponse,
+    CalibrationStatusView,
+    ClvView,
+    DiagnosticsView,
     HealthResponse,
+    ReviewQueueView,
     SessionDetail,
     SessionListResponse,
+    SignalPerformanceView,
     TraceDetail,
     TraceListResponse,
 )
@@ -31,6 +36,7 @@ def get_service(request: Request) -> Iterator[ConsoleService]:
         db_path=getattr(state, "console_db_path", None),
         sessions_dir=getattr(state, "console_sessions_dir", None),
         max_scan=getattr(state, "console_max_scan", None),
+        calibration_registry_path=getattr(state, "console_calibration_registry", None),
     )
     try:
         yield service
@@ -44,6 +50,41 @@ router = APIRouter(prefix="/api", tags=["console"])
 @router.get("/healthz", response_model=HealthResponse)
 def healthz(service: ConsoleService = Depends(get_service)) -> HealthResponse:
     return service.health()
+
+
+@router.get("/diagnostics", response_model=DiagnosticsView)
+def diagnostics(service: ConsoleService = Depends(get_service)) -> DiagnosticsView:
+    return service.diagnostics()
+
+
+@router.get("/calibration", response_model=CalibrationStatusView)
+def calibration(
+    service: ConsoleService = Depends(get_service),
+    league: str | None = Query(None),
+    status: str | None = Query(None),
+) -> CalibrationStatusView:
+    return service.calibration_status(league=league, status=status)
+
+
+@router.get("/signals", response_model=SignalPerformanceView)
+def signals(
+    service: ConsoleService = Depends(get_service),
+    league: str | None = Query(None),
+) -> SignalPerformanceView:
+    return service.signal_performance(league=league)
+
+
+@router.get("/review", response_model=ReviewQueueView)
+def review(service: ConsoleService = Depends(get_service)) -> ReviewQueueView:
+    return service.review_queue()
+
+
+@router.get("/clv", response_model=ClvView)
+def clv(
+    service: ConsoleService = Depends(get_service),
+    league: str | None = Query(None),
+) -> ClvView:
+    return service.clv_report(league=league)
 
 
 @router.get("/traces", response_model=TraceListResponse)

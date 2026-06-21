@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, warning_chips, filter_chips %}
+{% block title %}Calibration Status · Omega Console{% endblock %}
+{% block content %}
+<h1>Calibration Status</h1>
+<p class="lede">Versioned calibration profiles from the registry. The
+<span class="badge-prod">active</span> row is the production profile the engine
+resolves for that league / slice / market. Read-only.</p>
+
+<form class="filters" method="get" action="/calibration">
+  <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="e.g. NBA" autocomplete="off"></label>
+  <label>Status
+    <select name="status">
+      <option value="">any</option>
+      {% for s in ['production', 'candidate', 'archived', 'rejected'] %}
+        <option value="{{ s }}" {{ 'selected' if data.filters.status == s else '' }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a class="clearbtn" href="/calibration">Clear</a>
+</form>
+
+{{ filter_chips(request, data.filters, '/calibration') }}
+{{ warning_chips(data.warnings) }}
+
+<p class="srcnote">Profiles and held-out metrics sourced from {{ src_badge('calibration_registry') }}.</p>
+
+<table class="grid">
+  <thead>
+    <tr>
+      <th>profile_id</th><th>league</th><th>market</th><th>slice</th><th>method</th><th>ver</th>
+      <th>status</th><th>samples</th><th>brier</th><th>cal. err</th><th>log loss</th><th>promoted</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in data.rows %}
+    <tr class="{{ 'profile active' if r.is_active else '' }}">
+      <td><code>{{ r.profile_id }}</code>{% if r.is_active %} <span class="badge-prod" title="active production profile">active</span>{% endif %}</td>
+      <td>{{ r.league }}</td>
+      <td>{{ r.market }}</td>
+      <td>{{ r.context_slice or '—' }}</td>
+      <td>{{ r.method }}</td>
+      <td>{{ r.version }}</td>
+      <td><span class="pstatus pstatus-{{ r.status }}">{{ r.status }}</span></td>
+      <td>{{ r.sample_size }}</td>
+      <td>{{ '%.4f' % r.brier if r.brier is not none else '—' }}</td>
+      <td>{{ '%.4f' % r.calibration_error if r.calibration_error is not none else '—' }}</td>
+      <td>{{ '%.4f' % r.log_loss if r.log_loss is not none else '—' }}</td>
+      <td class="nowrap">{{ r.promoted_at[:10] if r.promoted_at else '—' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="12" class="empty">
+      {% if data.registry_available %}No calibration profiles{% if data.filters.league or data.filters.status %} match these filters{% endif %}.{% else %}Calibration registry unavailable or unreadable.{% endif %}
+    </td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

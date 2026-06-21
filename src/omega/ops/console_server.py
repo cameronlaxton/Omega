@@ -56,14 +56,14 @@ NAV_ENABLED = (
     {"key": "traces", "label": "Trace Ledger", "href": "/traces"},
     {"key": "bets", "label": "Bet Ledger", "href": "/bets"},
     {"key": "sessions", "label": "Session Review", "href": "/sessions"},
+    {"key": "diagnostics", "label": "Diagnostics", "href": "/diagnostics"},
+    {"key": "calibration", "label": "Calibration Status", "href": "/calibration"},
+    {"key": "signals", "label": "Signal Performance", "href": "/signals"},
+    {"key": "review", "label": "Review Queue", "href": "/review"},
+    {"key": "clv", "label": "Market Movement / CLV", "href": "/clv"},
 )
-NAV_PLACEHOLDERS = (
-    {"label": "Diagnostics", "milestone": "B"},
-    {"label": "Calibration Status", "milestone": "B"},
-    {"label": "Market Movement / CLV", "milestone": "C"},
-    {"label": "Review Queue", "milestone": "C"},
-    {"label": "Signal Performance", "milestone": "C"},
-)
+# All placeholder pages are implemented as of Milestone B.3.
+NAV_PLACEHOLDERS: tuple[dict[str, str], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +191,7 @@ def build_console_app(
     db_path: str | None = None,
     sessions_dir: str | Path | None = None,
     max_scan: int | None = None,
+    calibration_registry: str | Path | None = None,
     auth_token: str | None = None,
 ):
     """Build the read-only console FastAPI app.
@@ -209,6 +210,9 @@ def build_console_app(
     app.state.console_db_path = db_path
     app.state.console_sessions_dir = str(sessions_dir) if sessions_dir else None
     app.state.console_max_scan = max_scan
+    app.state.console_calibration_registry = (
+        str(calibration_registry) if calibration_registry else None
+    )
 
     if auth_token:
         app.add_middleware(
@@ -363,6 +367,59 @@ def build_console_app(
             request, "session_detail.html", _ctx(request, detail=detail.model_dump(), active="sessions")
         )
 
+    @app.get("/diagnostics", response_class=HTMLResponse)
+    def page_diagnostics(request: Request, service=Depends(get_service)):
+        data = service.diagnostics()
+        return templates.TemplateResponse(
+            request, "diagnostics.html",
+            _ctx(request, data=data.model_dump(), active="diagnostics"),
+        )
+
+    @app.get("/calibration", response_class=HTMLResponse)
+    def page_calibration(
+        request: Request,
+        service=Depends(get_service),
+        league: str | None = Query(None),
+        status: str | None = Query(None),
+    ):
+        data = service.calibration_status(league=league, status=status)
+        return templates.TemplateResponse(
+            request, "calibration.html",
+            _ctx(request, data=data.model_dump(), active="calibration"),
+        )
+
+    @app.get("/signals", response_class=HTMLResponse)
+    def page_signals(
+        request: Request,
+        service=Depends(get_service),
+        league: str | None = Query(None),
+    ):
+        data = service.signal_performance(league=league)
+        return templates.TemplateResponse(
+            request, "signals.html",
+            _ctx(request, data=data.model_dump(), active="signals"),
+        )
+
+    @app.get("/review", response_class=HTMLResponse)
+    def page_review(request: Request, service=Depends(get_service)):
+        data = service.review_queue()
+        return templates.TemplateResponse(
+            request, "review.html",
+            _ctx(request, data=data.model_dump(), active="review"),
+        )
+
+    @app.get("/clv", response_class=HTMLResponse)
+    def page_clv(
+        request: Request,
+        service=Depends(get_service),
+        league: str | None = Query(None),
+    ):
+        data = service.clv_report(league=league)
+        return templates.TemplateResponse(
+            request, "clv.html",
+            _ctx(request, data=data.model_dump(), active="clv"),
+        )
+
     return app
 
 
@@ -381,6 +438,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--db", default=None, help="Trace DB path override (else default).")
     p.add_argument("--sessions-dir", default=None, help="Session sidecar dir override.")
     p.add_argument("--max-scan", type=int, default=None, help="Max read-scan rows.")
+    p.add_argument(
+        "--calibration-registry",
+        default=None,
+        help="Calibration profiles.json override (else the registry default).",
+    )
     p.add_argument(
         "--allow-remote",
         action="store_true",
@@ -413,6 +475,8 @@ def main(argv: list[str] | None = None) -> None:
         db_path=args.db,
         sessions_dir=args.sessions_dir,
         max_scan=args.max_scan,
+        calibration_registry=args.calibration_registry
+        or os.environ.get("OMEGA_CONSOLE_CALIBRATION_REGISTRY"),
         auth_token=enforced_token,
     )
     logger.info(

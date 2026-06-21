@@ -21,8 +21,34 @@ values are sourced from DB-backed records; session sidecars are shown as process
     <p>Validated JSON session sidecars with audit events, assumptions, bugs, and agent
     notes — correlated to DB traces by <code>session_id</code>.</p>
   </a>
+  <a class="card" href="/diagnostics">
+    <h2>Diagnostics</h2>
+    <p>System health: runtime DB counts, calibration-registry summary, and
+    signal-scoring freshness.</p>
+  </a>
+  <a class="card" href="/calibration">
+    <h2>Calibration Status</h2>
+    <p>Versioned calibration profiles with the active production profile and its
+    held-out metrics.</p>
+  </a>
+  <a class="card" href="/signals">
+    <h2>Signal Performance</h2>
+    <p>Retrospective scoring of evidence signals — direction accuracy, hit rate,
+    calibration gap, brier — from the latest run.</p>
+  </a>
+  <a class="card" href="/review">
+    <h2>Review Queue</h2>
+    <p>Work to act on: ungraded traces, pending bets, and problem sessions —
+    aggregated from existing reads.</p>
+  </a>
+  <a class="card" href="/clv">
+    <h2>Market Movement / CLV</h2>
+    <p>Closing-line value per bet: the price you took versus the attached closing
+    line, with beat-the-close coverage.</p>
+  </a>
 </section>
 
+{% if nav_placeholders %}
 <section class="future">
   <h3>Planned (later milestones — disabled)</h3>
   <ul class="ph-list">
@@ -31,6 +57,7 @@ values are sourced from DB-backed records; session sidecars are shown as process
     {% endfor %}
   </ul>
 </section>
+{% endif %}
 
 <section class="health">
   <h3>Runtime</h3>

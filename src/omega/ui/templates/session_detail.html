@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import src_badge, provenance_legend %}
+{% from "base.html" import src_badge, provenance_legend, warning_chips %}
 {% block title %}Session {{ not_found_id or detail.session_id }} · Omega Console{% endblock %}
 {% block content %}
 <p class="crumbs"><a href="/sessions">‹ Session Review</a></p>
@@ -16,6 +16,33 @@
   {{ detail.sidecar_error }} The session-process view is unavailable, but DB-backed traces
   for this <code>session_id</code> are still shown below.
 </div>
+{% endif %}
+
+{% set h = detail.health %}
+{% if h %}
+<section class="block health">
+  <h2>Session health {{ src_badge('db_trace_payload') }}</h2>
+  <p class="muted">Computed from DB-backed traces. The sidecar contributes only counts/flags (assumptions, bugs, audit status) — never numbers.</p>
+  <div class="hstats">
+    <span class="hstat"><em>{{ h.total_traces }}</em> traces</span>
+    <span class="hstat"><em>{{ h.traces_with_evidence }}</em> with evidence</span>
+    <span class="hstat"><em>{{ h.traces_zero_evidence }}</em> zero-evidence</span>
+    <span class="hstat"><em>{{ h.total_evidence_signals }}</em> signals</span>
+    <span class="hstat">coverage <em>{{ '%.0f%%' % (h.evidence_coverage_ratio * 100) }}</em></span>
+    <span class="hstat">avg/trace <em>{{ '%.2f' % h.avg_evidence_signals_per_trace }}</em></span>
+    <span class="hstat"><em>{{ h.traces_with_outcomes }}</em> graded</span>
+    <span class="hstat"><em>{{ h.traces_with_bets }}</em> with bets</span>
+    <span class="hstat">gate <em class="qa-{{ h.quality_gate_status }}">{{ h.quality_gate_status }}</em></span>
+  </div>
+  <div class="hstats sub">
+    <span class="hstat">assumptions {{ h.assumption_count }}</span>
+    <span class="hstat">bugs {{ h.bug_count }}</span>
+    <span class="hstat">audit events {{ h.audit_event_count }}</span>
+    <span class="hstat">failed audits {{ h.failed_audit_events }}</span>
+    {% if h.pipeline_steps_failed %}<span class="hstat neg">failed steps: {{ h.pipeline_steps_failed | join(', ') }}</span>{% endif %}
+  </div>
+  {{ warning_chips(h.warnings) }}
+</section>
 {% endif %}
 
 <div class="split">

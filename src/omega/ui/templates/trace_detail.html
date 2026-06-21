@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import src_badge, provenance_legend %}
+{% from "base.html" import src_badge, provenance_legend, field_val, warning_chips %}
 {% block title %}Trace {{ not_found_id or detail.trace_id }} · Omega Console{% endblock %}
 {% block content %}
 <p class="crumbs"><a href="/traces">‹ Trace Ledger</a></p>
@@ -20,15 +20,55 @@
   <tr><th>session</th><td>{% if detail.session_id %}<a href="/sessions/{{ detail.session_id }}">{{ detail.session_id }}</a>{% else %}—{% endif %}</td></tr>
 </table>
 
-<section class="block">
-  <h2>Recommendations {{ src_badge('db_trace_payload') }}</h2>
-  {% if detail.recommendations %}<pre class="json">{{ detail.recommendations | tojson(indent=2) }}</pre>
-  {% else %}<p class="muted">None.</p>{% endif %}
+{% set rv = detail.recommendation_view %}
+<section class="block recs">
+  <h2>Recommendations <span class="muted">(normalized)</span> {{ src_badge('db_trace_payload') }}{% if rv and rv.recommendations %} <span class="count">{{ rv.recommendations | length }}</span>{% endif %}</h2>
+  {% if rv and rv.recommendations %}
+  {% for rec in rv.recommendations %}
+  <div class="reccard{% if rec.is_primary %} primary{% endif %}">
+    <div class="rechead">
+      <span class="recsel">{{ field_val(rec.selection) }}</span>
+      <span class="recmkt">{{ field_val(rec.market) }}</span>
+      {% if rec.is_primary %}<span class="pill primary">primary</span>{% else %}<span class="pill alt">alt{% if rec.rank is not none %} #{{ rec.rank }}{% endif %}</span>{% endif %}
+      <span class="band">{{ field_val(rec.display_confidence_band) }}</span>
+    </div>
+    <table class="kv reckv">
+      <tr><th>line</th><td>{{ field_val(rec.line) }}</td><th>odds</th><td>{{ field_val(rec.odds) }}</td></tr>
+      <tr><th>raw prob</th><td>{{ field_val(rec.raw_probability) }}</td><th>calibrated</th><td>{{ field_val(rec.calibrated_probability) }}</td></tr>
+      <tr><th>implied</th><td>{{ field_val(rec.implied_probability) }}</td><th>engine edge</th><td>{{ field_val(rec.engine_edge) }}</td></tr>
+      <tr><th>computed edge</th><td>{{ field_val(rec.computed_edge) }}</td><th>kelly</th><td>{{ field_val(rec.kelly_fraction) }}</td></tr>
+      <tr><th>units</th><td>{{ field_val(rec.recommended_units) }}</td><th>raw tier <span class="muted">(audit)</span></th><td>{{ field_val(rec.raw_confidence_tier) }}</td></tr>
+    </table>
+    {{ warning_chips(rec.warnings) }}
+  </div>
+  {% endfor %}
+  <p class="srcnote">DB-sourced; hover a value for its source path. <span class="cbadge">computed</span> marks console-derived fields (implied probability, computed edge, confidence band). Raw tier is audit/source context only.</p>
+  {% else %}<p class="muted">No recommendations in this trace payload.</p>{% endif %}
+  {% if detail.recommendations %}
+  <details class="rawdetails"><summary>Show raw recommendations JSON</summary><pre class="json">{{ detail.recommendations | tojson(indent=2) }}</pre></details>
+  {% endif %}
 </section>
+
+{% if rv %}
+{% set ev = rv.evidence_coverage %}
+<section class="block">
+  <h2>Evidence coverage {{ src_badge('evidence_signals') }} <span class="count">{{ ev.total_signals }}</span></h2>
+  <div class="evcov">
+    <span class="evstat">applied <strong>{{ ev.applied_signals }}</strong></span>
+    <span class="evstat">shadow <strong>{{ ev.shadow_signals }}</strong></span>
+    <span class="evstat">with confidence <strong>{{ ev.signals_with_confidence }}</strong></span>
+    <span class="evstat">avg conf <strong>{{ '%.3f' % ev.avg_confidence if ev.avg_confidence is not none else '—' }}</strong></span>
+  </div>
+  {% if ev.signal_types_present %}<p class="muted">types: {{ ev.signal_types_present | join(', ') }}</p>{% endif %}
+  {{ warning_chips(ev.warnings) }}
+  <p class="muted small">Coverage counts which signals exist and were applied — not a strength/quality score.</p>
+</section>
+{% endif %}
 
 <section class="block">
   <h2>Predictions {{ src_badge('db_trace_payload') }}</h2>
-  {% if detail.predictions %}<pre class="json">{{ detail.predictions | tojson(indent=2) }}</pre>
+  {% if detail.predictions %}
+  <details class="rawdetails"><summary>Show raw predictions JSON</summary><pre class="json">{{ detail.predictions | tojson(indent=2) }}</pre></details>
   {% else %}<p class="muted">None.</p>{% endif %}
 </section>
 

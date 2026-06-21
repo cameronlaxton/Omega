@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Omega Operator Console{% endblock %}</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -49,6 +50,32 @@
     {% if pagination.has_next %}<a href="{{ request.url.include_query_params(page=pagination.page + 1) }}">Next ›</a>{% else %}<span class="disabled">Next ›</span>{% endif %}
   </span>
 </div>
+{%- endmacro %}
+{# -- Normalized read-view macros (Milestone B.1) ------------------------- #}
+{# Light display-only number formatting (round non-integer floats to 4dp).
+   This is presentation, not normalization — no value is derived or reinterpreted. #}
+{% macro _num(v) -%}
+{%- if v is number and (v | int) != v -%}{{ v | round(4) }}{%- else -%}{{ v }}{%- endif -%}
+{%- endmacro %}
+{# Render one ExtractedField (a dict from model_dump): the scalar value with its
+   source path as a hover tooltip and a visible badge on computed fields. A
+   missing value (value is none ⇒ source_path none) renders as a muted dash. #}
+{% macro field_val(f, dash='—') -%}
+{%- if f and f.value is not none -%}
+<span class="fv{% if f.computed %} computed{% endif %}"{% if f.source_path %} title="source: {{ f.source_path }}"{% endif %}>{{ _num(f.value) }}{% if f.computed %} <span class="cbadge" title="Console-derived (not an engine value)">computed</span>{% endif %}</span>
+{%- else -%}
+<span class="muted" title="not found in payload (source_path: none)">{{ dash }}</span>
+{%- endif -%}
+{%- endmacro %}
+{# Render a list of OperatorWarnings as severity-colored chips. #}
+{% macro warning_chips(warnings) -%}
+{% if warnings %}
+<div class="warnchips" aria-label="Warnings">
+  {% for w in warnings %}
+  <span class="wchip sev-{{ w.severity }}" title="{{ w.code }}{% if w.source_path %} · source: {{ w.source_path }}{% endif %}"><strong>{{ w.severity }}</strong> {{ w.message }}</span>
+  {% endfor %}
+</div>
+{% endif %}
 {%- endmacro %}
 {% macro filter_chips(request, filters, clear_href) -%}
 {# Render a chip bar showing each active (non-null) filter with a one-click remove link. #}

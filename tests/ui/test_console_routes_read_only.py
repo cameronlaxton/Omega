@@ -48,20 +48,24 @@ def test_post_to_existing_resource_is_405(client):
         assert resp.status_code == 405, f"{method.upper()} -> {resp.status_code}"
 
 
-def test_future_milestone_endpoints_absent(client):
-    # Placeholder nav (Diagnostics, Calibration, CLV, Review Queue, Signal
-    # Performance) must NOT be backed by working endpoints in Milestone A.
+def test_unimplemented_paths_stay_absent(client):
+    # Paths that were never implemented must not silently exist (no stray surface).
+    for path in ("/api/market-movement", "/api/review-queue", "/api/signal-performance", "/api/nonsense"):
+        assert client.get(path).status_code == 404, f"{path} unexpectedly exists"
+
+
+def test_console_pages_are_read_only_endpoints(client):
+    # Every console API page (incl. B.2 diagnostics/calibration and B.3
+    # signals/review/clv) is a real GET-only, mutation-free endpoint.
     for path in (
         "/api/diagnostics",
         "/api/calibration",
-        "/api/calibration/status",
-        "/api/clv",
-        "/api/market-movement",
-        "/api/review-queue",
         "/api/signals",
-        "/api/signal-performance",
+        "/api/review",
+        "/api/clv",
     ):
-        assert client.get(path).status_code == 404, f"{path} unexpectedly exists"
+        assert client.get(path).status_code == 200, f"GET {path}"
+        assert client.post(path, json={}).status_code == 405, f"POST {path}"
 
 
 def test_no_permissive_cors(app):

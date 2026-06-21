@@ -32,7 +32,7 @@
   <thead>
     <tr>
       <th>trace_id</th><th>timestamp</th><th>league / sport</th><th>kind</th>
-      <th>matchup</th><th>confidence</th><th>markets</th><th>agg. quality</th><th>graded?</th><th>session</th>
+      <th>matchup</th><th>confidence</th><th>markets</th><th>evidence</th><th>agg. quality</th><th>graded?</th><th>session</th>
     </tr>
   </thead>
   <tbody>
@@ -45,12 +45,18 @@
       <td>{{ row.matchup or '—' }}</td>
       <td>{{ row.confidence_tiers | join(', ') or '—' }}</td>
       <td>{{ row.markets | join(', ') or '—' }}</td>
+      <td class="evcol">
+        {%- if row.evidence_coverage -%}
+        <span title="applied {{ row.evidence_coverage.applied_signals }} · shadow {{ row.evidence_coverage.shadow_signals }}">{{ row.evidence_coverage.total_signals }}</span>
+        {%- if row.evidence_coverage.total_signals == 0 %} <span class="warn" title="zero evidence signals linked to this trace">⚠</span>{% endif -%}
+        {%- else -%}—{%- endif -%}
+      </td>
       <td>{{ '%.3f' % row.aggregate_quality if row.aggregate_quality is not none else '—' }}</td>
       <td>{{ 'yes' if row.has_outcome else 'no' }}</td>
       <td>{% if row.session_id %}<a href="/sessions/{{ row.session_id }}">{{ row.session_id }}</a>{% else %}—{% endif %}</td>
     </tr>
     {% else %}
-    <tr><td colspan="10" class="empty">No traces match these filters.</td></tr>
+    <tr><td colspan="11" class="empty">No traces match these filters.</td></tr>
     {% endfor %}
   </tbody>
 </table>

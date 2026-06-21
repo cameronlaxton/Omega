@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, warning_chips, filter_chips %}
+{% block title %}Market Movement / CLV · Omega Console{% endblock %}
+{% block content %}
+<h1>Closing-Line Value</h1>
+<p class="lede">How the price you took compares to the closing line, per bet with an
+attached close. CLV points are raw implied-probability deltas (they include the
+book's vig); a positive value means you beat the close. Read-only; taken price
+{{ src_badge('bet_ledger') }}, closing price {{ src_badge('closing_lines') }}.</p>
+
+<form class="filters" method="get" action="/clv">
+  <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="e.g. NBA" autocomplete="off"></label>
+  <button type="submit">Filter</button>
+  <a class="clearbtn" href="/clv">Clear</a>
+</form>
+
+{{ filter_chips(request, data.filters, '/clv') }}
+{{ warning_chips(data.warnings) }}
+
+<div class="tiles">
+  <div class="tile"><span class="tlabel">bets scanned</span><span class="tval">{{ data.summary.bets_scanned }}</span></div>
+  <div class="tile"><span class="tlabel">with closing line</span><span class="tval">{{ data.summary.with_closing_line }}</span></div>
+  <div class="tile"><span class="tlabel">beat the close</span><span class="tval pos">{{ data.summary.beat_close }}</span></div>
+  <div class="tile"><span class="tlabel">avg CLV pts</span><span class="tval">{{ '%+.4f' % data.summary.avg_clv_points if data.summary.avg_clv_points is not none else '—' }}</span></div>
+</div>
+
+<table class="grid">
+  <thead>
+    <tr>
+      <th>bet</th><th>date</th><th>matchup</th><th>market</th><th>selection</th><th>status</th>
+      <th>taken</th><th>close</th><th>CLV pts</th><th>beat?</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in data.rows %}
+    <tr>
+      <td><a href="/bets/{{ r.ledger_id }}"><code>{{ r.ledger_id }}</code></a></td>
+      <td class="nowrap">{{ r.bet_date or '—' }}</td>
+      <td>{{ r.matchup or '—' }}</td>
+      <td>{{ r.market or '—' }}</td>
+      <td>{{ r.selection or '—' }}</td>
+      <td>{{ r.status or '—' }}</td>
+      <td>{{ r.taken_odds if r.taken_odds is not none else '—' }}</td>
+      <td>{{ r.closing_odds if r.closing_odds is not none else '—' }}</td>
+      <td class="{{ 'pos' if r.clv_points is not none and r.clv_points > 0 else ('neg' if r.clv_points is not none and r.clv_points < 0 else '') }}">{{ '%+.4f' % r.clv_points if r.clv_points is not none else '—' }}</td>
+      <td>{{ 'yes' if r.beat_close else 'no' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="10" class="empty">No bets with an attached closing line{% if data.filters.league %} for {{ data.filters.league }}{% endif %}.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
