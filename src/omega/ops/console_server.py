@@ -250,6 +250,7 @@ def build_console_app(
         service=Depends(get_service),
         page: int = Query(1, ge=1),
         page_size: int = Query(25, ge=1, le=200),
+        limit: int | None = Query(None, ge=1, le=200),
         date_from: str | None = Query(None),
         date_to: str | None = Query(None),
         league: str | None = Query(None),
@@ -259,9 +260,10 @@ def build_console_app(
         confidence: str | None = Query(None),
         session_id: str | None = Query(None),
     ):
+        effective_page_size = min(page_size, limit) if limit is not None else page_size
         data = service.list_traces(
             page=page,
-            page_size=page_size,
+            page_size=effective_page_size,
             date_from=date_from,
             date_to=date_to,
             league=league,
@@ -294,6 +296,7 @@ def build_console_app(
         service=Depends(get_service),
         page: int = Query(1, ge=1),
         page_size: int = Query(25, ge=1, le=200),
+        limit: int | None = Query(None, ge=1, le=200),
         date_from: str | None = Query(None),
         date_to: str | None = Query(None),
         league: str | None = Query(None),
@@ -302,9 +305,10 @@ def build_console_app(
         bookmaker: str | None = Query(None),
         provenance: str | None = Query(None),
     ):
+        effective_page_size = min(page_size, limit) if limit is not None else page_size
         data = service.list_bets(
             page=page,
-            page_size=page_size,
+            page_size=effective_page_size,
             date_from=date_from,
             date_to=date_to,
             league=league,
@@ -336,8 +340,10 @@ def build_console_app(
         service=Depends(get_service),
         page: int = Query(1, ge=1),
         page_size: int = Query(25, ge=1, le=200),
+        limit: int | None = Query(None, ge=1, le=200),
     ):
-        data = service.list_sessions(page=page, page_size=page_size)
+        effective_page_size = min(page_size, limit) if limit is not None else page_size
+        data = service.list_sessions(page=page, page_size=effective_page_size)
         return templates.TemplateResponse(
             request, "sessions.html", _ctx(request, data=data.model_dump(), active="sessions")
         )

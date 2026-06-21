@@ -50,3 +50,21 @@
   </span>
 </div>
 {%- endmacro %}
+{% macro filter_chips(request, filters, clear_href) -%}
+{# Render a chip bar showing each active (non-null) filter with a one-click remove link. #}
+{% set active = [] %}
+{% for key, value in filters.items() if value %}
+  {% if active.append(key) %}{% endif %}
+{% endfor %}
+{% if active %}
+<div class="filter-chips" aria-label="Active filters">
+  {% for key in active %}
+    {# Build a remove-URL that preserves all OTHER query params but drops this one. #}
+    <span class="chip">{{ key }}: <strong>{{ filters[key] }}</strong>
+      <a class="chip-remove" href="{{ request.url.remove_query_params(key) }}" title="Remove {{ key }} filter" aria-label="Remove {{ key }} filter">×</a>
+    </span>
+  {% endfor %}
+  {% if active | length > 1 %}<a class="chip-clear-all" href="{{ clear_href }}">clear all</a>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}

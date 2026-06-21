@@ -51,6 +51,7 @@ def list_traces(
     service: ConsoleService = Depends(get_service),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
+    limit: int | None = Query(None, ge=1, le=200),
     date_from: str | None = Query(None),
     date_to: str | None = Query(None),
     league: str | None = Query(None),
@@ -60,9 +61,10 @@ def list_traces(
     confidence: str | None = Query(None),
     session_id: str | None = Query(None),
 ) -> TraceListResponse:
+    effective_page_size = min(page_size, limit) if limit is not None else page_size
     return service.list_traces(
         page=page,
-        page_size=page_size,
+        page_size=effective_page_size,
         date_from=date_from,
         date_to=date_to,
         league=league,
@@ -89,6 +91,7 @@ def list_bets(
     service: ConsoleService = Depends(get_service),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
+    limit: int | None = Query(None, ge=1, le=200),
     date_from: str | None = Query(None),
     date_to: str | None = Query(None),
     league: str | None = Query(None),
@@ -97,9 +100,10 @@ def list_bets(
     bookmaker: str | None = Query(None),
     provenance: str | None = Query(None),
 ) -> BetListResponse:
+    effective_page_size = min(page_size, limit) if limit is not None else page_size
     return service.list_bets(
         page=page,
-        page_size=page_size,
+        page_size=effective_page_size,
         date_from=date_from,
         date_to=date_to,
         league=league,
@@ -125,8 +129,10 @@ def list_sessions(
     service: ConsoleService = Depends(get_service),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
+    limit: int | None = Query(None, ge=1, le=200),
 ) -> SessionListResponse:
-    return service.list_sessions(page=page, page_size=page_size)
+    effective_page_size = min(page_size, limit) if limit is not None else page_size
+    return service.list_sessions(page=page, page_size=effective_page_size)
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)

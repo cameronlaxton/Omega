@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import src_badge, pager %}
+{% from "base.html" import src_badge, pager, filter_chips %}
 {% block title %}Traces · Omega Console{% endblock %}
 {% block content %}
 <h1>Trace Ledger Explorer</h1>
@@ -7,8 +7,8 @@
 <form class="filters" method="get" action="/traces">
   <label>Date from <input type="date" name="date_from" value="{{ data.filters.date_from or '' }}"></label>
   <label>Date to <input type="date" name="date_to" value="{{ data.filters.date_to or '' }}"></label>
-  <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="NBA"></label>
-  <label>Sport <input type="text" name="sport" value="{{ data.filters.sport or '' }}" placeholder="soccer"></label>
+  <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="e.g. MLB" autocomplete="off"></label>
+  <label>Sport <input type="text" name="sport" value="{{ data.filters.sport or '' }}" placeholder="e.g. baseball" autocomplete="off"></label>
   <label>Kind
     <select name="kind">
       <option value="">any</option>
@@ -17,12 +17,14 @@
       {% endfor %}
     </select>
   </label>
-  <label>Market <input type="text" name="market" value="{{ data.filters.market or '' }}" placeholder="moneyline"></label>
-  <label>Confidence <input type="text" name="confidence" value="{{ data.filters.confidence or '' }}" placeholder="A"></label>
-  <label>Session <input type="text" name="session_id" value="{{ data.filters.session_id or '' }}" placeholder="sess-…"></label>
+  <label>Market <input type="text" name="market" value="{{ data.filters.market or '' }}" placeholder="e.g. moneyline" autocomplete="off"></label>
+  <label>Confidence <input type="text" name="confidence" value="{{ data.filters.confidence or '' }}" placeholder="e.g. A or B" autocomplete="off"></label>
+  <label>Session <input type="text" name="session_id" value="{{ data.filters.session_id or '' }}" placeholder="e.g. sess-…" autocomplete="off"></label>
   <button type="submit">Filter</button>
   <a class="clearbtn" href="/traces">Clear</a>
 </form>
+
+{{ filter_chips(request, data.filters, '/traces') }}
 
 <p class="srcnote">Row numbers sourced from {{ src_badge('db_trace_payload') }} (trace JSON) and {{ src_badge('outcomes') }} (graded?).</p>
 

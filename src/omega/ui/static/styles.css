@@ -139,3 +139,39 @@ details summary { cursor: pointer; color: var(--accent); }
 .qa-unknown { color: var(--warn); }
 
 .foot { color: var(--muted); font-size: 0.78rem; padding: 1rem 1.4rem; border-top: 1px solid var(--line); display: flex; gap: 1.5rem; flex-wrap: wrap; }
+
+/* -- Filter chips --------------------------------------------------------- */
+.filter-chips {
+  display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+  margin-bottom: 0.6rem;
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 3px 8px; font-size: 0.82rem; color: var(--ink);
+}
+.chip strong { color: var(--accent); font-weight: 600; }
+.chip-remove {
+  color: var(--muted); font-size: 1rem; line-height: 1; text-decoration: none;
+  margin-left: 2px; padding: 0 2px; border-radius: 3px;
+}
+.chip-remove:hover { color: var(--neg); background: rgba(240, 120, 111, 0.15); text-decoration: none; }
+.chip-clear-all {
+  font-size: 0.78rem; color: var(--muted); padding: 3px 6px;
+}
+
+/* -- Print ---------------------------------------------------------------- */
+@media print {
+  :root { --bg: #fff; --ink: #000; --panel: #f8f8f8; --panel2: #f0f0f0; --muted: #555; --line: #ccc; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  a { color: #000; }
+  .topbar { position: static; border-bottom: 2px solid #000; background: #fff; }
+  .mainnav, .navph, .ro-badge { display: none; }
+  .filters, .pager, .pagelinks, .filter-chips, .clearbtn { display: none; }
+  .content { padding: 0.5rem; max-width: 100%; }
+  table.grid { font-size: 9pt; }
+  table.grid thead th { position: static; background: #eee; }
+  pre.json, pre.prose { max-height: none; overflow: visible; border: 1px solid #ccc; }
+  .foot { border-top: 1px solid #ccc; }
+  .src { background: #eee; color: #333; border-color: #ccc; }
+}
