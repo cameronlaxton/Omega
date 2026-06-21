@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, pager %}
+{% block title %}Sessions · Omega Console{% endblock %}
+{% block content %}
+<h1>Session Review</h1>
+<p class="srcnote">Validated JSON session sidecars from <code>var/inbox/sessions</code>.
+Sidecars are {{ src_badge('sidecar_process') }} (process/narrative); the <code>traces</code> count is
+{{ src_badge('db_trace_payload') }}.</p>
+
+<table class="grid">
+  <thead>
+    <tr><th>session_id</th><th>valid?</th><th>opened</th><th>purpose</th><th>league</th><th>model</th><th>QA gate</th><th>events</th><th>DB traces</th></tr>
+  </thead>
+  <tbody>
+    {% for row in data.rows %}
+    <tr class="{{ 'invalid' if not row.sidecar_valid else '' }}">
+      <td><a href="/sessions/{{ row.session_id }}">{{ row.session_id }}</a></td>
+      <td>{{ 'yes' if row.sidecar_valid else 'NO' }}</td>
+      <td class="nowrap">{{ row.opened_at or '—' }}</td>
+      <td>{{ row.purpose or '—' }}</td>
+      <td>{{ row.league or '—' }}</td>
+      <td>{{ row.model_version or '—' }}</td>
+      <td class="qa-{{ row.quality_gate_status }}">{{ row.quality_gate_status }}</td>
+      <td>{{ row.event_count }}</td>
+      <td>{{ row.db_trace_count }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="empty">No session sidecars found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{{ pager(request, data.pagination) }}
+{% endblock %}

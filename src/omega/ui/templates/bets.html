@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, pager %}
+{% block title %}Bets · Omega Console{% endblock %}
+{% block content %}
+<h1>Bet Ledger Explorer</h1>
+
+<form class="filters" method="get" action="/bets">
+  <label>Date from <input type="date" name="date_from" value="{{ data.filters.date_from or '' }}"></label>
+  <label>Date to <input type="date" name="date_to" value="{{ data.filters.date_to or '' }}"></label>
+  <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="NBA"></label>
+  <label>Sport <input type="text" name="sport" value="{{ data.filters.sport or '' }}" placeholder="soccer"></label>
+  <label>Status
+    <select name="status">
+      <option value="">any</option>
+      {% for s in ['pending', 'won', 'lost', 'push', 'void'] %}
+        <option value="{{ s }}" {{ 'selected' if data.filters.status == s else '' }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Bookmaker <input type="text" name="bookmaker" value="{{ data.filters.bookmaker or '' }}" placeholder="consensus"></label>
+  <label>Provenance <input type="text" name="provenance" value="{{ data.filters.provenance or '' }}" placeholder="engine_auto"></label>
+  <button type="submit">Filter</button>
+  <a class="clearbtn" href="/bets">Clear</a>
+</form>
+
+<p class="srcnote">All figures below sourced from {{ src_badge('bet_ledger') }}. Edge%, Kelly, and units are
+<em>not</em> assumed to live in <code>bet_ledger</code> — see a bet's detail for linked-trace recommendation values.</p>
+
+<table class="grid">
+  <thead>
+    <tr>
+      <th>ledger_id</th><th>bet_date</th><th>league / sport</th><th>market</th>
+      <th>selection</th><th>book</th><th>odds</th><th>stake</th><th>net PnL</th><th>status</th><th>prov.</th><th>trace</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in data.rows %}
+    <tr>
+      <td><a href="/bets/{{ row.ledger_id }}"><code>{{ row.ledger_id }}</code></a></td>
+      <td class="nowrap">{{ row.bet_date or '—' }}</td>
+      <td>{{ row.league or '—' }}{% if row.sport %} <span class="muted">/ {{ row.sport }}</span>{% endif %}</td>
+      <td>{{ row.market or '—' }}</td>
+      <td>{{ row.selection or '—' }}</td>
+      <td>{{ row.bookmaker or '—' }}</td>
+      <td>{{ row.odds if row.odds is not none else '—' }}</td>
+      <td>{{ '%.2f' % row.stake_amount if row.stake_amount is not none else '—' }}</td>
+      <td class="{{ 'pos' if (row.net_pnl or 0) > 0 else ('neg' if (row.net_pnl or 0) < 0 else '') }}">{{ '%.2f' % row.net_pnl if row.net_pnl is not none else '—' }}</td>
+      <td>{{ row.status or '—' }}</td>
+      <td>{{ row.provenance or '—' }}</td>
+      <td>{% if row.trace_id %}<a href="/traces/{{ row.trace_id }}">trace</a>{% else %}—{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="12" class="empty">No bets match these filters.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{{ pager(request, data.pagination) }}
+{% endblock %}

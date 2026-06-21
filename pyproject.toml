@@ -82,6 +82,7 @@ omega-validate-repo-state = "omega.ops.validate_repo_state:main"
 omega-validate-session-sidecars = "omega.ops.validate_session_sidecars:main"
 omega-validate-trace-export = "omega.ops.validate_trace_export:main"
 omega-mcp-http = "omega.mcp.http:main"
+omega-console = "omega.ops.console_server:main"
 
 [project.optional-dependencies]
 dev = [
@@ -94,6 +95,13 @@ mcp = [
     "mcp[cli]>=1.27",
     "fastapi>=0.100",
     "uvicorn>=0.31.1",
+]
+console = [
+    # Standalone read-only operator console (omega-console). Server-rendered
+    # HTML via Jinja2 + a GET-only JSON API; no MCP, no heavy frontend build.
+    "fastapi>=0.100",
+    "uvicorn>=0.31.1",
+    "jinja2>=3.1",
 ]
 postgres = [
     "sqlalchemy>=2.0",
@@ -140,4 +148,4 @@ include = ["omega*"]
 exclude = ["tests*", "docs*", "inbox*", "reports*", "config*"]
 
 [tool.setuptools.package-data]
-omega = ["data/aliases/*.json"]
+omega = ["data/aliases/*.json", "ui/templates/*.html", "ui/static/*"]

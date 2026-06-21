@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, pager %}
+{% block title %}Traces · Omega Console{% endblock %}
+{% block content %}
+<h1>Trace Ledger Explorer</h1>
+
+<form class="filters" method="get" action="/traces">
+  <label>Date from <input type="date" name="date_from" value="{{ data.filters.date_from or '' }}"></label>
+  <label>Date to <input type="date" name="date_to" value="{{ data.filters.date_to or '' }}"></label>
+  <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="NBA"></label>
+  <label>Sport <input type="text" name="sport" value="{{ data.filters.sport or '' }}" placeholder="soccer"></label>
+  <label>Kind
+    <select name="kind">
+      <option value="">any</option>
+      {% for k in ['game', 'prop', 'slate', 'unknown'] %}
+        <option value="{{ k }}" {{ 'selected' if data.filters.kind == k else '' }}>{{ k }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Market <input type="text" name="market" value="{{ data.filters.market or '' }}" placeholder="moneyline"></label>
+  <label>Confidence <input type="text" name="confidence" value="{{ data.filters.confidence or '' }}" placeholder="A"></label>
+  <label>Session <input type="text" name="session_id" value="{{ data.filters.session_id or '' }}" placeholder="sess-…"></label>
+  <button type="submit">Filter</button>
+  <a class="clearbtn" href="/traces">Clear</a>
+</form>
+
+<p class="srcnote">Row numbers sourced from {{ src_badge('db_trace_payload') }} (trace JSON) and {{ src_badge('outcomes') }} (graded?).</p>
+
+<table class="grid">
+  <thead>
+    <tr>
+      <th>trace_id</th><th>timestamp</th><th>league / sport</th><th>kind</th>
+      <th>matchup</th><th>confidence</th><th>markets</th><th>agg. quality</th><th>graded?</th><th>session</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in data.rows %}
+    <tr>
+      <td><a href="/traces/{{ row.trace_id }}"><code>{{ row.trace_id }}</code></a></td>
+      <td class="nowrap">{{ row.timestamp or '—' }}</td>
+      <td>{{ row.league or '—' }}{% if row.sport %} <span class="muted">/ {{ row.sport }}</span>{% endif %}</td>
+      <td>{{ row.kind or '—' }}</td>
+      <td>{{ row.matchup or '—' }}</td>
+      <td>{{ row.confidence_tiers | join(', ') or '—' }}</td>
+      <td>{{ row.markets | join(', ') or '—' }}</td>
+      <td>{{ '%.3f' % row.aggregate_quality if row.aggregate_quality is not none else '—' }}</td>
+      <td>{{ 'yes' if row.has_outcome else 'no' }}</td>
+      <td>{% if row.session_id %}<a href="/sessions/{{ row.session_id }}">{{ row.session_id }}</a>{% else %}—{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="10" class="empty">No traces match these filters.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{{ pager(request, data.pagination) }}
+{% endblock %}
