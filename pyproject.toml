@@ -90,6 +90,10 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.8.0",
     "mypy>=1.13.0",
+    "fastapi>=0.108",
+    "uvicorn>=0.31.1",
+    "jinja2>=3.1",
+    "httpx>=0.24",
 ]
 mcp = [
     "mcp[cli]>=1.27",
@@ -99,7 +103,7 @@ mcp = [
 console = [
     # Standalone read-only operator console (omega-console). Server-rendered
     # HTML via Jinja2 + a GET-only JSON API; no MCP, no heavy frontend build.
-    "fastapi>=0.100",
+    "fastapi>=0.108",
     "uvicorn>=0.31.1",
     "jinja2>=3.1",
 ]

@@ -87,6 +87,7 @@ class TraceListResponse(BaseModel):
     rows: list[TraceRow]
     pagination: Pagination
     filters: dict[str, Any] = Field(default_factory=dict)
+    schema_version: int = 1
 
 
 class TraceDetail(BaseModel):
@@ -150,6 +151,7 @@ class BetListResponse(BaseModel):
     rows: list[BetRow]
     pagination: Pagination
     filters: dict[str, Any] = Field(default_factory=dict)
+    schema_version: int = 1
 
 
 class BetDetail(BaseModel):
@@ -195,6 +197,7 @@ class SessionListResponse(BaseModel):
 
     rows: list[SessionSummary]
     pagination: Pagination
+    schema_version: int = 1
 
 
 class AuditEventView(BaseModel):

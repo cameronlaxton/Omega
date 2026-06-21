@@ -92,8 +92,12 @@ def test_protected_route_200_with_token(token_client):
 
 
 def test_healthz_open_even_when_token_required(token_client):
-    # Health stays reachable without a token (liveness probe).
-    assert token_client.get("/api/healthz").status_code == 200
+    assert token_client.get("/healthz").status_code == 200
+    assert token_client.get("/api/healthz").status_code == 401
+    assert token_client.get(
+        "/api/healthz",
+        headers={"Authorization": "Bearer secret-token"},
+    ).status_code == 200
 
 
 def test_html_pages_gated_when_token_required(token_client):

@@ -133,7 +133,11 @@ def test_service_constructs_read_only_store_only():
     offenders: list[str] = []
     for path, tree in _iter_files():
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "TraceStore":
+            if not isinstance(node, ast.Call):
+                continue
+            is_direct = isinstance(node.func, ast.Name) and node.func.id == "TraceStore"
+            is_attr = isinstance(node.func, ast.Attribute) and node.func.attr == "TraceStore"
+            if is_direct or is_attr:
                 has_ro = any(
                     kw.arg == "read_only" and _is_true(kw.value) for kw in node.keywords
                 )

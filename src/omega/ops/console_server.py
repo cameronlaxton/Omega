@@ -48,7 +48,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
 
 # Paths reachable without a bearer token even on a non-loopback bind.
-_OPEN_PATHS = ("/api/healthz", "/healthz")
+_OPEN_PATHS = ("/healthz",)
 
 # Navigation: Milestone-A pages are enabled; later-milestone destinations are
 # rendered as disabled placeholders (no working endpoint behind them).

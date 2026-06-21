@@ -322,6 +322,7 @@ class ConsoleService:
         )
         league = trace.get("league")
         has_outcome = bool(trace.get("_outcome") or trace.get("_prop_outcomes"))
+        outcome_source = Source.OUTCOMES if trace.get("_outcome") else Source.PROP_OUTCOMES
         return TraceRow(
             trace_id=str(trace.get("trace_id", "")),
             timestamp=trace.get("timestamp"),
@@ -339,7 +340,7 @@ class ConsoleService:
                 "aggregate_quality": Source.DB_TRACE_PAYLOAD,
                 "confidence_tiers": Source.DB_TRACE_PAYLOAD,
                 "markets": Source.DB_TRACE_PAYLOAD,
-                "has_outcome": Source.OUTCOMES,
+                "has_outcome": outcome_source,
             },
         )
 
@@ -558,6 +559,8 @@ class ConsoleService:
         # .events.jsonl mirrors never match *.json.
         for path in self.sessions_dir.glob("*.json"):
             if not path.is_file():
+                continue
+            if path.is_symlink():
                 continue
             if path.name.endswith(".legacy.json"):
                 continue
