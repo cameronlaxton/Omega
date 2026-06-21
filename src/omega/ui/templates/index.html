@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Omega Operator Console{% endblock %}
+{% block content %}
+<h1>Operator Console</h1>
+<p class="lede">Read-only exploration of traces, bets, and session QA. All numeric and betting
+values are sourced from DB-backed records; session sidecars are shown as process/narrative only.</p>
+
+<section class="cards">
+  <a class="card" href="/traces">
+    <h2>Trace Ledger Explorer</h2>
+    <p>Browse persisted analysis traces, filter by date/league/kind/confidence/session, and
+    inspect linked evidence, simulation distributions, outcomes, bets, and QA.</p>
+  </a>
+  <a class="card" href="/bets">
+    <h2>Bet Ledger Explorer</h2>
+    <p>Browse <code>bet_ledger</code> entries with settlement/PnL, staking metadata, and
+    correlation groups; drill into the linked trace recommendation values.</p>
+  </a>
+  <a class="card" href="/sessions">
+    <h2>Session Review</h2>
+    <p>Validated JSON session sidecars with audit events, assumptions, bugs, and agent
+    notes — correlated to DB traces by <code>session_id</code>.</p>
+  </a>
+</section>
+
+<section class="future">
+  <h3>Planned (later milestones — disabled)</h3>
+  <ul class="ph-list">
+    {% for item in nav_placeholders %}
+      <li><span class="navph">{{ item.label }}</span> <em>Milestone {{ item.milestone }}</em></li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="health">
+  <h3>Runtime</h3>
+  <table class="kv">
+    <tr><th>status</th><td>{{ health.status }}</td></tr>
+    <tr><th>read_only</th><td>{{ health.read_only }}</td></tr>
+    <tr><th>db_path</th><td><code>{{ health.db_path }}</code></td></tr>
+    <tr><th>db_source</th><td>{{ health.db_source }}</td></tr>
+    <tr><th>trace_count</th><td>{{ health.trace_count }}</td></tr>
+    <tr><th>schema_version</th><td>{{ health.schema_version }}</td></tr>
+    <tr><th>sessions_dir</th><td><code>{{ health.sessions_dir }}</code></td></tr>
+    <tr><th>milestone</th><td>{{ health.milestone }}</td></tr>
+  </table>
+</section>
+{% endblock %}

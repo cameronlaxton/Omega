@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, provenance_legend %}
+{% block title %}Session {{ not_found_id or detail.session_id }} · Omega Console{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/sessions">‹ Session Review</a></p>
+
+{% if detail is none %}
+  <h1>Session not found</h1>
+  <p>No session sidecar file for <code>{{ not_found_id }}</code> in the sessions inbox.</p>
+{% else %}
+<h1>Session <code>{{ detail.session_id }}</code></h1>
+
+{% if not detail.sidecar_valid %}
+<div class="banner warn">
+  <strong>Sidecar unreadable / invalid.</strong>
+  {{ detail.sidecar_error }} The session-process view is unavailable, but DB-backed traces
+  for this <code>session_id</code> are still shown below.
+</div>
+{% endif %}
+
+<div class="split">
+  <section class="block sidecar">
+    <h2>Session process / narrative {{ src_badge('sidecar_process') }}</h2>
+    <p class="muted">Non-canonical. Never the source of numbers — these are session/process QA only.</p>
+
+    {% if detail.sidecar_valid %}
+    <h3>Metadata</h3>
+    <table class="kv">
+      {% for key, value in detail.metadata.items() %}
+      <tr><th>{{ key }}</th><td>{{ value if value is not none else '—' }}</td></tr>
+      {% endfor %}
+    </table>
+
+    <h3>Pipeline / actionability</h3>
+    {% if detail.pipeline_status %}<pre class="json">{{ detail.pipeline_status | tojson(indent=2) }}</pre>{% else %}<p class="muted">None.</p>{% endif %}
+    <p><strong>next_required_action:</strong> {{ detail.next_required_action or '—' }}</p>
+    <p><strong>quality_gate_status:</strong> <span class="qa-{{ detail.quality_gate_status }}">{{ detail.quality_gate_status }}</span></p>
+
+    <h3>exec_stats <span class="muted">(process stats)</span></h3>
+    {% if detail.exec_stats %}<pre class="json">{{ detail.exec_stats | tojson(indent=2) }}</pre>{% else %}<p class="muted">None.</p>{% endif %}
+
+    <h3>agent_notes</h3>
+    {% if detail.agent_notes %}<pre class="prose">{{ detail.agent_notes }}</pre>{% else %}<p class="muted">None.</p>{% endif %}
+
+    <h3>Assumptions</h3>
+    {% if detail.assumptions %}<ul>{% for a in detail.assumptions %}<li>{{ a }}</li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+
+    <h3>Bugs</h3>
+    {% if detail.bugs %}<ul>{% for b in detail.bugs %}<li>{{ b }}</li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+
+    <h3>Audit events <span class="count">{{ detail.audit_events | length }}</span></h3>
+    <table class="grid compact">
+      <thead><tr><th>ts</th><th>type</th><th>step</th><th>status</th><th>notes</th></tr></thead>
+      <tbody>
+        {% for e in detail.audit_events %}
+        <tr>
+          <td class="nowrap">{{ e.ts or '—' }}</td>
+          <td>{{ e.event_type or '—' }}</td>
+          <td>{{ e.step or '—' }}</td>
+          <td class="qa-{{ 'fail' if e.status == 'fail' else ('pass' if e.status == 'ok' else 'unknown') }}">{{ e.status or '—' }}</td>
+          <td>{{ e.notes or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No audit events.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </section>
+
+  <section class="block db">
+    <h2>DB-backed traces {{ src_badge('db_trace_payload') }}</h2>
+    <p class="muted">Canonical numbers for this session. <strong>{{ detail.db_traces | length }}</strong> trace(s).</p>
+    <table class="grid compact">
+      <thead><tr><th>trace_id</th><th>timestamp</th><th>kind</th><th>matchup</th><th>confidence</th><th>agg.q</th><th>graded?</th></tr></thead>
+      <tbody>
+        {% for t in detail.db_traces %}
+        <tr>
+          <td><a href="/traces/{{ t.trace_id }}"><code>{{ t.trace_id }}</code></a></td>
+          <td class="nowrap">{{ t.timestamp or '—' }}</td>
+          <td>{{ t.kind or '—' }}</td>
+          <td>{{ t.matchup or '—' }}</td>
+          <td>{{ t.confidence_tiers | join(', ') or '—' }}</td>
+          <td>{{ '%.3f' % t.aggregate_quality if t.aggregate_quality is not none else '—' }}</td>
+          <td>{{ 'yes' if t.has_outcome else 'no' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No DB traces correlate to this session_id.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+{{ provenance_legend(detail.field_sources) }}
+{% endif %}
+{% endblock %}

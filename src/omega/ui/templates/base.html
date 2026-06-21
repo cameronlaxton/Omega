@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Omega Operator Console{% endblock %}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><a href="/">Omega Console</a> <span class="ro-badge" title="This console is strictly read-only">READ-ONLY</span></div>
+  <nav class="mainnav">
+    {% for item in nav_enabled %}
+      <a href="{{ item.href }}" class="{{ 'active' if active == item.key else '' }}">{{ item.label }}</a>
+    {% endfor %}
+    {% for item in nav_placeholders %}
+      <span class="navph" title="Planned for Milestone {{ item.milestone }} — not yet available" aria-disabled="true">{{ item.label }} <em>M{{ item.milestone }}</em></span>
+    {% endfor %}
+  </nav>
+</header>
+<main class="content">
+  {% block content %}{% endblock %}
+</main>
+<footer class="foot">
+  <span>Phase 8 · Milestone A · read-only.</span>
+  <span>Numbers are DB-backed; session sidecars are process/narrative only (non-canonical).</span>
+</footer>
+<script src="/static/app.js" defer></script>
+</body>
+</html>
+{% macro src_badge(label) -%}
+<span class="src src-{{ label }}" title="Provenance: {{ label }}">{{ label }}</span>
+{%- endmacro %}
+{% macro provenance_legend(field_sources) -%}
+{% if field_sources %}
+<div class="legend">
+  <strong>Provenance</strong>
+  {% for field, label in field_sources.items() %}
+    <span class="legend-row"><code>{{ field }}</code> → {{ src_badge(label) }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+{%- endmacro %}
+{% macro pager(request, pagination) -%}
+<div class="pager">
+  <span class="pageinfo">Page {{ pagination.page }} / {{ pagination.total_pages }} · {{ pagination.total }} row(s){% if pagination.scan_capped %} · <span class="warn" title="A bounded read scan limited the candidate set; older rows may exist beyond the scan window (Milestone-B will add SQL offset paging).">scan-capped</span>{% endif %}</span>
+  <span class="pagelinks">
+    {% if pagination.has_prev %}<a href="{{ request.url.include_query_params(page=pagination.page - 1) }}">‹ Prev</a>{% else %}<span class="disabled">‹ Prev</span>{% endif %}
+    {% if pagination.has_next %}<a href="{{ request.url.include_query_params(page=pagination.page + 1) }}">Next ›</a>{% else %}<span class="disabled">Next ›</span>{% endif %}
+  </span>
+</div>
+{%- endmacro %}

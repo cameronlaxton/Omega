@@ -532,6 +532,18 @@ class TraceStore:
         return self._empty_history_mode
 
     @property
+    def read_only(self) -> bool:
+        """True when this store was opened read-only.
+
+        Backend-neutral: both the SQLite and Postgres paths set ``_read_only`` at
+        construction. A read-only store opens its SQLite connection with the
+        ``mode=ro`` URI and ``PRAGMA query_only=ON``; callers (e.g. the read-only
+        operator console) assert on this to enforce the no-mutation boundary at
+        the DB layer.
+        """
+        return self._read_only
+
+    @property
     def db_path(self) -> str:
         """The DB path the store will actually read/write."""
         return self._db_path
@@ -1828,6 +1840,21 @@ class TraceStore:
             (trace_id,),
         ).fetchall()
         return [self._decode_ledger_row(row) for row in rows]
+
+    def get_ledger_bet(self, ledger_id: str) -> dict[str, Any] | None:
+        """Return a single ledger bet by ledger_id, or None.
+
+        Backend-neutral read helper (the read-only operator console needs a
+        by-id lookup for the bet-detail page; the by-trace_id readers above do
+        not cover it). Pure SELECT — safe on a read-only store.
+        """
+        if self._repo is not None:
+            return self._repo.get_ledger_bet(ledger_id)
+        row = self.conn.execute(
+            f"SELECT {self._LEDGER_COLUMNS} FROM bet_ledger WHERE ledger_id = ?",
+            (ledger_id,),
+        ).fetchone()
+        return self._decode_ledger_row(row) if row else None
 
     def query_ledger(
         self,

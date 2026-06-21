@@ -728,6 +728,20 @@ class PostgresRepository:
             ).mappings()
             return [self._decode_ledger_row(row) for row in rows]
 
+    def get_ledger_bet(self, ledger_id: str) -> dict[str, Any] | None:
+        table = BetLedgerRow.__table__
+        with self.Session() as session:
+            row = (
+                session.execute(
+                    select(*(table.c[name] for name in self._LEDGER_COLUMNS)).where(
+                        table.c.ledger_id == ledger_id
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return self._decode_ledger_row(row) if row else None
+
     def query_ledger(
         self,
         league: str | None = None,

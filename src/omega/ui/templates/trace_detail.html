@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, provenance_legend %}
+{% block title %}Trace {{ not_found_id or detail.trace_id }} · Omega Console{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/traces">‹ Trace Ledger</a></p>
+
+{% if detail is none %}
+  <h1>Trace not found</h1>
+  <p>No trace with id <code>{{ not_found_id }}</code> exists in the trace ledger.</p>
+{% else %}
+<h1>Trace <code>{{ detail.trace_id }}</code></h1>
+
+<table class="kv">
+  <tr><th>timestamp</th><td>{{ detail.timestamp or '—' }}</td></tr>
+  <tr><th>league / sport</th><td>{{ detail.league or '—' }}{% if detail.sport %} / {{ detail.sport }}{% endif %}</td></tr>
+  <tr><th>kind</th><td>{{ detail.kind or '—' }}</td></tr>
+  <tr><th>matchup</th><td>{{ detail.matchup or '—' }}</td></tr>
+  <tr><th>execution_mode</th><td>{{ detail.execution_mode or '—' }}</td></tr>
+  <tr><th>aggregate_quality {{ src_badge('db_trace_payload') }}</th><td>{{ detail.aggregate_quality if detail.aggregate_quality is not none else '—' }}</td></tr>
+  <tr><th>session</th><td>{% if detail.session_id %}<a href="/sessions/{{ detail.session_id }}">{{ detail.session_id }}</a>{% else %}—{% endif %}</td></tr>
+</table>
+
+<section class="block">
+  <h2>Recommendations {{ src_badge('db_trace_payload') }}</h2>
+  {% if detail.recommendations %}<pre class="json">{{ detail.recommendations | tojson(indent=2) }}</pre>
+  {% else %}<p class="muted">None.</p>{% endif %}
+</section>
+
+<section class="block">
+  <h2>Predictions {{ src_badge('db_trace_payload') }}</h2>
+  {% if detail.predictions %}<pre class="json">{{ detail.predictions | tojson(indent=2) }}</pre>
+  {% else %}<p class="muted">None.</p>{% endif %}
+</section>
+
+<section class="block">
+  <h2>Evidence signals {{ src_badge('evidence_signals') }} <span class="count">{{ detail.evidence_signals | length }}</span></h2>
+  {% if detail.evidence_signals %}<pre class="json">{{ detail.evidence_signals | tojson(indent=2) }}</pre>
+  {% else %}<p class="muted">No linked evidence signals.</p>{% endif %}
+</section>
+
+<section class="block">
+  <h2>Simulation distributions {{ src_badge('simulation_distributions') }} <span class="count">{{ detail.simulation_distributions | length }}</span></h2>
+  {% if detail.simulation_distributions %}<pre class="json">{{ detail.simulation_distributions | tojson(indent=2) }}</pre>
+  {% else %}<p class="muted">No linked simulation distributions.</p>{% endif %}
+</section>
+
+<section class="block">
+  <h2>Outcome {{ src_badge('outcomes') }}</h2>
+  {% if detail.outcome %}<pre class="json">{{ detail.outcome | tojson(indent=2) }}</pre>
+  {% else %}<p class="muted">Not graded.</p>{% endif %}
+  {% if detail.prop_outcomes %}
+  <h3>Prop outcomes {{ src_badge('prop_outcomes') }}</h3>
+  <pre class="json">{{ detail.prop_outcomes | tojson(indent=2) }}</pre>
+  {% endif %}
+</section>
+
+<section class="block">
+  <h2>Linked bets {{ src_badge('bet_ledger') }} <span class="count">{{ detail.bets | length }}</span></h2>
+  {% if detail.bets %}
+  <ul class="linklist">
+    {% for b in detail.bets %}<li><a href="/bets/{{ b.ledger_id }}"><code>{{ b.ledger_id }}</code></a> — {{ b.market }} / {{ b.selection }} ({{ b.status }})</li>{% endfor %}
+  </ul>
+  <pre class="json">{{ detail.bets | tojson(indent=2) }}</pre>
+  {% else %}<p class="muted">No linked bet_ledger entries.</p>{% endif %}
+</section>
+
+<section class="block">
+  <h2>QA verdict {{ src_badge('trace_qa_verdicts') }}</h2>
+  {% if detail.qa_verdict %}<pre class="json">{{ detail.qa_verdict | tojson(indent=2) }}</pre>
+  {% else %}<p class="muted">No QA verdict row.</p>{% endif %}
+</section>
+
+{% if detail.closing_lines %}
+<section class="block">
+  <h2>Closing lines {{ src_badge('closing_lines') }}</h2>
+  <pre class="json">{{ detail.closing_lines | tojson(indent=2) }}</pre>
+</section>
+{% endif %}
+
+<section class="block">
+  <h2>Full trace payload {{ src_badge('db_trace_payload') }}</h2>
+  <details>
+    <summary>Show raw trace JSON</summary>
+    <pre class="json">{{ detail.payload | tojson(indent=2) }}</pre>
+  </details>
+</section>
+
+{{ provenance_legend(detail.field_sources) }}
+{% endif %}
+{% endblock %}
