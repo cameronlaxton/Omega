@@ -400,7 +400,7 @@ _SPREAD_TOTAL_MARKETS = {
 }
 
 
-def _selection_kind(selection: Any, side: Any, market: Any) -> str:
+def _selection_kind(selection: Any, side: Any, market: Any, home_team: str = "", away_team: str = "") -> str:
     """Classify a recommendation selection for probability mapping.
 
     Prefers the engine's explicit ``side`` (game edges) over the free-text
@@ -416,6 +416,10 @@ def _selection_kind(selection: Any, side: Any, market: Any) -> str:
     if market_key in _SPREAD_TOTAL_MARKETS:
         return "spread_total"
     if token:
+        if home_team and token == home_team.lower():
+            return "home"
+        if away_team and token == away_team.lower():
+            return "away"
         # A non-empty, non-canonical label: most often a player-prop / tennis
         # player name. Treated as best-effort fallback (see helper below).
         return "player"
@@ -428,6 +432,8 @@ def probability_source_for_selection(
     predictions: Any,
     result: Any,
     rec: Any,
+    home_team: str = "",
+    away_team: str = "",
 ) -> ExtractedField:
     """Map a selection to its matching model probability (public B.0 contract).
 
@@ -438,6 +444,7 @@ def probability_source_for_selection(
     field_, _warnings = _resolve_raw_probability(
         selection=selection, side=_g(rec, "side"), market=market,
         predictions=predictions, result=result, rec=rec, rec_prefix="recommendations",
+        home_team=home_team, away_team=away_team,
     )
     return field_
 
@@ -451,6 +458,8 @@ def _resolve_raw_probability(
     result: Any,
     rec: Any,
     rec_prefix: str,
+    home_team: str = "",
+    away_team: str = "",
 ) -> tuple[ExtractedField, list[OperatorWarning]]:
     """Selection-aware raw/model probability with warnings.
 
@@ -467,7 +476,7 @@ def _resolve_raw_probability(
     Emits ``missing_raw_prob`` when nothing is found.
     """
     sim = result.get("simulation") if isinstance(result, dict) else None
-    kind = _selection_kind(selection, side, market)
+    kind = _selection_kind(selection, side, market, home_team, away_team)
     warnings: list[OperatorWarning] = []
 
     edge_native = [
@@ -482,12 +491,12 @@ def _resolve_raw_probability(
     ]
 
     if kind == "over":
-        cands = [
+        cands = edge_native + [
             (_g(predictions, "over_prob"), "predictions.over_prob"),
             (_g(result, "over_prob"), "result.over_prob"),
         ]
     elif kind == "under":
-        cands = [
+        cands = edge_native + [
             (_g(predictions, "under_prob"), "predictions.under_prob"),
             (_g(result, "under_prob"), "result.under_prob"),
         ]
@@ -503,6 +512,12 @@ def _resolve_raw_probability(
         cands = generic
 
     field_ = _extracted(cands)
+    if field_.value is not None and isinstance(field_.value, (int, float)):
+        path = field_.source_path or ""
+        if ("predictions." in path or "result.simulation." in path) and path.endswith("_win_prob"):
+            if field_.value > 1.0:
+                field_ = ExtractedField(value=field_.value / 100.0, source=field_.source, source_path=field_.source_path)
+
     if kind in ("player", "unknown"):
         warnings.append(
             OperatorWarning(
@@ -678,6 +693,9 @@ def normalize_recommendation(
     odds_snapshot = trace.get("odds_snapshot")
     calibration_audit = trace.get("calibration_audit")
 
+    home_team = str(trace.get("home_team") or trace.get("result", {}).get("home_team") or _g(input_snapshot, "home_team") or "").strip().lower()
+    away_team = str(trace.get("away_team") or trace.get("result", {}).get("away_team") or _g(input_snapshot, "away_team") or "").strip().lower()
+
     warnings: list[OperatorWarning] = []
 
     market = _extracted([
@@ -697,7 +715,7 @@ def normalize_recommendation(
         (_g(result, "line"), "result.line"),
     ])
 
-    selection_kind = _selection_kind(selection.value, _g(rec, "side"), market.value)
+    selection_kind = _selection_kind(selection.value, _g(rec, "side"), market.value, home_team, away_team)
 
     odds, confirmed_american, odds_warnings = _resolve_odds(
         rec=rec, rec_prefix=rec_prefix, selection_kind=selection_kind,
@@ -708,6 +726,7 @@ def normalize_recommendation(
     raw_probability, prob_warnings = _resolve_raw_probability(
         selection=selection.value, side=_g(rec, "side"), market=market.value,
         predictions=predictions, result=result, rec=rec, rec_prefix=rec_prefix,
+        home_team=home_team, away_team=away_team,
     )
     warnings.extend(prob_warnings)
 

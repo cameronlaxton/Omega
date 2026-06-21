@@ -821,6 +821,45 @@ class PostgresRepository:
                 )
                 return closing_id
 
+
+    def get_session_trace_facts_batch(self, trace_ids: list[str]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        if not trace_ids:
+            return out
+        t = TraceRow.__table__
+        e = EvidenceSignalRow.__table__
+        o = OutcomeRow.__table__
+        p = PropOutcomeRow.__table__
+        b = BetLedgerRow.__table__
+        
+        stmt = select(
+            t.c.trace_id,
+            select(func.count()).select_from(e).where(e.c.trace_id == t.c.trace_id).scalar_subquery().label("evidence_signal_count"),
+            (
+                exists(select(1).select_from(o).where(o.c.trace_id == t.c.trace_id)) | 
+                exists(select(1).select_from(p).where(p.c.trace_id == t.c.trace_id))
+            ).label("has_outcome"),
+            exists(select(1).select_from(b).where(b.c.trace_id == t.c.trace_id)).label("has_bet")
+        ).where(t.c.trace_id.in_(trace_ids))
+
+        with self.Session() as session:
+            rows = session.execute(stmt).mappings()
+            for r in rows:
+                out[r["trace_id"]] = dict(r)
+        return out
+
+    def get_closing_lines_batch(self, trace_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        out: dict[str, list[dict[str, Any]]] = {}
+        if not trace_ids:
+            return out
+        table = ClosingLineRow.__table__
+        stmt = select(table).where(table.c.trace_id.in_(trace_ids)).order_by(table.c.trace_id, table.c.captured_at)
+        with self.Session() as session:
+            rows = session.execute(stmt).mappings()
+            for r in rows:
+                out.setdefault(r["trace_id"], []).append(dict(r))
+        return out
+
     def get_closing_lines(self, trace_id: str) -> list[dict[str, Any]]:
         table = ClosingLineRow.__table__
         with self.Session() as session:

@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Phase 6 Schema Glossary
 
 This glossary names the active concepts without changing runtime schema. It is
@@ -30,3 +33,4 @@ Player props are league-scoped player-stat markets. The separate
 plane remain active adapters because their grading shape differs from game
 outcomes. Do not use this glossary as justification for a table unification
 refactor.
+

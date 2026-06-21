@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Phase 6 Design Plan — Trace Persistence, Backtest Integration, Calibration Learning
 
 ## Prerequisites completed
@@ -488,3 +491,4 @@ A candidate profile is promoted to production when:
 - **6c:** Revert `apply_calibration()` to static-only (remove registry lookup). Delete profiles.json. All behavior returns to pre-Phase-6c state.
 
 Each phase is independently rollback-safe because they extend existing behavior rather than replacing it.
+

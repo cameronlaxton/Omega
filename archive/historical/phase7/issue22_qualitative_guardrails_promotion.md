@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Issue #22 — Qualitative Evidence Guardrails: Promotion Runbook
 
 Status: implementation complete (Phases 1–6 merged on `issue-22-qualitative-guardrails`).
@@ -97,3 +100,4 @@ The registry workflow already exists (`AdjustmentPolicyRegistry`):
 Revert the production policy to the seed (all flags off, `mode='shadow'`) via the
 registry. No code revert or schema migration is required; the guardrail code
 stays dormant behind the flags.
+

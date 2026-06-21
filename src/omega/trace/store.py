@@ -1990,6 +1990,50 @@ class TraceStore:
         self.conn.commit()
         return closing_id
 
+
+    def get_session_trace_facts_batch(self, trace_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Return session trace facts (evidence counts, has_outcome, has_bet) for a batch of traces."""
+        if self._repo is not None:
+            return self._repo.get_session_trace_facts_batch(trace_ids)
+        out: dict[str, dict[str, Any]] = {}
+        if not trace_ids:
+            return out
+        
+        placeholders = ",".join("?" * len(trace_ids))
+        sql = f"""
+            SELECT t.trace_id,
+                   (SELECT COUNT(*) FROM evidence_signals e WHERE e.trace_id = t.trace_id) AS evidence_signal_count,
+                   (CASE WHEN EXISTS (SELECT 1 FROM outcomes o WHERE o.trace_id = t.trace_id) OR
+                              EXISTS (SELECT 1 FROM prop_outcomes p WHERE p.trace_id = t.trace_id)
+                         THEN 1 ELSE 0 END) AS has_outcome,
+                   (CASE WHEN EXISTS (SELECT 1 FROM bet_ledger b WHERE b.trace_id = t.trace_id)
+                         THEN 1 ELSE 0 END) AS has_bet
+            FROM traces t
+            WHERE t.trace_id IN ({placeholders})
+        """
+        rows = self.conn.execute(sql, trace_ids).fetchall()
+        for r in rows:
+            out[r["trace_id"]] = dict(r)
+        return out
+
+    def get_closing_lines_batch(self, trace_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Return all closing-line snapshots attached to a batch of traces."""
+        if self._repo is not None:
+            return self._repo.get_closing_lines_batch(trace_ids)
+        out: dict[str, list[dict[str, Any]]] = {}
+        if not trace_ids:
+            return out
+        placeholders = ",".join("?" * len(trace_ids))
+        rows = self.conn.execute(
+            f"""SELECT closing_id, trace_id, market, selection_descriptor,
+                      closing_line, closing_odds, closing_timestamp, source, captured_at
+               FROM closing_lines WHERE trace_id IN ({placeholders}) ORDER BY trace_id, captured_at""",
+            trace_ids,
+        ).fetchall()
+        for r in rows:
+            out.setdefault(r["trace_id"], []).append(dict(r))
+        return out
+
     def get_closing_lines(self, trace_id: str) -> list[dict[str, Any]]:
         """Return all closing-line snapshots attached to a trace."""
         if self._repo is not None:

@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Phase 6 Red Team — Two-Plane Evaluation Architecture
 
 ## Context
@@ -153,3 +156,4 @@ The plan follows the order specified in CURRENT_HANDOFF.md:
 3. Calibration learning (profile fitting, versioning, promotion)
 
 Each step closes one of the blind spots identified above.
+

@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Phase 7 Handoff — Multi-Sport Expansion
 
 **Purpose:** continue Phase 7 implementation in a fresh session. This document is
@@ -328,3 +331,4 @@ GameAnalysisRequest.prior_payload          # schemas.py — gatherer populates t
    + request/engine plumbing). The M2 gatherer just populates
    `GameAnalysisRequest.prior_payload`; the backend reads `request.prior_payload`.
 5. Start M2 (Soccer) — it has the binding 2026-06-11 deadline.
+

@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Phase 6 Automation Playbook
 
 Omega automation is repo-local and command-gated. Action plans may move existing
@@ -78,3 +81,4 @@ Operators should record or review these counts after each loop:
   `promote_profile`.
 - `adj_v1_seed` remains in shadow unless a separate validation and promotion
   decision changes it.
+

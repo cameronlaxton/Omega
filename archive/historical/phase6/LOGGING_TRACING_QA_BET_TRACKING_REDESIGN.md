@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Phase 6 Logical Infrastructure Redesign
 
 **Date:** 2026-05-16  
@@ -118,3 +121,4 @@ Recommended next:
 5. Add market snapshots for line movement and historical backfill.
 6. Add versioned historical market artifacts for benchmark replay.
 7. Expand QA reports to include trace coverage, bet-record coverage, close coverage, CLV coverage, outcome coverage, and descriptor mismatch counts.
+

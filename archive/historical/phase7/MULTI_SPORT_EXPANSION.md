@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Phase 7 Design Plan — Multi-Sport Expansion (WNBA, Soccer, Tennis, NFL)
 
 ## Context
@@ -838,3 +841,4 @@ ETL-standard tests (shared harness in `tests/integrations/`):
 - `tests/integrations/test_etl_aliases.py` — entity-resolution and exclusion-on-unresolved.
 
 Plus contract / math unit tests under `tests/core/simulation/` and adapter tests under `tests/integrations/` per sport.
+

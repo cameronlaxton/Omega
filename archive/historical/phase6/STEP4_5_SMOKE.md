@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Phase 6 Step 4 & 5 — End-to-End Smoke Test
 
 This document walks the operator through a full session of the closing-line +
@@ -207,3 +210,4 @@ violates a CLAUDE.md required invariant.
   These currently require operator confirmation via `--confirm-*` flags.
   Full automation is a follow-up commit once enough graded data accumulates to
   make the replay statistically meaningful.
+

@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Artifact Authority (Phase 6)
 
 The single source-of-truth map for Omega's tracking artifacts. When two
@@ -74,3 +77,4 @@ Do not merge these tables, rename the prop calibration plane, or replace
 `trace.kind = "prop"` in this hardening phase. Treat those names as current
 adapter vocabulary until a future migration explicitly introduces
 `market_family`.
+

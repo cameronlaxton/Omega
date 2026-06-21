@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Postgres + MCP HTTP Phase 1
 
 Phase 1 adds opt-in Postgres persistence and browser-reachable MCP transports
@@ -69,3 +72,4 @@ default backend to Postgres.
 - JSON blobs and timestamps remain text for SQLite/Postgres round-trip parity.
 - Alembic is the canonical Postgres schema path. `bootstrap_create_all()` is
   guarded by `OMEGA_DB_DEV_BOOTSTRAP=1` and is for scratch databases only.
+

@@ -210,26 +210,70 @@ def _analysis_plan(
         "",
         "  omega_run_batch(",
         f"    session_id=\"{session_id}\",",
-        f"    game_date=\"{date}\",",
+        "    bankroll=1000.0,",
+        "    entries=[",
+        "      # Game Entry Example:",
+        "      {",
+        "        \"kind\": \"game\",",
+        f"        \"league\": \"{leagues[0] if leagues else 'MLB'}\",",
+        "        \"home_team\": \"Home Team\",",
+        "        \"away_team\": \"Away Team\",",
+        f"        \"game_date\": \"{date}\",",
+        "        \"home_context\": {\"off_rating\": 4.5, \"def_rating\": 3.8},",
+        "        \"away_context\": {\"off_rating\": 4.1, \"def_rating\": 4.2},",
+        "        \"game_context\": {\"is_playoff\": False, \"rest_days\": 4},",
+        "        \"evidence\": [",
+        "          {",
+        "            \"signal_type\": \"rest_advantage\",",
+        "            \"category\": \"situational\",",
+        "            \"plane\": \"game\",",
+        "            \"value\": 2,",
+        "            \"source\": \"agent_reasoning\",",
+        "            \"confidence\": 0.8,",
+        "            \"window\": \"matchup\",",
+        "            \"direction\": \"home\"",
+        "          }",
+        "        ],",
+        "        \"reasoning_narrative\": \"Narrative summary of reasoning here...\",",
+        "        \"reasoning_sources\": [\"espn.com\"]",
+        "      },",
+        "      # Player Prop Entry Example:",
+        "      {",
+        "        \"kind\": \"prop\",",
+        f"        \"league\": \"{leagues[0] if leagues else 'MLB'}\",",
+        "        \"home_team\": \"Home Team\",",
+        "        \"away_team\": \"Away Team\",",
+        f"        \"game_date\": \"{date}\",",
+        "        \"player_name\": \"Player Name\",",
+        "        \"prop_type\": \"strikeouts_pitched\",  # or other stat key",
+        "        \"player_context\": {",
+        "          \"strikeouts_pitched_mean\": 5.8,",
+        "          \"strikeouts_pitched_std\": 2.1,",
+        "          \"sample_size\": 10",
+        "        },",
+        "        \"game_context\": {\"is_playoff\": False, \"rest_days\": 4},",
+        "        \"evidence\": []",
+        "      }",
+        "    ]",
     ]
 
     if "MLB" in leagues:
         lines += [
-            f"    # MLB: {mlb_games} games + {mlb_props} prop sweeps",
+            f"    # MLB Info: {mlb_games} games + {mlb_props} prop sweeps planned",
             "    # Include: h2h, spreads, totals for each game",
             "    # Props: strikeouts_pitched, hits, total_bases, earned_runs",
         ]
 
     if any(lg in _TENNIS_LEAGUES for lg in leagues):
         lines += [
-            f"    # TENNIS: {tennis_games} matches",
+            f"    # TENNIS Info: {tennis_games} matches planned",
             "    # Requires: surface context, serve_win_pct, return_win_pct",
         ]
 
     if any(lg in _SOCCER_LEAGUES for lg in leagues):
         effective_mode = "research_candidate" if downgraded_leagues else mode
         lines += [
-            f"    # FIFA/Soccer: {fifa_games} matches",
+            f"    # FIFA/Soccer Info: {fifa_games} matches planned",
             f"    # output_mode={effective_mode!r} (downgraded due to prior coverage)" if downgraded_leagues else "",
             "    # Requires: rho prior (injected automatically from priors_dixon_coles)",
         ]

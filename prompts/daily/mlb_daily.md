@@ -164,27 +164,27 @@ metrics in unstructured notes.
 
 Useful MLB evidence:
 
-| signal_type | what to capture | direction |
-|---|---|---|
-| `pace_up` / `pace_down` | run environment / pitcher duel | optional |
-| `rest_advantage` | rested starter or bullpen edge | `home` or `away` |
-| `b2b_fatigue` | bullpen overuse | `home` or `away` |
-| `def_matchup_weak` | lineup advantage vs starter handedness | `home` or `away` |
-| `def_matchup_strong` | pitcher advantage vs lineup | `home` or `away` |
-| `blowout_risk` | large mismatch plus depleted bullpen | optional |
+| signal_type | what to capture | plane | category | direction |
+|---|---|---|---|---|
+| `park_factor_evidence` | Ballpark hitter/pitcher friendliness | game/player | situational | optional |
+| `weather_wind` | Wind speed/direction effect on run environment | game | situational | optional |
+| `pitcher_matchup` | Batter-vs-pitcher handedness/history edge | player | matchup | required (over/under/neutral) |
+| `starter_era` | Starting pitcher's ERA for the directional team | game | matchup | required (home/away) |
+| `rest_advantage` | Rested starter or bullpen edge | game | situational | required (home/away) |
+| `blowout_risk` | Probability game is non-competitive | game | situational | optional |
 
 Example:
 
 ```python
 EvidenceSignal(
-    signal_type="b2b_fatigue",
-    category="fatigue",
+    signal_type="weather_wind",
+    category="situational",
     plane="game",
-    value="bullpen used 25+ pitches last 2 days",
-    source="baseballsavant.mlb.com",
-    confidence=0.75,
-    window="last_3",
-    direction="away",
+    value="15mph blowing out to center field",
+    source="weather.gov",
+    confidence=0.90,
+    window="matchup",
+    direction="over",
 )
 ```
 

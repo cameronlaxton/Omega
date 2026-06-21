@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Phase 6 Handoff — Steps 1–3 Done, Steps 4 + 5 Next
 
 **Branch:** `main` (no PR opened yet — commit when ready)
@@ -256,3 +259,4 @@ Then:
 - Schema migration applies `CREATE TABLE IF NOT EXISTS` for every version on
   every connection. Old DBs converge to current. New tables only — never
   ALTER an existing one without writing a real migration.
+

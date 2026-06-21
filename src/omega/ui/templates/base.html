@@ -67,6 +67,14 @@
 <span class="muted" title="not found in payload (source_path: none)">{{ dash }}</span>
 {%- endif -%}
 {%- endmacro %}
+{# Like field_val but formats a 0-1 float as a clean percentage (e.g. 0.1234 -> 12.34%) #}
+{% macro pct_field_val(f, dash='—') -%}
+{%- if f and f.value is not none -%}
+<span class="fv{% if f.computed %} computed{% endif %}"{% if f.source_path %} title="source: {{ f.source_path }}"{% endif %}>{{ (f.value * 100) | round(2) }}%{% if f.computed %} <span class="cbadge" title="Console-derived (not an engine value)">computed</span>{% endif %}</span>
+{%- else -%}
+<span class="muted" title="not found in payload (source_path: none)">{{ dash }}</span>
+{%- endif -%}
+{%- endmacro %}
 {# Render a list of OperatorWarnings as severity-colored chips. #}
 {% macro warning_chips(warnings) -%}
 {% if warnings %}

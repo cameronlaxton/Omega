@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Phase 6i — Structured Evidence Loop
 
 **Status:** implemented · **Schema:** trace DB V9 · **Default rollout:** shadow mode
@@ -186,3 +189,4 @@ Skipped: empty evidence:       N
 Skipped: QA failed:            N
 Signal-performance rows:       N
 ```
+

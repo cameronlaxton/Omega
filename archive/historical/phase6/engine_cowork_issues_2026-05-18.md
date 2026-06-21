@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document is from a legacy phase that has been implemented and merged to `main`. It is retained here for historical reference.
+
 # Engine / Cowork Session Issues — 2026-05-18
 
 **Session:** sess-20260518-mlb1  
@@ -108,3 +111,4 @@ This is methodologically incorrect. The true probability of **covering -1.5** (w
 | 4 | Medium | service.py `analyze_game` | `recommended_units` missing / always 0.0 in EdgeDetail |
 | 5 | **High** | service.py `analyze_game` | Run-line edge uses outright win prob, not spread coverage prob |
 | 6 | Low | service.py `analyze` | `kind` not returned in trace top-level; input_snapshot often empty |
+

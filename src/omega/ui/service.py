@@ -26,6 +26,7 @@ Milestone-B sharpening point and is intentionally not faked here.
 from __future__ import annotations
 
 import dataclasses
+import logging
 import math
 import os
 import re
@@ -276,8 +277,16 @@ class ConsoleService:
             recent = self.store.query_traces(limit=1)  # ORDER BY timestamp DESC
             if recent:
                 latest_trace_ts = recent[0].get("timestamp")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger(__name__).error("Failed to query recent traces: %s", e)
+            status = "degraded"
+            warnings.append(
+                OperatorWarningModel(
+                    code="query_traces_failed",
+                    severity="fail",
+                    message="failed to read recent traces from DB",
+                )
+            )
 
         # Bet count via a bounded read scan (no exact COUNT helper on the store);
         # surfaced honestly as a lower bound when the scan window is full.
@@ -294,8 +303,16 @@ class ConsoleService:
                         message=f"bet count is a lower bound (scan-capped at {self.max_scan})",
                     )
                 )
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger(__name__).error("Failed to query ledger for bet count: %s", e)
+            status = "degraded"
+            warnings.append(
+                OperatorWarningModel(
+                    code="query_ledger_failed",
+                    severity="fail",
+                    message="failed to read bet ledger from DB",
+                )
+            )
 
         session_count = len(self._session_files())
         calibration = self._calibration_summary(warnings)
@@ -488,7 +505,7 @@ class ConsoleService:
             brier=_as_float(metrics.get("brier_score")),
             calibration_error=_as_float(metrics.get("calibration_error")),
             log_loss=_as_float(metrics.get("log_loss")),
-            n_eval=int(n_eval) if n_eval is not None else None,
+            n_eval=_as_int(n_eval) if n_eval is not None else None,
             training_window=profile.training_window,
             created_at=profile.created_at,
             promoted_at=profile.promoted_at,
@@ -607,6 +624,62 @@ class ConsoleService:
             )
         )
 
+        recent_traces = self.store.query_traces(limit=self.max_scan)
+        trace_ids = [t.get("trace_id", "") for t in recent_traces]
+        facts_batch = self.store.get_session_trace_facts_batch(trace_ids) if trace_ids else {}
+        zero_evidence = []
+        qa_fail = []
+        for t in recent_traces:
+            tid = str(t.get("trace_id", ""))
+            f = facts_batch.get(tid)
+            if f and f.get("evidence_signal_count", 0) == 0:
+                zero_evidence.append(t)
+            q = t.get("trace_quality") or {}
+            if q.get("aggregate_quality") == "fail":
+                qa_fail.append(t)
+
+        buckets.append(
+            ReviewBucket(
+                code="zero_evidence",
+                title="Zero evidence (empty context)",
+                severity="warn",
+                count=len(zero_evidence),
+                scan_capped=len(zero_evidence) >= self.max_scan,
+                source=Source.DB_TRACE_PAYLOAD,
+                items=[
+                    ReviewItem(
+                        kind="trace",
+                        id=str(t.get("trace_id") or ""),
+                        label=t.get("matchup"),
+                        detail=" ".join(x for x in (t.get("league"), t.get("kind")) if x) or None,
+                        href=f"/traces/{t.get('trace_id')}",
+                    )
+                    for t in zero_evidence[:_REVIEW_SAMPLE]
+                ],
+            )
+        )
+        
+        buckets.append(
+            ReviewBucket(
+                code="qa_fail",
+                title="QA gate fail (trace_quality)",
+                severity="warn",
+                count=len(qa_fail),
+                scan_capped=len(qa_fail) >= self.max_scan,
+                source=Source.DB_TRACE_PAYLOAD,
+                items=[
+                    ReviewItem(
+                        kind="trace",
+                        id=str(t.get("trace_id") or ""),
+                        label=t.get("matchup"),
+                        detail=" ".join(x for x in (t.get("league"), t.get("kind")) if x) or None,
+                        href=f"/traces/{t.get('trace_id')}",
+                    )
+                    for t in qa_fail[:_REVIEW_SAMPLE]
+                ],
+            )
+        )
+
         # Problem sessions: invalid sidecar OR a failed quality gate. Bounded by
         # the session inbox size (a directory listing + per-file validate).
         problems: list[tuple[str, str]] = []
@@ -647,6 +720,9 @@ class ConsoleService:
         bets = self.store.query_ledger(league=league, limit=self.max_scan)
         scan_capped = len(bets) >= self.max_scan
 
+        trace_ids = list({bet.get("trace_id") for bet in bets if bet.get("trace_id")})
+        closing_lines_by_trace = self.store.get_closing_lines_batch(trace_ids) if trace_ids else {}
+
         rows: list[ClvRow] = []
         points: list[float] = []
         beat = 0
@@ -655,7 +731,7 @@ class ConsoleService:
             taken_odds = _as_float(bet.get("odds"))
             match = (
                 self._match_closing_line(
-                    self.store.get_closing_lines(trace_id),
+                    closing_lines_by_trace.get(trace_id, []),
                     bet.get("selection_descriptor"),
                     bet.get("market"),
                 )
@@ -736,7 +812,7 @@ class ConsoleService:
             for c in closes:
                 if c.get("market") == market:
                     return c
-        return closes[0]
+        return None
 
     # -- traces ----------------------------------------------------------
 
@@ -924,21 +1000,30 @@ class ConsoleService:
     def _session_trace_facts(self, trace_ids: list[str]) -> list[SessionTraceFacts]:
         """Per-trace DB facts for session health (evidence count + outcome/bet
         presence). Backend-neutral reads; never sidecar-derived."""
+        if not trace_ids:
+            return []
+        batch_facts = self.store.get_session_trace_facts_batch(trace_ids)
         facts: list[SessionTraceFacts] = []
         for tid in trace_ids:
-            evidence = self.store.get_evidence_signals(tid)
-            has_outcome = bool(self.store.get_outcome(tid)) or bool(
-                self.store.get_prop_outcomes(tid)
-            )
-            has_bet = bool(self.store.get_ledger_bets(tid))
-            facts.append(
-                SessionTraceFacts(
-                    trace_id=tid,
-                    evidence_signal_count=len(evidence),
-                    has_outcome=has_outcome,
-                    has_bet=has_bet,
+            row = batch_facts.get(tid)
+            if row:
+                facts.append(
+                    SessionTraceFacts(
+                        trace_id=tid,
+                        evidence_signal_count=row["evidence_signal_count"],
+                        has_outcome=bool(row["has_outcome"]),
+                        has_bet=bool(row["has_bet"]),
+                    )
                 )
-            )
+            else:
+                facts.append(
+                    SessionTraceFacts(
+                        trace_id=tid,
+                        evidence_signal_count=0,
+                        has_outcome=False,
+                        has_bet=False,
+                    )
+                )
         return facts
 
     # -- bets ------------------------------------------------------------
