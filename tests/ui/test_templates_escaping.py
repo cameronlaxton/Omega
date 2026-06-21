@@ -28,7 +28,7 @@ def _client(tmp_path: Path) -> TestClient:
                 recommendations=[{"market": SCRIPT, "confidence_tier": "A"}],
             )
         )
-        from omega.trace.ledger_bet import LedgerBet, LedgerStatus, BetProvenance
+        from omega.trace.ledger_bet import BetProvenance, LedgerBet, LedgerStatus
         store.record_ledger_bet(
             LedgerBet(
                 ledger_id="led-xss",

@@ -86,6 +86,9 @@ def _tennis_leagues_in(leagues: list[str]) -> list[str]:
 
 def _run_subprocess(cmd: list[str], *, label: str, dry_run: bool) -> int:
     """Run a subprocess and return its exit code.  Prints output live."""
+    if sys.platform == "win32" and cmd:
+        if not cmd[0].endswith(".exe") and cmd[0] != "python":
+            cmd = [cmd[0] + ".exe"] + cmd[1:]
     if dry_run:
         logger.info("[DRY-RUN] would run: %s", " ".join(cmd))
         return 0
