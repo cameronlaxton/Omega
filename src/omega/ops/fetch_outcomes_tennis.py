@@ -264,22 +264,22 @@ def main(argv: list[str] | None = None) -> int:
 
     # GRAND_SLAM traces may belong to either tour; query both sources for them.
     tours = sorted(
-        {"atp", "wta"}
-        if "GRAND_SLAM" in args.leagues
-        else {lg.lower() for lg in args.leagues}
+        {"atp", "wta"} if "GRAND_SLAM" in args.leagues else {lg.lower() for lg in args.leagues}
     )
     alias_table = load_alias_table("TENNIS")
 
     if args.source == "sackmann":
         results = collect_sackmann_results(
-            tours, start, end, alias_table,
-            local_root=args.local_root, cache_root=args.cache_root,
+            tours,
+            start,
+            end,
+            alias_table,
+            local_root=args.local_root,
+            cache_root=args.cache_root,
         )
         source_tag = "api:sackmann"
     else:
-        results = collect_odds_api_results(
-            [t.upper() for t in tours], alias_table
-        )
+        results = collect_odds_api_results([t.upper() for t in tours], alias_table)
         source_tag = "api:odds_api"
     logger.info("%s: %d completed matches in window", args.source, len(results))
 
@@ -315,7 +315,9 @@ def main(argv: list[str] | None = None) -> int:
 
                 home_sets, away_sets = match[home_key], match[away_key]
                 if args.dry_run:
-                    logger.info("DRY %s -> %s %d, %s %d", tid, players[0], home_sets, players[1], away_sets)
+                    logger.info(
+                        "DRY %s -> %s %d, %s %d", tid, players[0], home_sets, players[1], away_sets
+                    )
                     attached += 1
                     continue
                 try:
@@ -327,7 +329,12 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     attached += 1
                     logger.info(
-                        "ATTACHED %s -> %s %d, %s %d", tid, players[0], home_sets, players[1], away_sets
+                        "ATTACHED %s -> %s %d, %s %d",
+                        tid,
+                        players[0],
+                        home_sets,
+                        players[1],
+                        away_sets,
                     )
                 except ValueError as exc:
                     logger.warning("Skipped %s: %s", tid, exc)

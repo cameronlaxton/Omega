@@ -67,7 +67,10 @@ def _clv(sel: ReplayCandidateSelection, closing_list: list[dict]) -> float | Non
     if sel.decision_odds is None:
         return None
     for c in closing_list:
-        if c.get("market") == sel.market and c.get("selection_descriptor") == sel.selection_descriptor:
+        if (
+            c.get("market") == sel.market
+            and c.get("selection_descriptor") == sel.selection_descriptor
+        ):
             close_odds = c.get("closing_odds")
             if close_odds is None:
                 continue

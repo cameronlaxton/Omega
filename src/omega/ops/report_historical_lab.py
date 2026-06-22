@@ -41,7 +41,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default=None, help="Output path (default <lab_dir>/REPORT.md)")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
 
     out_dir = lab_dir(args.root, args.lab_run_id)
     lab_path = out_dir / "LAB_RUN.json"
@@ -52,7 +54,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         lab_run = HistoricalLabRun.model_validate(_load(lab_path))
         ledger = AttemptedVariantLedger.model_validate(_load(out_dir / "ATTEMPTED_VARIANTS.json"))
-        evidence = PromotionEvidenceBundle.model_validate(_load(out_dir / "PROMOTION_EVIDENCE.json"))
+        evidence = PromotionEvidenceBundle.model_validate(
+            _load(out_dir / "PROMOTION_EVIDENCE.json")
+        )
     except (FileNotFoundError, ValueError) as exc:
         logger.error("Failed to load lab artifacts: %s", exc)
         return 1

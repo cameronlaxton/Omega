@@ -54,8 +54,16 @@ def test_cross_validate_calibrated_low_ece():
     preds, outs = _calibrated_dataset()
     fitter = CalibrationFitter()
     res = cross_validate(
-        fitter, preds, outs, "TEST", "game", "isotonic",
-        folds=5, repeats=3, ece_floor=0.05, base_seed=1,
+        fitter,
+        preds,
+        outs,
+        "TEST",
+        "game",
+        "isotonic",
+        folds=5,
+        repeats=3,
+        ece_floor=0.05,
+        base_seed=1,
     )
     assert res.n_pairs == len(preds)
     assert res.n_folds_total == 15  # 5 folds x 3 repeats
@@ -70,17 +78,24 @@ def test_cross_validate_miscalibrated_high_ece():
     preds, outs = _miscalibrated_dataset()
     fitter = CalibrationFitter()
     res = cross_validate(
-        fitter, preds, outs, "TEST", "game", "isotonic",
-        folds=5, repeats=3, ece_floor=0.05, base_seed=1,
+        fitter,
+        preds,
+        outs,
+        "TEST",
+        "game",
+        "isotonic",
+        folds=5,
+        repeats=3,
+        ece_floor=0.05,
+        base_seed=1,
     )
     # Raw is confidently wrong; even after calibration the held-out signal is weak,
     # but the RAW out-of-sample ECE must clearly exceed the floor.
-    raw_mean, raw_pass = raw_oos(
-        preds, outs, folds=5, repeats=3, ece_floor=0.05, base_seed=1
-    )
+    raw_mean, raw_pass = raw_oos(preds, outs, folds=5, repeats=3, ece_floor=0.05, base_seed=1)
     assert raw_mean > 0.05
     assert raw_pass == 0.0
     import math
+
     assert math.isclose(res.raw_ece, raw_mean, rel_tol=1e-9)
 
 

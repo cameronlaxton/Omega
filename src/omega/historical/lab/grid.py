@@ -78,7 +78,13 @@ def _compact_params(profile: Any) -> dict[str, Any]:
 
 
 def fit_variant(
-    fitter: CalibrationFitter, method: str, preds: list[float], outs: list[int], *, league: str, market: str
+    fitter: CalibrationFitter,
+    method: str,
+    preds: list[float],
+    outs: list[int],
+    *,
+    league: str,
+    market: str,
 ):
     """Fit one method on the train pairs via the single fitter. Raises on bad method."""
     if method == "isotonic":
@@ -141,7 +147,9 @@ def run_grid(
     variants: list[AttemptedVariant] = []
     for slice_name, slice_traces in groups.items():
         train_traces = [
-            t for t in slice_traces if _in_window(_decision_date(t), train_window.start, train_window.end)
+            t
+            for t in slice_traces
+            if _in_window(_decision_date(t), train_window.start, train_window.end)
         ]
         val_traces = [
             t
@@ -178,7 +186,9 @@ def run_grid(
                 continue
 
             try:
-                profile = fit_variant(fitter, method, train_p, train_o, league=league, market=market)
+                profile = fit_variant(
+                    fitter, method, train_p, train_o, league=league, market=market
+                )
                 metrics = fitter.evaluate(profile, val_p, val_o)
                 cv = fitter.cross_validated_ece(
                     train_p, train_o, league=league, market=market, method=method

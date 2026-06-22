@@ -9,7 +9,6 @@ import pytest
 from omega.trace.ledger_bet import DEFAULT_BANKROLL
 from omega.trace.portfolio_state import (
     SETTLED_STATUSES,
-    BankrollTimeline,
     OpenPosition,
     PortfolioState,
     entity_keys_for,
@@ -106,9 +105,9 @@ def test_bankroll_at_historical_timestamp():
     ]
     tl = PortfolioState.from_ledger_rows(rows, base_bankroll=100.0).timeline
     assert tl.bankroll_at("2026-05-31T00:00:00+00:00") == 100.0  # before any settlement
-    assert tl.bankroll_at("2026-06-02T00:00:00+00:00") == 95.0   # after the loss only
+    assert tl.bankroll_at("2026-06-02T00:00:00+00:00") == 95.0  # after the loss only
     assert tl.bankroll_at("2026-06-04T00:00:00+00:00") == 105.0  # after both
-    assert tl.bankroll_at(None) == 105.0                          # current
+    assert tl.bankroll_at(None) == 105.0  # current
 
 
 # --- open positions + exposure -------------------------------------------------
@@ -132,8 +131,12 @@ def test_open_positions_and_exposure_keys():
 def test_exposure_sums_across_open_positions():
     rows = [
         _row(ledger_id="o1", status="pending", stake_amount=30.0),
-        _row(ledger_id="o2", status="pending", stake_amount=20.0,
-             selection_descriptor="player_assists_over_6.5"),
+        _row(
+            ledger_id="o2",
+            status="pending",
+            stake_amount=20.0,
+            selection_descriptor="player_assists_over_6.5",
+        ),
     ]
     state = PortfolioState.from_ledger_rows(rows)
     # both share sport/league/game -> exposure accumulates there
@@ -147,8 +150,13 @@ def test_exposure_sums_across_open_positions():
 def test_settled_bets_do_not_count_as_exposure():
     rows = [
         _row(ledger_id="o", status="pending", stake_amount=40.0),
-        _row(ledger_id="s", status="won", stake_amount=99.0, net_pnl=90.0,
-             graded_at="2026-06-01T22:00:00+00:00"),
+        _row(
+            ledger_id="s",
+            status="won",
+            stake_amount=99.0,
+            net_pnl=90.0,
+            graded_at="2026-06-01T22:00:00+00:00",
+        ),
     ]
     state = PortfolioState.from_ledger_rows(rows)
     assert state.exposure_by_entity["league:NBA"] == 40.0  # only the open one
@@ -161,8 +169,24 @@ def test_entity_keys_skip_missing_fields():
 
 
 def test_entity_keys_case_normalized():
-    a = entity_keys_for({"league": "nba", "sport": "Basketball", "matchup": "A @ B", "market": "game", "selection_descriptor": "x"})
-    b = entity_keys_for({"league": "NBA", "sport": "basketball", "matchup": "A @ B", "market": "game", "selection_descriptor": "x"})
+    a = entity_keys_for(
+        {
+            "league": "nba",
+            "sport": "Basketball",
+            "matchup": "A @ B",
+            "market": "game",
+            "selection_descriptor": "x",
+        }
+    )
+    b = entity_keys_for(
+        {
+            "league": "NBA",
+            "sport": "basketball",
+            "matchup": "A @ B",
+            "market": "game",
+            "selection_descriptor": "x",
+        }
+    )
     assert a == b
     assert "league:NBA" in a and "sport:BASKETBALL" in a
 
@@ -170,8 +194,20 @@ def test_entity_keys_case_normalized():
 # --- determinism ---------------------------------------------------------------
 def test_order_independent():
     rows = [
-        _row(ledger_id="a", status="won", net_pnl=10.0, graded_at="2026-06-01T00:00:00+00:00", stake_amount=10.0),
-        _row(ledger_id="b", status="lost", net_pnl=-7.0, graded_at="2026-06-02T00:00:00+00:00", stake_amount=20.0),
+        _row(
+            ledger_id="a",
+            status="won",
+            net_pnl=10.0,
+            graded_at="2026-06-01T00:00:00+00:00",
+            stake_amount=10.0,
+        ),
+        _row(
+            ledger_id="b",
+            status="lost",
+            net_pnl=-7.0,
+            graded_at="2026-06-02T00:00:00+00:00",
+            stake_amount=20.0,
+        ),
         _row(ledger_id="c", status="pending", stake_amount=15.0, selection_descriptor="other"),
     ]
     base = PortfolioState.from_ledger_rows(rows, base_bankroll=500.0)

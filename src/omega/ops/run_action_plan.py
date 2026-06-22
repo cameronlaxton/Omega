@@ -334,13 +334,9 @@ def _validate_render_audit(args: dict[str, Any]) -> list[str]:
         if not isinstance(session_ids, list) or not all(
             isinstance(sid, str) and sid.strip() for sid in session_ids
         ):
-            raise ValueError(
-                "render_audit.args.session_ids must be a list of non-empty strings"
-            )
+            raise ValueError("render_audit.args.session_ids must be a list of non-empty strings")
     if bool(session_ids) == bool(all_open):
-        raise ValueError(
-            "render_audit requires exactly one of session_ids or all_open=true"
-        )
+        raise ValueError("render_audit requires exactly one of session_ids or all_open=true")
     verbose = _optional_bool("render_audit", args, "verbose")
 
     cmd = _module_cmd("render_session_audits")
@@ -458,11 +454,7 @@ def _validate_all(plan: dict[str, Any]) -> list[ValidatedAction]:
             cmd = _DISPATCH[atype](args)
         except ValueError as exc:
             raise ValueError(f"actions[{i}] ({atype}): {exc}") from exc
-        non_fatal = (
-            bool(args.get("non_fatal", True))
-            if atype == "render_report"
-            else False
-        )
+        non_fatal = bool(args.get("non_fatal", True)) if atype == "render_report" else False
         out.append(ValidatedAction(atype, cmd, non_fatal=non_fatal))
     return out
 

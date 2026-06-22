@@ -17,11 +17,12 @@ def test_neg_binom_dispersion_parity():
         projection_mean=11.0,
         prior_payload={"nb_dispersion_k": 5.0},
         exact=False,
-        dispersion=DispersionPolicy(variance_multiplier=1.5)
+        dispersion=DispersionPolicy(variance_multiplier=1.5),
     )
     mc_res = backend.run(input_mc)
 
     import dataclasses
+
     input_ex = dataclasses.replace(input_mc, exact=True)
     ex_res = backend.run(input_ex)
 
@@ -36,6 +37,7 @@ def test_neg_binom_dispersion_parity():
 
 def test_soccer_bivariate_dispersion_parity(monkeypatch):
     import omega.core.config.leagues
+
     monkeypatch.setattr(
         omega.core.config.leagues,
         "get_league_config",
@@ -53,7 +55,7 @@ def test_soccer_bivariate_dispersion_parity(monkeypatch):
         away_context={"xg_for": 1.0, "xg_against": 1.5},
         prior_payload={"rho": 0.05},
         exact=False,
-        dispersion=DispersionPolicy(variance_multiplier=1.2)
+        dispersion=DispersionPolicy(variance_multiplier=1.2),
     )
 
     mc_res = backend.run(input_mc)

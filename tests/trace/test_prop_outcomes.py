@@ -355,4 +355,3 @@ class TestQueryTracesUnifiedOutcomeFilter:
         results = store.query_traces()
         assert "_prop_outcomes" not in results[0]
         store.close()
-

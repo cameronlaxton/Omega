@@ -66,8 +66,7 @@ class DatasetHashDriftError(RuntimeError):
     def __init__(self, drifted: dict[str, tuple[str, str]]):
         self.drifted = drifted
         detail = ", ".join(
-            f"{path}: manifest={old[:12]}… disk={new[:12]}…"
-            for path, (old, new) in drifted.items()
+            f"{path}: manifest={old[:12]}… disk={new[:12]}…" for path, (old, new) in drifted.items()
         )
         super().__init__(f"dataset file hash drift detected: {detail}")
 

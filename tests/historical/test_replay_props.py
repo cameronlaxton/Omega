@@ -25,15 +25,23 @@ LG, FAM = "NBA", "basketball"
 def _event(d, h, a):
     s = parse_datetime_utc(d)
     return HistoricalEvent(
-        event_id=event_key(LG, s, h, a), league=LG, sport_family=FAM,
-        start_time=s, home_team=h, away_team=a, source_name="test",
+        event_id=event_key(LG, s, h, a),
+        league=LG,
+        sport_family=FAM,
+        start_time=s,
+        home_team=h,
+        away_team=a,
+        source_name="test",
     )
 
 
 def _oc(e, hs, as_, props=None):
     return HistoricalOutcome(
-        event_id=e.event_id, home_score=hs, away_score=as_,
-        result=HistoricalOutcome.derive_result(hs, as_), prop_outcomes=props or [],
+        event_id=e.event_id,
+        home_score=hs,
+        away_score=as_,
+        result=HistoricalOutcome.derive_result(hs, as_),
+        prop_outcomes=props or [],
     )
 
 
@@ -54,10 +62,22 @@ def _dataset():
     }
     markets = {
         tg.event_id: [
-            HistoricalPropMarket(event_key=tg.event_id, player_name="LeBron James",
-                                 stat_type="pts", line=24.5, over_price=-110, under_price=-110),
-            HistoricalPropMarket(event_key=tg.event_id, player_name="Bench Guy",
-                                 stat_type="pts", line=8.5, over_price=-110, under_price=-110),
+            HistoricalPropMarket(
+                event_key=tg.event_id,
+                player_name="LeBron James",
+                stat_type="pts",
+                line=24.5,
+                over_price=-110,
+                under_price=-110,
+            ),
+            HistoricalPropMarket(
+                event_key=tg.event_id,
+                player_name="Bench Guy",
+                stat_type="pts",
+                line=8.5,
+                over_price=-110,
+                under_price=-110,
+            ),
         ]
     }
     prop_context = {
@@ -65,8 +85,11 @@ def _dataset():
         f"{tg.event_id}|Bench Guy|pts": {"pts_mean": 9.0, "pts_std": 4.0},
     }
     ds = ReplayDataset(
-        events=[e1, e2, e3, tg], outcomes=outcomes, odds={},
-        prop_markets=markets, prop_context=prop_context,
+        events=[e1, e2, e3, tg],
+        outcomes=outcomes,
+        odds={},
+        prop_markets=markets,
+        prop_context=prop_context,
     )
     return ds, tg
 
@@ -83,16 +106,15 @@ def _run(store, tmp_path):
 def test_prop_replay_eligible_and_decision_time_line(backtest_store, tmp_path):
     _run(backtest_store, tmp_path)
     props = backtest_store.query_traces(
-        execution_mode="historical_replay", has_outcome=True,
-        calibration_eligible_only=True, limit=100,
+        execution_mode="historical_replay",
+        has_outcome=True,
+        calibration_eligible_only=True,
+        limit=100,
     )
     prop_traces = [t for t in props if t.get("kind") == "prop"]
     assert len(prop_traces) == 2  # both prop predictions are eligible traces
 
-    lebron = next(
-        t for t in prop_traces
-        if t["_prop_outcomes"][0]["player_name"] == "LeBron James"
-    )
+    lebron = next(t for t in prop_traces if t["_prop_outcomes"][0]["player_name"] == "LeBron James")
     # Predictions are RAW over/under probabilities.
     assert lebron["predictions"].get("over_prob") is not None
     po = lebron["_prop_outcomes"][0]
@@ -105,8 +127,10 @@ def test_prop_replay_eligible_and_decision_time_line(backtest_store, tmp_path):
 def test_void_prop_excluded_from_calibration(backtest_store, tmp_path):
     _run(backtest_store, tmp_path)
     props = backtest_store.query_traces(
-        execution_mode="historical_replay", has_outcome=True,
-        calibration_eligible_only=True, limit=100,
+        execution_mode="historical_replay",
+        has_outcome=True,
+        calibration_eligible_only=True,
+        limit=100,
     )
     preds, outs = CalibrationFitter().extract_prop_pairs(props)
     # Only the non-void prop contributes a calibration pair.

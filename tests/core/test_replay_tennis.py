@@ -70,14 +70,14 @@ def _request(league, a, b, surface, spw_a, rpw_a, spw_b, rpw_b, *, seed):
 
 
 @pytest.mark.parametrize(
-    "fixture", _FIXTURES,
+    "fixture",
+    _FIXTURES,
     ids=[f"{f[0]}_{f[1]}_v_{f[2]}_{f[3]}".replace(" ", "_") for f in _FIXTURES],
 )
 def test_tennis_replay_is_bit_identical(fixture):
     league, a, b, surface, spw_a, rpw_a, spw_b, rpw_b = fixture
     seed = (
-        int.from_bytes(hashlib.sha256(repr((a, b, surface)).encode()).digest()[:4], "big")
-        % 100_000
+        int.from_bytes(hashlib.sha256(repr((a, b, surface)).encode()).digest()[:4], "big") % 100_000
     )
     req = _request(league, a, b, surface, spw_a, rpw_a, spw_b, rpw_b, seed=seed)
 

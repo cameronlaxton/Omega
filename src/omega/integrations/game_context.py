@@ -34,7 +34,7 @@ from typing import Any
 
 from omega.core.contracts.evidence import SIGNAL_REGISTRY, signal_applies_to_league
 from omega.core.simulation.evidence_to_modifier import MAPPED_SIGNAL_TYPES
-from omega.integrations import espn_mlb, espn_nba, espn_wnba, espn_nhl, espn_nfl
+from omega.integrations import espn_mlb, espn_nba, espn_nfl, espn_nhl, espn_wnba
 from omega.integrations._guards import assert_not_replay_mode
 
 logger = logging.getLogger("omega.integrations.game_context")

@@ -153,9 +153,7 @@ def fetch_matches(
 
     @cached_fetch("statsbomb", ttl_seconds=_FROZEN_TTL_SECONDS, fmt="json", cache_root=cache_root)
     def _fetch() -> Any:
-        return _download_json(
-            f"{_RAW_BASE}/matches/{competition_id}/{season_id}.json", url_opener
-        )
+        return _download_json(f"{_RAW_BASE}/matches/{competition_id}/{season_id}.json", url_opener)
 
     return _fetch(cache_key=f"matches_{competition_id}_{season_id}")
 
@@ -229,9 +227,7 @@ def load_profile_matches(
         raw = fetch_matches(
             comp.competition_id, comp.season_id, cache_root=cache_root, url_opener=url_opener
         )
-        matches = validate_records(
-            raw, SBMatch, source="statsbomb", session_path=session_path
-        )
+        matches = validate_records(raw, SBMatch, source="statsbomb", session_path=session_path)
         pairs.extend((m.home_score, m.away_score) for m in matches)
         logger.info(
             "profile %s: %s %s -> %d matches",
@@ -266,9 +262,7 @@ def compute_team_xg_aggregates(
         away = match.away_team.away_team_name
         events = events_by_match.get(match.match_id, [])
         shots = [e for e in events if (e.get("type") or {}).get("name") == "Shot"]
-        validated = validate_records(
-            shots, SBShotEvent, source=source, session_path=session_path
-        )
+        validated = validate_records(shots, SBShotEvent, source=source, session_path=session_path)
         match_xg = {home: 0.0, away: 0.0}
         for shot in validated:
             if shot.team.name in match_xg:

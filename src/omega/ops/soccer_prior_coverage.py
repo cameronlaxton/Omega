@@ -87,7 +87,7 @@ class SoccerPriorCoverageReport:
 
     # Dixon-Coles rho status
     dc_profile: DixonColesProfile | None  # None = no production row
-    dc_candidate_exists: bool = False     # True if candidate (not promoted) row found
+    dc_candidate_exists: bool = False  # True if candidate (not promoted) row found
 
     # Per-team xG coverage (None entries for teams not requested)
     home_team: TeamXgCoverage | None = None
@@ -111,7 +111,9 @@ class SoccerPriorCoverageReport:
                 "as_of_date": dc.as_of_date,
                 "source": dc.source,
                 "status": dc.status,
-            } if dc else None,
+            }
+            if dc
+            else None,
             "dc_candidate_exists": self.dc_candidate_exists,
             "home_team": _team_xg_dict(self.home_team),
             "away_team": _team_xg_dict(self.away_team),
@@ -198,8 +200,7 @@ def build_coverage_report(
     if not profile_id:
         # League has no rho profile configured (e.g. MLB — wrong command)
         warnings.append(
-            f"{league.upper()} has no rho_fit_profile configured; "
-            "not a bivariate-DC soccer league"
+            f"{league.upper()} has no rho_fit_profile configured; not a bivariate-DC soccer league"
         )
         return SoccerPriorCoverageReport(
             league=league.upper(),
@@ -229,9 +230,7 @@ def build_coverage_report(
 
     # Determine confidence tier
     has_dc = dc_profile is not None
-    has_xg = bool(
-        (home_cov and home_cov.has_xg) or (away_cov and away_cov.has_xg)
-    )
+    has_xg = bool((home_cov and home_cov.has_xg) or (away_cov and away_cov.has_xg))
 
     if has_dc and has_xg:
         tier = TIER_STRONG
@@ -335,7 +334,7 @@ def _render_report(report: SoccerPriorCoverageReport) -> str:
         ]
     else:
         lines.append(
-            f"  status             : NO PRODUCTION ROW"
+            "  status             : NO PRODUCTION ROW"
             + (" (candidate exists)" if report.dc_candidate_exists else "")
         )
 
@@ -378,10 +377,14 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--league", required=True, help="Omega league code (e.g. FIFA_WORLD_CUP_2026, EPL)")
+    parser.add_argument(
+        "--league", required=True, help="Omega league code (e.g. FIFA_WORLD_CUP_2026, EPL)"
+    )
     parser.add_argument("--home-team", default=None, help="Home team name for xG lookup")
     parser.add_argument("--away-team", default=None, help="Away team name for xG lookup")
-    parser.add_argument("--season", default=None, help="Season string for xG lookup (e.g. 2025/2026)")
+    parser.add_argument(
+        "--season", default=None, help="Season string for xG lookup (e.g. 2025/2026)"
+    )
     parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument("--format", choices=["summary", "json"], default="summary")
     parser.add_argument("--verbose", action="store_true")

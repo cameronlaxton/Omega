@@ -244,12 +244,8 @@ class TestTraceIdentity:
         monkeypatch.delenv("OMEGA_EVIDENCE_MODE", raising=False)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            a = analyze(
-                _prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0
-            )
-            b = analyze(
-                _prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0
-            )
+            a = analyze(_prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0)
+            b = analyze(_prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0)
         # trace_id = sandbox-<hash>-<nonce>; the hash prefix must be stable.
         assert a["trace_id"].rsplit("-", 1)[0] == b["trace_id"].rsplit("-", 1)[0]
 
@@ -258,9 +254,7 @@ class TestTraceIdentity:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             a = analyze(_prop_request(), session_id="s", bankroll=1000.0)
-            b = analyze(
-                _prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0
-            )
+            b = analyze(_prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0)
         assert a["trace_id"].rsplit("-", 1)[0] != b["trace_id"].rsplit("-", 1)[0]
 
 

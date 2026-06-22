@@ -398,8 +398,7 @@ def ingest_file(
     if qa_verdict.verdict == "fail":
         _mark_calibration_ineligible(adapted, REASON_QA_FAILED)
         logger.info(
-            "trace %s QA verdict=fail scope=%s; persisting audit-only "
-            "(calibration-ineligible): %s",
+            "trace %s QA verdict=fail scope=%s; persisting audit-only (calibration-ineligible): %s",
             adapted["trace_id"],
             qa_verdict.scope,
             qa_verdict.reason,
@@ -672,4 +671,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

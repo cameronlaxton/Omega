@@ -206,7 +206,8 @@ class PostgresRepository:
                     "n_iterations": item.get("n_iterations"),
                     "seed": item.get("seed", trace.get("simulation_seed")),
                     "context_hash": item.get("context_hash"),
-                    "component_version": item.get("component_version") or trace.get("model_version"),
+                    "component_version": item.get("component_version")
+                    or trace.get("model_version"),
                 }
             )
         if rows:
@@ -217,9 +218,7 @@ class PostgresRepository:
         table = SimulationDistributionRow.__table__
         with self.Session() as session:
             rows = session.execute(
-                select(table)
-                .where(table.c.trace_id == trace_id)
-                .order_by(table.c.distribution_id)
+                select(table).where(table.c.trace_id == trace_id).order_by(table.c.distribution_id)
             ).mappings()
             result = []
             for row in rows:
@@ -327,7 +326,11 @@ class PostgresRepository:
     def get_qa_verdict(self, trace_id: str) -> dict[str, Any] | None:
         table = TraceQaVerdictRow.__table__
         with self.Session() as session:
-            row = session.execute(select(table).where(table.c.trace_id == trace_id)).mappings().first()
+            row = (
+                session.execute(select(table).where(table.c.trace_id == trace_id))
+                .mappings()
+                .first()
+            )
             return dict(row) if row else None
 
     def upsert_signal_performance(self, rows: list[Any], dataset_hash: str) -> int:
@@ -407,9 +410,16 @@ class PostgresRepository:
     def get_outcome(self, trace_id: str) -> dict[str, Any] | None:
         table = OutcomeRow.__table__
         with self.Session() as session:
-            row = session.execute(
-                select(table).where(table.c.trace_id == trace_id).order_by(table.c.attached_at).limit(1)
-            ).mappings().first()
+            row = (
+                session.execute(
+                    select(table)
+                    .where(table.c.trace_id == trace_id)
+                    .order_by(table.c.attached_at)
+                    .limit(1)
+                )
+                .mappings()
+                .first()
+            )
             return dict(row) if row else None
 
     def attach_outcome(
@@ -436,7 +446,11 @@ class PostgresRepository:
                         "delete the existing outcome explicitly before re-grading"
                     )
                 result = result_override or (
-                    "home_win" if home_score > away_score else "away_win" if away_score > home_score else "draw"
+                    "home_win"
+                    if home_score > away_score
+                    else "away_win"
+                    if away_score > home_score
+                    else "draw"
                 )
                 outcome_id = uuid.uuid4().hex[:12]
                 session.execute(
@@ -617,7 +631,9 @@ class PostgresRepository:
                 )
 
     def _record_ledger_bet(self, session, bet: LedgerBet) -> str:
-        if not session.execute(select(TraceRow.trace_id).where(TraceRow.trace_id == bet.trace_id)).first():
+        if not session.execute(
+            select(TraceRow.trace_id).where(TraceRow.trace_id == bet.trace_id)
+        ).first():
             raise ValueError(f"No trace found with trace_id={bet.trace_id!r}")
 
         table = BetLedgerRow.__table__
@@ -795,7 +811,9 @@ class PostgresRepository:
         table = ClosingLineRow.__table__
         with self.Session() as session:
             with session.begin():
-                if not session.execute(select(TraceRow.trace_id).where(TraceRow.trace_id == trace_id)).first():
+                if not session.execute(
+                    select(TraceRow.trace_id).where(TraceRow.trace_id == trace_id)
+                ).first():
                     raise ValueError(f"No trace found with trace_id={trace_id!r}")
                 existing = session.execute(
                     select(table.c.closing_id).where(
@@ -821,7 +839,6 @@ class PostgresRepository:
                 )
                 return closing_id
 
-
     def get_session_trace_facts_batch(self, trace_ids: list[str]) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}
         if not trace_ids:
@@ -831,15 +848,19 @@ class PostgresRepository:
         o = OutcomeRow.__table__
         p = PropOutcomeRow.__table__
         b = BetLedgerRow.__table__
-        
+
         stmt = select(
             t.c.trace_id,
-            select(func.count()).select_from(e).where(e.c.trace_id == t.c.trace_id).scalar_subquery().label("evidence_signal_count"),
+            select(func.count())
+            .select_from(e)
+            .where(e.c.trace_id == t.c.trace_id)
+            .scalar_subquery()
+            .label("evidence_signal_count"),
             (
-                exists(select(1).select_from(o).where(o.c.trace_id == t.c.trace_id)) | 
-                exists(select(1).select_from(p).where(p.c.trace_id == t.c.trace_id))
+                exists(select(1).select_from(o).where(o.c.trace_id == t.c.trace_id))
+                | exists(select(1).select_from(p).where(p.c.trace_id == t.c.trace_id))
             ).label("has_outcome"),
-            exists(select(1).select_from(b).where(b.c.trace_id == t.c.trace_id)).label("has_bet")
+            exists(select(1).select_from(b).where(b.c.trace_id == t.c.trace_id)).label("has_bet"),
         ).where(t.c.trace_id.in_(trace_ids))
 
         with self.Session() as session:
@@ -853,7 +874,11 @@ class PostgresRepository:
         if not trace_ids:
             return out
         table = ClosingLineRow.__table__
-        stmt = select(table).where(table.c.trace_id.in_(trace_ids)).order_by(table.c.trace_id, table.c.captured_at)
+        stmt = (
+            select(table)
+            .where(table.c.trace_id.in_(trace_ids))
+            .order_by(table.c.trace_id, table.c.captured_at)
+        )
         with self.Session() as session:
             rows = session.execute(stmt).mappings()
             for r in rows:
@@ -1024,9 +1049,9 @@ class PostgresRepository:
         if execution_mode:
             clauses.append(t.c.execution_mode == execution_mode)
 
-        any_outcome = exists(select(1).select_from(OutcomeRow.__table__).where(OutcomeRow.trace_id == t.c.trace_id)) | exists(
-            select(1).select_from(p).where(p.c.trace_id == t.c.trace_id)
-        )
+        any_outcome = exists(
+            select(1).select_from(OutcomeRow.__table__).where(OutcomeRow.trace_id == t.c.trace_id)
+        ) | exists(select(1).select_from(p).where(p.c.trace_id == t.c.trace_id))
         if has_outcome is True:
             clauses.append(any_outcome)
         elif has_outcome is False:
@@ -1034,7 +1059,9 @@ class PostgresRepository:
 
         if calibration_eligible_only:
             clauses.append(t.c.predictions.is_not(None))
-            clauses.append(text("(t.full_trace::jsonb #>> '{trace_quality,calibration_eligible}') = 'true'"))
+            clauses.append(
+                text("(t.full_trace::jsonb #>> '{trace_quality,calibration_eligible}') = 'true'")
+            )
         if clauses:
             stmt = stmt.where(*clauses)
 
@@ -1199,12 +1226,16 @@ class PostgresRepository:
 
     def schema_version(self) -> int:
         with self.Session() as session:
-            version = session.execute(select(func.max(SchemaVersionRow.version))).scalar_one_or_none()
+            version = session.execute(
+                select(func.max(SchemaVersionRow.version))
+            ).scalar_one_or_none()
             return int(version or 0)
 
     def count(self) -> int:
         with self.Session() as session:
-            return int(session.execute(select(func.count()).select_from(TraceRow.__table__)).scalar_one())
+            return int(
+                session.execute(select(func.count()).select_from(TraceRow.__table__)).scalar_one()
+            )
 
     def close(self) -> None:
         self.engine.dispose()

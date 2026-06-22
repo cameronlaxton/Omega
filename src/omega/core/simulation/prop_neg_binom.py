@@ -31,11 +31,15 @@ class NegBinomPropBackend:
         prior = request.prior_payload or {}
         k = prior.get("nb_dispersion_k")
         if k is None:
-            raise ValueError("prior_payload.nb_dispersion_k is required for negative binomial props")
+            raise ValueError(
+                "prior_payload.nb_dispersion_k is required for negative binomial props"
+            )
         try:
             k = float(k)
         except (TypeError, ValueError) as exc:
-            raise ValueError("prior_payload.nb_dispersion_k must be a finite positive number") from exc
+            raise ValueError(
+                "prior_payload.nb_dispersion_k must be a finite positive number"
+            ) from exc
         if not np.isfinite(k) or k <= 0:
             raise ValueError("prior_payload.nb_dispersion_k must be a finite positive number")
 

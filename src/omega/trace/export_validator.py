@@ -157,7 +157,9 @@ def validate_export_block(
     if not trace_id:
         issues.append(ValidationIssue("error", "trace_id", "trace.trace_id is missing or empty"))
     if not adapted.get("timestamp"):
-        issues.append(ValidationIssue("error", "ran_at", "trace.ran_at/timestamp is missing or empty"))
+        issues.append(
+            ValidationIssue("error", "ran_at", "trace.ran_at/timestamp is missing or empty")
+        )
 
     if kind == "prop" and isinstance(bet, dict):
         miss = [f for f in ("home_team", "away_team", "game_date") if not snap.get(f)]
@@ -187,7 +189,11 @@ def validate_export_block(
 
     if isinstance(bet, dict):
         b = dict(bet)
-        if "selection_descriptor" not in b and isinstance(clv, dict) and clv.get("selection_descriptor"):
+        if (
+            "selection_descriptor" not in b
+            and isinstance(clv, dict)
+            and clv.get("selection_descriptor")
+        ):
             b["selection_descriptor"] = clv["selection_descriptor"]
         try:
             BetRecord.from_export_block(trace_id=trace_id or "x", bet_id="x", block=b)
@@ -205,7 +211,9 @@ def validate_export_block(
     ident_missing = _identity_missing(kind, snap)
     if ident_missing:
         issues.append(
-            ValidationIssue(lvl, "identity", f"missing {kind or 'game'} identity fields {ident_missing}")
+            ValidationIssue(
+                lvl, "identity", f"missing {kind or 'game'} identity fields {ident_missing}"
+            )
         )
     league = str(snap.get("league") or trace.get("league") or league_hint or "").upper()
     if league == "NBA":
@@ -213,7 +221,9 @@ def validate_export_block(
         gc_missing = [f for f in _NBA_GAME_CONTEXT_FIELDS if f not in gc]
         if gc_missing:
             issues.append(
-                ValidationIssue(lvl, "nba_game_context", f"NBA trace missing game_context {gc_missing}")
+                ValidationIssue(
+                    lvl, "nba_game_context", f"NBA trace missing game_context {gc_missing}"
+                )
             )
 
     ok = not any(i.level == "error" for i in issues)

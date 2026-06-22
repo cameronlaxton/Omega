@@ -1,4 +1,3 @@
-
 from omega.core.calibration.probability import apply_calibration_audited
 
 
@@ -19,7 +18,7 @@ def test_apply_calibration_audited_sport_mapping(monkeypatch):
             metrics={},
             context_slice=context_slice,
             training_window="365d",
-            sample_size=1000
+            sample_size=1000,
         )
 
     monkeypatch.setattr(probability, "_get_active_profile", mock_get_active_profile)

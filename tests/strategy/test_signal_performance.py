@@ -196,9 +196,12 @@ class TestSignalPerformanceStore:
     def test_get_filters_by_league(self):
         store = TraceStore(db_path=_tmp_db())
         store.upsert_signal_performance(
-            [self._row(), SignalPerformanceRow(
-                "recent_form", "s", "last_5", "NHL", 10, 5, 0.5, 0.5, 0.5, 0.0, 0.25
-            )],
+            [
+                self._row(),
+                SignalPerformanceRow(
+                    "recent_form", "s", "last_5", "NHL", 10, 5, 0.5, 0.5, 0.5, 0.0, 0.25
+                ),
+            ],
             dataset_hash="h1",
         )
         nba = store.get_signal_performance(league="NBA")

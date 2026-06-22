@@ -49,7 +49,9 @@ def test_apply_moves_and_deletes_root(tmp_path, monkeypatch):
     _patch(monkeypatch, root, runtime)
 
     assert M.main(["--apply"]) == 0
-    assert (runtime / "inbox" / "traces" / "processed" / "a.json").read_text(encoding="utf-8") == "A"
+    assert (runtime / "inbox" / "traces" / "processed" / "a.json").read_text(
+        encoding="utf-8"
+    ) == "A"
     assert (runtime / "inbox" / "sessions" / "s1.json").read_text(encoding="utf-8") == "S1"
     assert (runtime / "reports" / "latest.md").read_text(encoding="utf-8") == "ROOT"
     assert (runtime / "reports" / "run_audits" / "x.audit.md").read_text(encoding="utf-8") == "AUD"

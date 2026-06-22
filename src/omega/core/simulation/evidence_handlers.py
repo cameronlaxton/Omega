@@ -379,13 +379,17 @@ def _evaluate_signal(
 
     if handler is None or not coeffs:
         return _skip_record(
-            signal, "no handler or coefficients for signal_type",
-            policy_version, evidence_mode,
+            signal,
+            "no handler or coefficients for signal_type",
+            policy_version,
+            evidence_mode,
         )
     if not signal_applies(signal.signal_type, archetype):
         return _skip_record(
-            signal, f"signal does not apply to sport archetype {archetype!r}",
-            policy_version, evidence_mode,
+            signal,
+            f"signal does not apply to sport archetype {archetype!r}",
+            policy_version,
+            evidence_mode,
         )
 
     target, raw_factor = handler(signal, coeffs, baseline)
@@ -396,9 +400,7 @@ def _evaluate_signal(
     # so the hand-seeded v1 policy behaves exactly as the raw handler.
     reliability = max(0.0, min(1.0, float(coeffs.get("reliability_weight", 1.0))))
     reliability_adjusted = reliability_adjusted_factor(raw_factor, reliability)  # step 2
-    per_signal_capped = _cap_factor(
-        reliability_adjusted, float(coeffs.get("cap", 0.0))
-    )  # step 3
+    per_signal_capped = _cap_factor(reliability_adjusted, float(coeffs.get("cap", 0.0)))  # step 3
 
     # Steps 4-5 (correlation damping) are wired in Phase 3. Until then every
     # signal is processed as its own singleton family, so these are identity.
@@ -407,9 +409,7 @@ def _evaluate_signal(
 
     # Step 6 — confidence weighting, gated. When disabled the factor is the
     # legacy per-signal-capped value (bit-identical to before this phase).
-    confidence, confidence_defaulted = resolve_confidence(
-        getattr(signal, "confidence", None)
-    )
+    confidence, confidence_defaulted = resolve_confidence(getattr(signal, "confidence", None))
     if policy.enable_confidence_weighting:
         confidence_adjusted = confidence_adjusted_factor(family_capped, confidence)
     else:
@@ -454,9 +454,7 @@ def _resolve_b2b_coeffs(policy: AdjustmentPolicy, league: str) -> dict[str, Any]
         return coeffs
     by_league: dict[str, Any] = coeffs.get("by_league", {})
     resolved = dict(coeffs)
-    resolved["default_mult"] = float(
-        by_league.get(league.upper(), coeffs.get("default_mult", 1.0))
-    )
+    resolved["default_mult"] = float(by_league.get(league.upper(), coeffs.get("default_mult", 1.0)))
     return resolved
 
 
@@ -519,10 +517,7 @@ def _apply_correlation_damping(
     for idxs in buckets.values():
         if len(idxs) < 2:
             continue  # a lone family member stays a Phase 2 singleton record
-        members = [
-            FamilyMember(key=i, factor=pairs[i][1].per_signal_capped_factor)
-            for i in idxs
-        ]
+        members = [FamilyMember(key=i, factor=pairs[i][1].per_signal_capped_factor) for i in idxs]
         result = damp_family(members, weight)
         family_capped = (
             _cap_factor(result.family_damped_factor, family_cap)
@@ -533,9 +528,7 @@ def _apply_correlation_damping(
         primary = pairs[primary_i][1]
         fam_name = primary.damping_family
         if policy.enable_confidence_weighting:
-            confidence_adjusted = confidence_adjusted_factor(
-                family_capped, primary.confidence
-            )
+            confidence_adjusted = confidence_adjusted_factor(family_capped, primary.confidence)
         else:
             confidence_adjusted = family_capped
 
@@ -543,11 +536,7 @@ def _apply_correlation_damping(
             rec = pairs[i][1]
             if i == primary_i:
                 final = confidence_adjusted
-                applied = (
-                    rec.evidence_mode == "live"
-                    and rec.target != "skip"
-                    and final != 1.0
-                )
+                applied = rec.evidence_mode == "live" and rec.target != "skip" and final != 1.0
                 out[i] = dataclasses.replace(
                     rec,
                     factor=final,
@@ -608,16 +597,21 @@ def compute_player_adjustment(
     pairs: list[tuple[EvidenceSignal, AdjustmentRecord]] = []
     for signal in evidence:
         if signal.plane != "player":
-            pairs.append((
-                signal,
-                _skip_record(
+            pairs.append(
+                (
                     signal,
-                    "game-plane signal not applied on a player-prop analysis",
-                    policy.policy_id, evidence_mode,
-                ),
-            ))
+                    _skip_record(
+                        signal,
+                        "game-plane signal not applied on a player-prop analysis",
+                        policy.policy_id,
+                        evidence_mode,
+                    ),
+                )
+            )
             continue
-        rec = _evaluate_record_for_signal(signal, policy, archetype, baseline, evidence_mode, league)
+        rec = _evaluate_record_for_signal(
+            signal, policy, archetype, baseline, evidence_mode, league
+        )
         pairs.append((signal, rec))
 
     if policy.enable_correlation_damping:
@@ -664,14 +658,17 @@ def compute_game_adjustment(
     pairs: list[tuple[EvidenceSignal, AdjustmentRecord]] = []
     for signal in evidence:
         if signal.plane != "game":
-            pairs.append((
-                signal,
-                _skip_record(
+            pairs.append(
+                (
                     signal,
-                    "player-plane signal not applied on a game analysis",
-                    policy.policy_id, evidence_mode,
-                ),
-            ))
+                    _skip_record(
+                        signal,
+                        "player-plane signal not applied on a game analysis",
+                        policy.policy_id,
+                        evidence_mode,
+                    ),
+                )
+            )
             continue
         rec = _evaluate_record_for_signal(signal, policy, archetype, 0.0, evidence_mode, league)
         if rec.target == "std" and rec.applied:
@@ -729,10 +726,16 @@ def _evaluate_record_for_signal(
             update={"coefficients": {**policy.coefficients, "b2b_fatigue": resolved}}
         )
         return _evaluate_signal(
-            signal, policy=patched, archetype=archetype,
-            baseline=baseline, evidence_mode=evidence_mode,
+            signal,
+            policy=patched,
+            archetype=archetype,
+            baseline=baseline,
+            evidence_mode=evidence_mode,
         )
     return _evaluate_signal(
-        signal, policy=policy, archetype=archetype,
-        baseline=baseline, evidence_mode=evidence_mode,
+        signal,
+        policy=policy,
+        archetype=archetype,
+        baseline=baseline,
+        evidence_mode=evidence_mode,
     )

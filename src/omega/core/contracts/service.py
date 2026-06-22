@@ -315,8 +315,10 @@ def analyze(
     # no signals are expected. This never gates calibration eligibility — that
     # path is deliberately evidence-agnostic (see omega.trace.eligibility).
     evidence_quality = (
-        "present" if evidence_signals
-        else "missing" if context_source == "provided"
+        "present"
+        if evidence_signals
+        else "missing"
+        if context_source == "provided"
         else "not_applicable"
     )
     caller_exclusion_reasons = (
@@ -351,14 +353,12 @@ def analyze(
         "calibration_exclusion_reasons": calibration_exclusion_reasons,
     }
     if trace_quality:
-        merged_downgrades = sorted(
-            {*trace_quality.get("downgrades", []), *result_downgrades}
-        )
+        merged_downgrades = sorted({*trace_quality.get("downgrades", []), *result_downgrades})
         engine_trace_quality = {
             **engine_trace_quality,
             **trace_quality,
             "downgrades": merged_downgrades,
-            "evidence_status": evidence_status,   # engine-computed; caller cannot override
+            "evidence_status": evidence_status,  # engine-computed; caller cannot override
             "evidence_quality": evidence_quality,  # engine-computed; caller cannot override
             "identity_status": identity_status,
             "context_source": context_source,
@@ -633,17 +633,13 @@ def _game_evidence_plan_for(request: GameAnalysisRequest) -> EvidenceExecutionPl
     suppressed = _suppressed_player_signal_indices(evidence)
     backend = resolve_game_backend(_effective_game_backend_name(request))
     if _uses_transition_modifiers(backend):
-        active_evidence = [
-            sig for idx, sig in enumerate(evidence) if idx not in suppressed
-        ]
+        active_evidence = [sig for idx, sig in enumerate(evidence) if idx not in suppressed]
         markov = compute_transition_modifier_adjustment(
             active_evidence,
             home_team=request.home_team,
             policy=_load_adjustment_policy(),
         )
-        applications = _merge_markov_applications(
-            evidence, suppressed, markov.applications
-        )
+        applications = _merge_markov_applications(evidence, suppressed, markov.applications)
         return EvidenceExecutionPlan(
             adjustment=None,
             transition_modifiers=markov.modifiers or None,
@@ -1017,8 +1013,8 @@ def analyze_game(
     use_markov = _uses_transition_modifiers(backend)
     if evidence_plan is None:
         evidence_plan = _game_evidence_plan_for(request)
-    effective_adjustment = None if use_markov else (
-        evidence_plan.adjustment if evidence_plan else evidence_adjustment
+    effective_adjustment = (
+        None if use_markov else (evidence_plan.adjustment if evidence_plan else evidence_adjustment)
     )
     if not use_markov and effective_adjustment is None:
         effective_adjustment = evidence_adjustment
@@ -1036,9 +1032,7 @@ def analyze_game(
             transition_modifiers,
         )
 
-    competition_strength_index = (
-        evidence_plan.competition_strength_index if evidence_plan else None
-    )
+    competition_strength_index = evidence_plan.competition_strength_index if evidence_plan else None
 
     try:
         sim_result = _engine.run_fast_game_simulation(
@@ -1092,9 +1086,7 @@ def analyze_game(
         baseline_used=bool(sim_result.get("baseline_used", False)),
         simulation_backend=sim_result.get("simulation_backend"),
         component_version=sim_result.get("component_version"),
-        competition_strength_adjustment=sim_result.get(
-            "competition_strength_adjustment"
-        ),
+        competition_strength_adjustment=sim_result.get("competition_strength_adjustment"),
     )
 
     # Edge analysis -- requires odds
@@ -1181,9 +1173,7 @@ def analyze_game(
                     market="spread",
                     line=spread_line,
                 )
-                edges.append(
-                    home_edge.model_copy(update={"spread_coverage_prob": cover_prob})
-                )
+                edges.append(home_edge.model_copy(update={"spread_coverage_prob": cover_prob}))
             if away_spread_odds is not None:
                 away_cover_prob = sim_result["away_cover_prob"] / 100.0
                 cal_away_cover, away_cover_audit = _calibrate_audited(
@@ -1205,9 +1195,7 @@ def analyze_game(
                     market="spread",
                     line=-spread_line,
                 )
-                edges.append(
-                    away_edge.model_copy(update={"spread_coverage_prob": away_cover_prob})
-                )
+                edges.append(away_edge.model_copy(update={"spread_coverage_prob": away_cover_prob}))
 
         total_line, over_odds, under_odds = _resolve_game_total_market(request.odds)
         if (
@@ -1288,9 +1276,27 @@ def analyze_game(
         # the game calibration plane (cold-start) until exotic profiles exist.
         # (price_field, sim_prob_key, side, team_label, market_name)
         _exotic_specs = [
-            ("dc_home_draw", "double_chance_home_draw_prob", "home_draw", "Home or Draw", "double_chance"),
-            ("dc_home_away", "double_chance_home_away_prob", "home_away", "Home or Away", "double_chance"),
-            ("dc_away_draw", "double_chance_away_draw_prob", "away_draw", "Away or Draw", "double_chance"),
+            (
+                "dc_home_draw",
+                "double_chance_home_draw_prob",
+                "home_draw",
+                "Home or Draw",
+                "double_chance",
+            ),
+            (
+                "dc_home_away",
+                "double_chance_home_away_prob",
+                "home_away",
+                "Home or Away",
+                "double_chance",
+            ),
+            (
+                "dc_away_draw",
+                "double_chance_away_draw_prob",
+                "away_draw",
+                "Away or Draw",
+                "double_chance",
+            ),
             ("dnb_home", "dnb_home_prob", "home", request.home_team, "draw_no_bet"),
             ("dnb_away", "dnb_away_prob", "away", request.away_team, "draw_no_bet"),
             ("btts_yes", "btts_yes_prob", "yes", "Both Teams To Score", "both_teams_to_score"),
@@ -1372,9 +1378,7 @@ def analyze_game(
                 )
 
     best_bet = (
-        _pick_best_bet(edges, bankroll, league=request.league, matchup=matchup)
-        if edges
-        else None
+        _pick_best_bet(edges, bankroll, league=request.league, matchup=matchup) if edges else None
     )
 
     return GameAnalysisResponse(
@@ -1597,7 +1601,7 @@ def analyze_player_prop(
         for i, val in enumerate(recent_perf):
             try:
                 val_f = float(val)
-                is_dud = (val_f <= 0.0)
+                is_dud = val_f <= 0.0
                 if recent_mins and isinstance(recent_mins, list) and i < len(recent_mins):
                     try:
                         mins_f = float(recent_mins[i])

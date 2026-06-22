@@ -50,7 +50,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate trace export files before ingest.")
     parser.add_argument("target", type=Path, help="A .json file or a directory of *.json")
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--strict", action="store_true", help="(default) export-quality checks are errors")
+    mode.add_argument(
+        "--strict", action="store_true", help="(default) export-quality checks are errors"
+    )
     mode.add_argument("--lenient", action="store_true", help="export-quality checks are warnings")
     parser.add_argument("--json", action="store_true", help="emit JSON")
     args = parser.parse_args(argv)
@@ -103,14 +105,12 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"REJECT {path.name}: unreadable JSON: {read_err}")
                 continue
             print(f"{path.name}: {report.summary()}")
-        print(f"\n{len(files)} file(s), {n_error} with errors (mode={'strict' if strict else 'lenient'}).")
+        print(
+            f"\n{len(files)} file(s), {n_error} with errors (mode={'strict' if strict else 'lenient'})."
+        )
 
     return 1 if n_error else 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-

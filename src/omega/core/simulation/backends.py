@@ -173,9 +173,7 @@ def register_game_backend(name: str, backend: GameSimulationBackend) -> None:
     mistakes fail loudly rather than silently shadowing an existing backend or
     deferring an attribute error to dispatch time.
     """
-    _require_backend_contract(
-        name, backend, ("backend_name", "component_version", "evidence_mode")
-    )
+    _require_backend_contract(name, backend, ("backend_name", "component_version", "evidence_mode"))
     if name in GAME_BACKENDS:
         raise ValueError(f"game backend {name!r} already registered")
     GAME_BACKENDS[name] = backend

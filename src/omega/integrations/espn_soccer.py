@@ -23,6 +23,7 @@ and the ESPN display name pass through the same function, so identical names
 match even when not in the alias table; mismatched short names are reported as
 unmatched and can be added to :data:`SOCCER_TEAM_ALIASES` over time.
 """
+
 from __future__ import annotations
 
 import json

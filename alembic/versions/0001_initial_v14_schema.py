@@ -130,7 +130,9 @@ def upgrade() -> None:
         _t("result", sa.Text(), nullable=False),
         _t("attached_at", sa.Text(), nullable=False, server_default=sa.text(SQLITE_NOW_DEFAULT)),
         _t("source", sa.Text(), nullable=False, server_default=sa.text("'manual'")),
-        sa.UniqueConstraint("trace_id", "player_name", "stat_type", name="uq_prop_outcomes_identity"),
+        sa.UniqueConstraint(
+            "trace_id", "player_name", "stat_type", name="uq_prop_outcomes_identity"
+        ),
     )
     op.create_index("idx_prop_outcomes_trace_id", "prop_outcomes", ["trace_id"])
 
@@ -237,7 +239,9 @@ def upgrade() -> None:
         ),
     )
     op.create_index("idx_early_market_snapshots_trace_id", "early_market_snapshots", ["trace_id"])
-    op.create_index("idx_early_market_snapshots_league", "early_market_snapshots", ["league", "captured_at"])
+    op.create_index(
+        "idx_early_market_snapshots_league", "early_market_snapshots", ["league", "captured_at"]
+    )
 
     op.create_table(
         "trace_qa_verdicts",

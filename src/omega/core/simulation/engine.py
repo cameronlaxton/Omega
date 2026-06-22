@@ -121,7 +121,9 @@ def select_distribution(
     return "normal"
 
 
-def _poisson_sample(lam: float, size: int, rng: np.random.Generator | random.Random | None = None) -> list[float]:
+def _poisson_sample(
+    lam: float, size: int, rng: np.random.Generator | random.Random | None = None
+) -> list[float]:
     """Generate Poisson samples."""
     lam = max(0.01, lam)
     if rng is not None:
@@ -151,7 +153,9 @@ def _poisson_sample(lam: float, size: int, rng: np.random.Generator | random.Ran
     return samples
 
 
-def _normal_sample(mu: float, sigma: float, size: int, rng: np.random.Generator | random.Random | None = None) -> list[float]:
+def _normal_sample(
+    mu: float, sigma: float, size: int, rng: np.random.Generator | random.Random | None = None
+) -> list[float]:
     """Generate Normal samples."""
     sigma = max(0.1, sigma)
     if rng is not None:
@@ -177,7 +181,9 @@ def _expected_against_allowed_rate(
     return team_off * (opponent_allowed / league_avg_allowed) * pace_factor
 
 
-def _bernoulli_sample(p: float, size: int, rng: np.random.Generator | random.Random | None = None) -> list[int]:
+def _bernoulli_sample(
+    p: float, size: int, rng: np.random.Generator | random.Random | None = None
+) -> list[int]:
     """Generate Bernoulli samples (0 or 1)."""
     p = max(0.001, min(0.999, p))
     if rng is not None:
@@ -564,15 +570,9 @@ def _build_team_score_result_exact_grid(
     }
 
     if supports_draw:
-        result["double_chance_home_draw_prob"] = round(
-            markets["double_chance_home_draw"] * 100, 1
-        )
-        result["double_chance_home_away_prob"] = round(
-            markets["double_chance_home_away"] * 100, 1
-        )
-        result["double_chance_away_draw_prob"] = round(
-            markets["double_chance_away_draw"] * 100, 1
-        )
+        result["double_chance_home_draw_prob"] = round(markets["double_chance_home_draw"] * 100, 1)
+        result["double_chance_home_away_prob"] = round(markets["double_chance_home_away"] * 100, 1)
+        result["double_chance_away_draw_prob"] = round(markets["double_chance_away_draw"] * 100, 1)
         result["dnb_home_prob"] = round(markets["dnb_home"] * 100, 1)
         result["dnb_away_prob"] = round(markets["dnb_away"] * 100, 1)
         result["btts_yes_prob"] = round(markets["btts_yes"] * 100, 1)
@@ -667,9 +667,7 @@ def _build_team_score_result_exact_gaussian(
     supports_draw = bool(archetype.supports_draw) if archetype is not None else False
 
     market_fn = (
-        exact_eval.gaussian_censored_market_probs
-        if censored
-        else exact_eval.gaussian_market_probs
+        exact_eval.gaussian_censored_market_probs if censored else exact_eval.gaussian_market_probs
     )
     markets = market_fn(
         mu_h,
@@ -934,10 +932,12 @@ def run_player_simulation(
             samples = _normal_sample(mean, sigma, n_iter, rng=rng)
 
         if dud_prob > 0.0:
+
             def _rand():
                 if rng is not None:
                     return rng.random()
                 return random.random()
+
             samples = [0.0 if (_rand() < dud_prob) else x for x in samples]
 
     over_hits = sum(1 for x in samples if x > market_line)
@@ -983,6 +983,7 @@ def _archetype_league_defaults(league: str) -> dict:
     possible to improve accuracy.
     """
     from omega.core.config.leagues import get_league_config
+
     config = get_league_config(league)
     archetype = get_archetype(league)
     if archetype is None:
@@ -1057,7 +1058,12 @@ def _basketball_score_params(
 
 
 def _sim_basketball(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None
+    home_ctx: dict,
+    away_ctx: dict,
+    league: str,
+    n_iter: int,
+    config: dict,
+    rng: np.random.Generator | random.Random | None = None,
 ) -> tuple:
     """Basketball: ORtg/DRtg/pace possession model (Normal distribution)."""
     home_expected, std, away_expected, _ = _basketball_score_params(
@@ -1092,7 +1098,12 @@ def _american_football_score_params(
 
 
 def _sim_american_football(
-    home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None
+    home_ctx: dict,
+    away_ctx: dict,
+    league: str,
+    n_iter: int,
+    config: dict,
+    rng: np.random.Generator | random.Random | None = None,
 ) -> tuple:
     """American Football: (PPG + opp PAPG) / 2 with Normal distribution."""
     home_expected, std, away_expected, _ = _american_football_score_params(
@@ -1145,15 +1156,20 @@ def _baseball_score_params(
     return home_lambda, away_lambda, None
 
 
-def _sim_baseball(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
+def _sim_baseball(
+    home_ctx: dict,
+    away_ctx: dict,
+    league: str,
+    n_iter: int,
+    config: dict,
+    rng: np.random.Generator | random.Random | None = None,
+) -> tuple:
     """Baseball: Poisson run environment model.
 
     off_rating = runs scored per game, def_rating = runs allowed per game.
     Expected runs = (team_off * opp_runs_allowed / league_avg) adjusted for park factor.
     """
-    home_lambda, away_lambda, _ = _baseball_score_params(
-        home_ctx, away_ctx, league, config
-    )
+    home_lambda, away_lambda, _ = _baseball_score_params(home_ctx, away_ctx, league, config)
     home_scores = _poisson_sample(home_lambda, n_iter, rng=rng)
     away_scores = _poisson_sample(away_lambda, n_iter, rng=rng)
     return home_scores, away_scores
@@ -1205,15 +1221,20 @@ def _hockey_score_params(
     return home_lambda, away_lambda, None
 
 
-def _sim_hockey(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
+def _sim_hockey(
+    home_ctx: dict,
+    away_ctx: dict,
+    league: str,
+    n_iter: int,
+    config: dict,
+    rng: np.random.Generator | random.Random | None = None,
+) -> tuple:
     """Hockey: Poisson goal model with goalie/shot-rate adjustments.
 
     off_rating = goals per game, def_rating = goals allowed per game.
     Goalie save percentage adjusts expected goals against.
     """
-    home_lambda, away_lambda, _ = _hockey_score_params(
-        home_ctx, away_ctx, league, config
-    )
+    home_lambda, away_lambda, _ = _hockey_score_params(home_ctx, away_ctx, league, config)
     home_scores = _poisson_sample(home_lambda, n_iter, rng=rng)
     away_scores = _poisson_sample(away_lambda, n_iter, rng=rng)
     return home_scores, away_scores
@@ -1245,12 +1266,8 @@ def _dc_joint(
     import math
 
     ks = range(max_goals + 1)
-    h_pmf = np.array(
-        [math.exp(-home_lambda) * home_lambda**k / math.factorial(k) for k in ks]
-    )
-    a_pmf = np.array(
-        [math.exp(-away_lambda) * away_lambda**k / math.factorial(k) for k in ks]
-    )
+    h_pmf = np.array([math.exp(-home_lambda) * home_lambda**k / math.factorial(k) for k in ks])
+    a_pmf = np.array([math.exp(-away_lambda) * away_lambda**k / math.factorial(k) for k in ks])
     joint = np.outer(h_pmf, a_pmf)  # joint[i, j] = P(home=i) * P(away=j)
 
     # Dixon-Coles tau correction (x = home goals, y = away goals).
@@ -1340,10 +1357,13 @@ def _soccer_score_params(
     config_avg_total = config.get("avg_total", _SOCCER_ARCHETYPE_AVG_TOTAL)
     if config_avg_total > _SOCCER_AVG_TOTAL_CEILING:
         import logging as _logging
+
         _logging.getLogger("omega.core.simulation.engine").warning(
             "Soccer league %s has avg_total=%.1f (>%.0f); clamping to archetype "
             "default %.1f — check leagues.py for a missing config entry",
-            league, config_avg_total, _SOCCER_AVG_TOTAL_CEILING,
+            league,
+            config_avg_total,
+            _SOCCER_AVG_TOTAL_CEILING,
             _SOCCER_ARCHETYPE_AVG_TOTAL,
         )
         config_avg_total = _SOCCER_ARCHETYPE_AVG_TOTAL
@@ -1395,9 +1415,7 @@ def _sim_soccer(
     modelled via a Dixon-Coles tau correction (see :func:`_dixon_coles_scores`);
     otherwise home and away goals are sampled independently.
     """
-    home_lambda, away_lambda, rho = _soccer_score_params(
-        home_ctx, away_ctx, league, config
-    )
+    home_lambda, away_lambda, rho = _soccer_score_params(home_ctx, away_ctx, league, config)
 
     if rho is not None and np is not None:
         return _dixon_coles_scores(home_lambda, away_lambda, rho, n_iter, rng=rng)
@@ -1407,7 +1425,14 @@ def _sim_soccer(
     return home_scores, away_scores
 
 
-def _sim_tennis(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
+def _sim_tennis(
+    home_ctx: dict,
+    away_ctx: dict,
+    league: str,
+    n_iter: int,
+    config: dict,
+    rng: np.random.Generator | random.Random | None = None,
+) -> tuple:
     """Tennis: Point-level serve/return probability → simulate sets.
 
     home = Player A (listed first / higher seed), away = Player B.
@@ -1460,7 +1485,9 @@ def _sim_tennis(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config
     )
 
 
-def _simulate_tennis_set(p_a_serve: float, p_b_serve: float, rng: np.random.Generator | random.Random | None = None) -> tuple:
+def _simulate_tennis_set(
+    p_a_serve: float, p_b_serve: float, rng: np.random.Generator | random.Random | None = None
+) -> tuple:
     """Simulate a single tennis set. Returns (a_games, b_games)."""
     a_games, b_games = 0, 0
     # Alternate serve: A serves first
@@ -1551,7 +1578,14 @@ def _golf_score_params(
     return -mu_a_total, sigma_total, -mu_b_total, sigma_total
 
 
-def _sim_golf(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
+def _sim_golf(
+    home_ctx: dict,
+    away_ctx: dict,
+    league: str,
+    n_iter: int,
+    config: dict,
+    rng: np.random.Generator | random.Random | None = None,
+) -> tuple:
     """Golf: Strokes-gained field probability model.
 
     For head-to-head matchup betting, we simulate 4-round tournament scores
@@ -1583,8 +1617,12 @@ def _sim_golf(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: 
         b_totals = np.sum(b_draws, axis=1).tolist()
     else:
         for _ in range(n_iter):
-            a_score = sum(_normal_sample(a_per_round, round_std, 1, rng=rng)[0] for _ in range(n_rounds))
-            b_score = sum(_normal_sample(b_per_round, round_std, 1, rng=rng)[0] for _ in range(n_rounds))
+            a_score = sum(
+                _normal_sample(a_per_round, round_std, 1, rng=rng)[0] for _ in range(n_rounds)
+            )
+            b_score = sum(
+                _normal_sample(b_per_round, round_std, 1, rng=rng)[0] for _ in range(n_rounds)
+            )
             a_totals.append(a_score)
             b_totals.append(b_score)
 
@@ -1596,7 +1634,14 @@ def _sim_golf(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: 
     return ([-s for s in a_totals], [-s for s in b_totals])
 
 
-def _sim_fighting(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
+def _sim_fighting(
+    home_ctx: dict,
+    away_ctx: dict,
+    league: str,
+    n_iter: int,
+    config: dict,
+    rng: np.random.Generator | random.Random | None = None,
+) -> tuple:
     """Fighting: Win probability with method-of-victory modeling.
 
     off_rating = win percentage (0-1), finish_rate = rate of finishes.
@@ -1671,7 +1716,14 @@ def _sim_fighting(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, conf
     return a_scores, b_scores
 
 
-def _sim_esports(home_ctx: dict, away_ctx: dict, league: str, n_iter: int, config: dict, rng: np.random.Generator | random.Random | None = None) -> tuple:
+def _sim_esports(
+    home_ctx: dict,
+    away_ctx: dict,
+    league: str,
+    n_iter: int,
+    config: dict,
+    rng: np.random.Generator | random.Random | None = None,
+) -> tuple:
     """Esports: Map win probability with best-of-N simulation.
 
     map_win_rate: team's overall map win rate (0-1).
@@ -1903,9 +1955,7 @@ class FastScoreSimulationBackend:
             )
         if gaussian_params is not None:
             param_fn, censored = gaussian_params
-            mu_h, sigma_h, mu_a, sigma_a = param_fn(
-                home_context, away_context, league, config
-            )
+            mu_h, sigma_h, mu_a, sigma_a = param_fn(home_context, away_context, league, config)
             return _build_team_score_result_exact_gaussian(
                 request.home_team,
                 request.away_team,
@@ -2525,11 +2575,7 @@ class PropDistributionRouterBackend:
     component_version = "prop_distribution_router_v1"
 
     def run(self, request: PropSimulationInput) -> dict[str, Any]:
-        variance = (
-            request.projection_std ** 2
-            if request.projection_std is not None
-            else 1.0
-        )
+        variance = request.projection_std**2 if request.projection_std is not None else 1.0
         player_proj = {
             "league": request.league,
             "stat_key": request.stat_type,
@@ -2545,9 +2591,7 @@ class PropDistributionRouterBackend:
             player_proj["distribution"] = prior["distribution"]
         if "dud_prob" in prior:
             player_proj["dud_prob"] = prior["dud_prob"]
-        return run_player_simulation(
-            player_proj, n_iter=request.n_iter, seed=request.seed
-        )
+        return run_player_simulation(player_proj, n_iter=request.n_iter, seed=request.seed)
 
 
 # ---------------------------------------------------------------------------

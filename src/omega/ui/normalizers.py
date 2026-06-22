@@ -332,9 +332,7 @@ def implied_probability_from_american(odds: Any) -> float | None:
     return None  # even money sentinel 0 / unknown
 
 
-def computed_edge_value(
-    calibrated_probability: Any, implied_probability: Any
-) -> float | None:
+def computed_edge_value(calibrated_probability: Any, implied_probability: Any) -> float | None:
     """Calibrated-minus-implied edge as a 0–1 fraction, or ``None``.
 
     Returns ``None`` unless *both* inputs are present and coercible to a 0–1
@@ -400,7 +398,9 @@ _SPREAD_TOTAL_MARKETS = {
 }
 
 
-def _selection_kind(selection: Any, side: Any, market: Any, home_team: str = "", away_team: str = "") -> str:
+def _selection_kind(
+    selection: Any, side: Any, market: Any, home_team: str = "", away_team: str = ""
+) -> str:
     """Classify a recommendation selection for probability mapping.
 
     Prefers the engine's explicit ``side`` (game edges) over the free-text
@@ -442,9 +442,15 @@ def probability_source_for_selection(
     the warning-bearing internal form.
     """
     field_, _warnings = _resolve_raw_probability(
-        selection=selection, side=_g(rec, "side"), market=market,
-        predictions=predictions, result=result, rec=rec, rec_prefix="recommendations",
-        home_team=home_team, away_team=away_team,
+        selection=selection,
+        side=_g(rec, "side"),
+        market=market,
+        predictions=predictions,
+        result=result,
+        rec=rec,
+        rec_prefix="recommendations",
+        home_team=home_team,
+        away_team=away_team,
     )
     return field_
 
@@ -516,7 +522,9 @@ def _resolve_raw_probability(
         path = field_.source_path or ""
         if ("predictions." in path or "result.simulation." in path) and path.endswith("_win_prob"):
             if field_.value > 1.0:
-                field_ = ExtractedField(value=field_.value / 100.0, source=field_.source, source_path=field_.source_path)
+                field_ = ExtractedField(
+                    value=field_.value / 100.0, source=field_.source, source_path=field_.source_path
+                )
 
     if kind in ("player", "unknown"):
         warnings.append(
@@ -575,9 +583,7 @@ def _resolve_odds(
     """
     warnings: list[OperatorWarning] = []
 
-    confirmed_cands = [
-        (_g(rec, key), f"{rec_prefix}.{key}") for key in _AMERICAN_ODDS_KEYS
-    ]
+    confirmed_cands = [(_g(rec, key), f"{rec_prefix}.{key}") for key in _AMERICAN_ODDS_KEYS]
     value, path = _first_present(confirmed_cands)
     if value is not None:
         return (
@@ -644,8 +650,14 @@ def _resolve_calibrated_probability(
     cands: list[tuple[Any, str]] = [
         (_g(rec, "calibrated_prob"), f"{rec_prefix}.calibrated_prob"),
         (_g(rec, "calibrated_probability"), f"{rec_prefix}.calibrated_probability"),
-        (_g(_g(rec, "calibration_audit"), "calibrated_prob"), f"{rec_prefix}.calibration_audit.calibrated_prob"),
-        (_g(_g(rec, "calibration_audit"), "calibrated_probability"), f"{rec_prefix}.calibration_audit.calibrated_probability"),
+        (
+            _g(_g(rec, "calibration_audit"), "calibrated_prob"),
+            f"{rec_prefix}.calibration_audit.calibrated_prob",
+        ),
+        (
+            _g(_g(rec, "calibration_audit"), "calibrated_probability"),
+            f"{rec_prefix}.calibration_audit.calibrated_probability",
+        ),
     ]
 
     if selection_kind in ("over", "under"):
@@ -665,7 +677,10 @@ def _resolve_calibrated_probability(
             if entry_market and entry_market == selection_kind:
                 cands += [
                     (entry.get("calibrated_prob"), f"calibration_audit[{idx}].calibrated_prob"),
-                    (entry.get("calibrated_probability"), f"calibration_audit[{idx}].calibrated_probability"),
+                    (
+                        entry.get("calibrated_probability"),
+                        f"calibration_audit[{idx}].calibrated_probability",
+                    ),
                 ]
                 break
 
@@ -693,76 +708,120 @@ def normalize_recommendation(
     odds_snapshot = trace.get("odds_snapshot")
     calibration_audit = trace.get("calibration_audit")
 
-    home_team = str(trace.get("home_team") or trace.get("result", {}).get("home_team") or _g(input_snapshot, "home_team") or "").strip().lower()
-    away_team = str(trace.get("away_team") or trace.get("result", {}).get("away_team") or _g(input_snapshot, "away_team") or "").strip().lower()
+    home_team = (
+        str(
+            trace.get("home_team")
+            or trace.get("result", {}).get("home_team")
+            or _g(input_snapshot, "home_team")
+            or ""
+        )
+        .strip()
+        .lower()
+    )
+    away_team = (
+        str(
+            trace.get("away_team")
+            or trace.get("result", {}).get("away_team")
+            or _g(input_snapshot, "away_team")
+            or ""
+        )
+        .strip()
+        .lower()
+    )
 
     warnings: list[OperatorWarning] = []
 
-    market = _extracted([
-        (_g(rec, "market"), f"{rec_prefix}.market"),
-        (_g(_g(result, "best_bet"), "market"), "result.best_bet.market"),
-        (trace.get("kind"), "kind"),
-    ])
-    selection = _extracted([
-        (_g(rec, "side"), f"{rec_prefix}.side"),
-        (_g(rec, "selection"), f"{rec_prefix}.selection"),
-        (_g(rec, "recommendation"), f"{rec_prefix}.recommendation"),
-        (_g(result, "recommendation"), "result.recommendation"),
-    ])
-    line = _extracted([
-        (_g(rec, "line"), f"{rec_prefix}.line"),
-        (_g(input_snapshot, "line"), "input_snapshot.line"),
-        (_g(result, "line"), "result.line"),
-    ])
+    market = _extracted(
+        [
+            (_g(rec, "market"), f"{rec_prefix}.market"),
+            (_g(_g(result, "best_bet"), "market"), "result.best_bet.market"),
+            (trace.get("kind"), "kind"),
+        ]
+    )
+    selection = _extracted(
+        [
+            (_g(rec, "side"), f"{rec_prefix}.side"),
+            (_g(rec, "selection"), f"{rec_prefix}.selection"),
+            (_g(rec, "recommendation"), f"{rec_prefix}.recommendation"),
+            (_g(result, "recommendation"), "result.recommendation"),
+        ]
+    )
+    line = _extracted(
+        [
+            (_g(rec, "line"), f"{rec_prefix}.line"),
+            (_g(input_snapshot, "line"), "input_snapshot.line"),
+            (_g(result, "line"), "result.line"),
+        ]
+    )
 
-    selection_kind = _selection_kind(selection.value, _g(rec, "side"), market.value, home_team, away_team)
+    selection_kind = _selection_kind(
+        selection.value, _g(rec, "side"), market.value, home_team, away_team
+    )
 
     odds, confirmed_american, odds_warnings = _resolve_odds(
-        rec=rec, rec_prefix=rec_prefix, selection_kind=selection_kind,
-        odds_snapshot=odds_snapshot, input_snapshot=input_snapshot,
+        rec=rec,
+        rec_prefix=rec_prefix,
+        selection_kind=selection_kind,
+        odds_snapshot=odds_snapshot,
+        input_snapshot=input_snapshot,
     )
     warnings.extend(odds_warnings)
 
     raw_probability, prob_warnings = _resolve_raw_probability(
-        selection=selection.value, side=_g(rec, "side"), market=market.value,
-        predictions=predictions, result=result, rec=rec, rec_prefix=rec_prefix,
-        home_team=home_team, away_team=away_team,
+        selection=selection.value,
+        side=_g(rec, "side"),
+        market=market.value,
+        predictions=predictions,
+        result=result,
+        rec=rec,
+        rec_prefix=rec_prefix,
+        home_team=home_team,
+        away_team=away_team,
     )
     warnings.extend(prob_warnings)
 
     calibrated_probability = _resolve_calibrated_probability(
-        selection_kind=selection_kind, rec=rec, rec_prefix=rec_prefix,
-        result=result, calibration_audit=calibration_audit,
+        selection_kind=selection_kind,
+        rec=rec,
+        rec_prefix=rec_prefix,
+        result=result,
+        calibration_audit=calibration_audit,
     )
 
     # Implied probability: only from confirmed-American odds.
-    implied_value = (
-        implied_probability_from_american(odds.value) if confirmed_american else None
-    )
+    implied_value = implied_probability_from_american(odds.value) if confirmed_american else None
     implied_probability = _computed(implied_value, "computed:implied_from_american_odds")
 
-    engine_edge = _extracted([
-        (_g(rec, "edge_pct"), f"{rec_prefix}.edge_pct"),
-        (_g(rec, "edge"), f"{rec_prefix}.edge"),
-    ])
+    engine_edge = _extracted(
+        [
+            (_g(rec, "edge_pct"), f"{rec_prefix}.edge_pct"),
+            (_g(rec, "edge"), f"{rec_prefix}.edge"),
+        ]
+    )
 
     # Computed edge: calibrated − implied, only when both present (American odds).
     edge_value = computed_edge_value(calibrated_probability.value, implied_probability.value)
     computed_edge = _computed(edge_value, "computed:calibrated_minus_implied")
 
-    kelly_fraction = _extracted([
-        (_g(rec, "kelly_fraction"), f"{rec_prefix}.kelly_fraction"),
-        (_g(result, "kelly_fraction"), "result.kelly_fraction"),
-    ])
-    recommended_units = _extracted([
-        (_g(rec, "recommended_units"), f"{rec_prefix}.recommended_units"),
-        (_g(result, "recommended_units"), "result.recommended_units"),
-    ])
+    kelly_fraction = _extracted(
+        [
+            (_g(rec, "kelly_fraction"), f"{rec_prefix}.kelly_fraction"),
+            (_g(result, "kelly_fraction"), "result.kelly_fraction"),
+        ]
+    )
+    recommended_units = _extracted(
+        [
+            (_g(rec, "recommended_units"), f"{rec_prefix}.recommended_units"),
+            (_g(result, "recommended_units"), "result.recommended_units"),
+        ]
+    )
 
-    raw_confidence_tier = _extracted([
-        (_g(rec, "confidence_tier"), f"{rec_prefix}.confidence_tier"),
-        (_g(result, "confidence_tier"), "result.confidence_tier"),
-    ])
+    raw_confidence_tier = _extracted(
+        [
+            (_g(rec, "confidence_tier"), f"{rec_prefix}.confidence_tier"),
+            (_g(result, "confidence_tier"), "result.confidence_tier"),
+        ]
+    )
     band = confidence_band(raw_confidence_tier.value)
     display_confidence_band = _computed(band, "computed:from_raw_confidence_tier")
 
@@ -969,15 +1028,11 @@ def build_evidence_coverage(
     applied = sum(1 for r in rows if _signal_is_applied(r))
     shadow = total - applied
 
-    confidences = [
-        float(r.get("confidence")) for r in rows if _is_number(r.get("confidence"))
-    ]
+    confidences = [float(r.get("confidence")) for r in rows if _is_number(r.get("confidence"))]
     signals_with_confidence = len(confidences)
     avg_confidence = (sum(confidences) / len(confidences)) if confidences else None
 
-    types = sorted(
-        {str(r.get("signal_type")) for r in rows if r.get("signal_type") is not None}
-    )
+    types = sorted({str(r.get("signal_type")) for r in rows if r.get("signal_type") is not None})
 
     warnings: list[OperatorWarning] = []
     if total == 0:

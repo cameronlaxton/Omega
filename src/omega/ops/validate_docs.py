@@ -185,9 +185,7 @@ def check_plugin_skill_pointers() -> bool:
             continue
         content = plugin_path.read_text(encoding="utf-8")
         if f"Canonical source: `{canonical}`" not in content:
-            print(
-                f"  [FAIL] Plugin skill {skill} does not point to canonical source {canonical}"
-            )
+            print(f"  [FAIL] Plugin skill {skill} does not point to canonical source {canonical}")
             success = False
         elif plugin_path.read_bytes() == canonical_path.read_bytes():
             print(f"  [FAIL] Plugin skill {skill} is a byte-for-byte mirror, not a pointer")
@@ -217,4 +215,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

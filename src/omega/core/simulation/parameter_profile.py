@@ -127,7 +127,9 @@ class BackendParameterProfile(BaseModel):
         default=None, description="Frozen historical DatasetManifest id used to fit/evaluate"
     )
     dataset_hash: str = Field(description="sha256 of the frozen fit/eval dataset (+ pinned priors)")
-    sample_size: int = Field(ge=0, description="Held-out eval sample size (drives SAMPLE_SIZE gate)")
+    sample_size: int = Field(
+        ge=0, description="Held-out eval sample size (drives SAMPLE_SIZE gate)"
+    )
 
     # RAW (pre-calibration) held-out quality — drives ECE_FLOOR/BRIER/LOG_LOSS gates
     metrics: dict[str, Any] = Field(

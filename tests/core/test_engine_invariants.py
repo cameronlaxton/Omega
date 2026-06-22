@@ -68,12 +68,8 @@ def test_fast_score_no_draw_leak_for_no_draw_archetypes(league, home_ctx, away_c
         )
     )
     assert result["success"] is True, f"backend skipped: {result.get('skip_reason')}"
-    assert result["draw_prob"] == 0.0, (
-        f"{league} draw_prob leaked: {result['draw_prob']}"
-    )
-    assert result["home_win_prob"] + result["away_win_prob"] == pytest.approx(
-        100.0, abs=0.2
-    )
+    assert result["draw_prob"] == 0.0, f"{league} draw_prob leaked: {result['draw_prob']}"
+    assert result["home_win_prob"] + result["away_win_prob"] == pytest.approx(100.0, abs=0.2)
 
 
 @pytest.mark.parametrize(("league", "home_ctx", "away_ctx"), _NO_DRAW_CASES)
@@ -98,9 +94,7 @@ def test_markov_no_draw_leak_for_no_draw_archetypes(league, home_ctx, away_ctx):
         # not what this test guards. Skip in that case rather than fail.
         pytest.skip(f"Markov skipped {league}: {result.get('skip_reason')}")
     assert result["draw_prob"] == 0.0
-    assert result["home_win_prob"] + result["away_win_prob"] == pytest.approx(
-        100.0, abs=0.2
-    )
+    assert result["home_win_prob"] + result["away_win_prob"] == pytest.approx(100.0, abs=0.2)
 
 
 # ---------------------------------------------------------------------------
@@ -135,12 +129,8 @@ def test_spread_edge_uses_cover_prob_not_moneyline_prob():
     response = analyze_game(request)
     assert response.status == "success", response.skip_reason
 
-    home_ml = next(
-        e for e in response.edges if e.market == "moneyline" and e.side == "home"
-    )
-    home_spread = next(
-        e for e in response.edges if e.market == "spread" and e.side == "home"
-    )
+    home_ml = next(e for e in response.edges if e.market == "moneyline" and e.side == "home")
+    home_spread = next(e for e in response.edges if e.market == "spread" and e.side == "home")
     assert home_spread.true_prob is not None
     assert home_ml.true_prob is not None
     assert abs(home_spread.true_prob - home_ml.true_prob) >= 0.05, (
@@ -149,9 +139,7 @@ def test_spread_edge_uses_cover_prob_not_moneyline_prob():
     )
     # spread_coverage_prob attribute should now be populated (not None)
     assert home_spread.spread_coverage_prob is not None
-    assert home_spread.spread_coverage_prob == pytest.approx(
-        home_spread.true_prob, abs=1e-6
-    )
+    assert home_spread.spread_coverage_prob == pytest.approx(home_spread.true_prob, abs=1e-6)
 
 
 # ---------------------------------------------------------------------------

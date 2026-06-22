@@ -188,8 +188,7 @@ def main(
     """
     parser = argparse.ArgumentParser(
         description=(
-            "Attach ESPN box-score player stats to NBA/WNBA/MLB/supported-soccer "
-            "prop traces"
+            "Attach ESPN box-score player stats to NBA/WNBA/MLB/supported-soccer prop traces"
         )
     )
     parser.add_argument(
@@ -202,9 +201,7 @@ def main(
         choices=_SUPPORTED_LEAGUES,
         help="Restrict to one league (default: all supported)",
     )
-    parser.add_argument(
-        "--db", default=None, help="SQLite path (default: var/omega_traces.db)"
-    )
+    parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -313,9 +310,7 @@ def main(
                                 unsupported_prop.append(f"{tid} ({league} {pt})")
                         elif tid not in _missing_fields_seen:
                             _missing_fields_seen.add(tid)
-                            skipped_missing_fields.append(
-                                f"{tid} (missing game_date/home/away)"
-                            )
+                            skipped_missing_fields.append(f"{tid} (missing game_date/home/away)")
                     continue
                 if fields["game_date"] != d.isoformat():
                     continue
@@ -343,7 +338,9 @@ def main(
                 try:
                     games.extend(sb_fetch(league, check_date))
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("ESPN scoreboard fetch failed for %s %s: %s", league, check_date, exc)
+                    logger.warning(
+                        "ESPN scoreboard fetch failed for %s %s: %s", league, check_date, exc
+                    )
 
             if not games:
                 if args.dry_run:
@@ -353,7 +350,9 @@ def main(
                         d,
                     )
                     continue
-                logger.error("All ESPN scoreboard fetches failed or empty for %s around %s", league, d)
+                logger.error(
+                    "All ESPN scoreboard fetches failed or empty for %s around %s", league, d
+                )
                 return 1
 
             games_by_pair = defaultdict(list)
@@ -377,12 +376,14 @@ def main(
                     game = final_games[0]
                 else:
                     target_date = d
+
                     def date_diff(g) -> int:
                         try:
                             g_date = date.fromisoformat(g.date)
                             return abs((g_date - target_date).days)
                         except ValueError:
                             return 999
+
                     game = min(final_games, key=date_diff)
 
                 # Fetch the box score once per game
@@ -483,7 +484,3 @@ def main(
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-

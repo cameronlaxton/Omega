@@ -40,8 +40,7 @@ from omega.trace.priors import TennisPrior
 logger = logging.getLogger("omega.integrations.tennis_sackmann")
 
 _RAW_URL_TEMPLATE = (
-    "https://raw.githubusercontent.com/JeffSackmann/tennis_{tour}/master/"
-    "{tour}_matches_{year}.csv"
+    "https://raw.githubusercontent.com/JeffSackmann/tennis_{tour}/master/{tour}_matches_{year}.csv"
 )
 _REQUEST_TIMEOUT_SECONDS = 30
 _CACHE_TTL_SECONDS = 7 * 24 * 3600  # weekly refresh cadence (design Part 8)
@@ -381,8 +380,7 @@ def parse_charting_points(
     if total and dropped / total > _MCP_MAX_DEFECT_RATE:
         raise SourceSchemaDriftError(
             "sackmann_mcp",
-            f"{dropped}/{total} point rows failed validation — column drift, "
-            "not isolated typos",
+            f"{dropped}/{total} point rows failed validation — column drift, not isolated typos",
         )
     if dropped:
         logger.info("dropped %d/%d defective MCP point rows", dropped, total)
@@ -403,9 +401,7 @@ def parse_charting_matches(
         }
         for r in reader
     ]
-    return validate_records(
-        raw, ChartingMatchRow, source="sackmann_mcp", session_path=session_path
-    )
+    return validate_records(raw, ChartingMatchRow, source="sackmann_mcp", session_path=session_path)
 
 
 def load_tennis_priors(

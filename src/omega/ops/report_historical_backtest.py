@@ -19,7 +19,9 @@ logger = logging.getLogger("omega.ops.report_historical_backtest")
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render a saved historical backtest report.")
     parser.add_argument("--replay-id", default=None, help="Replay run id")
-    parser.add_argument("--manifest-id", default=None, help="Derive replay-id from manifest if unset")
+    parser.add_argument(
+        "--manifest-id", default=None, help="Derive replay-id from manifest if unset"
+    )
     parser.add_argument("--root", default=None, help="Artifact root (default var/historical)")
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of text")
     args = parser.parse_args(argv)

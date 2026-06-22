@@ -107,9 +107,7 @@ def upsert_dixon_coles_profile(store: TraceStore, profile: DixonColesProfile) ->
     store.conn.commit()
 
 
-def get_production_dc_profile(
-    store: TraceStore, profile_id: str
-) -> DixonColesProfile | None:
+def get_production_dc_profile(store: TraceStore, profile_id: str) -> DixonColesProfile | None:
     """Return the production rho fit for *profile_id*, or None (fail closed)."""
     row = store.conn.execute(
         """SELECT profile_id, rho, n_matches, fit_loss, as_of_date, status, source
@@ -263,9 +261,7 @@ class TennisPressureDelta(BaseModel):
     @classmethod
     def _validate_state(cls, value: str) -> str:
         if value not in TENNIS_PRESSURE_STATES:
-            raise ValueError(
-                f"state must be one of {', '.join(TENNIS_PRESSURE_STATES)}"
-            )
+            raise ValueError(f"state must be one of {', '.join(TENNIS_PRESSURE_STATES)}")
         return value
 
 
@@ -294,9 +290,7 @@ def upsert_tennis_prior(store: TraceStore, prior: TennisPrior) -> None:
     store.conn.commit()
 
 
-def get_tennis_prior(
-    store: TraceStore, player: str, tour: str, surface: str
-) -> TennisPrior | None:
+def get_tennis_prior(store: TraceStore, player: str, tour: str, surface: str) -> TennisPrior | None:
     """Return the most recent rate row for (player, tour, surface), or None."""
     row = store.conn.execute(
         """SELECT player, tour, surface, spw_pct, rpw_pct, n_matches, as_of_date
@@ -679,7 +673,10 @@ def build_tennis_prior_payload(
     if prior.get("pressure_coefficients") is not None:
         return out, None  # recorded/replayed request: never re-read live tables
 
-    sides = {"home": str(payload.get("home_team") or ""), "away": str(payload.get("away_team") or "")}
+    sides = {
+        "home": str(payload.get("home_team") or ""),
+        "away": str(payload.get("away_team") or ""),
+    }
     coefficients: dict[str, dict[str, float]] = {}
     sources: dict[str, str] = {}
     filled_rates: list[str] = []

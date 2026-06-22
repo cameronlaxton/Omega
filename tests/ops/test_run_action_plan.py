@@ -221,11 +221,7 @@ def test_render_report_action_is_non_fatal_by_default():
 
 def test_render_report_action_can_be_fatal():
     action = run_action_plan._validate_all(
-        {
-            "actions": [
-                {"type": "render_report", "args": {"kind": "intake", "non_fatal": False}}
-            ]
-        }
+        {"actions": [{"type": "render_report", "args": {"kind": "intake", "non_fatal": False}}]}
     )[0]
 
     assert action.non_fatal is False

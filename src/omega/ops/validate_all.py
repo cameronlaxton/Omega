@@ -78,7 +78,9 @@ def _run_module(name: str, module: str, *args: str) -> StepResult:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run all Omega validation checks with one verdict.")
+    parser = argparse.ArgumentParser(
+        description="Run all Omega validation checks with one verdict."
+    )
     parser.add_argument("--skip-tests", action="store_true", help="Skip the (slow) pytest run")
     parser.add_argument(
         "--sessions-inbox",
@@ -158,4 +160,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

@@ -18,7 +18,7 @@ keys already built (by the caller, via ``portfolio_state.entity_keys_for``), so
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from omega.core.betting.exposure import ExposureAction, ExposureLedger, ExposurePolicy
 from omega.core.betting.staking_policy import (

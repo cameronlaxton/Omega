@@ -91,12 +91,8 @@ def test_settles_only_pending_rows_at_query_level(store):
 def test_default_provenance_settles_user_confirmed_only(store):
     _persist_trace(store, "user")
     _persist_trace(store, "auto")
-    store.record_ledger_bet(
-        _bet("user", ledger_id="u1", provenance=BetProvenance.USER_CONFIRMED)
-    )
-    store.record_ledger_bet(
-        _bet("auto", ledger_id="a1", provenance=BetProvenance.ENGINE_AUTO)
-    )
+    store.record_ledger_bet(_bet("user", ledger_id="u1", provenance=BetProvenance.USER_CONFIRMED))
+    store.record_ledger_bet(_bet("auto", ledger_id="a1", provenance=BetProvenance.ENGINE_AUTO))
     store.attach_outcome("user", home_score=110, away_score=104)
     store.attach_outcome("auto", home_score=110, away_score=104)
 
@@ -109,9 +105,7 @@ def test_default_provenance_settles_user_confirmed_only(store):
 
 def test_all_provenance_can_settle_engine_auto(store):
     _persist_trace(store, "auto")
-    store.record_ledger_bet(
-        _bet("auto", ledger_id="a1", provenance=BetProvenance.ENGINE_AUTO)
-    )
+    store.record_ledger_bet(_bet("auto", ledger_id="a1", provenance=BetProvenance.ENGINE_AUTO))
     store.attach_outcome("auto", home_score=110, away_score=104)
 
     summary = settle_pending_ledger(store, apply=True, provenance=None)

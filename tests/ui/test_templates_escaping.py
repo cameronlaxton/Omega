@@ -29,6 +29,7 @@ def _client(tmp_path: Path) -> TestClient:
             )
         )
         from omega.trace.ledger_bet import BetProvenance, LedgerBet, LedgerStatus
+
         store.record_ledger_bet(
             LedgerBet(
                 ledger_id="led-xss",

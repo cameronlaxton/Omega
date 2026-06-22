@@ -127,9 +127,7 @@ def _request_with_mcp_defaults(
     return payload, {}
 
 
-def _maybe_inject_game_priors(
-    payload: dict[str, Any], session_id: str | None
-) -> dict[str, Any]:
+def _maybe_inject_game_priors(payload: dict[str, Any], session_id: str | None) -> dict[str, Any]:
     """Gatherer seam: merge league dynamic priors (e.g. Dixon-Coles rho) into
     the request and record provenance in the session sidecar.
 
@@ -155,14 +153,19 @@ def _maybe_inject_game_priors(
                 try:
                     from omega.trace.session_sidecar import append_audit_events
 
-                    append_audit_events(sidecar, [{
-                        "ts": datetime.now(timezone.utc).isoformat(),
-                        "event_type": "data_provenance",
-                        "step": "mcp:prior_injection",
-                        "status": "skipped",
-                        "notes": f"prior_injection_failed: {exc}",
-                        "trace_ids": [],
-                    }])
+                    append_audit_events(
+                        sidecar,
+                        [
+                            {
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                                "event_type": "data_provenance",
+                                "step": "mcp:prior_injection",
+                                "status": "skipped",
+                                "notes": f"prior_injection_failed: {exc}",
+                                "trace_ids": [],
+                            }
+                        ],
+                    )
                 except Exception as audit_exc:  # noqa: BLE001
                     logger.warning(
                         "prior injection audit event failed for session_id=%s: %s",
@@ -172,9 +175,7 @@ def _maybe_inject_game_priors(
     return payload
 
 
-def _maybe_inject_prop_priors(
-    payload: dict[str, Any], session_id: str | None
-) -> dict[str, Any]:
+def _maybe_inject_prop_priors(payload: dict[str, Any], session_id: str | None) -> dict[str, Any]:
     """Gatherer seam for player props: merge the fitted NB dispersion ``k``
     (NFL yardage) into player_context and record provenance in the sidecar.
 
@@ -204,9 +205,7 @@ def _merge_mcp_trace_quality(
         return trace_quality
 
     merged = dict(trace_quality or {})
-    merged["downgrades"] = sorted(
-        {*merged.get("downgrades", []), _MCP_EXPLORATORY_DOWNGRADE}
-    )
+    merged["downgrades"] = sorted({*merged.get("downgrades", []), _MCP_EXPLORATORY_DOWNGRADE})
     merged["calibration_exclusion_reasons"] = sorted(
         {
             *merged.get("calibration_exclusion_reasons", []),
@@ -417,7 +416,9 @@ def omega_analyze_slate(
         gate_failures = _formal_output_gate_failures()
         if gate_failures:
             return _formal_output_blocked("omega_analyze_slate", gate_failures)
-        trace = analyze(typed, bankroll=bankroll, session_id=session_id, trace_quality=trace_quality)
+        trace = analyze(
+            typed, bankroll=bankroll, session_id=session_id, trace_quality=trace_quality
+        )
         return _ok("omega_analyze_slate", trace=trace, result=trace.get("result"))
     except ValidationError as exc:
         return _error("omega_analyze_slate", "invalid_request", exc.errors())
@@ -473,7 +474,13 @@ def omega_run_batch(
         try:
             entry = BatchAnalysisEntry(**raw)
         except Exception as exc:  # noqa: BLE001
-            errors.append({"index": idx, "identifier": str(raw.get("player_name") or raw.get("home_team") or idx), "error": str(exc)})
+            errors.append(
+                {
+                    "index": idx,
+                    "identifier": str(raw.get("player_name") or raw.get("home_team") or idx),
+                    "error": str(exc),
+                }
+            )
             results.append({"index": idx, "status": "error", "error": str(exc)})
             continue
 
@@ -483,22 +490,40 @@ def omega_run_batch(
                 game_date, league=entry.league
             )
         except ValueError as exc:
-            identifier = entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
+            identifier = (
+                entry.player_name
+                if entry.kind == "prop"
+                else f"{entry.away_team} @ {entry.home_team}"
+            )
             errors.append({"index": idx, "identifier": identifier, "error": str(exc)})
             results.append(
                 {"index": idx, "status": "error", "identifier": identifier, "error": str(exc)}
             )
             continue
-        identifier = entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
+        identifier = (
+            entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
+        )
 
         # --- Odds resolution ---
         if entry.kind == "prop":
-            prop_types = entry.prop_type if isinstance(entry.prop_type, list) else ([entry.prop_type] if entry.prop_type else [])
+            prop_types = (
+                entry.prop_type
+                if isinstance(entry.prop_type, list)
+                else ([entry.prop_type] if entry.prop_type else [])
+            )
             odds_patch: dict[str, Any] | None = None
             resolved_prop_type: str | None = None
-            if entry.odds_over is not None and entry.odds_under is not None and entry.line is not None:
+            if (
+                entry.odds_over is not None
+                and entry.odds_under is not None
+                and entry.line is not None
+            ):
                 # Pre-supplied
-                odds_patch = {"line": entry.line, "odds_over": entry.odds_over, "odds_under": entry.odds_under}
+                odds_patch = {
+                    "line": entry.line,
+                    "odds_over": entry.odds_over,
+                    "odds_under": entry.odds_under,
+                }
                 resolved_prop_type = prop_types[0] if prop_types else None
             else:
                 fallback_books = ["betmgm", "draftkings", "fanduel", "williamhill_us", "espnbet"]
@@ -525,7 +550,14 @@ def omega_run_batch(
                     if odds_patch is not None:
                         break
             if odds_patch is None:
-                results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": "odds_unavailable"})
+                results.append(
+                    {
+                        "index": idx,
+                        "status": "skipped",
+                        "identifier": identifier,
+                        "reason": "odds_unavailable",
+                    }
+                )
                 continue
 
             request_dict: dict[str, Any] = {
@@ -565,7 +597,14 @@ def omega_run_batch(
                     except Exception:  # noqa: BLE001
                         continue
                 if game_odds is None:
-                    results.append({"index": idx, "status": "skipped", "identifier": identifier, "reason": "odds_unavailable"})
+                    results.append(
+                        {
+                            "index": idx,
+                            "status": "skipped",
+                            "identifier": identifier,
+                            "reason": "odds_unavailable",
+                        }
+                    )
                     continue
 
             request_dict = {
@@ -597,7 +636,9 @@ def omega_run_batch(
             trace = analyze(request_dict, bankroll=bankroll, session_id=session_id)
         except Exception as exc:  # noqa: BLE001
             errors.append({"index": idx, "identifier": identifier, "error": str(exc)})
-            results.append({"index": idx, "status": "error", "identifier": identifier, "error": str(exc)})
+            results.append(
+                {"index": idx, "status": "error", "identifier": identifier, "error": str(exc)}
+            )
             continue
 
         trace_id = trace["trace_id"]
@@ -639,13 +680,31 @@ def omega_run_batch(
         try:
             atomic_write_text(dest, _json.dumps(export_block, indent=2, default=str))
         except Exception as exc:  # noqa: BLE001
-            errors.append({"index": idx, "identifier": identifier, "error": f"export_write_failed: {exc}"})
-            results.append({"index": idx, "status": "error", "identifier": identifier, "trace_id": trace_id, "error": str(exc)})
+            errors.append(
+                {"index": idx, "identifier": identifier, "error": f"export_write_failed: {exc}"}
+            )
+            results.append(
+                {
+                    "index": idx,
+                    "status": "error",
+                    "identifier": identifier,
+                    "trace_id": trace_id,
+                    "error": str(exc),
+                }
+            )
             continue
 
         trace_ids.append(trace_id)
         export_paths.append(str(dest))
-        results.append({"index": idx, "status": "ok", "identifier": identifier, "trace_id": trace_id, "export_path": str(dest)})
+        results.append(
+            {
+                "index": idx,
+                "status": "ok",
+                "identifier": identifier,
+                "trace_id": trace_id,
+                "export_path": str(dest),
+            }
+        )
 
     ok_count = sum(1 for r in results if r["status"] == "ok")
     skipped_count = sum(1 for r in results if r["status"] == "skipped")
@@ -891,8 +950,7 @@ def omega_trace_void_prop(
             (
                 r
                 for r in store.get_prop_outcomes(req.trace_id)
-                if r.get("player_name") == req.player_name
-                and r.get("stat_type") == req.stat_type
+                if r.get("player_name") == req.player_name and r.get("stat_type") == req.stat_type
             ),
             None,
         )
@@ -1302,8 +1360,7 @@ def omega_record_flat_bet(
             (
                 r
                 for r in rows
-                if r.get("market") == req.market
-                and r.get("selection_descriptor") == descriptor
+                if r.get("market") == req.market and r.get("selection_descriptor") == descriptor
             ),
             None,
         )

@@ -73,8 +73,7 @@ def test_quarantine_apply_tags_without_deleting_and_rolls_back(tmp_path):
     trace = store.get_trace("mlb-bug")
     assert trace["trace_quality"]["calibration_eligible"] is False
     assert (
-        quarantine_sim_bug_traces._REASON
-        in trace["trace_quality"]["calibration_exclusion_reasons"]
+        quarantine_sim_bug_traces._REASON in trace["trace_quality"]["calibration_exclusion_reasons"]
     )
     store.close()
 
@@ -86,8 +85,8 @@ def test_quarantine_apply_tags_without_deleting_and_rolls_back(tmp_path):
     store = TraceStore(db_path=db_path)
     trace = store.get_trace("mlb-bug")
     assert trace["trace_quality"]["calibration_eligible"] is True
-    assert quarantine_sim_bug_traces._REASON not in trace["trace_quality"][
-        "calibration_exclusion_reasons"
-    ]
+    assert (
+        quarantine_sim_bug_traces._REASON
+        not in trace["trace_quality"]["calibration_exclusion_reasons"]
+    )
     store.close()
-

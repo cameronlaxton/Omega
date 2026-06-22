@@ -18,6 +18,7 @@ from omega.integrations.odds_resolver import resolve_odds
 def temp_db_path(tmp_path: Path) -> Path:
     return tmp_path / "test_odds_cache.db"
 
+
 def test_cache_schema_initialization(temp_db_path: Path):
     OddsCache(db_path=temp_db_path)
     assert temp_db_path.exists()
@@ -31,13 +32,21 @@ def test_cache_schema_initialization(temp_db_path: Path):
         assert "market_data" in columns
         assert "inserted_at" in columns
 
+
 def test_deterministic_key_computation():
-    key1 = OddsCache.compute_cache_key("NBA", "game", "Los Angeles Lakers", "Boston Celtics", "2026-05-16")
-    key2 = OddsCache.compute_cache_key("nba", "GAME", "los angeles lakers", "boston celtics", "2026-05-16 ")
+    key1 = OddsCache.compute_cache_key(
+        "NBA", "game", "Los Angeles Lakers", "Boston Celtics", "2026-05-16"
+    )
+    key2 = OddsCache.compute_cache_key(
+        "nba", "GAME", "los angeles lakers", "boston celtics", "2026-05-16 "
+    )
     assert key1 == key2
 
-    key3 = OddsCache.compute_cache_key("NBA", "game", "Los Angeles Lakers", "Boston Celtics", "2026-05-17")
+    key3 = OddsCache.compute_cache_key(
+        "NBA", "game", "Los Angeles Lakers", "Boston Celtics", "2026-05-17"
+    )
     assert key1 != key3
+
 
 def test_cache_hit_and_ttl_expiration(temp_db_path: Path):
     cache = OddsCache(db_path=temp_db_path)
@@ -54,11 +63,14 @@ def test_cache_hit_and_ttl_expiration(temp_db_path: Path):
 
     # Expiry Verification
     with sqlite3.connect(str(temp_db_path)) as conn:
-        conn.execute("UPDATE odds_cache SET inserted_at = ? WHERE cache_key = ?", (time.time() - 901, key))
+        conn.execute(
+            "UPDATE odds_cache SET inserted_at = ? WHERE cache_key = ?", (time.time() - 901, key)
+        )
         conn.commit()
 
     expired = cache.get(key)
     assert expired is None
+
 
 def test_cache_eviction_on_set(temp_db_path: Path):
     cache = OddsCache(db_path=temp_db_path)
@@ -69,7 +81,10 @@ def test_cache_eviction_on_set(temp_db_path: Path):
 
     # Manually age the record
     with sqlite3.connect(str(temp_db_path)) as conn:
-        conn.execute("UPDATE odds_cache SET inserted_at = ? WHERE cache_key = ?", (time.time() - 950, key_expired))
+        conn.execute(
+            "UPDATE odds_cache SET inserted_at = ? WHERE cache_key = ?",
+            (time.time() - 950, key_expired),
+        )
         conn.commit()
 
     cache.set(key_fresh, "NBA", "game", {"status": "fresh"})
@@ -81,9 +96,11 @@ def test_cache_eviction_on_set(temp_db_path: Path):
         assert key_expired not in keys
         assert key_fresh in keys
 
+
 def test_fallback_db_path_resolution(monkeypatch):
     # Simulate directory with no write permissions to test hardening
     original_mkdir = Path.mkdir
+
     def mock_mkdir(self, *args, **kwargs):
         if ".omega" in str(self):
             raise OSError("Permission denied")
@@ -95,9 +112,16 @@ def test_fallback_db_path_resolution(monkeypatch):
     assert "omega" in str(cache.db_path)
     assert tempfile.gettempdir() in str(cache.db_path)
 
+
 def test_find_by_teams_and_event_id(temp_db_path: Path):
     cache = OddsCache(db_path=temp_db_path)
-    payload = {"status": "success", "event_id": "evt-1234", "home_team": "Lakers", "away_team": "Celtics", "metadata": []}
+    payload = {
+        "status": "success",
+        "event_id": "evt-1234",
+        "home_team": "Lakers",
+        "away_team": "Celtics",
+        "metadata": [],
+    }
     key = cache.compute_cache_key("NBA", "game", "lakers", "celtics", "2026-05-16")
     cache.set(key, "NBA", "game", payload)
 
@@ -108,6 +132,7 @@ def test_find_by_teams_and_event_id(temp_db_path: Path):
     by_event = cache.find_by_event_id("NBA", "game", "evt-1234")
     assert by_event is not None
     assert by_event["home_team"] == "Lakers"
+
 
 def test_resolver_uses_cache_avoiding_external_calls(temp_db_path: Path):
     cache = OddsCache(db_path=temp_db_path)
@@ -126,9 +151,11 @@ def test_resolver_uses_cache_avoiding_external_calls(temp_db_path: Path):
         "quotes": [],
         "skipped_reasons": [],
         "quota": {},
-        "metadata": ["source: local_cache"]
+        "metadata": ["source: local_cache"],
     }
-    key = cache.compute_cache_key("NBA", "game", "Los Angeles Lakers", "Boston Celtics", "2026-05-16")
+    key = cache.compute_cache_key(
+        "NBA", "game", "Los Angeles Lakers", "Boston Celtics", "2026-05-16"
+    )
     cache.set(key, "NBA", "game", payload)
 
     mock_client = MagicMock()
@@ -152,6 +179,7 @@ def test_resolver_uses_cache_avoiding_external_calls(temp_db_path: Path):
 # ---------------------------------------------------------------------------
 # Negative-result cache (180s soft TTL)
 # ---------------------------------------------------------------------------
+
 
 def test_negative_entry_180s_ttl(temp_db_path: Path):
     cache = OddsCache(db_path=temp_db_path)
@@ -263,7 +291,9 @@ def test_resolver_short_circuits_on_cached_negative(temp_db_path: Path, monkeypa
         "quota": {},
     }
     # Seed under the exact key the resolver will recompute for this request.
-    key = cache.compute_cache_key("NBA", "game", "los angeles lakers", "boston celtics", "2026-05-16")
+    key = cache.compute_cache_key(
+        "NBA", "game", "los angeles lakers", "boston celtics", "2026-05-16"
+    )
     cache.set(key, "NBA", "game", negative_payload, entry_type="negative")
 
     mock_client = MagicMock()
@@ -286,13 +316,25 @@ class TestPropCacheIdentity:
     def test_two_players_same_game_different_keys_no_cross_serve(self, temp_db_path: Path):
         cache = OddsCache(db_path=temp_db_path)
 
-        key_lebron = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="LeBron James")
-        key_tatum = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="Jayson Tatum")
+        key_lebron = cache.compute_cache_key(
+            "NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="LeBron James"
+        )
+        key_tatum = cache.compute_cache_key(
+            "NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="Jayson Tatum"
+        )
 
         assert key_lebron != key_tatum
 
-        payload_lebron = {"status": "success", "player": "LeBron James", "quotes": [{"player": "LeBron James", "price": -110}]}
-        payload_tatum = {"status": "success", "player": "Jayson Tatum", "quotes": [{"player": "Jayson Tatum", "price": -115}]}
+        payload_lebron = {
+            "status": "success",
+            "player": "LeBron James",
+            "quotes": [{"player": "LeBron James", "price": -110}],
+        }
+        payload_tatum = {
+            "status": "success",
+            "player": "Jayson Tatum",
+            "quotes": [{"player": "Jayson Tatum", "price": -115}],
+        }
 
         cache.set(key_lebron, "NBA", "pts", payload_lebron)
         cache.set(key_tatum, "NBA", "pts", payload_tatum)
@@ -308,11 +350,13 @@ class TestPropCacheIdentity:
     def test_one_player_with_stable_id(self, temp_db_path: Path):
         cache = OddsCache(db_path=temp_db_path)
 
-        key_by_id = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_id="pid-123")
+        key_by_id = cache.compute_cache_key(
+            "NBA", "pts", "lakers", "celtics", "2026-05-16", player_id="pid-123"
+        )
         payload = {
             "status": "success",
             "player_id": "pid-123",
-            "quotes": [{"player_id": "pid-123", "player": "LeBron James", "price": -110}]
+            "quotes": [{"player_id": "pid-123", "player": "LeBron James", "price": -110}],
         }
 
         cache.set(key_by_id, "NBA", "pts", payload)
@@ -326,19 +370,25 @@ class TestPropCacheIdentity:
         cache = OddsCache(db_path=temp_db_path)
 
         # Retrieval using different name casing / spacing / accents Normalization
-        key_original = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="Luka Dončić")
-        key_normalized = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="luka doncic  ")
+        key_original = cache.compute_cache_key(
+            "NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="Luka Dončić"
+        )
+        key_normalized = cache.compute_cache_key(
+            "NBA", "pts", "lakers", "celtics", "2026-05-16", player_name="luka doncic  "
+        )
 
         assert key_original == key_normalized
 
-    def test_legacy_playerless_prop_entry_misses_for_player_specific_lookup(self, temp_db_path: Path):
+    def test_legacy_playerless_prop_entry_misses_for_player_specific_lookup(
+        self, temp_db_path: Path
+    ):
         cache = OddsCache(db_path=temp_db_path)
 
         # Legacy entry has no player_name/id in its cache key, and no quotes with the player inside
         key_legacy = cache.compute_cache_key("NBA", "pts", "lakers", "celtics", "2026-05-16")
         payload_legacy = {
             "status": "success",
-            "quotes": []  # empty/no player info
+            "quotes": [],  # empty/no player info
         }
         cache.set(key_legacy, "NBA", "pts", payload_legacy)
 

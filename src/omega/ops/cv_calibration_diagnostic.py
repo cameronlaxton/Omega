@@ -64,7 +64,9 @@ from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 logger = logging.getLogger("cv_calibration_diagnostic")
 
 _MIN_SAMPLES = int(os.environ.get("OMEGA_MIN_SAMPLES", 30))
-_MIN_CV_SAMPLES = _MIN_SAMPLES * 2  # need enough that each fold's train split clears the fitter's min samples
+_MIN_CV_SAMPLES = (
+    _MIN_SAMPLES * 2
+)  # need enough that each fold's train split clears the fitter's min samples
 
 
 @dataclass
@@ -111,7 +113,7 @@ def raw_oos(
     calibrated scores use, so raw-vs-calibrated is apples-to-apples. Raw is
     parameter-free, so it cannot overfit — if calibrated ECE is worse than this,
     the calibration step is adding noise, not removing it. Returns (mean, pass_rate)."""
-    n = len(predictions)
+    len(predictions)
     eces: list[float] = []
     for r in range(repeats):
         assignment = stratified_folds(outcomes, folds, base_seed + r)
@@ -277,7 +279,10 @@ def main(argv: list[str] | None = None) -> int:
     if n < _MIN_CV_SAMPLES:
         logger.error(
             "Only %d graded %s pairs for %s — need >=%d to cross-validate.",
-            n, args.plane, args.league, _MIN_CV_SAMPLES,
+            n,
+            args.plane,
+            args.league,
+            _MIN_CV_SAMPLES,
         )
         return 1
     if len(set(outcomes)) < 2:
@@ -298,16 +303,24 @@ def main(argv: list[str] | None = None) -> int:
     base_rate = sum(outcomes) / n
     print(
         f"\n{args.league} / {args.plane}  (market={market})  n={n}  "
-        f"base_rate={base_rate:.3f}  mean_pred={sum(predictions)/n:.3f}"
+        f"base_rate={base_rate:.3f}  mean_pred={sum(predictions) / n:.3f}"
     )
-    print(f"CV: {args.folds}-fold x {args.repeats} repeats, stratified, out-of-sample. floor={args.ece_floor:.3f}")
+    print(
+        f"CV: {args.folds}-fold x {args.repeats} repeats, stratified, out-of-sample. floor={args.ece_floor:.3f}"
+    )
     print("-" * 104)
 
     raw_mean, raw_pass = raw_oos(
-        predictions, outcomes,
-        folds=args.folds, repeats=args.repeats, ece_floor=args.ece_floor, base_seed=base_seed,
+        predictions,
+        outcomes,
+        folds=args.folds,
+        repeats=args.repeats,
+        ece_floor=args.ece_floor,
+        base_seed=base_seed,
     )
-    print(f"{'raw (none)':<10}{'':>9}{raw_mean:>9.4f}{'(no calibration)':>17}{'':>19}{raw_pass:>9.0%}")
+    print(
+        f"{'raw (none)':<10}{'':>9}{raw_mean:>9.4f}{'(no calibration)':>17}{'':>19}{raw_pass:>9.0%}"
+    )
 
     print(
         f"{'method':<10}{'raw_ECE':>9}{'cal_ECE':>9}{'95%CI':>17}{'[p2.5,p97.5]':>19}"
@@ -316,8 +329,16 @@ def main(argv: list[str] | None = None) -> int:
     results: list[CvResult] = []
     for method in methods:
         res = cross_validate(
-            fitter, predictions, outcomes, args.league, market, method,
-            folds=args.folds, repeats=args.repeats, ece_floor=args.ece_floor, base_seed=base_seed,
+            fitter,
+            predictions,
+            outcomes,
+            args.league,
+            market,
+            method,
+            folds=args.folds,
+            repeats=args.repeats,
+            ece_floor=args.ece_floor,
+            base_seed=base_seed,
         )
         results.append(res)
         ci_s = f"[{res.cal_ece_ci95[0]:.4f},{res.cal_ece_ci95[1]:.4f}]"

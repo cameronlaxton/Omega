@@ -51,8 +51,12 @@ def evaluate_backtest_parity(
     if n_eval == 0:
         return {
             "schema_version": 1,
-            "plane": plane, "n_eval": 0, "candidate": None, "incumbent": None,
-            "recommend_promotion": False, "reasons": ["no eval pairs"],
+            "plane": plane,
+            "n_eval": 0,
+            "candidate": None,
+            "incumbent": None,
+            "recommend_promotion": False,
+            "reasons": ["no eval pairs"],
         }
 
     candidate = fitter.evaluate(candidate_profile, preds, outs)
@@ -122,8 +126,11 @@ def main(argv: list[str] | None = None) -> int:
     store = TraceStore(db_path=args.historical_db)
     try:
         graded = store.query_traces(
-            league=args.league, execution_mode="historical_replay",
-            has_outcome=True, calibration_eligible_only=True, limit=1_000_000,
+            league=args.league,
+            execution_mode="historical_replay",
+            has_outcome=True,
+            calibration_eligible_only=True,
+            limit=1_000_000,
         )
     finally:
         store.close()

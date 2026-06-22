@@ -64,7 +64,12 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError:
         n_events = n_outcomes = n_odds = 0
 
-    logger.info("manifest_id=%s source=%s league=%s", verified.manifest_id, verified.source_name, verified.league)
+    logger.info(
+        "manifest_id=%s source=%s league=%s",
+        verified.manifest_id,
+        verified.source_name,
+        verified.league,
+    )
     logger.info("files=%d total_rows=%d", len(verified.files), verified.total_rows)
     logger.info("date_range=%s..%s", verified.date_range_start, verified.date_range_end)
     logger.info("normalized: events=%d outcomes=%d odds=%d", n_events, n_outcomes, n_odds)

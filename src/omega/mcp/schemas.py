@@ -155,11 +155,7 @@ class FetchOutcomesRequest(BaseModel):
     @model_validator(mode="after")
     def _check_leagues(self) -> FetchOutcomesRequest:
         if self.leagues is not None:
-            bad = [
-                lg
-                for lg in self.leagues
-                if lg.lower() not in _FETCH_OUTCOMES_VALID_LEAGUES
-            ]
+            bad = [lg for lg in self.leagues if lg.lower() not in _FETCH_OUTCOMES_VALID_LEAGUES]
             if bad:
                 raise ValueError(
                     f"Unknown league(s): {', '.join(bad)}. "

@@ -161,7 +161,7 @@ def _print_diagnostics(games: list[dict]) -> None:
             real_tot = ""
             outcome = game.get("outcome")
             if outcome:
-                real_tot = f"  (real {int(outcome['home_score'])+int(outcome['away_score'])})"
+                real_tot = f"  (real {int(outcome['home_score']) + int(outcome['away_score'])})"
             print(
                 f"{label:<35} {d['base_possessions']:>4} {d['mean_home_score']:>7.1f} "
                 f"{d['mean_away_score']:>7.1f} {d['mean_total']:>7.1f}{real_tot:12} "
@@ -174,10 +174,17 @@ def _print_diagnostics(games: list[dict]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Modifier-free CRPS baseline sweep")
     parser.add_argument("--league", default=None, help="Filter to one league (e.g. NBA)")
-    parser.add_argument("--json", default=None, metavar="PATH", help="Write JSON summary to this path")
-    parser.add_argument("--n-iterations", type=int, default=500, help="Simulation iterations per game")
-    parser.add_argument("--diagnose", action="store_true",
-                        help="Print per-game Markov diagnostics (possession count, PPP, expected scores)")
+    parser.add_argument(
+        "--json", default=None, metavar="PATH", help="Write JSON summary to this path"
+    )
+    parser.add_argument(
+        "--n-iterations", type=int, default=500, help="Simulation iterations per game"
+    )
+    parser.add_argument(
+        "--diagnose",
+        action="store_true",
+        help="Print per-game Markov diagnostics (possession count, PPP, expected scores)",
+    )
     args = parser.parse_args()
 
     # Source games: prefer graded TraceStore records; fall back to bundled fixtures
@@ -229,7 +236,9 @@ def main() -> None:
         if (i + 1) % 5 == 0:
             print(f"  processed {i + 1}/{len(games)} games...")
 
-    print(f"\n[info] Sweep complete. Processed {len(games) - skipped}/{len(games)} games ({skipped} skipped)\n")
+    print(
+        f"\n[info] Sweep complete. Processed {len(games) - skipped}/{len(games)} games ({skipped} skipped)\n"
+    )
 
     # Build summary table
     all_targets = sorted(set(fast_crps) | set(markov_crps))
@@ -239,7 +248,11 @@ def main() -> None:
         markov_vals = markov_crps.get(target, [])
         fast_mean = _mean(fast_vals)
         markov_mean = _mean(markov_vals)
-        delta = markov_mean - fast_mean if not (math.isnan(fast_mean) or math.isnan(markov_mean)) else float("nan")
+        delta = (
+            markov_mean - fast_mean
+            if not (math.isnan(fast_mean) or math.isnan(markov_mean))
+            else float("nan")
+        )
         rows.append(
             {
                 "target": target,
@@ -257,10 +270,20 @@ def main() -> None:
     print(header)
     print(sep)
     for r in rows:
-        delta_str = f"{r['delta_markov_vs_fast']:+.4f}" if r["delta_markov_vs_fast"] is not None else "   n/a"
-        note = " <-- better" if (r["delta_markov_vs_fast"] is not None and r["delta_markov_vs_fast"] < 0) else ""
+        delta_str = (
+            f"{r['delta_markov_vs_fast']:+.4f}"
+            if r["delta_markov_vs_fast"] is not None
+            else "   n/a"
+        )
+        note = (
+            " <-- better"
+            if (r["delta_markov_vs_fast"] is not None and r["delta_markov_vs_fast"] < 0)
+            else ""
+        )
         fast_str = f"{r['fast_mean_crps']:.4f}" if r["fast_mean_crps"] is not None else "   n/a"
-        markov_str = f"{r['markov_mean_crps']:.4f}" if r["markov_mean_crps"] is not None else "   n/a"
+        markov_str = (
+            f"{r['markov_mean_crps']:.4f}" if r["markov_mean_crps"] is not None else "   n/a"
+        )
         print(
             f"{r['target']:<12} {r['fast_n']:>6} {fast_str:>10} "
             f"{r['markov_n']:>8} {markov_str:>12} {delta_str:>8}{note}"
@@ -276,7 +299,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-
-

@@ -493,9 +493,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--game-date", help="(single-trace mode) Game date YYYY-MM-DD")
     parser.add_argument("--home", help="(single-trace mode) Home team string")
     parser.add_argument("--away", help="(single-trace mode) Away team string")
-    parser.add_argument(
-        "--db", default=None, help="SQLite path (default: var/omega_traces.db)"
-    )
+    parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument(
         "--dry-run", action="store_true", help="Print what would attach but don't write"
     )

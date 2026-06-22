@@ -217,9 +217,7 @@ def test_renderer_never_reads_legacy_run_artifacts(workspace, monkeypatch):
         return real_open(file, *args, **kwargs)
 
     with mock.patch("builtins.open", side_effect=tracking_open):
-        render_session_audit(
-            session_id, db_path=db_path, sidecar_dir=sidecar_dir, out_dir=out_dir
-        )
+        render_session_audit(session_id, db_path=db_path, sidecar_dir=sidecar_dir, out_dir=out_dir)
 
     for path in opened:
         assert "RUN_TRACE" not in path
@@ -232,7 +230,5 @@ def test_renderer_atomic_write_no_tmp_leftover(workspace):
     _write_sidecar(sidecar_dir / f"{session_id}.json", session_id)
     TraceStore(db_path=str(db_path)).close()
 
-    render_session_audit(
-        session_id, db_path=db_path, sidecar_dir=sidecar_dir, out_dir=out_dir
-    )
+    render_session_audit(session_id, db_path=db_path, sidecar_dir=sidecar_dir, out_dir=out_dir)
     assert list(out_dir.glob("*.tmp")) == []

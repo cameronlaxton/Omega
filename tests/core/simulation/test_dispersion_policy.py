@@ -1,5 +1,6 @@
 import pytest
 from pydantic import ValidationError
+
 from omega.core.simulation.dispersion import DispersionPolicy
 
 

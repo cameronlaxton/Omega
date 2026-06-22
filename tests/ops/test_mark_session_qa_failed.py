@@ -45,4 +45,3 @@ def test_mark_sidecar_appends_quality_gate_once(tmp_path):
     assert event.step == "qa_failed_quarantine_0528"
     assert event.status == "fail"
     assert event.notes == "QA failed"
-

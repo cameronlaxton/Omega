@@ -82,9 +82,7 @@ class VariantSweepReport(BaseModel):
     dataset_hash: str | None = None
 
 
-def _artifact_records(
-    artifacts: list[FrozenArtifact], validation_start: str
-) -> list[dict]:
+def _artifact_records(artifacts: list[FrozenArtifact], validation_start: str) -> list[dict]:
     """Eval universe: artifacts on/after ``validation_start`` with a graded outcome.
 
     Shaped as ``{"_dt": date, "art": artifact}`` so ``partition_fold`` (which keys
@@ -209,12 +207,12 @@ def sweep_backend_variants(
     # Reuse the calibration walk-forward's no-leak primitive: validation is strictly
     # before holdout_start, holdout is the strictly-after remainder (sealed).
     config = WalkForwardConfig(mode="expanding")
-    validation_recs, holdout_recs, _ = partition_fold(
-        records, holdout_start, _FAR_FUTURE, config
-    )
+    validation_recs, holdout_recs, _ = partition_fold(records, holdout_start, _FAR_FUTURE, config)
     # Hard guard mirroring run_walk_forward's: no validation event may reach the
     # holdout window.
-    assert all(r["_dt"] < holdout_start for r in validation_recs), "variant-sweep validation/holdout leak"
+    assert all(r["_dt"] < holdout_start for r in validation_recs), (
+        "variant-sweep validation/holdout leak"
+    )
 
     engine = OmegaSimulationEngine()
 
@@ -223,8 +221,13 @@ def sweep_backend_variants(
     # smaller, easier subset (e.g. one whose lambda_scale skipped hard games).
     val_pairs = {
         c.profile_id: _simulate_pairs(
-            engine, backend, c.params, validation_recs,
-            n_iterations=n_iterations, seed=seed, exact=exact,
+            engine,
+            backend,
+            c.params,
+            validation_recs,
+            n_iterations=n_iterations,
+            seed=seed,
+            exact=exact,
         )
         for c in candidates
     }
@@ -278,8 +281,13 @@ def sweep_backend_variants(
         winner_score = next(s for s in scores if s.profile_id == winner_id)
         winner_candidate = next(c for c in candidates if c.profile_id == winner_id)
         holdout_pairs = _simulate_pairs(
-            engine, backend, winner_candidate.params, holdout_recs,
-            n_iterations=n_iterations, seed=seed, exact=exact,
+            engine,
+            backend,
+            winner_candidate.params,
+            holdout_recs,
+            n_iterations=n_iterations,
+            seed=seed,
+            exact=exact,
         )
         winner_score.holdout = _score_pairs(holdout_pairs, sorted(holdout_pairs))
         winner_score.n_holdout = len(holdout_pairs)

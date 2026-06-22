@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from omega.trace.session_report.models import AuditRow, ContextBullet, IntakeReportData, TraceReportCard
+from omega.trace.session_report.models import (
+    AuditRow,
+    ContextBullet,
+    IntakeReportData,
+    TraceReportCard,
+)
 
 
 def _clean(value: object) -> str:
@@ -120,10 +125,23 @@ def _render_card(card: TraceReportCard) -> list[str]:
 
 
 _AUDIT_HEADERS = [
-    "trace_id", "league", "matchup", "market", "selection",
-    "line", "odds", "bookmaker", "odds_at",
-    "output_mode", "tier", "calib_elig", "quality",
-    "evidence", "prior_status", "fallback", "ledger",
+    "trace_id",
+    "league",
+    "matchup",
+    "market",
+    "selection",
+    "line",
+    "odds",
+    "bookmaker",
+    "odds_at",
+    "output_mode",
+    "tier",
+    "calib_elig",
+    "quality",
+    "evidence",
+    "prior_status",
+    "fallback",
+    "ledger",
 ]
 
 
@@ -162,13 +180,15 @@ def _render_audit_table(rows: list[AuditRow]) -> list[str]:
         for row in rows:
             cells = _audit_row_cells(row)
             lines.append("| " + " | ".join(cells) + " |")
-    lines.extend([
-        "",
-        "_Legend: `odds_at` = timestamp of the odds snapshot used; "
-        "`prior_status` = data_provenance event from prior injection; "
-        "`fallback` = ⚠ N means N resolver warnings present._",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "_Legend: `odds_at` = timestamp of the odds snapshot used; "
+            "`prior_status` = data_provenance event from prior injection; "
+            "`fallback` = ⚠ N means N resolver warnings present._",
+            "",
+        ]
+    )
     return lines
 
 

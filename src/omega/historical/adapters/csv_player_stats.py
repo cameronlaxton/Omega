@@ -79,9 +79,7 @@ class CsvPlayerStatsAdapter(CsvAdapterBase):
 
     def _event_key_for(self, row: PlayerStatRow | PropMarketRow, table: dict[str, Any]) -> str:
         date_iso = parse_datetime_utc(row.date)
-        ident = resolve_event_identity(
-            self.league, row.home_team, row.away_team, alias_table=table
-        )
+        ident = resolve_event_identity(self.league, row.home_team, row.away_team, alias_table=table)
         return event_key(self.league, date_iso, ident.home, ident.away)
 
     @staticmethod

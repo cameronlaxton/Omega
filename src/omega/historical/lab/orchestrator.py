@@ -83,7 +83,11 @@ def _clv_artifact(wf_report: Any) -> dict[str, Any]:
     dataset carries odds.
     """
     if wf_report is None or wf_report.aggregate_betting is None:
-        return {"verdict": "INCONCLUSIVE", "reason": "walk_forward_betting_unavailable", "n_bets": 0}
+        return {
+            "verdict": "INCONCLUSIVE",
+            "reason": "walk_forward_betting_unavailable",
+            "n_bets": 0,
+        }
     bb = wf_report.aggregate_betting
     if bb.n_bets == 0 or bb.avg_clv is None:
         return {"verdict": "INCONCLUSIVE", "reason": "no_graded_bets", "n_bets": bb.n_bets}
@@ -231,7 +235,9 @@ def run_lab_from_store(
     if seal.winner_profile is not None:
         incumbent_profile = registry.gating_incumbent(seal.winner_profile)
         incumbent_id = incumbent_profile.profile_id if incumbent_profile else None
-        bt_artifact = evaluate_backtest_parity(graded, seal.winner_profile, incumbent_profile, plane=plane)
+        bt_artifact = evaluate_backtest_parity(
+            graded, seal.winner_profile, incumbent_profile, plane=plane
+        )
         paths["backtest_parity"] = _write_json(out_dir / "backtest_parity.json", bt_artifact)
     runner.record(
         "backtest_parity",
@@ -383,10 +389,14 @@ def run_lab(
     runner = LabCommandRunner(out_dir / "command_log.jsonl")
 
     replay_argv = [
-        "--league", league,
-        "--manifest-id", manifest_id,
-        "--db", replay_db_path,
-        "--replay-id", replay_id,
+        "--league",
+        league,
+        "--manifest-id",
+        manifest_id,
+        "--db",
+        replay_db_path,
+        "--replay-id",
+        replay_id,
         # Size historical bets so the walk-forward can grade ROI/CLV. Harmless on
         # odds-less datasets (no decision odds → no selections → CLV INCONCLUSIVE).
         "--enable-staking",

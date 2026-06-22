@@ -85,16 +85,22 @@ def _extract_engine_view(trace: dict[str, Any]) -> EngineView:
     )
 
 
-def _decision_fields(trace: dict[str, Any], ledger_rows: list[dict[str, Any]]) -> dict[str, str | None]:
+def _decision_fields(
+    trace: dict[str, Any], ledger_rows: list[dict[str, Any]]
+) -> dict[str, str | None]:
     first_ledger = ledger_rows[0] if ledger_rows else {}
     result = _first_dict(trace.get("result"))
     best = _first_dict(result.get("best_bet"))
     recs = trace.get("recommendations")
     rec = recs[0] if isinstance(recs, list) and recs and isinstance(recs[0], dict) else {}
     return {
-        "selection": _cell(first_ledger.get("selection") or best.get("selection") or rec.get("selection")),
+        "selection": _cell(
+            first_ledger.get("selection") or best.get("selection") or rec.get("selection")
+        ),
         "market": _cell(first_ledger.get("market") or rec.get("market") or trace.get("kind")),
-        "book": _cell(first_ledger.get("bookmaker") or trace.get("input_snapshot", {}).get("bookmaker")),
+        "book": _cell(
+            first_ledger.get("bookmaker") or trace.get("input_snapshot", {}).get("bookmaker")
+        ),
         "stake_status": _cell(first_ledger.get("status") or "no ledger row"),
     }
 
@@ -157,7 +163,9 @@ def _context_for_trace(
                 source_title=str(source),
             )
         )
-    input_snapshot = trace.get("input_snapshot") if isinstance(trace.get("input_snapshot"), dict) else {}
+    input_snapshot = (
+        trace.get("input_snapshot") if isinstance(trace.get("input_snapshot"), dict) else {}
+    )
     captured = [
         key
         for key in ("home_context", "away_context", "player_context", "game_context", "evidence")
@@ -314,10 +322,7 @@ def _build_audit_row(
                 break
 
     # Odds metadata: pulled from the odds resolver output embedded in snapshot
-    line_val = (
-        _cell(odds_input.get("line"))
-        or _cell(first_ledger.get("line"))
-    )
+    line_val = _cell(odds_input.get("line")) or _cell(first_ledger.get("line"))
     odds_val = (
         _cell(odds_input.get("odds_over"))
         or _cell(odds_input.get("moneyline_home"))
@@ -336,7 +341,9 @@ def _build_audit_row(
         event_id=_cell(snap.get("event_id") or odds_input.get("event_id")),
         matchup=_cell(trace.get("matchup")),
         market_type=_cell(first_ledger.get("market") or trace.get("kind")),
-        selection=_cell(first_ledger.get("selection") or best.get("selection") or rec.get("selection")),
+        selection=_cell(
+            first_ledger.get("selection") or best.get("selection") or rec.get("selection")
+        ),
         line=line_val,
         odds=odds_val,
         bookmaker=_cell(first_ledger.get("bookmaker") or snap.get("bookmaker")),
@@ -380,7 +387,9 @@ def extract_intake_report(
     sidecar = sidecar_obj.to_report_dict() if sidecar_obj is not None else None
 
     trace_ids = {str(t.get("trace_id")) for t in traces}
-    ledger_rows = store.query_ledger(league=league.upper() if league else None, start=since, end=until, limit=100_000)
+    ledger_rows = store.query_ledger(
+        league=league.upper() if league else None, start=since, end=until, limit=100_000
+    )
     ledger_by_trace: dict[str, list[dict[str, Any]]] = {}
     for row in ledger_rows:
         ledger_by_trace.setdefault(str(row.get("trace_id")), []).append(row)
@@ -411,9 +420,7 @@ def extract_intake_report(
         )
         decision = _decision_fields(trace, ledgers)
         tq = _first_dict(trace.get("trace_quality"))
-        audit_rows.append(
-            _build_audit_row(trace, ledger_rows=ledgers, evidence_rows=evidence)
-        )
+        audit_rows.append(_build_audit_row(trace, ledger_rows=ledgers, evidence_rows=evidence))
         cards.append(
             TraceReportCard(
                 trace_id=trace_id,
@@ -455,7 +462,9 @@ def extract_intake_report(
         sidecar_status=_sidecar_status(session_id, sidecar),
         coverage=_coverage_rows(traces),
         ledger_linkage=[CoverageRow(label=k, count=v) for k, v in sorted(linkage_counter.items())],
-        provenance_split=[CoverageRow(label=k, count=v) for k, v in sorted(provenance_counter.items())],
+        provenance_split=[
+            CoverageRow(label=k, count=v) for k, v in sorted(provenance_counter.items())
+        ],
         cards=cards,
         audit_rows=audit_rows,
         unmatched_ledger_rows=unmatched,

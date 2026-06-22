@@ -87,7 +87,7 @@ _TENNIS_KEYS_TTL_SECONDS = 24 * 3600
 
 
 def resolve_tennis_sport_keys(
-    client: "OddsApiClient",
+    client: OddsApiClient,
     tour: str,
     *,
     cache_dir: str | Path | None = None,
@@ -101,9 +101,7 @@ def resolve_tennis_sport_keys(
     """
     prefix = TENNIS_TOUR_KEY_PREFIXES.get(tour.upper())
     if prefix is None:
-        raise ValueError(
-            f"tour must be one of {sorted(TENNIS_TOUR_KEY_PREFIXES)}, got {tour!r}"
-        )
+        raise ValueError(f"tour must be one of {sorted(TENNIS_TOUR_KEY_PREFIXES)}, got {tour!r}")
     cache_path = Path(cache_dir or _TENNIS_KEYS_CACHE_DIR) / f"tennis_keys_{tour.lower()}.json"
     if cache_path.exists() and (time.time() - cache_path.stat().st_mtime) < ttl_seconds:
         return json.loads(cache_path.read_text(encoding="utf-8"))
@@ -118,9 +116,7 @@ def resolve_tennis_sport_keys(
             return json.loads(cache_path.read_text(encoding="utf-8"))
         raise
     keys = sorted(
-        s.key
-        for s in sports
-        if s.active and (s.key == prefix or s.key.startswith(prefix + "_"))
+        s.key for s in sports if s.active and (s.key == prefix or s.key.startswith(prefix + "_"))
     )
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(keys), encoding="utf-8")
@@ -326,8 +322,7 @@ class OddsApiClient:
         if path == "/v4" or path.startswith("/v4/"):
             corrected_path = path.removeprefix("/v4") or "/"
             raise ValueError(
-                "Odds API path must not include /v4 prefix. "
-                f'Use "{corrected_path}", not "{path}".'
+                f'Odds API path must not include /v4 prefix. Use "{corrected_path}", not "{path}".'
             )
         self._consume_budget(request_cost)
         query = dict(params)

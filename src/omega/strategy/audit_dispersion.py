@@ -31,7 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Audit prop dispersion across distributions.")
     parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument("--league", default="NFL", help="League to audit (default: NFL)")
-    parser.add_argument("--stat", default="rushing_yards", help="Stat type to audit (default: rushing_yards)")
+    parser.add_argument(
+        "--stat", default="rushing_yards", help="Stat type to audit (default: rushing_yards)"
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -50,7 +52,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # Filter for prop traces of the requested stat type
     props = [
-        t for t in traces
+        t
+        for t in traces
         if t.get("kind") == "prop" and t.get("request", {}).get("prop_type") == args.stat
     ]
 
@@ -80,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
 
         std_value = req.get("projection_std")
         std = std_value if std_value is not None else max(1.0, mean * 0.3)
-        variance = std ** 2
+        variance = std**2
         line = req.get("line", mean)
 
         # Outcome is typically in trace["outcome"]["away_score"] or "home_score" but

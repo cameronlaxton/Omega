@@ -150,8 +150,12 @@ def _mean(values: list[float]) -> float:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Markov Champion/Challenger CRPS comparison")
     parser.add_argument("--league", default=None, help="Filter to one league (e.g. NBA)")
-    parser.add_argument("--json", default=None, metavar="PATH", help="Write JSON summary to this path")
-    parser.add_argument("--n-iterations", type=int, default=500, help="Simulation iterations per game")
+    parser.add_argument(
+        "--json", default=None, metavar="PATH", help="Write JSON summary to this path"
+    )
+    parser.add_argument(
+        "--n-iterations", type=int, default=500, help="Simulation iterations per game"
+    )
     args = parser.parse_args()
 
     # Source games: prefer graded TraceStore records; fall back to bundled fixtures
@@ -210,7 +214,9 @@ def main() -> None:
             signals = _parse_signals(raw_signals)
             modifiers = signals_to_transition_modifiers(signals, home_team=game["home_team"])
             if modifiers:
-                challenger_result = _run_markov(game, transition_modifiers=modifiers, n_iterations=args.n_iterations)
+                challenger_result = _run_markov(
+                    game, transition_modifiers=modifiers, n_iterations=args.n_iterations
+                )
                 if challenger_result is not None:
                     for target, crps_val in _crps_for_result(challenger_result, outcome).items():
                         challenger_crps.setdefault(target, []).append(crps_val)
@@ -236,14 +242,18 @@ def main() -> None:
         chall_vals = challenger_crps.get(target, [])
         champ_mean = _mean(champ_vals)
         chall_mean = _mean(chall_vals)
-        delta = chall_mean - champ_mean if (chall_vals and not math.isnan(champ_mean)) else float("nan")
+        delta = (
+            chall_mean - champ_mean if (chall_vals and not math.isnan(champ_mean)) else float("nan")
+        )
         rows.append(
             {
                 "target": target,
                 "champion_n": len(champ_vals),
                 "champion_mean_crps": round(champ_mean, 4) if not math.isnan(champ_mean) else None,
                 "challenger_n": len(chall_vals),
-                "challenger_mean_crps": round(chall_mean, 4) if not math.isnan(chall_mean) else None,
+                "challenger_mean_crps": round(chall_mean, 4)
+                if not math.isnan(chall_mean)
+                else None,
                 "delta_vs_champion": round(delta, 4) if not math.isnan(delta) else None,
                 "promotes": (not math.isnan(delta) and delta < 0),
             }
@@ -258,9 +268,15 @@ def main() -> None:
     print(header)
     print(sep)
     for r in rows:
-        delta_str = f"{r['delta_vs_champion']:+.4f}" if r["delta_vs_champion"] is not None else "    n/a"
-        verdict = "PROMOTES" if r["promotes"] else ("REJECTS" if r["challenger_n"] > 0 else "NO_DATA")
-        chall_crps_str = f"{r['challenger_mean_crps']}" if r["challenger_mean_crps"] is not None else "   n/a"
+        delta_str = (
+            f"{r['delta_vs_champion']:+.4f}" if r["delta_vs_champion"] is not None else "    n/a"
+        )
+        verdict = (
+            "PROMOTES" if r["promotes"] else ("REJECTS" if r["challenger_n"] > 0 else "NO_DATA")
+        )
+        chall_crps_str = (
+            f"{r['challenger_mean_crps']}" if r["challenger_mean_crps"] is not None else "   n/a"
+        )
         print(
             f"{r['target']:<12} {r['champion_n']:>7} {r['champion_mean_crps']:>10} "
             f"{r['challenger_n']:>7} {chall_crps_str:>10} {delta_str:>8} {verdict:>10}"
@@ -282,7 +298,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-
-

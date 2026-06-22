@@ -161,14 +161,22 @@ def build_wnba_artifacts(
             resolve_entity(home.team_display_name, alias_table) is None
             or resolve_entity(away.team_display_name, alias_table) is None
         ):
-            skipped.append(f"{game_id} (unresolved team: {home.team_display_name} / {away.team_display_name})")
+            skipped.append(
+                f"{game_id} (unresolved team: {home.team_display_name} / {away.team_display_name})"
+            )
             continue
 
         home_poss = estimate_possessions(
-            home.field_goals_attempted, home.offensive_rebounds, home.turnovers, home.free_throws_attempted
+            home.field_goals_attempted,
+            home.offensive_rebounds,
+            home.turnovers,
+            home.free_throws_attempted,
         )
         away_poss = estimate_possessions(
-            away.field_goals_attempted, away.offensive_rebounds, away.turnovers, away.free_throws_attempted
+            away.field_goals_attempted,
+            away.offensive_rebounds,
+            away.turnovers,
+            away.free_throws_attempted,
         )
         pace = round((home_poss + away_poss) / 2.0, 2)
 
@@ -215,6 +223,4 @@ def load_wnba_artifacts(
     """Fetch (cached) the wehoop WNBA team box for *season* and build artifacts."""
     df = fetch_team_box(season, cache_root=cache_root, url_opener=url_opener)
     rows = df.to_dict(orient="records")
-    return build_wnba_artifacts(
-        rows, alias_table=alias_table, session_path=session_path
-    )
+    return build_wnba_artifacts(rows, alias_table=alias_table, session_path=session_path)

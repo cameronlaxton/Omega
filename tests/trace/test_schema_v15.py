@@ -69,17 +69,19 @@ def test_apply_v15_upgrades_a_pre_v15_table():
 def test_sizing_audit_round_trips():
     store = TraceStore(db_path=_tmp_db())
     try:
-        store.persist({
-            "trace_id": "t1",
-            "run_id": "r",
-            "timestamp": "2026-06-01T00:00:00Z",
-            "prompt": "p",
-            "league": "NBA",
-            "matchup": "A @ B",
-            "execution_mode": "native_sim",
-            "kind": "game",
-            "result": {"status": "success"},
-        })
+        store.persist(
+            {
+                "trace_id": "t1",
+                "run_id": "r",
+                "timestamp": "2026-06-01T00:00:00Z",
+                "prompt": "p",
+                "league": "NBA",
+                "matchup": "A @ B",
+                "execution_mode": "native_sim",
+                "kind": "game",
+                "result": {"status": "success"},
+            }
+        )
         bet = LedgerBet(
             ledger_id="lb1",
             trace_id="t1",
@@ -110,16 +112,31 @@ def test_sizing_audit_round_trips():
 def test_audit_columns_default_null_when_absent():
     store = TraceStore(db_path=_tmp_db())
     try:
-        store.persist({
-            "trace_id": "t2", "run_id": "r", "timestamp": "2026-06-01T00:00:00Z",
-            "prompt": "p", "league": "NBA", "matchup": "A @ B",
-            "execution_mode": "native_sim", "kind": "game", "result": {"status": "success"},
-        })
-        store.record_ledger_bet(LedgerBet(
-            ledger_id="lb2", trace_id="t2", market="moneyline", selection="B",
-            selection_descriptor="home_moneyline", odds=-110,
-            provenance=BetProvenance.BACKFILL, decision_timestamp="2026-06-01T00:00:00+00:00",
-        ))
+        store.persist(
+            {
+                "trace_id": "t2",
+                "run_id": "r",
+                "timestamp": "2026-06-01T00:00:00Z",
+                "prompt": "p",
+                "league": "NBA",
+                "matchup": "A @ B",
+                "execution_mode": "native_sim",
+                "kind": "game",
+                "result": {"status": "success"},
+            }
+        )
+        store.record_ledger_bet(
+            LedgerBet(
+                ledger_id="lb2",
+                trace_id="t2",
+                market="moneyline",
+                selection="B",
+                selection_descriptor="home_moneyline",
+                odds=-110,
+                provenance=BetProvenance.BACKFILL,
+                decision_timestamp="2026-06-01T00:00:00+00:00",
+            )
+        )
         row = store.get_ledger_bets("t2")[0]
         assert row["staking_policy_id"] is None
         assert row["sizing_reasons"] is None
@@ -131,17 +148,32 @@ def test_audit_columns_default_null_when_absent():
 def test_empty_sizing_reasons_round_trips_as_empty_list():
     store = TraceStore(db_path=_tmp_db())
     try:
-        store.persist({
-            "trace_id": "t-empty", "run_id": "r", "timestamp": "2026-06-01T00:00:00Z",
-            "prompt": "p", "league": "NBA", "matchup": "A @ B",
-            "execution_mode": "native_sim", "kind": "game", "result": {"status": "success"},
-        })
-        store.record_ledger_bet(LedgerBet(
-            ledger_id="lb-empty", trace_id="t-empty", market="moneyline", selection="B",
-            selection_descriptor="home_moneyline", odds=-110,
-            provenance=BetProvenance.BACKFILL, decision_timestamp="2026-06-01T00:00:00+00:00",
-            sizing_reasons=[],
-        ))
+        store.persist(
+            {
+                "trace_id": "t-empty",
+                "run_id": "r",
+                "timestamp": "2026-06-01T00:00:00Z",
+                "prompt": "p",
+                "league": "NBA",
+                "matchup": "A @ B",
+                "execution_mode": "native_sim",
+                "kind": "game",
+                "result": {"status": "success"},
+            }
+        )
+        store.record_ledger_bet(
+            LedgerBet(
+                ledger_id="lb-empty",
+                trace_id="t-empty",
+                market="moneyline",
+                selection="B",
+                selection_descriptor="home_moneyline",
+                odds=-110,
+                provenance=BetProvenance.BACKFILL,
+                decision_timestamp="2026-06-01T00:00:00+00:00",
+                sizing_reasons=[],
+            )
+        )
         row = store.get_ledger_bets("t-empty")[0]
         assert row["sizing_reasons"] == []
     finally:

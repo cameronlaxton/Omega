@@ -1,7 +1,4 @@
-import pytest
-
 from omega.core.calibration.registry import CalibrationRegistry
-from omega.core.calibration.profiles import CalibrationProfile
 
 
 def test_registry_slice_resolution(monkeypatch):
@@ -21,7 +18,7 @@ def test_registry_slice_resolution(monkeypatch):
                 "params": {"x": [0.0, 1.0], "y": [0.0, 1.0]},
                 "metrics": {},
                 "training_window": "365d",
-                "sample_size": 1000
+                "sample_size": 1000,
             },
             {
                 "profile_id": "playoff_nba",
@@ -35,7 +32,7 @@ def test_registry_slice_resolution(monkeypatch):
                 "params": {"x": [0.0, 1.0], "y": [0.0, 1.0]},
                 "metrics": {},
                 "training_window": "365d",
-                "sample_size": 1000
+                "sample_size": 1000,
             },
             {
                 "profile_id": "wrong_market_nba",
@@ -49,8 +46,8 @@ def test_registry_slice_resolution(monkeypatch):
                 "params": {"x": [0.0, 1.0], "y": [0.0, 1.0]},
                 "metrics": {},
                 "training_window": "365d",
-                "sample_size": 1000
-            }
+                "sample_size": 1000,
+            },
         ]
     }
     monkeypatch.setattr(registry, "_load", lambda: profiles_data)

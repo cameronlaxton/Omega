@@ -13,9 +13,17 @@ from omega.trace.store import TraceStore
 
 def _row(signal_type: str, league: str = "NBA", **kw) -> SignalPerformanceRow:
     base = dict(
-        signal_type=signal_type, source="espn", obs_window="last_5", league=league,
-        sample_size=40, direction_correct=26, direction_accuracy=0.65,
-        mean_confidence=0.7, realized_hit_rate=0.62, calibration_gap=0.05, brier=0.22,
+        signal_type=signal_type,
+        source="espn",
+        obs_window="last_5",
+        league=league,
+        sample_size=40,
+        direction_correct=26,
+        direction_accuracy=0.65,
+        mean_confidence=0.7,
+        realized_hit_rate=0.62,
+        calibration_gap=0.05,
+        brier=0.22,
     )
     base.update(kw)
     return SignalPerformanceRow(**base)

@@ -127,9 +127,7 @@ def main(
     taking (iso_date, league) and returning a list of FinalGame. Production
     leaves it None and the live ESPN soccer fetcher is used.
     """
-    parser = argparse.ArgumentParser(
-        description="Attach ESPN final scores to soccer game traces"
-    )
+    parser = argparse.ArgumentParser(description="Attach ESPN final scores to soccer game traces")
     parser.add_argument(
         "--since", default="yesterday", help="Start date (YYYY-MM-DD | today | yesterday)"
     )
@@ -141,9 +139,7 @@ def main(
         default=list(_SOCCER_LEAGUES),
         help="Which soccer leagues to process (default: all)",
     )
-    parser.add_argument(
-        "--db", default=None, help="SQLite path (default: var/omega_traces.db)"
-    )
+    parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -289,8 +285,3 @@ def main(
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-
-

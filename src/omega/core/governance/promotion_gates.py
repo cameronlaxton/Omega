@@ -149,7 +149,10 @@ def artifact_indicates_pass(evidence: dict[str, Any] | None) -> tuple[bool, str]
         return verdict == "PASS", f"verdict={verdict}"
     if evidence.get("non_regression") is True:
         return True, "non_regression=true"
-    return False, "artifact has no recognized pass signal (state/recommend_promotion/verdict/non_regression)"
+    return (
+        False,
+        "artifact has no recognized pass signal (state/recommend_promotion/verdict/non_regression)",
+    )
 
 
 def _evidence_gate(name: str, confirmed: bool, evidence: dict[str, Any] | None) -> GateResult:
@@ -200,7 +203,9 @@ def evaluate_promotion_gates(
     # Gate 1: sample size.
     n = candidate.sample_size
     results.append(
-        GateResult("SAMPLE_SIZE", n >= min_samples, f"candidate.sample_size={n}, required>={min_samples}")
+        GateResult(
+            "SAMPLE_SIZE", n >= min_samples, f"candidate.sample_size={n}, required>={min_samples}"
+        )
     )
 
     # Gate 2: absolute ECE quality floor on the candidate itself.
@@ -228,7 +233,11 @@ def evaluate_promotion_gates(
         )
     else:
         results.append(
-            GateResult("ECE_FLOOR", ece <= ece_floor, f"candidate.{src}={ece:.4f}, required<={ece_floor:.4f}")
+            GateResult(
+                "ECE_FLOOR",
+                ece <= ece_floor,
+                f"candidate.{src}={ece:.4f}, required<={ece_floor:.4f}",
+            )
         )
 
     # Gate 3: Brier improvement vs incumbent.
@@ -240,7 +249,9 @@ def evaluate_promotion_gates(
     else:
         inc_brier = incumbent.metrics.get("brier_score")
         if inc_brier is None:
-            results.append(GateResult("BRIER_IMPROVES", True, "incumbent has no brier_score — auto-pass"))
+            results.append(
+                GateResult("BRIER_IMPROVES", True, "incumbent has no brier_score — auto-pass")
+            )
         else:
             improvement = inc_brier - cand_brier
             results.append(
@@ -261,7 +272,9 @@ def evaluate_promotion_gates(
     else:
         inc_log = incumbent.metrics.get("log_loss")
         if inc_log is None:
-            results.append(GateResult("LOG_LOSS_NO_REG", True, "incumbent has no log_loss — auto-pass"))
+            results.append(
+                GateResult("LOG_LOSS_NO_REG", True, "incumbent has no log_loss — auto-pass")
+            )
         else:
             regression = cand_log - inc_log
             results.append(

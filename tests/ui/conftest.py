@@ -180,9 +180,7 @@ def seeded(db_path: str, sessions_dir: Path) -> dict[str, Any]:
 
 @pytest.fixture
 def app(seeded: dict[str, Any]):
-    return build_console_app(
-        db_path=seeded["db_path"], sessions_dir=str(seeded["sessions_dir"])
-    )
+    return build_console_app(db_path=seeded["db_path"], sessions_dir=str(seeded["sessions_dir"]))
 
 
 @pytest.fixture

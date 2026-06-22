@@ -40,9 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--n-iterations", type=int, default=1000)
     parser.add_argument("--simulation-backend", default="fast_score")
     parser.add_argument("--enable-staking", action="store_true")
-    parser.add_argument(
-        "--leakage-policy", choices=["skip", "fail"], default="skip"
-    )
+    parser.add_argument("--leakage-policy", choices=["skip", "fail"], default="skip")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 

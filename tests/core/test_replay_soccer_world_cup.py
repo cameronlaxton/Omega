@@ -91,12 +91,11 @@ def _promote_profile(store, profile_id="fifa_intl_v1", rho=-0.11, as_of="2026-06
 
 
 @pytest.mark.parametrize(
-    "league,home,away,hxg,hxga,axg,axga", _FIXTURES,
+    "league,home,away,hxg,hxga,axg,axga",
+    _FIXTURES,
     ids=[f"{f[1]}_v_{f[2]}".replace(" ", "_") for f in _FIXTURES],
 )
-def test_replay_is_bit_identical_with_nonzero_draw_prob(
-    league, home, away, hxg, hxga, axg, axga
-):
+def test_replay_is_bit_identical_with_nonzero_draw_prob(league, home, away, hxg, hxga, axg, axga):
     seed = int.from_bytes(hashlib.sha256(f"{home}|{away}".encode()).digest()[:4], "big") % 100_000
     req = _request(league, home, away, hxg, hxga, axg, axga, seed=seed)
     first = analyze_game(req)
@@ -128,9 +127,7 @@ def test_three_way_edges_priced_when_draw_odds_supplied():
         "moneyline_draw": +270,
         "over_under": 2.5,
     }
-    resp = analyze_game(
-        _request(league, home, away, hxg, hxga, axg, axga, seed=11, odds=odds)
-    )
+    resp = analyze_game(_request(league, home, away, hxg, hxga, axg, axga, seed=11, odds=odds))
     assert resp.status == "success"
     sides = {e.side for e in resp.edges}
     assert "draw" in sides  # 3-way moneyline evaluated, not just home/away
@@ -201,9 +198,7 @@ def test_injection_preserves_caller_supplied_rho_for_replay():
     try:
         _promote_profile(store, rho=-0.11)
         recorded = {"rho": -0.2, "rho_profile_id": "recorded_run"}
-        merged, event = build_game_prior_payload(
-            "FIFA_WORLD_CUP_2026", recorded, store
-        )
+        merged, event = build_game_prior_payload("FIFA_WORLD_CUP_2026", recorded, store)
         assert merged == recorded  # replay never re-reads live table state
         assert event is None
     finally:
@@ -221,9 +216,7 @@ def test_provenance_event_lands_in_session_sidecar(tmp_path):
     store = _tmp_store()
     try:
         _promote_profile(store)
-        _, event = inject_game_priors(
-            {"league": "FIFA_WORLD_CUP_2026"}, store=store
-        )
+        _, event = inject_game_priors({"league": "FIFA_WORLD_CUP_2026"}, store=store)
         sidecar = tmp_path / "test-session.json"
         sidecar.write_text(
             json.dumps(
@@ -238,9 +231,7 @@ def test_provenance_event_lands_in_session_sidecar(tmp_path):
         )
         append_audit_events(sidecar, [event])
         saved = json.loads(Path(sidecar).read_text(encoding="utf-8"))
-        events = [
-            e for e in saved["audit_events"] if e["event_type"] == "data_provenance"
-        ]
+        events = [e for e in saved["audit_events"] if e["event_type"] == "data_provenance"]
         assert len(events) == 1
         assert events[0]["outputs"]["rho_profile_id"] == "fifa_intl_v1"
         assert events[0]["outputs"]["rho_as_of_date"] == "2026-06-10"
@@ -256,12 +247,30 @@ def test_provenance_event_lands_in_session_sidecar(tmp_path):
 def test_profile_rho_measurably_shifts_draw_prob():
     league, home, away, hxg, hxga, axg, axga = _FIXTURES[2]  # near-even matchup
     flat = analyze_game(
-        _request(league, home, away, hxg, hxga, axg, axga, seed=99,
-                 prior={"rho": 0.0, "rho_profile_id": "flat_test"})
+        _request(
+            league,
+            home,
+            away,
+            hxg,
+            hxga,
+            axg,
+            axga,
+            seed=99,
+            prior={"rho": 0.0, "rho_profile_id": "flat_test"},
+        )
     )
     corrected = analyze_game(
-        _request(league, home, away, hxg, hxga, axg, axga, seed=99,
-                 prior={"rho": -0.2, "rho_profile_id": "intl_test"})
+        _request(
+            league,
+            home,
+            away,
+            hxg,
+            hxga,
+            axg,
+            axga,
+            seed=99,
+            prior={"rho": -0.2, "rho_profile_id": "intl_test"},
+        )
     )
     assert flat.status == corrected.status == "success"
     assert corrected.simulation.draw_prob > flat.simulation.draw_prob

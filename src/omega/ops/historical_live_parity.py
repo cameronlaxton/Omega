@@ -116,8 +116,11 @@ def main(argv: list[str] | None = None) -> int:
     hstore = TraceStore(db_path=args.historical_db)
     try:
         historical = hstore.query_traces(
-            league=args.league, execution_mode="historical_replay",
-            has_outcome=True, calibration_eligible_only=True, limit=1_000_000,
+            league=args.league,
+            execution_mode="historical_replay",
+            has_outcome=True,
+            calibration_eligible_only=True,
+            limit=1_000_000,
         )
     finally:
         hstore.close()
@@ -134,8 +137,12 @@ def main(argv: list[str] | None = None) -> int:
     report["league"] = args.league
     report["market"] = args.market
     print(json.dumps(report, indent=2))
-    logger.info("parity verdict: %s (historical_n=%d live_n=%d)",
-                report["state"], report["historical_n"], report["live_n"])
+    logger.info(
+        "parity verdict: %s (historical_n=%d live_n=%d)",
+        report["state"],
+        report["historical_n"],
+        report["live_n"],
+    )
 
     return {"PASS": 0, "FAIL": 1, "INCONCLUSIVE": 2}[report["state"]]
 

@@ -45,8 +45,7 @@ def _training_trace(trace_id: str = "sandbox-secret-123") -> dict:
             "market_context": {"odds_over": -110},
         },
         "reasoning_narrative": (
-            "Usage rose after injury news; ignore over_prob and edge_pct "
-            "from sandbox-secret-123."
+            "Usage rose after injury news; ignore over_prob and edge_pct from sandbox-secret-123."
         ),
         "reasoning_downgrade_rationale": (
             "Downgraded because market_context odds were stale for "

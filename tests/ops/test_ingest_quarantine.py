@@ -9,7 +9,9 @@ from omega.historical.quarantine import partition_events, quarantine_path, write
 from omega.ops.ingest_historical_dataset import IngestBundle, _apply_clean_events
 
 
-def _ev(event_id: str, *, identity_status: str = "complete", raw_home="H", raw_away="A") -> HistoricalEvent:
+def _ev(
+    event_id: str, *, identity_status: str = "complete", raw_home="H", raw_away="A"
+) -> HistoricalEvent:
     return HistoricalEvent(
         event_id=event_id,
         league="NFL",

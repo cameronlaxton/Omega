@@ -909,12 +909,18 @@ class TestDrawMarketSelection:
         from omega.core.calibration.profiles import ProfileStatus
 
         game = _make_profile(
-            profile_id="g_epl", league="EPL", market="game",
-            params={"shrink_factor": 0.5}, status=ProfileStatus.CANDIDATE,
+            profile_id="g_epl",
+            league="EPL",
+            market="game",
+            params={"shrink_factor": 0.5},
+            status=ProfileStatus.CANDIDATE,
         )
         draw = _make_profile(
-            profile_id="d_epl", league="EPL", market="draw",
-            params={"shrink_factor": 0.9}, status=ProfileStatus.CANDIDATE,
+            profile_id="d_epl",
+            league="EPL",
+            market="draw",
+            params={"shrink_factor": 0.9},
+            status=ProfileStatus.CANDIDATE,
         )
         reg, path = self._registry_with(game, draw)
         try:
@@ -929,8 +935,11 @@ class TestDrawMarketSelection:
         from omega.core.calibration.profiles import ProfileStatus
 
         game = _make_profile(
-            profile_id="g_epl", league="EPL", market="game",
-            params={"shrink_factor": 0.5}, status=ProfileStatus.CANDIDATE,
+            profile_id="g_epl",
+            league="EPL",
+            market="game",
+            params={"shrink_factor": 0.5},
+            status=ProfileStatus.CANDIDATE,
         )
         reg, path = self._registry_with(game)
         try:
@@ -953,12 +962,18 @@ class TestDrawMarketSelection:
         from omega.core.calibration.profiles import ProfileStatus
 
         game = _make_profile(
-            profile_id="g_epl", league="EPL", market="game",
-            params={"shrink_factor": 0.2}, status=ProfileStatus.CANDIDATE,
+            profile_id="g_epl",
+            league="EPL",
+            market="game",
+            params={"shrink_factor": 0.2},
+            status=ProfileStatus.CANDIDATE,
         )
         draw = _make_profile(
-            profile_id="d_epl", league="EPL", market="draw",
-            params={"shrink_factor": 1.0}, status=ProfileStatus.CANDIDATE,
+            profile_id="d_epl",
+            league="EPL",
+            market="draw",
+            params={"shrink_factor": 1.0},
+            status=ProfileStatus.CANDIDATE,
         )
         reg, path = self._registry_with(game, draw)
         try:

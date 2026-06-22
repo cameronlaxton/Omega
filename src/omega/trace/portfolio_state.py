@@ -151,9 +151,7 @@ class PortfolioState:
         rows = list(rows)
 
         # Bankroll timeline from settled bets, ordered by settle time.
-        settled = [
-            r for r in rows if str(r.get("status") or "pending").lower() in SETTLED_STATUSES
-        ]
+        settled = [r for r in rows if str(r.get("status") or "pending").lower() in SETTLED_STATUSES]
         settled.sort(key=_settle_ts)
         points: list[tuple[str, float]] = []
         running = base_bankroll

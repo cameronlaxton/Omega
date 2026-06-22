@@ -102,9 +102,7 @@ class TraceFeedback:
 
 
 def _has_enrichment(apps: list[Any]) -> bool:
-    return any(
-        isinstance(a, dict) and (_ENRICHMENT_MARKERS & a.keys()) for a in apps
-    )
+    return any(isinstance(a, dict) and (_ENRICHMENT_MARKERS & a.keys()) for a in apps)
 
 
 def _backend_path(trace: dict[str, Any]) -> str | None:
@@ -192,9 +190,7 @@ def classify_trace(trace: dict[str, Any]) -> TraceFeedback:
             evidence_mode=a.get("evidence_mode") or evidence_mode,
             confidence=_as_float_or_none(a.get("confidence")),
             confidence_defaulted=a.get("confidence_defaulted"),
-            final_factor=_as_float_or_none(
-                a.get("final_applied_factor", a.get("factor"))
-            ),
+            final_factor=_as_float_or_none(a.get("final_applied_factor", a.get("factor"))),
             family_role=a.get("family_role"),
         )
         for a in apps
@@ -339,9 +335,7 @@ def render_report_markdown(report: QualitativeFeedbackReport) -> str:
         )
         lines.append(f"  {'-' * 28} {'-' * 7} {'-' * 7} {'-' * 8} {'-' * 6}  {'-' * 24}")
         for s in report.signal_summaries:
-            routing = ",".join(
-                f"{k}:{v}" for k, v in sorted(s.by_backend_path.items())
-            )
+            routing = ",".join(f"{k}:{v}" for k, v in sorted(s.by_backend_path.items()))
             lines.append(
                 f"  {s.signal_type:<28} {s.present:>7} {s.applied:>7} "
                 f"{s.outcome_resolved_applied:>8} {s.calibration_eligible_applied:>6}  "

@@ -21,9 +21,9 @@ from typing import Any
 LEAGUE_BASELINES: dict[str, dict[str, Any]] = {
     "WNBA": {
         # Anchored to 2025 WNBA league averages.
-        "possessions_per_game_baseline": 80.0,   # per team
-        "off_efficiency_baseline": 100.0,        # pts / 100 poss
-        "def_efficiency_baseline": 100.0,        # pts / 100 poss allowed
+        "possessions_per_game_baseline": 80.0,  # per team
+        "off_efficiency_baseline": 100.0,  # pts / 100 poss
+        "def_efficiency_baseline": 100.0,  # pts / 100 poss allowed
         # Forward-looking rate priors. Not yet consumed by the IID Markov PPP
         # model (which derives points purely from off/def rating); reserved for
         # a future shot-mix refinement. Documented here so the tuning target is

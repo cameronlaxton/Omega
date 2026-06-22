@@ -341,7 +341,9 @@ def apply_calibration_audited(
     }
 
 
-def _derive_context_slice(context_hints: dict[str, Any] | None, league: str | None = None) -> str | None:
+def _derive_context_slice(
+    context_hints: dict[str, Any] | None, league: str | None = None
+) -> str | None:
     """Derive a calibration context_slice string from context hints using the canonical resolution."""
     if not context_hints:
         return None

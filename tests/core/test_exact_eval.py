@@ -41,7 +41,9 @@ def _assert_prob_parity(result_exact: dict, result_mc: dict, field: str, n: int)
     )
 
 
-def _game_request(league: str, home_ctx: dict, away_ctx: dict, *, exact: bool, n: int) -> GameSimulationInput:
+def _game_request(
+    league: str, home_ctx: dict, away_ctx: dict, *, exact: bool, n: int
+) -> GameSimulationInput:
     return GameSimulationInput(
         home_team="H",
         away_team="A",
@@ -134,8 +136,12 @@ def test_basketball_exact_matches_high_n_mc():
     backend = FastScoreSimulationBackend()
     home = {"off_rating": 118.0, "def_rating": 110.0, "pace": 100.0}
     away = {"off_rating": 113.0, "def_rating": 112.0, "pace": 99.0}
-    exact = backend.run(_game_request_lines("NBA", home, away, spread=-3.5, total=224.5, exact=True, n=1000))
-    mc = backend.run(_game_request_lines("NBA", home, away, spread=-3.5, total=224.5, exact=False, n=_N_MC))
+    exact = backend.run(
+        _game_request_lines("NBA", home, away, spread=-3.5, total=224.5, exact=True, n=1000)
+    )
+    mc = backend.run(
+        _game_request_lines("NBA", home, away, spread=-3.5, total=224.5, exact=False, n=_N_MC)
+    )
     assert exact["success"] and mc["success"]
     assert exact["component_version"].endswith("_exact_v1")
     for field in (
@@ -172,8 +178,12 @@ def test_football_exact_matches_high_n_mc():
     backend = FastScoreSimulationBackend()
     home = {"off_rating": 24.0, "def_rating": 21.0}
     away = {"off_rating": 22.0, "def_rating": 23.0}
-    exact = backend.run(_game_request_lines("NFL", home, away, spread=-2.5, total=45.5, exact=True, n=1000))
-    mc = backend.run(_game_request_lines("NFL", home, away, spread=-2.5, total=45.5, exact=False, n=_N_MC))
+    exact = backend.run(
+        _game_request_lines("NFL", home, away, spread=-2.5, total=45.5, exact=True, n=1000)
+    )
+    mc = backend.run(
+        _game_request_lines("NFL", home, away, spread=-2.5, total=45.5, exact=False, n=_N_MC)
+    )
     assert exact["success"] and mc["success"]
     for field in (
         "home_win_prob",
@@ -216,7 +226,9 @@ def test_exact_flag_is_noop_for_path_dependent_archetypes():
     home = {"serve_win_pct": 0.66, "return_win_pct": 0.38}
     away = {"serve_win_pct": 0.62, "return_win_pct": 0.34}
     mc = backend.run(GameSimulationInput("A", "B", "ATP", 2000, home, away, seed=5, exact=False))
-    flagged = backend.run(GameSimulationInput("A", "B", "ATP", 2000, home, away, seed=5, exact=True))
+    flagged = backend.run(
+        GameSimulationInput("A", "B", "ATP", 2000, home, away, seed=5, exact=True)
+    )
     assert mc["home_win_prob"] == flagged["home_win_prob"]
     assert mc["component_version"] == flagged["component_version"]
     assert not mc["component_version"].endswith("_exact_v1")

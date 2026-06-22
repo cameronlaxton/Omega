@@ -56,7 +56,13 @@ def test_default_knobs_are_bit_identical():
             "lambda_scale": 1.0,
         }
     )
-    for key in ("home_win_prob", "away_win_prob", "draw_prob", "predicted_total", "predicted_spread"):
+    for key in (
+        "home_win_prob",
+        "away_win_prob",
+        "draw_prob",
+        "predicted_total",
+        "predicted_spread",
+    ):
         assert base[key] == explicit_default[key], key
 
 

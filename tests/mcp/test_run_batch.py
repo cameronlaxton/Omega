@@ -1,4 +1,5 @@
 """Unit tests for omega_run_batch."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -53,11 +54,18 @@ def _game_entry(**kwargs: Any) -> dict[str, Any]:
 
 def _mock_resolve_odds_ok(kind: str, **kwargs: Any) -> dict[str, Any]:
     if kind == "prop":
-        return {"status": "success", "request_patch": {"line": 0.5, "odds_over": -115, "odds_under": -105}}
-    return {"status": "success", "request_patch": {"odds": {"moneyline_home": -180, "moneyline_away": 150}}}
+        return {
+            "status": "success",
+            "request_patch": {"line": 0.5, "odds_over": -115, "odds_under": -105},
+        }
+    return {
+        "status": "success",
+        "request_patch": {"odds": {"moneyline_home": -180, "moneyline_away": 150}},
+    }
 
 
 # --- Gate-blocked ---
+
 
 def test_gate_failure_blocks_entire_batch(tmp_path: Path) -> None:
     with (
@@ -73,6 +81,7 @@ def test_gate_failure_blocks_entire_batch(tmp_path: Path) -> None:
 
 
 # --- Happy path ---
+
 
 def test_happy_path_prop_writes_export_block(tmp_path: Path) -> None:
     trace = _make_trace("sandbox-prop-001")
@@ -97,6 +106,7 @@ def test_happy_path_prop_writes_export_block(tmp_path: Path) -> None:
     export_path = Path(result["export_paths"][0])
     assert export_path.exists()
     import json
+
     block = json.loads(export_path.read_text())
     assert block["trace"]["trace_id"] == "sandbox-prop-001"
     assert "reasoning_inputs" in block
@@ -176,6 +186,7 @@ def test_resolve_odds_uses_entry_game_date_window(tmp_path: Path) -> None:
 
 # --- Odds unavailable ---
 
+
 def test_odds_unavailable_skips_entry(tmp_path: Path) -> None:
     def _no_odds(kind: str, **kwargs: Any) -> dict[str, Any]:
         return {"status": "error", "message": "no_markets"}
@@ -199,6 +210,7 @@ def test_odds_unavailable_skips_entry(tmp_path: Path) -> None:
 
 # --- prop_type fallback chain ---
 
+
 def test_prop_type_fallback_chain(tmp_path: Path) -> None:
     trace = _make_trace("sandbox-fallback-001")
 
@@ -208,7 +220,10 @@ def test_prop_type_fallback_chain(tmp_path: Path) -> None:
         call_log.append(str(prop_type))
         if prop_type == "hits":
             return {"status": "error"}
-        return {"status": "success", "request_patch": {"line": 1.5, "odds_over": -110, "odds_under": -110}}
+        return {
+            "status": "success",
+            "request_patch": {"line": 1.5, "odds_over": -110, "odds_under": -110},
+        }
 
     with (
         patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
@@ -228,6 +243,7 @@ def test_prop_type_fallback_chain(tmp_path: Path) -> None:
 
 
 # --- Per-entry exception does not abort batch ---
+
 
 def test_per_entry_error_continues_batch(tmp_path: Path) -> None:
     traces = [_make_trace("sandbox-ok-001"), _make_trace("sandbox-ok-002")]
@@ -259,6 +275,7 @@ def test_per_entry_error_continues_batch(tmp_path: Path) -> None:
 
 # --- Invalid entry validation error ---
 
+
 def test_invalid_entry_captured_as_error(tmp_path: Path) -> None:
     with (
         patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
@@ -275,6 +292,7 @@ def test_invalid_entry_captured_as_error(tmp_path: Path) -> None:
 
 
 # --- Tool registered ---
+
 
 def test_omega_run_batch_in_tool_names() -> None:
     assert "omega_run_batch" in TOOL_NAMES

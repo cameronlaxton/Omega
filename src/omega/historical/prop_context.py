@@ -167,9 +167,7 @@ def build_prop_context(
     for rows in grouped.values():
         rows.sort(key=lambda r: (r.date, r.event_key))
 
-    duplicate_names = {
-        name: sorted(ids) for name, ids in name_to_ids.items() if len(ids) > 1
-    }
+    duplicate_names = {name: sorted(ids) for name, ids in name_to_ids.items() if len(ids) > 1}
 
     context: dict[str, dict[str, Any]] = {}
     buckets = {"0": 0, "1-4": 0, "5-9": 0, "10+": 0}
@@ -282,9 +280,7 @@ def build_prop_context(
     per_stat_coverage = {
         stat: PropContextStatCoverage(
             **counts,
-            coverage_rate=round(
-                counts["contexts_present"] / counts["targets"], 6
-            )
+            coverage_rate=round(counts["contexts_present"] / counts["targets"], 6)
             if counts["targets"]
             else 0.0,
         )

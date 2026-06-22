@@ -26,11 +26,17 @@ def _write(path: Path, text: str) -> Path:
 def test_manifest_id_is_deterministic(tmp_path: Path):
     f = _write(tmp_path / "games.csv", "date,home_team,away_team\n2023-09-10,A,B\n")
     m1 = compute_manifest(
-        [f], source_name="csv_games", league="NFL", sport_family="american_football",
+        [f],
+        source_name="csv_games",
+        league="NFL",
+        sport_family="american_football",
         row_counts={str(f): 1},
     )
     m2 = compute_manifest(
-        [f], source_name="csv_games", league="NFL", sport_family="american_football",
+        [f],
+        source_name="csv_games",
+        league="NFL",
+        sport_family="american_football",
         row_counts={str(f): 1},
     )
     assert m1.manifest_id == m2.manifest_id
@@ -107,7 +113,10 @@ def test_verify_refresh_preserves_odds_timing_class(tmp_path: Path):
 def test_manifest_persistence_roundtrip(tmp_path: Path):
     f = _write(tmp_path / "games.csv", "a,b\n1,2\n")
     m = compute_manifest(
-        [f], source_name="s", league="NFL", sport_family="american_football",
+        [f],
+        source_name="s",
+        league="NFL",
+        sport_family="american_football",
         date_range=("2023-09-01", "2023-12-31"),
         limitations=["no closing odds"],
     )

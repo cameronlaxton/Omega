@@ -91,9 +91,7 @@ def test_sidecar_cannot_override_db_numeric_values(seeded):
     from omega.ops.console_server import build_console_app
 
     client = TestClient(
-        build_console_app(
-            db_path=seeded["db_path"], sessions_dir=str(seeded["sessions_dir"])
-        )
+        build_console_app(db_path=seeded["db_path"], sessions_dir=str(seeded["sessions_dir"]))
     )
     detail = client.get("/api/traces/sandbox-aaa").json()
     assert detail["aggregate_quality"] == 0.85  # DB value, not 999.0

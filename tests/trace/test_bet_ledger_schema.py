@@ -16,17 +16,19 @@ def _tmp_store() -> TraceStore:
 
 
 def _persist_trace(store: TraceStore, trace_id: str = "t-1") -> None:
-    store.persist({
-        "trace_id": trace_id,
-        "run_id": "r",
-        "timestamp": "2026-05-01T00:00:00Z",
-        "prompt": "p",
-        "league": "NBA",
-        "matchup": "A @ B",
-        "execution_mode": "native_sim",
-        "kind": "game",
-        "result": {"status": "success"},
-    })
+    store.persist(
+        {
+            "trace_id": trace_id,
+            "run_id": "r",
+            "timestamp": "2026-05-01T00:00:00Z",
+            "prompt": "p",
+            "league": "NBA",
+            "matchup": "A @ B",
+            "execution_mode": "native_sim",
+            "kind": "game",
+            "result": {"status": "success"},
+        }
+    )
 
 
 def _ledger_bet(trace_id: str = "t-1", descriptor: str = "home_spread_-3.5") -> LedgerBet:
@@ -52,20 +54,20 @@ class TestMigration:
         store = _tmp_store()
         try:
             tables = {
-                r[0] for r in store.conn.execute(
+                r[0]
+                for r in store.conn.execute(
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 ).fetchall()
             }
             views = {
-                r[0] for r in store.conn.execute(
+                r[0]
+                for r in store.conn.execute(
                     "SELECT name FROM sqlite_master WHERE type='view'"
                 ).fetchall()
             }
             assert "bet_ledger" in tables
             assert "v_bet_ledger_dashboard" in views
-            version = store.conn.execute(
-                "SELECT MAX(version) FROM schema_versions"
-            ).fetchone()[0]
+            version = store.conn.execute("SELECT MAX(version) FROM schema_versions").fetchone()[0]
             assert version >= 13
         finally:
             store.close()
@@ -197,8 +199,13 @@ class TestLedgerCrud:
             store.close()
 
 
-def _bet_with(provenance: BetProvenance, *, odds: float = -110,
-              bookmaker: str = "consensus", ledger_id: str = "led-x") -> LedgerBet:
+def _bet_with(
+    provenance: BetProvenance,
+    *,
+    odds: float = -110,
+    bookmaker: str = "consensus",
+    ledger_id: str = "led-x",
+) -> LedgerBet:
     bet = _ledger_bet()
     bet.ledger_id = ledger_id
     bet.provenance = provenance
@@ -217,13 +224,18 @@ class TestProvenanceUpgrade:
         try:
             _persist_trace(store)
             store.record_ledger_bet(
-                _bet_with(BetProvenance.ENGINE_AUTO, odds=-110,
-                          bookmaker="consensus", ledger_id="auto-1")
+                _bet_with(
+                    BetProvenance.ENGINE_AUTO, odds=-110, bookmaker="consensus", ledger_id="auto-1"
+                )
             )
             # User confirms the same selection at a different price/book.
             store.record_ledger_bet(
-                _bet_with(BetProvenance.USER_CONFIRMED, odds=-105,
-                          bookmaker="draftkings", ledger_id="user-1")
+                _bet_with(
+                    BetProvenance.USER_CONFIRMED,
+                    odds=-105,
+                    bookmaker="draftkings",
+                    ledger_id="user-1",
+                )
             )
             rows = store.get_ledger_bets("t-1")
             assert len(rows) == 1  # still one row — upgraded in place
@@ -242,12 +254,17 @@ class TestProvenanceUpgrade:
         try:
             _persist_trace(store)
             store.record_ledger_bet(
-                _bet_with(BetProvenance.USER_CONFIRMED, odds=-105,
-                          bookmaker="draftkings", ledger_id="user-1")
+                _bet_with(
+                    BetProvenance.USER_CONFIRMED,
+                    odds=-105,
+                    bookmaker="draftkings",
+                    ledger_id="user-1",
+                )
             )
             store.record_ledger_bet(
-                _bet_with(BetProvenance.ENGINE_AUTO, odds=-110,
-                          bookmaker="consensus", ledger_id="auto-1")
+                _bet_with(
+                    BetProvenance.ENGINE_AUTO, odds=-110, bookmaker="consensus", ledger_id="auto-1"
+                )
             )
             row = store.get_ledger_bets("t-1")[0]
             assert row["provenance"] == "user_confirmed"

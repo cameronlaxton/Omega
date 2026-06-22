@@ -192,9 +192,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--db", default=None, help="DB path (default: var/omega_traces.db)")
     parser.add_argument("--league", default=None, help="Restrict to one league (e.g. NBA)")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Report changes without writing."
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Report changes without writing.")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     if args.verbose:
@@ -206,5 +204,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

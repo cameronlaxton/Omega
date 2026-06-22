@@ -61,7 +61,9 @@ def test_fast_backend_result_satisfies_contract():
     assert result["component_version"] == "fast_score_v1"
     enforce_game_backend_contract(result)
     assert len(result["simulation_distributions"]) >= 4
-    assert all(row["component_version"] == "fast_score_v1" for row in result["simulation_distributions"])
+    assert all(
+        row["component_version"] == "fast_score_v1" for row in result["simulation_distributions"]
+    )
 
 
 def test_successful_backend_without_distribution_rows_is_rejected():
@@ -126,9 +128,9 @@ def test_markov_backend_accepts_scalar_transition_modifiers():
     request = _fast_game_kwargs()
     request["n_iterations"] = 500
     request["seed"] = 777
-    base = OmegaSimulationEngine(game_backend=MarkovGameSimulationBackend()).run_fast_game_simulation(
-        **request
-    )
+    base = OmegaSimulationEngine(
+        game_backend=MarkovGameSimulationBackend()
+    ).run_fast_game_simulation(**request)
     adjusted = MarkovGameSimulationBackend().run(
         request=GameSimulationInput(
             home_team=request["home_team"],
@@ -240,7 +242,10 @@ def test_markov_expected_nba_total_is_near_league_average():
         home_context={"off_rating": 116.0, "def_rating": 110.0, "pace": 100.0},
         away_context={"off_rating": 114.0, "def_rating": 112.0, "pace": 100.0},
     )
-    totals = [simulator.simulate_game().home_score + simulator.simulate_game().away_score for _ in range(250)]
+    totals = [
+        simulator.simulate_game().home_score + simulator.simulate_game().away_score
+        for _ in range(250)
+    ]
     mean_total = sum(totals) / len(totals)
     # NBA avg_total = 224; allow ±15 for sampling variance at n=250
     assert 209 <= mean_total <= 239, (

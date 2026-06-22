@@ -24,32 +24,36 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger("omega.trace.session_sidecar")
 
-_PROTECTED_QUANT_FIELDS: frozenset[str] = frozenset({
-    "edge_pct",
-    "ev_pct",
-    "kelly_fraction",
-    "units",
-    "confidence_tier",
-    "fair_price",
-    "no_vig_price",
-    "model_probability",
-    "over_prob",
-    "under_prob",
-})
+_PROTECTED_QUANT_FIELDS: frozenset[str] = frozenset(
+    {
+        "edge_pct",
+        "ev_pct",
+        "kelly_fraction",
+        "units",
+        "confidence_tier",
+        "fair_price",
+        "no_vig_price",
+        "model_probability",
+        "over_prob",
+        "under_prob",
+    }
+)
 
-_VALID_EVENT_TYPES: frozenset[str] = frozenset({
-    "preflight",
-    "data_provenance",
-    "engine_run",
-    "candidate_rejected",
-    "downgrade",
-    "quality_gate",
-    "rationale",
-    "bug",
-    "command",
-    "step",
-    "note",
-})
+_VALID_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "preflight",
+        "data_provenance",
+        "engine_run",
+        "candidate_rejected",
+        "downgrade",
+        "quality_gate",
+        "rationale",
+        "bug",
+        "command",
+        "step",
+        "note",
+    }
+)
 
 _VALID_STATUSES: frozenset[str] = frozenset({"ok", "warn", "fail", "skipped"})
 
@@ -136,7 +140,12 @@ def bootstrap_payload(
     bankroll_confirmed: bool = False,
 ) -> dict[str, Any]:
     """Return a minimal dict suitable for SessionSidecar.model_validate."""
-    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    now = (
+        datetime.datetime.now(datetime.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
     return {
         "session_id": session_id,
         "opened_at": now,
@@ -297,14 +306,16 @@ QaScope = Literal[
 ]
 
 _VALID_QA_VERDICTS: frozenset[str] = frozenset({"pass", "fail", "unknown"})
-_VALID_QA_SCOPES: frozenset[str] = frozenset({
-    "trace_id",
-    "timestamp_window",
-    "pre_trace_fatal",
-    "session_fallback",
-    "unrelated_session_failure",
-    "no_sidecar",
-})
+_VALID_QA_SCOPES: frozenset[str] = frozenset(
+    {
+        "trace_id",
+        "timestamp_window",
+        "pre_trace_fatal",
+        "session_fallback",
+        "unrelated_session_failure",
+        "no_sidecar",
+    }
+)
 
 # Secondary, deliberately tight tolerance for the timestamp_window matcher. A
 # trace has no recorded execution duration, and QA gates normally fire shortly
@@ -561,7 +572,12 @@ def rebuild_sidecar_from_jsonl(jsonl_path: Path) -> dict[str, Any]:
     # Estimate opened_at from the first event timestamp, fallback to now
     opened_at = events[0].get("ts") if events else None
     if not opened_at:
-        opened_at = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        opened_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
 
     return {
         "session_id": session_id,
@@ -589,7 +605,12 @@ def append_null_data_audit(
     ``missing_variables`` must contain variable names or paths only. Protected
     engine-owned numeric values remain in traces/ledger rows, not sidecar prose.
     """
-    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    now = (
+        datetime.datetime.now(datetime.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
     variables = [str(v) for v in missing_variables if str(v).strip()]
     notes = (
         "NULL detected: " + ", ".join(variables)

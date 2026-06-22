@@ -139,9 +139,7 @@ def test_local_first_read_makes_no_network_call(tmp_path):
 def test_cold_remote_fetch_blocked_in_replay_mode(tmp_path, monkeypatch):
     monkeypatch.setenv("OMEGA_REPLAY_MODE", "1")
     with pytest.raises(OmegaReplayModeError):
-        ts.fetch_matches_csv(
-            "wta", 2026, local_root=tmp_path, cache_root=str(tmp_path / "cache")
-        )
+        ts.fetch_matches_csv("wta", 2026, local_root=tmp_path, cache_root=str(tmp_path / "cache"))
 
 
 def test_invalid_tour_rejected():

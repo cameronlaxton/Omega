@@ -74,11 +74,14 @@ def test_http_app_transports_are_not_double_mounted():
     app = build_http_app()
     with TestClient(app, base_url=LOCAL_BASE_URL) as client:
         # /sse resolves to the SSE handler (307 to /sse/), not a 404.
-        assert client.get(
-            "/sse",
-            headers={"accept": "text/event-stream"},
-            follow_redirects=False,
-        ).status_code == 307
+        assert (
+            client.get(
+                "/sse",
+                headers={"accept": "text/event-stream"},
+                follow_redirects=False,
+            ).status_code
+            == 307
+        )
         # The old doubled paths must no longer exist.
         assert client.post("/mcp/mcp", json={}, follow_redirects=False).status_code == 404
         assert client.get("/sse/sse", follow_redirects=False).status_code == 404

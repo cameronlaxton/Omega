@@ -218,11 +218,21 @@ class TestFetchOutcomesSoccer:
     def test_league_filter_skips_other_competitions(self):
         db = _tmp_db()
         store = TraceStore(db_path=db)
-        store.persist(_game_trace("sandbox-laliga", league="LA_LIGA", home_team="Barcelona", away_team="Real Madrid"))
+        store.persist(
+            _game_trace(
+                "sandbox-laliga", league="LA_LIGA", home_team="Barcelona", away_team="Real Madrid"
+            )
+        )
         store.close()
 
         # Provide a La Liga final, but only ask for EPL â†’ nothing should attach.
-        sb = _sb({("2026-05-17", "LA_LIGA"): [_final("Barcelona", "Real Madrid", 3, 0, league="LA_LIGA")]})
+        sb = _sb(
+            {
+                ("2026-05-17", "LA_LIGA"): [
+                    _final("Barcelona", "Real Madrid", 3, 0, league="LA_LIGA")
+                ]
+            }
+        )
         rc = fetch_outcomes_soccer.main(
             ["--since", "2026-05-17", "--leagues", "EPL", "--db", db],
             scoreboard_fetcher=sb,
@@ -236,7 +246,9 @@ class TestFetchOutcomesSoccer:
     def test_no_matching_final_left_ungraded(self):
         db = _tmp_db()
         store = TraceStore(db_path=db)
-        store.persist(_game_trace("sandbox-soccer-nomatch", home_team="Brentford", away_team="Fulham"))
+        store.persist(
+            _game_trace("sandbox-soccer-nomatch", home_team="Brentford", away_team="Fulham")
+        )
         store.close()
 
         sb = _sb({("2026-05-17", "EPL"): [_final("Arsenal", "Chelsea", 2, 1)]})
@@ -249,4 +261,3 @@ class TestFetchOutcomesSoccer:
         store = TraceStore(db_path=db)
         assert _game_outcomes(store, "sandbox-soccer-nomatch") == []
         store.close()
-

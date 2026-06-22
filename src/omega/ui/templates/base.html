@@ -8,9 +8,16 @@
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+<div class="bg-glow"></div>
 <header class="topbar">
-  <div class="brand"><a href="/">Omega Console</a> <span class="ro-badge" title="This console is strictly read-only">READ-ONLY</span></div>
-  <nav class="mainnav">
+  <div class="brand">
+    <a href="/" style="text-decoration:none; display:flex; gap:0.6rem; align-items:center;">
+      <span class="brand-omega">Omega</span>
+      <span class="brand-console">Console</span>
+    </a>
+    <span class="ro-badge" title="This console is strictly read-only">READ-ONLY</span>
+  </div>
+  <nav class="nav">
     {% for item in nav_enabled %}
       <a href="{{ item.href }}" class="{{ 'active' if active == item.key else '' }}">{{ item.label }}</a>
     {% endfor %}
@@ -18,11 +25,14 @@
       <span class="navph" title="Planned for Milestone {{ item.milestone }} — not yet available" aria-disabled="true">{{ item.label }} <em>M{{ item.milestone }}</em></span>
     {% endfor %}
   </nav>
+  <span class="status-text">All systems</span>
+  <span class="status-dot"></span>
 </header>
 <main class="content">
   {% block content %}{% endblock %}
 </main>
-<footer class="foot">
+<footer class="footer">
+  <span>Omega Operator Console</span>
   <span>Phase 8 · Milestone A · read-only.</span>
   <span>Numbers are DB-backed; session sidecars are process/narrative only (non-canonical).</span>
 </footer>
@@ -30,7 +40,8 @@
 </body>
 </html>
 {% macro src_badge(label) -%}
-<span class="src src-{{ label }}" title="Provenance: {{ label }}">{{ label }}</span>
+{% set cls = 'db' if label == 'db_trace_payload' else 'sidecar' if label == 'sidecar_process' else 'bet' if label == 'bet_ledger' else 'db' %}
+<span class="src-badge src-{{ cls }}" title="Provenance: {{ label }}">{{ label }}</span>
 {%- endmacro %}
 {% macro provenance_legend(field_sources) -%}
 {% if field_sources %}

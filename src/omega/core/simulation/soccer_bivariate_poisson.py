@@ -180,9 +180,7 @@ class SoccerPoissonBackend:
                 request.home_team,
                 request.away_team,
                 league,
-                skip_reason=(
-                    "Missing soccer attack/defense inputs: " + ", ".join(missing)
-                ),
+                skip_reason=("Missing soccer attack/defense inputs: " + ", ".join(missing)),
                 missing_requirements=missing,
             )
 
@@ -355,9 +353,7 @@ class SoccerPoissonBackend:
         first_half_share = float(prior.get("first_half_share", _FIRST_HALF_GOAL_SHARE))
         # First-half totals via independent thinning (drawn after the score
         # sample on the same seeded rng, so replays stay bit-identical).
-        fh_totals = rng.binomial(
-            [int(t) for t in totals], first_half_share
-        ).tolist()
+        fh_totals = rng.binomial([int(t) for t in totals], first_half_share).tolist()
 
         result["simulation_distributions"].extend(
             [
@@ -377,9 +373,7 @@ class SoccerPoissonBackend:
                     "btts",
                     [1.0 if h > 0 and a > 0 else 0.0 for h, a in zip(home_scores, away_scores)],
                 ),
-                _extra_row(
-                    "first_half_total", "first_half_total", [float(t) for t in fh_totals]
-                ),
+                _extra_row("first_half_total", "first_half_total", [float(t) for t in fh_totals]),
             ]
         )
 
@@ -393,9 +387,7 @@ class SoccerPoissonBackend:
                 out[key] = out.get(key, 0) + 1
             return out
 
-        result["margin_counts"] = _counts(
-            [h - a for h, a in zip(home_scores, away_scores)]
-        )
+        result["margin_counts"] = _counts([h - a for h, a in zip(home_scores, away_scores)])
         result["total_counts"] = _counts(totals)
         result["fh_total_counts"] = _counts(fh_totals)
         return result
@@ -503,9 +495,24 @@ class SoccerPoissonBackend:
         result["simulation_distributions"].extend(
             [
                 _exrow("total_goals", "game_total", total_vals, total_probs),
-                _exrow("home_clean_sheet", "clean_sheet", np.array([0.0, 1.0]), np.array([1.0 - p_home_cs, p_home_cs])),
-                _exrow("away_clean_sheet", "clean_sheet", np.array([0.0, 1.0]), np.array([1.0 - p_away_cs, p_away_cs])),
-                _exrow("both_teams_to_score", "btts", np.array([0.0, 1.0]), np.array([1.0 - p_btts, p_btts])),
+                _exrow(
+                    "home_clean_sheet",
+                    "clean_sheet",
+                    np.array([0.0, 1.0]),
+                    np.array([1.0 - p_home_cs, p_home_cs]),
+                ),
+                _exrow(
+                    "away_clean_sheet",
+                    "clean_sheet",
+                    np.array([0.0, 1.0]),
+                    np.array([1.0 - p_away_cs, p_away_cs]),
+                ),
+                _exrow(
+                    "both_teams_to_score",
+                    "btts",
+                    np.array([0.0, 1.0]),
+                    np.array([1.0 - p_btts, p_btts]),
+                ),
                 _exrow("first_half_total", "first_half_total", fh_vals, fh_probs),
             ]
         )

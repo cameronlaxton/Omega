@@ -362,6 +362,7 @@ class TestBackfillDate:
         assert store.get_prop_outcomes("sandbox-prop-1") == []
         store.close()
 
+
 class TestBackfillSingleTrace:
     def test_legacy_prop_without_game_identity_can_be_pinned(self):
         db = _tmp_db()

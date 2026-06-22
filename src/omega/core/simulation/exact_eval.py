@@ -33,9 +33,7 @@ def normal_cdf(x: float) -> float:
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
 
 
-def pmf_stats(
-    values: np.ndarray, probs: np.ndarray
-) -> tuple[float, float, float, float, float]:
+def pmf_stats(values: np.ndarray, probs: np.ndarray) -> tuple[float, float, float, float, float]:
     """Return ``(mean, std, p10, p50, p90)`` of a discrete distribution.
 
     Quantiles are the smallest value whose cumulative mass reaches the target —
@@ -203,17 +201,9 @@ def thinned_total_pmf(grid: np.ndarray, share: float) -> dict[str, float]:
             continue
         ks = np.arange(t + 1)
         # Binomial(t, share) pmf via lgamma for numerical stability.
-        log_coeff = (
-            _lgamma_arr(t + 1)
-            - _lgamma_arr(ks + 1)
-            - _lgamma_arr(t - ks + 1)
-        )
+        log_coeff = _lgamma_arr(t + 1) - _lgamma_arr(ks + 1) - _lgamma_arr(t - ks + 1)
         with np.errstate(divide="ignore"):
-            log_p = (
-                log_coeff
-                + ks * math.log(share)
-                + (t - ks) * math.log1p(-share)
-            )
+            log_p = log_coeff + ks * math.log(share) + (t - ks) * math.log1p(-share)
         binom = np.exp(log_p)
         for k in range(t + 1):
             out[str(k)] = out.get(str(k), 0.0) + pt * float(binom[k])

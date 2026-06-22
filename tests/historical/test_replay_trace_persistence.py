@@ -60,14 +60,18 @@ def _dataset() -> tuple[ReplayDataset, HistoricalEvent]:
     def add_ml(ev: HistoricalEvent, home_price: float, away_price: float) -> None:
         obs.append(
             OddsObservation(
-                event_key=ev.event_id, market="moneyline",
-                selection_descriptor="home", odds=home_price,
+                event_key=ev.event_id,
+                market="moneyline",
+                selection_descriptor="home",
+                odds=home_price,
             )
         )
         obs.append(
             OddsObservation(
-                event_key=ev.event_id, market="moneyline",
-                selection_descriptor="away", odds=away_price,
+                event_key=ev.event_id,
+                market="moneyline",
+                selection_descriptor="away",
+                odds=away_price,
             )
         )
 
@@ -77,14 +81,15 @@ def _dataset() -> tuple[ReplayDataset, HistoricalEvent]:
     add_ml(target, 200, 200)
     obs.append(
         OddsObservation(
-            event_key=target.event_id, market="moneyline",
-            selection_descriptor="home", odds=-180, tier_hint="closing",
+            event_key=target.event_id,
+            market="moneyline",
+            selection_descriptor="home",
+            odds=-180,
+            tier_hint="closing",
         )
     )
 
-    dataset = ReplayDataset(
-        events=events, outcomes=outcomes, odds=ReplayDataset.group_odds(obs)
-    )
+    dataset = ReplayDataset(events=events, outcomes=outcomes, odds=ReplayDataset.group_odds(obs))
     return dataset, target
 
 

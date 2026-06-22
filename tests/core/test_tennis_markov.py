@@ -97,9 +97,7 @@ def test_closed_form_matches_100k_monte_carlo_within_half_percent():
     rng = np.random.default_rng(20260629)
     n = 100_000
     wins = sum(
-        1
-        for _ in range(n)
-        if tm._simulate_match(rng, pa, pb, coeffs_a, coeffs_b, 2)[0] == 2
+        1 for _ in range(n) if tm._simulate_match(rng, pa, pb, coeffs_a, coeffs_b, 2)[0] == 2
     )
     assert abs(closed_form - wins / n) < 0.005
 
@@ -185,9 +183,7 @@ def test_missing_serve_stats_fail_closed_without_defaults():
 def test_match_format_override_and_grand_slam_default():
     backend = tm.TennisMarkovBackend()
     bo3 = backend.run(_request())
-    bo5_override = backend.run(
-        _request(prior_payload={"match_format": "best_of_5"})
-    )
+    bo5_override = backend.run(_request(prior_payload={"match_format": "best_of_5"}))
     slam = backend.run(_request(league="GRAND_SLAM"))
     assert bo5_override["match_format"] == "best_of_5"
     assert slam["match_format"] == "best_of_5"
@@ -254,8 +250,6 @@ def test_service_skips_without_serve_stats():
 
 
 def test_moneyline_edges_priced():
-    resp = analyze_game(
-        _service_request(odds={"moneyline_home": -150, "moneyline_away": +180})
-    )
+    resp = analyze_game(_service_request(odds={"moneyline_home": -150, "moneyline_away": +180}))
     assert resp.status == "success"
     assert {e.side for e in resp.edges} >= {"home", "away"}

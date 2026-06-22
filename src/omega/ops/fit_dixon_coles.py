@@ -135,8 +135,12 @@ def fit_rho(pairs: list[tuple[int, int]], min_matches: int = _DEFAULT_MIN_MATCHE
     nll = _tau_nll(pairs, lambda_home, lambda_away, rho)
     for x, y in pairs:
         nll -= (
-            -lambda_home + x * math.log(lambda_home) - math.lgamma(x + 1)
-            - lambda_away + y * math.log(lambda_away) - math.lgamma(y + 1)
+            -lambda_home
+            + x * math.log(lambda_home)
+            - math.lgamma(x + 1)
+            - lambda_away
+            + y * math.log(lambda_away)
+            - math.lgamma(y + 1)
         )
     return DixonColesFit(
         rho=round(rho, 6),
@@ -238,9 +242,7 @@ def main() -> int:
 
     seasons = tuple(s.strip() for s in args.seasons.split(",")) if args.seasons else None
     try:
-        pairs = load_profile_matches(
-            args.profile, seasons=seasons, cache_root=args.cache_root
-        )
+        pairs = load_profile_matches(args.profile, seasons=seasons, cache_root=args.cache_root)
     except Exception as exc:  # noqa: BLE001 - surface ETL failures loudly
         logger.error("could not load fit dataset for %s: %s", args.profile, exc)
         return 1

@@ -219,7 +219,9 @@ def training_record(trace: dict[str, Any]) -> dict[str, Any] | None:
 
 def _contains_protected_key(value: Any) -> bool:
     if isinstance(value, dict):
-        return any(_is_protected_key(key) or _contains_protected_key(item) for key, item in value.items())
+        return any(
+            _is_protected_key(key) or _contains_protected_key(item) for key, item in value.items()
+        )
     if isinstance(value, list):
         return any(_contains_protected_key(item) for item in value)
     if isinstance(value, str):

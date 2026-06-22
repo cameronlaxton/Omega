@@ -107,8 +107,7 @@ def run_fetch_outcomes(
     unknown = [lg for lg in selected if lg not in _MODULES]
     if unknown:
         raise ValueError(
-            f"Unknown league(s): {', '.join(unknown)}. "
-            f"Valid: {', '.join(sorted(_MODULES))}"
+            f"Unknown league(s): {', '.join(unknown)}. Valid: {', '.join(sorted(_MODULES))}"
         )
 
     results: list[dict[str, object]] = []
@@ -129,8 +128,16 @@ def run_fetch_outcomes(
                 proc = subprocess.run(cmd, cwd=_REPO_ROOT, timeout=timeout_seconds)
                 tail = ""
         except subprocess.TimeoutExpired as exc:
-            output = exc.output.decode(errors="replace") if isinstance(exc.output, bytes) else (exc.output or "")
-            stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+            output = (
+                exc.output.decode(errors="replace")
+                if isinstance(exc.output, bytes)
+                else (exc.output or "")
+            )
+            stderr = (
+                exc.stderr.decode(errors="replace")
+                if isinstance(exc.stderr, bytes)
+                else (exc.stderr or "")
+            )
             tail = (output or "")[-2000:] + (stderr or "")[-2000:]
             results.append(
                 {
@@ -206,4 +213,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

@@ -102,7 +102,9 @@ def test_market_snapshot_decision_lookup():
     snap = HistoricalMarketSnapshot(
         event_id="e1",
         decision_time="t",
-        decision=[OddsQuote(market="total", selection_descriptor="over_45.5", odds=-110, line=45.5)],
+        decision=[
+            OddsQuote(market="total", selection_descriptor="over_45.5", odds=-110, line=45.5)
+        ],
     )
     q = snap.decision_quote("total", "over_45.5")
     assert q is not None and q.line == 45.5
@@ -209,7 +211,9 @@ def test_fold_and_report_roundtrip():
         league="NFL",
         walk_forward_config=WalkForwardConfig(),
         folds=[fold],
-        aggregate_metrics_by_market={"game": MetricBlock(raw_brier=0.25, calibrated_brier=0.22, n=30)},
+        aggregate_metrics_by_market={
+            "game": MetricBlock(raw_brier=0.25, calibrated_brier=0.22, n=30)
+        },
     )
     restored = BacktestReport.model_validate(report.model_dump(mode="json"))
     assert restored.folds[0].frozen_profiles[0].profile_hash == "abc123"

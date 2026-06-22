@@ -74,8 +74,7 @@ def build_policy(policy_id: str, params: dict[str, Any] | None = None) -> Stakin
     cls = _POLICY_FACTORIES.get(policy_id)
     if cls is None:
         raise ValueError(
-            f"Unknown staking policy_id: {policy_id!r} "
-            f"(known: {sorted(_POLICY_FACTORIES)})"
+            f"Unknown staking policy_id: {policy_id!r} (known: {sorted(_POLICY_FACTORIES)})"
         )
     return cls(**(params or {}))
 

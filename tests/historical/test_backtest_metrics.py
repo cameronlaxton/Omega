@@ -42,7 +42,9 @@ def test_betting_metrics_roi_pnl_clv():
         "e2": {"home_score": 24, "away_score": 17},  # home wins → away bet LOST
     }
     # decision -110 beat the -150 close → positive CLV
-    closing = {"t1": [{"market": "moneyline", "selection_descriptor": "home", "closing_odds": -150}]}
+    closing = {
+        "t1": [{"market": "moneyline", "selection_descriptor": "home", "closing_odds": -150}]
+    }
 
     b = betting_metrics(sels, outcomes, closing)
     assert b.n_bets == 2

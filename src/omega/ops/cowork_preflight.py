@@ -278,9 +278,11 @@ def _git(repo_root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-_CRITICAL_FILES = frozenset({
-    "src/omega/core/contracts/service.py",  # Service layer; repeated corruption across sessions
-})
+_CRITICAL_FILES = frozenset(
+    {
+        "src/omega/core/contracts/service.py",  # Service layer; repeated corruption across sessions
+    }
+)
 
 
 # Tiered repair targets (BUG-PREFLIGHT-3): test-tier divergence must never
@@ -477,8 +479,7 @@ def verify_against_git(
                 restored.append(rel_path)
             else:
                 failures.append(
-                    f"verify_against_git: failed to restore {rel_path}: "
-                    f"{result.stderr.strip()}"
+                    f"verify_against_git: failed to restore {rel_path}: {result.stderr.strip()}"
                 )
         if restored:
             _sync_filesystem()
@@ -491,7 +492,9 @@ def verify_against_git(
                 if parse_error is None:
                     print(f"  OK {path}")
                 else:
-                    failures.append(f"verify_against_git: AST parse failed after repair {path}: {parse_error}")
+                    failures.append(
+                        f"verify_against_git: AST parse failed after repair {path}: {parse_error}"
+                    )
             taint_path = _get_repair_taint_path(repo_root)
             try:
                 taint_path.parent.mkdir(parents=True, exist_ok=True)
@@ -534,8 +537,7 @@ def verify_against_git(
     if test_diverged:
         print(
             f"[warning] verify_against_git: {len(test_diverged)} test file(s) "
-            "diverge from git HEAD (not blocking engine execution): "
-            + ", ".join(test_diverged)
+            "diverge from git HEAD (not blocking engine execution): " + ", ".join(test_diverged)
         )
 
     return failures
@@ -568,9 +570,7 @@ def run_checks(
     if repair_from_git:
         # Restore known-corrupt tracked files before AST parsing so hard
         # truncations do not block the git-based repair path.
-        git_failures = verify_against_git(
-            repo_root, repair=True, force_repair=force_repair
-        )
+        git_failures = verify_against_git(repo_root, repair=True, force_repair=force_repair)
         if git_failures:
             failures.extend(git_failures)
             return failures
@@ -607,9 +607,7 @@ def run_checks(
         if crit_path.exists():
             err = _ast_parse_file(crit_path)
             if err is not None:
-                failures.append(
-                    f"Critical runtime file AST parse failed: {critical_rel}: {err}"
-                )
+                failures.append(f"Critical runtime file AST parse failed: {critical_rel}: {err}")
     if failures:
         return failures
 

@@ -143,9 +143,7 @@ def _render_markdown(
         lines.append("_No traces in `var/omega_traces.db` for this session._")
         lines.append("")
     else:
-        lines.append(
-            "| trace_id | kind | league | matchup | quality | outcome |"
-        )
+        lines.append("| trace_id | kind | league | matchup | quality | outcome |")
         lines.append("|---|---|---|---|---|---|")
         for row in rows:
             meta = row.get("_row") or {}
@@ -213,9 +211,7 @@ def _render_markdown(
             note_cell = (ev.notes or "").replace("|", "\\|").replace("\n", " ")
             if len(note_cell) > 120:
                 note_cell = note_cell[:117] + "..."
-            trace_cell = (
-                ", ".join(f"`{tid}`" for tid in ev.trace_ids) if ev.trace_ids else "—"
-            )
+            trace_cell = ", ".join(f"`{tid}`" for tid in ev.trace_ids) if ev.trace_ids else "—"
             lines.append(
                 f"| {ev.ts} | {ev.event_type} | {ev.step} | {ev.status} "
                 f"| {note_cell or '—'} | {trace_cell} |"

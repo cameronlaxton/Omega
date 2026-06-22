@@ -27,9 +27,7 @@ from omega.historical.contracts import current_code_version
 UTC = timezone.utc
 
 Plane = Literal["game", "prop", "draw"]
-PromotionStatus = Literal[
-    "evidence_ready", "promoted", "blocked", "not_recommended", "shadow_only"
-]
+PromotionStatus = Literal["evidence_ready", "promoted", "blocked", "not_recommended", "shadow_only"]
 VariantStatus = Literal["selected", "rejected", "shadow", "skipped", "error"]
 ParityVerdict = Literal["PASS", "FAIL", "INCONCLUSIVE", "no_incumbent"]
 RiskLevel = Literal["low", "elevated", "high"]
@@ -151,9 +149,7 @@ class AttemptedVariantLedger(BaseModel):
     def _seal_invariants(self) -> AttemptedVariantLedger:
         selected = [v for v in self.variants if v.status == "selected"]
         if len(selected) > 1:
-            raise ValueError(
-                f"at most one variant may be 'selected'; found {len(selected)}"
-            )
+            raise ValueError(f"at most one variant may be 'selected'; found {len(selected)}")
         # Touch-once: only the selected winner may carry holdout metrics.
         for v in self.variants:
             if v.touched_holdout and v.status != "selected":
@@ -322,9 +318,7 @@ class HistoricalLabRun(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def assert_consistent(
-    lab_run: HistoricalLabRun, ledger: AttemptedVariantLedger
-) -> None:
+def assert_consistent(lab_run: HistoricalLabRun, ledger: AttemptedVariantLedger) -> None:
     """Fail closed if the manifest and ledger disagree on count/seal/grid identity.
 
     The manifest carries summary fields (``attempted_variant_count``,
@@ -348,6 +342,5 @@ def assert_consistent(
         )
     if lab_run.lab_run_id != ledger.lab_run_id:
         raise ValueError(
-            f"lab_run_id mismatch: lab_run={lab_run.lab_run_id!r} "
-            f"ledger={ledger.lab_run_id!r}"
+            f"lab_run_id mismatch: lab_run={lab_run.lab_run_id!r} ledger={ledger.lab_run_id!r}"
         )

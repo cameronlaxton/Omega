@@ -64,7 +64,9 @@ class TraceReportCard(BaseModel):
     engine_view: EngineView = Field(default_factory=EngineView)
     ledger_view: LedgerView
     context: list[ContextBullet] = Field(default_factory=list)
-    reasoning_narrative: str | None = Field(default=None, description="Detailed qualitative narrative reasoning for the prediction")
+    reasoning_narrative: str | None = Field(
+        default=None, description="Detailed qualitative narrative reasoning for the prediction"
+    )
     trace_quality_status: str
     sidecar_status: str
     evidence_status: str

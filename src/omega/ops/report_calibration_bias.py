@@ -44,6 +44,7 @@ def main() -> int:
     # We want to evaluate the raw simulation probs. We can use CalibrationFitter.evaluate
     # with a dummy base profile (method="isotonic", x=[0,1], y=[0,1] i.e. identity mapping).
     from omega.core.calibration.profiles import CalibrationProfile
+
     identity_profile = CalibrationProfile(
         profile_id="identity",
         method="isotonic",

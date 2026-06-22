@@ -157,8 +157,12 @@ def test_clv_pass_when_beats_close_and_profitable():
 
 
 def test_clv_fail_when_clv_negative():
-    assert _clv_artifact(_report(BettingBlock(n_bets=8, avg_clv=-0.01, roi=0.1)))["verdict"] == "FAIL"
-    assert _clv_artifact(_report(BettingBlock(n_bets=8, avg_clv=0.01, roi=-0.2)))["verdict"] == "FAIL"
+    assert (
+        _clv_artifact(_report(BettingBlock(n_bets=8, avg_clv=-0.01, roi=0.1)))["verdict"] == "FAIL"
+    )
+    assert (
+        _clv_artifact(_report(BettingBlock(n_bets=8, avg_clv=0.01, roi=-0.2)))["verdict"] == "FAIL"
+    )
 
 
 def test_orchestrator_threads_selections_into_real_betting(tmp_path):

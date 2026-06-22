@@ -87,7 +87,9 @@ def render(
 
     w("## Attempted variants")
     w("")
-    w("| variant_id | family | slice | n_train | n_val | val_brier | val_ece | cv_ece | holdout_ece | status |")
+    w(
+        "| variant_id | family | slice | n_train | n_val | val_brier | val_ece | cv_ece | holdout_ece | status |"
+    )
     w("|---|---|---|---|---|---|---|---|---|---|")
     for v in ledger.variants:
         w(

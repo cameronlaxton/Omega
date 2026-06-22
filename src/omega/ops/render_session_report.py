@@ -38,7 +38,9 @@ def _target_path(out_dir: Path, *, kind: str, league: str | None, session_id: st
 def _render_one(args: argparse.Namespace, kind: str) -> Path:
     if kind != "intake":
         raise NotImplementedError(f"{kind} report is not implemented in the intake vertical slice")
-    bundle = load_context_bundle(args.context_bundle) if args.context_mode == "persisted+cited" else None
+    bundle = (
+        load_context_bundle(args.context_bundle) if args.context_mode == "persisted+cited" else None
+    )
     if args.context_mode == "persisted+cited" and bundle is None:
         raise ValueError("persisted+cited requires --context-bundle")
     store = TraceStore(db_path=args.db)
@@ -71,13 +73,17 @@ def _render_one(args: argparse.Namespace, kind: str) -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render derived Omega session reports.")
-    parser.add_argument("--kind", required=True, choices=["intake", "closing-lines", "portfolio", "all"])
+    parser.add_argument(
+        "--kind", required=True, choices=["intake", "closing-lines", "portfolio", "all"]
+    )
     parser.add_argument("--session-id", default=None)
     parser.add_argument("--since", default=None)
     parser.add_argument("--until", default=None)
     parser.add_argument("--league", default=None)
     parser.add_argument("--out-dir", type=Path, default=reports_dir() / "session_reports")
-    parser.add_argument("--context-mode", choices=["persisted", "persisted+cited"], default="persisted")
+    parser.add_argument(
+        "--context-mode", choices=["persisted", "persisted+cited"], default="persisted"
+    )
     parser.add_argument("--context-bundle", type=Path, default=None)
     parser.add_argument("--fail-on-context-mismatch", action="store_true")
     parser.add_argument("--dry-run", action="store_true")

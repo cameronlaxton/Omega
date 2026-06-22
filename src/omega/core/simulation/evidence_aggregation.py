@@ -110,9 +110,7 @@ def per_signal_capped_factor(
     Convenience for callers that do not need the intermediate value separately;
     the trace still records both via :class:`SignalApplication`.
     """
-    return cap_factor(
-        reliability_adjusted_factor(raw_factor, reliability_weight), per_signal_cap
-    )
+    return cap_factor(reliability_adjusted_factor(raw_factor, reliability_weight), per_signal_cap)
 
 
 def confidence_adjusted_factor(factor: float, confidence: float) -> float:
@@ -213,14 +211,11 @@ def damp_family(members: list[FamilyMember], damping_weight: float) -> FamilyDam
 
     # First record with the largest absolute deviation wins (deterministic on
     # ties because max() keeps the earliest maximal element).
-    primary_idx = max(
-        range(len(members)), key=lambda i: abs(members[i].factor - 1.0)
-    )
+    primary_idx = max(range(len(members)), key=lambda i: abs(members[i].factor - 1.0))
     primary = members[primary_idx]
     primary_delta = primary.factor - 1.0
     secondary_delta = (
-        sum(m.factor - 1.0 for i, m in enumerate(members) if i != primary_idx)
-        * damping_weight
+        sum(m.factor - 1.0 for i, m in enumerate(members) if i != primary_idx) * damping_weight
     )
     family_damped_factor = 1.0 + primary_delta + secondary_delta
 

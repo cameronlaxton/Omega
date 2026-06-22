@@ -63,9 +63,7 @@ def partition_events(
             rejected.append(_reject(ev, "missing_identity", "unresolved home/away identity"))
             continue
         if ev.event_id in seen:
-            rejected.append(
-                _reject(ev, "duplicate_event_key", "duplicate event_id within dataset")
-            )
+            rejected.append(_reject(ev, "duplicate_event_key", "duplicate event_id within dataset"))
             continue
         seen.add(ev.event_id)
         clean.append(ev)

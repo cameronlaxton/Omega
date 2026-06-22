@@ -16,7 +16,7 @@ This module is pure-decision + a single registry side effect:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from omega.core.calibration.profiles import CalibrationProfile
