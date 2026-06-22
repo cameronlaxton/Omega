@@ -1,4 +1,4 @@
-﻿# Omega
+# Omega
 
 Omega is a reasoning-led sports analytics system: an LLM/operator layer gathers auditable inputs, and a deterministic Python engine performs simulation, calibration, edge, EV, Kelly staking, confidence tiering, backtesting, grading, and trace ID generation.
 
@@ -76,9 +76,8 @@ The resolver prepares market inputs and provenance only. It does not compute pro
 - [OMEGA_COWORK.md](OMEGA_COWORK.md): local VM / Cowork runtime instruction.
 - [docs/LLM_MCP_INTERFACE.md](docs/LLM_MCP_INTERFACE.md): MCP tool contract and replay boundary.
 - [OMEGA_DATA_SOURCES.md](OMEGA_DATA_SOURCES.md): data sourcing and freshness rules.
-- [docs/anchor_parlay_strategy.md](docs/anchor_parlay_strategy.md): anchor parlay playbook + skip rules.
 
-Retired to `archive/historical/` (non-authoritative): `OMEGA_HANDBOOK.md`, `OMEGA_RUN_RECIPE.md`. `OMEGA_STRATEGY.md` was folded into the anchor parlay playbook above.
+Retired to `archive/historical/` (non-authoritative): `OMEGA_HANDBOOK.md`, `OMEGA_RUN_RECIPE.md`.
 
 ## Testing
 
