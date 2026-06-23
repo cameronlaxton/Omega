@@ -253,6 +253,32 @@ def main() -> int:
     parser.add_argument("--cache-root", default=None, help="Override ETL cache root")
     parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument("--dry-run", action="store_true", help="Fit and report; write nothing")
+    parser.add_argument(
+        "--emit-structure-candidate",
+        action="store_true",
+        help=(
+            "After fitting per-player prop k, also sweep the NFL game-score "
+            "dispersion (nfl_neg_binom backend, nb_k_scale) to minimize RAW OOS ECE "
+            "on graded game traces and register a BackendParameterProfile candidate "
+            "for the NFL game bucket. Distinct from the per-player prop k above; "
+            "requires the --structure-* args below."
+        ),
+    )
+    parser.add_argument(
+        "--structure-knob", default="nb_k_scale", help="Knob to sweep (default nb_k_scale)"
+    )
+    parser.add_argument(
+        "--structure-historical-db",
+        default=None,
+        help="Historical replay DB of graded NFL game traces",
+    )
+    parser.add_argument("--structure-validation-start", default=None, help="YYYY-MM-DD")
+    parser.add_argument(
+        "--structure-holdout-start", default=None, help="YYYY-MM-DD; strictly after validation"
+    )
+    parser.add_argument(
+        "--register-structure", action="store_true", help="Persist the structure candidate"
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -284,15 +310,43 @@ def main() -> int:
     if args.dry_run:
         rows = fit_dispersions(observations, season=args.season, as_of_date=as_of, n0=args.n0)
         logger.info("[dry-run] fit %d rows — not written", len(rows))
-        return 0
+    else:
+        from omega.trace.store import TraceStore
 
-    from omega.trace.store import TraceStore
+        store = TraceStore(db_path=args.db) if args.db else TraceStore()
+        try:
+            run_fit(store, observations, season=args.season, as_of_date=as_of, n0=args.n0)
+        finally:
+            store.close()
 
-    store = TraceStore(db_path=args.db) if args.db else TraceStore()
-    try:
-        run_fit(store, observations, season=args.season, as_of_date=as_of, n0=args.n0)
-    finally:
-        store.close()
+    if args.emit_structure_candidate:
+        missing = [
+            name
+            for name, val in (
+                ("--structure-historical-db", args.structure_historical_db),
+                ("--structure-validation-start", args.structure_validation_start),
+                ("--structure-holdout-start", args.structure_holdout_start),
+            )
+            if not val
+        ]
+        if missing:
+            logger.error("--emit-structure-candidate requires: %s", ", ".join(missing))
+            return 1
+        from omega.ops.fit_backend_structure import emit_structure_candidate_after_fit
+
+        return emit_structure_candidate_after_fit(
+            backend_name="nfl_neg_binom",
+            league="NFL",
+            knob=args.structure_knob,
+            base_params={},
+            historical_db=args.structure_historical_db,
+            historical_only=True,
+            validation_start=args.structure_validation_start,
+            holdout_start=args.structure_holdout_start,
+            priors_as_of=as_of,
+            register=args.register_structure,
+            db=args.db,
+        )
     return 0
 
 
