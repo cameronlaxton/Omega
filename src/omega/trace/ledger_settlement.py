@@ -56,10 +56,13 @@ def grade_ledger_fields(
         row = store.get_outcome(trace_id)
         if row is None:
             return None
-        side = selection_descriptor.split("_", 1)[0]
-        if side not in _GRADEABLE_GAME_SIDES:
-            return None
-        status = settle_game_bet(market, side, line, row["home_score"], row["away_score"])
+        if row.get("result") in ("void", "postponed", "cancelled"):
+            status = LedgerStatus.VOID
+        else:
+            side = selection_descriptor.split("_", 1)[0]
+            if side not in _GRADEABLE_GAME_SIDES:
+                return None
+            status = settle_game_bet(market, side, line, row["home_score"], row["away_score"])
 
     payout, net = compute_pnl(status, odds, stake)
     return status, payout, net

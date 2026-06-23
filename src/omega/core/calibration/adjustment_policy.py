@@ -91,6 +91,13 @@ BOUNDED_LIVE_PLANE_CAP = 0.20
 # contribute to an A-tier recommendation.
 MIN_EVIDENCE_SAMPLES_FOR_GATE = 100
 
+# Minimum mean reliability weight (from the fit) for the same gate. A policy can
+# be fitted on plenty of data yet have its signals score as noise (reliability
+# weight 0 => directional accuracy <= 0.50). Sample size alone must NOT unlock an
+# A; the fitted evidence must also be predictive. 0.10 ~ average directional
+# accuracy >= 0.55 across the fitted signal types.
+MIN_EVIDENCE_RELIABILITY_FOR_GATE = 0.10
+
 
 def normalize_evidence_mode(value: str | None, *, default: str = "score_only") -> str:
     """Map a raw mode string (incl. legacy ``shadow``) to a valid graduated mode.
@@ -218,13 +225,26 @@ class AdjustmentPolicy(BaseModel):
     def evidence_metrics_passed(self) -> bool:
         """Whether this policy's evidence metrics clear the gate.
 
-        Gate for "bounded_live evidence may contribute to an A-tier rec": the
-        policy must be fitted on enough data (``sample_size >=
-        MIN_EVIDENCE_SAMPLES_FOR_GATE``) and carry recorded fit ``metrics``. The
-        hand-seeded v1 priors (sample_size=0, metrics={}) deliberately fail this,
-        so bounded_live on unfitted priors can never manufacture an A.
+        Gate for "bounded_live evidence may contribute to an A-tier rec". The
+        policy must clear ALL of:
+          * fitted on enough data (``sample_size >= MIN_EVIDENCE_SAMPLES_FOR_GATE``);
+          * carry recorded fit ``metrics``;
+          * those signals must be *predictive*, not just plentiful —
+            ``mean_reliability_weight >= MIN_EVIDENCE_RELIABILITY_FOR_GATE``.
+
+        The hand-seeded v1 priors (sample_size=0, metrics={}) fail on the first
+        bar. A policy fitted on noise (e.g. recent_form scoring directional
+        accuracy 0.42 -> reliability weight 0.0) has plenty of samples but fails
+        the reliability bar, so bounded_live can still never manufacture an A
+        from un-predictive evidence.
         """
-        return self.sample_size >= MIN_EVIDENCE_SAMPLES_FOR_GATE and bool(self.metrics)
+        if self.sample_size < MIN_EVIDENCE_SAMPLES_FOR_GATE or not self.metrics:
+            return False
+        mean_reliability = self.metrics.get("mean_reliability_weight")
+        return (
+            mean_reliability is not None
+            and mean_reliability >= MIN_EVIDENCE_RELIABILITY_FOR_GATE
+        )
 
     def bounded_live_effective(self) -> AdjustmentPolicy:
         """Return a copy with bounded_live's hard caps forced on.

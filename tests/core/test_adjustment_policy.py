@@ -127,11 +127,28 @@ class TestPolicyModel:
         eff = _policy("p1", mode="bounded_live", plane_cap=0.05).bounded_live_effective()
         assert eff.plane_cap == 0.05  # tighter than the 0.20 default is kept
 
-    def test_evidence_metrics_passed_requires_samples_and_metrics(self):
+    def test_evidence_metrics_passed_requires_samples_and_predictive_metrics(self):
+        # No samples -> fail.
         assert _policy("p1").evidence_metrics_passed() is False
-        assert _policy("p2", sample_size=200).evidence_metrics_passed() is False  # no metrics
+        # Samples but no metrics -> fail.
+        assert _policy("p2", sample_size=200).evidence_metrics_passed() is False
+        # Plenty of samples but the fitted signals are NOISE (reliability 0) -> fail.
         assert (
-            _policy("p3", sample_size=200, metrics={"ece": 0.04}).evidence_metrics_passed()
+            _policy(
+                "p3", sample_size=200, metrics={"mean_reliability_weight": 0.0}
+            ).evidence_metrics_passed()
+            is False
+        )
+        # Samples but no reliability metric recorded -> fail (cannot verify predictiveness).
+        assert (
+            _policy("p4", sample_size=200, metrics={"ece": 0.04}).evidence_metrics_passed()
+            is False
+        )
+        # Enough samples AND predictive signals -> pass.
+        assert (
+            _policy(
+                "p5", sample_size=200, metrics={"mean_reliability_weight": 0.3}
+            ).evidence_metrics_passed()
             is True
         )
 
