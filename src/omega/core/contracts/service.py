@@ -525,6 +525,8 @@ def analyze(
     # (graded quality cap + evidence-metrics gate) and re-derive stake. This is
     # the single choke point that enforces zero_evidence_empty_context -> Pass,
     # static_identity/usable-band -> B/C, and "bounded_live needs gated metrics".
+    _home = getattr(typed_req, "home_team", None)
+    _away = getattr(typed_req, "away_team", None)
     _apply_confidence_caps(
         result,
         trace_confidence_cap=quality.confidence_cap,
@@ -532,6 +534,10 @@ def analyze(
         evidence_metrics_passed=evidence_metrics_passed,
         bankroll=bankroll,
         league=getattr(typed_req, "league", None),
+        # Match analyze_game's own best_bet selection key so re-picking after a
+        # cap uses identical portfolio correlation grouping (matchup matters
+        # under OMEGA_PORTFOLIO_SELECTION).
+        matchup=f"{_away} @ {_home}" if _home and _away else None,
     )
 
     engine_trace_quality: dict[str, Any] = {
@@ -581,9 +587,9 @@ def analyze(
         "evidence_metrics_passed": evidence_metrics_passed,
         "evidence_application": evidence_application,
         "evidence_aggregation": evidence_aggregation,
-        # Mirror the graded score (0-100) to the top level so the denormalized DB
-        # column and UI are honest instead of the long-standing 0.0/NULL default.
-        "aggregate_quality": engine_trace_quality["aggregate_quality"],
+        # Canonical graded score lives inside trace_quality (0-100); it is NOT
+        # mirrored to the top-level/DB-column key, whose readers (UI templates)
+        # still assume the legacy 0-1 fraction scale.
         "trace_quality": engine_trace_quality,
     }
 
@@ -854,11 +860,21 @@ def _game_evidence_plan_for(request: GameAnalysisRequest) -> EvidenceExecutionPl
         # until an operator flips the policy to bounded_live/live.
         rollout_mode = resolve_evidence_mode(markov_policy)
         applying = rollout_mode in APPLYING_MODES
+        # bounded_live engages the policy's correlation damping on the Markov
+        # path too (parity with the plane path). The per-key magnitude clamp on
+        # this path is the modifier engine's own ±_MAX_CUMULATIVE_SHIFT; the
+        # plane caps (single/family/plane) do not translate 1:1 to transition
+        # modifiers, so that residual clamp is the bound here.
+        markov_handler_policy = (
+            markov_policy.bounded_live_effective()
+            if markov_policy is not None and rollout_mode == "bounded_live"
+            else markov_policy
+        )
         active_evidence = [sig for idx, sig in enumerate(evidence) if idx not in suppressed]
         markov = compute_transition_modifier_adjustment(
             active_evidence,
             home_team=request.home_team,
-            policy=markov_policy,
+            policy=markov_handler_policy,
         )
         applications = _merge_markov_applications(evidence, suppressed, markov.applications)
         if not applying:

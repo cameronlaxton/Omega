@@ -395,10 +395,12 @@ def _get_applicable_profile(league: str, context_slice: str | None = None, marke
     Returns ``(profile, level)`` where level is one of league|sport_family|global,
     or ``(None, None)`` when no profile applies (caller uses the static policy).
 
-    Implemented as a walk over :func:`_get_active_profile` (one call per bucket)
-    so the production registry-override seam is honored at every level and the
-    same lookup is patchable in tests. Mirrors
-    ``CalibrationRegistry.get_applicable`` (the registry-native equivalent).
+    This is the single shared selection path consumed by both the production
+    service and the backtest engine (via apply_calibration / _audited). It walks
+    :func:`_get_active_profile` (one call per bucket) so the production
+    registry-override seam is honored at every level and the lookup stays
+    patchable in tests; the registry owns only the exact-key ``get_production``
+    each rung composes from.
     """
     try:
         profile = _get_active_profile(league, context_slice=context_slice, market=market)

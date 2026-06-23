@@ -28,7 +28,6 @@ from omega.core.calibration.profiles import (
     ProfileMaturity,
     ProfileStatus,
 )
-from omega.core.calibration.sport_family import sport_family_for_league
 from omega.core.calibration.promotion import (
     DEFAULT_BRIER_IMPROVEMENT,
     DEFAULT_ECE_FLOOR,
@@ -139,46 +138,11 @@ class CalibrationRegistry:
             resolved = self._resolve_market(league_uc, context_slice, "game")
         return resolved
 
-    def get_applicable(
-        self,
-        league: str,
-        context_slice: str | None = None,
-        market: str = "game",
-    ) -> tuple[CalibrationProfile | None, str | None]:
-        """Highest-trust profile to APPLY, walking the hierarchical fallback.
-
-        Lookup ladder (each rung lowers trust, which downstream tightens the
-        confidence cap):
-
-            league (exact slice -> base, market -> game)   -> level "league"
-            sport_family(league)                            -> level "sport_family"
-            GLOBAL                                          -> level "global"
-            none                                            -> static policy
-
-        Returns ``(profile, fallback_level)`` where ``fallback_level`` is None
-        when no applicable profile exists (caller falls back to the static
-        policy). A returned profile may be provisional/probation maturity —
-        callers read ``profile.effective_maturity()`` to cap the correction
-        magnitude and the confidence tier. ``get_production`` is intentionally
-        left unchanged for legacy exact-key callers.
-        """
-        profile = self.get_production(league, context_slice=context_slice, market=market)
-        if profile is not None:
-            return profile, "league"
-
-        family = sport_family_for_league(league)
-        if family and family != "unknown":
-            profile = self.get_production(
-                family.upper(), context_slice=context_slice, market=market
-            )
-            if profile is not None:
-                return profile, "sport_family"
-
-        profile = self.get_production(GLOBAL_BUCKET, context_slice=context_slice, market=market)
-        if profile is not None:
-            return profile, "global"
-
-        return None, None
+    # The hierarchical applicable-profile walk (league -> sport_family -> GLOBAL
+    # -> static) is the single shared selection path and lives with the rest of
+    # the selection policy in ``probability._get_applicable_profile`` (consumed by
+    # both the production service and the backtest engine). The registry owns
+    # storage + the exact-key ``get_production`` lookup it composes from.
 
     def _resolve_market(
         self,

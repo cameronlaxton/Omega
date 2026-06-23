@@ -65,9 +65,9 @@ class AdjustmentRecord:
     """Per-signal record of what the engine did (or would do) with one signal.
 
     ``factor`` is always the computed, capped (and — when the policy enables it —
-    confidence-weighted) factor, even in shadow mode, so retrospective scoring
-    can backtest counterfactually. ``applied`` is True only when the engine
-    actually multiplied the factor into the live prediction.
+    confidence-weighted) factor, even in a non-applying mode, so retrospective
+    scoring can backtest counterfactually. ``applied`` is True only when the
+    engine actually multiplied the factor into the live prediction.
 
     The remaining fields decompose the Issue #22 factor sequence so the trace can
     attribute each stage independently and never falsely credit grouped family
@@ -143,7 +143,7 @@ class PlaneAdjustment:
     home_factor: float = 1.0
     away_factor: float = 1.0
     records: list[AdjustmentRecord] = field(default_factory=list)
-    evidence_mode: str = "shadow"
+    evidence_mode: str = "score_only"
 
     def applications(self) -> list[dict[str, Any]]:
         """Per-signal application dicts, aligned by index with the evidence list."""

@@ -73,11 +73,16 @@ class TraceQuality:
 
 
 def _most_restrictive(caps: Iterable[str | None]) -> str | None:
-    """Return the lowest-tier (most restrictive) cap, or None if no real cap."""
+    """Return the lowest-tier (most restrictive) cap, or None if no real cap.
+
+    An unrecognized cap string is treated as most-restrictive (rank 0), matching
+    ``omega.core.contracts.confidence`` so the two stages can never disagree on
+    polarity for an unexpected value (fail closed).
+    """
     real = [c for c in caps if c]
     if not real:
         return None
-    return min(real, key=lambda c: _TIER_RANK.get(c, 3))
+    return min(real, key=lambda c: _TIER_RANK.get(c, 0))
 
 
 def is_zero_evidence_empty_context(*, evidence_count: int, context_source: str | None) -> bool:
