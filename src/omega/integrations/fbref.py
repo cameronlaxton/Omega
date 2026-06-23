@@ -66,9 +66,7 @@ class FbrefTeamSeason(BaseModel):
     xg_against: float
 
 
-def _download_comp_html(
-    comp_id: str, slug: str, url_opener: Callable[..., Any]
-) -> str:
+def _download_comp_html(comp_id: str, slug: str, url_opener: Callable[..., Any]) -> str:
     """Raw network fetch — replay-guarded; wrapped by cached_fetch upstream."""
     assert_not_replay_mode("fbref competition fetch")
     url = f"{_BASE_URL}/{comp_id}/{slug}-Stats"
@@ -132,9 +130,7 @@ def build_xg_priors(
     session_path: str | None = None,
 ) -> tuple[list[XgPrior], list[str]]:
     """Validate + alias-resolve standings rows into per-game ``XgPrior`` rows."""
-    validated = validate_records(
-        rows, FbrefTeamSeason, source="fbref", session_path=session_path
-    )
+    validated = validate_records(rows, FbrefTeamSeason, source="fbref", session_path=session_path)
     return build_team_xg_priors(
         ((row.team, row.xg_for, row.xg_against, row.games) for row in validated),
         competition=league,

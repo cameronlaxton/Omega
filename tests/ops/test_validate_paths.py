@@ -32,10 +32,7 @@ def test_validate_all_defaults_are_var_inbox():
 
 def test_validate_all_default_matches_subvalidator_default():
     # The orchestrator and the sub-validator must agree on where sidecars live.
-    assert (
-        validate_all._DEFAULT_SESSIONS_INBOX
-        == validate_session_sidecars._DEFAULT_SESSIONS_INBOX
-    )
+    assert validate_all._DEFAULT_SESSIONS_INBOX == validate_session_sidecars._DEFAULT_SESSIONS_INBOX
 
 
 def test_validate_directory_counts_valid_and_invalid(tmp_path):
@@ -62,9 +59,15 @@ def test_validate_all_warns_for_root_inbox_even_when_var_paths_are_clean(
     traces.mkdir(parents=True)
 
     monkeypatch.setattr(validate_all, "repo_root", lambda: root)
-    monkeypatch.setattr(validate_all, "_run_module", lambda name, module, *args: validate_all.StepResult(name, "PASS", "stub"))
+    monkeypatch.setattr(
+        validate_all,
+        "_run_module",
+        lambda name, module, *args: validate_all.StepResult(name, "PASS", "stub"),
+    )
 
-    code = validate_all.main(["--skip-tests", "--sessions-inbox", str(sessions), "--traces", str(traces)])
+    code = validate_all.main(
+        ["--skip-tests", "--sessions-inbox", str(sessions), "--traces", str(traces)]
+    )
 
     out = capsys.readouterr().out
     assert code == 0
@@ -84,9 +87,15 @@ def test_validate_all_warns_for_root_reports_even_when_var_paths_are_clean(
     traces.mkdir(parents=True)
 
     monkeypatch.setattr(validate_all, "repo_root", lambda: root)
-    monkeypatch.setattr(validate_all, "_run_module", lambda name, module, *args: validate_all.StepResult(name, "PASS", "stub"))
+    monkeypatch.setattr(
+        validate_all,
+        "_run_module",
+        lambda name, module, *args: validate_all.StepResult(name, "PASS", "stub"),
+    )
 
-    code = validate_all.main(["--skip-tests", "--sessions-inbox", str(sessions), "--traces", str(traces)])
+    code = validate_all.main(
+        ["--skip-tests", "--sessions-inbox", str(sessions), "--traces", str(traces)]
+    )
 
     out = capsys.readouterr().out
     assert code == 0

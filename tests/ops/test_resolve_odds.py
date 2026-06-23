@@ -19,9 +19,7 @@ def _isolate_odds_cache(tmp_path, monkeypatch):
     """Point OddsCache at a unique per-test SQLite file. Without this, resolve_odds
     shares the real ~/.omega/runtime cache across tests, so one test's success
     payload leaks into later tests' cache lookups and corrupts their assertions."""
-    monkeypatch.setattr(
-        OddsCache, "_resolve_db_path", lambda self: tmp_path / "odds_cache.db"
-    )
+    monkeypatch.setattr(OddsCache, "_resolve_db_path", lambda self: tmp_path / "odds_cache.db")
 
 
 class FakeOddsClient:
@@ -46,7 +44,9 @@ class FakeOddsClient:
         markets = ["player_points"] if self.market_available else ["player_rebounds"]
         return [EventMarketAvailability(bookmaker=bookmakers or "betmgm", markets=markets)]
 
-    def fetch_current_event_odds(self, league, event_id, regions="us", markets="", bookmakers=None, **kwargs):
+    def fetch_current_event_odds(
+        self, league, event_id, regions="us", markets="", bookmakers=None, **kwargs
+    ):
         self.event_odds_bookmakers.append(bookmakers)
         books = [
             BookOdds(
@@ -169,7 +169,9 @@ class FakeSoccerOddsClient:
     def fetch_event_markets(self, league, event_id, regions="us", bookmakers=None, **kwargs):
         return [EventMarketAvailability(bookmaker=bookmakers or "betmgm", markets=["h2h"])]
 
-    def fetch_current_event_odds(self, league, event_id, regions="us", markets="", bookmakers=None, **kwargs):
+    def fetch_current_event_odds(
+        self, league, event_id, regions="us", markets="", bookmakers=None, **kwargs
+    ):
         self.event_odds_bookmakers.append(bookmakers)
         books = [
             BookOdds(
@@ -371,7 +373,10 @@ def test_resolve_prop_returns_exact_betmgm_patch():
     # Single-book mode stamps the source book onto the prop patch for ledger
     # provenance; the over/under prices are unchanged.
     assert result["request_patch"] == {
-        "line": 27.5, "odds_over": -115, "odds_under": -105, "bookmaker": "betmgm",
+        "line": 27.5,
+        "odds_over": -115,
+        "odds_under": -105,
+        "bookmaker": "betmgm",
     }
 
 
@@ -389,7 +394,10 @@ def test_resolve_wnba_points_prop_uses_standard_ou_market():
 
     assert result["status"] == "success"
     assert result["request_patch"] == {
-        "line": 27.5, "odds_over": -115, "odds_under": -105, "bookmaker": "betmgm",
+        "line": 27.5,
+        "odds_over": -115,
+        "odds_under": -105,
+        "bookmaker": "betmgm",
     }
     assert {q["provider_market_key"] for q in result["quotes"]} == {"player_points"}
 

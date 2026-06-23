@@ -57,14 +57,21 @@ class TestResearchCandidateLoop:
         assert trace_envelope["trace_id"].startswith("sandbox-")
         assert trace_envelope["result"]["status"] == "success"
 
-        # 3. Simulate user-facing output withholding
-        # In RESEARCH_CANDIDATE mode, the LLM presentation layer must withhold key numbers:
-        # We assert the values exist inside the trace envelope (for calibration)
-        assert trace_envelope["result"]["best_bet"] is not None
-        best_bet = trace_envelope["result"]["best_bet"]
-        assert best_bet["edge_pct"] > 0
-        assert best_bet["recommended_units"] > 0
-        assert best_bet["confidence_tier"] in ("A", "B", "C", "Pass")
+        # 3. Honest output in RESEARCH_CANDIDATE mode.
+        # The engine still runs and produces internal edge data (which the agent
+        # withholds), but with no fitted profile (static_identity) and no
+        # structured evidence it must NOT manufacture an actionable bet: edges
+        # are capped (never A) and there is no headline best_bet.
+        result = trace_envelope["result"]
+        assert result["edges"], "engine should still produce internal edge data"
+        tiers = {e["confidence_tier"] for e in result["edges"]}
+        assert "A" not in tiers, "uncalibrated, evidence-free trace must not show Tier A"
+        assert result["best_bet"] is None, "no actionable headline bet without calibration"
+        # The honesty signals are present and real.
+        tq = trace_envelope["trace_quality"]
+        assert isinstance(tq["aggregate_quality"], int)
+        assert tq["confidence_cap"] in ("B", "C", "Pass")
+        assert tq["calibration_path"] == "static_identity"
 
         # But the agent must NOT show these to the user.
         # We check the contains_blocked_phrase helper to audit that blocked terms can be scanned:

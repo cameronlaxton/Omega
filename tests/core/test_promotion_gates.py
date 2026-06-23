@@ -81,7 +81,9 @@ def test_undersampled_candidate_blocked(tmp_path):
 def test_high_ece_candidate_blocked(tmp_path):
     reg = _registry(tmp_path)
     reg.register(
-        _profile("nba_v1", metrics={"brier_score": 0.22, "calibration_error": 0.15, "log_loss": 0.65})
+        _profile(
+            "nba_v1", metrics={"brier_score": 0.22, "calibration_error": 0.15, "log_loss": 0.65}
+        )
     )
     with pytest.raises(PromotionGateError) as exc:
         reg.promote("nba_v1", **_CONFIRMS)

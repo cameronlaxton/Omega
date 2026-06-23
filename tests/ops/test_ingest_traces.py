@@ -511,9 +511,7 @@ class TestTraceScopedQaIngest:
         assert verdict["scope"] == "trace_id"
         store.close()
 
-    def test_omitted_sidecar_dir_resolves_at_call_time(
-        self, workspace, tmp_path, monkeypatch
-    ):
+    def test_omitted_sidecar_dir_resolves_at_call_time(self, workspace, tmp_path, monkeypatch):
         inbox, db_path = workspace
         session_id = "sess-lazy"
         sidecar_dir = tmp_path / "lazy" / "sessions"
@@ -534,9 +532,7 @@ class TestTraceScopedQaIngest:
         assert verdict["verdict"] == "fail"
         store.close()
 
-    def test_explicit_none_sidecar_dir_still_disables_qa(
-        self, workspace, tmp_path, monkeypatch
-    ):
+    def test_explicit_none_sidecar_dir_still_disables_qa(self, workspace, tmp_path, monkeypatch):
         inbox, db_path = workspace
         session_id = "sess-none"
         sidecar_dir = tmp_path / "lazy" / "sessions"
@@ -560,9 +556,7 @@ class TestTraceScopedQaIngest:
         inbox, db_path = workspace
         session_id = "sess-qa2"
         sidecar_dir = tmp_path / "sessions"
-        _write_sidecar(
-            sidecar_dir, session_id, qa_failed=True, qa_failed_trace_ids=["sandbox-qa2"]
-        )
+        _write_sidecar(sidecar_dir, session_id, qa_failed=True, qa_failed_trace_ids=["sandbox-qa2"])
 
         payload = self._eligible_payload("sandbox-qa2", session_id)
         path = _write_file(inbox, "qa2.json", payload)
@@ -574,15 +568,11 @@ class TestTraceScopedQaIngest:
         assert store.get_graded_traces() == []
         store.close()
 
-    def test_force_ingest_qa_failed_does_not_mark_calibration_eligible(
-        self, workspace, tmp_path
-    ):
+    def test_force_ingest_qa_failed_does_not_mark_calibration_eligible(self, workspace, tmp_path):
         inbox, db_path = workspace
         session_id = "sess-qa3"
         sidecar_dir = tmp_path / "sessions"
-        _write_sidecar(
-            sidecar_dir, session_id, qa_failed=True, qa_failed_trace_ids=["sandbox-qa3"]
-        )
+        _write_sidecar(sidecar_dir, session_id, qa_failed=True, qa_failed_trace_ids=["sandbox-qa3"])
 
         payload = self._eligible_payload("sandbox-qa3", session_id)
         path = _write_file(inbox, "qa3.json", payload)
@@ -771,7 +761,9 @@ class TestPrePersistExportGate:
     def test_lenient_default_preserves_current_behavior(self, workspace):
         inbox, db_path = workspace
         # A normal export with no game_context ingests fine under the default gate.
-        path = _write_file(inbox, "lenient.json", _make_export_block("sandbox-lenient-1", with_bet=False))
+        path = _write_file(
+            inbox, "lenient.json", _make_export_block("sandbox-lenient-1", with_bet=False)
+        )
         store = TraceStore(db_path=str(db_path))
         trace_id, _ = ingest_traces.ingest_file(path, store, sidecar_dir=None)
         assert trace_id == "sandbox-lenient-1"
@@ -782,7 +774,9 @@ class TestPrePersistExportGate:
         inbox, db_path = workspace
         # The prop export omits game_context (is_playoff/rest_days); strict mode
         # hard-fails NBA traces that lack it.
-        path = _write_file(inbox, "strict.json", _make_export_block("sandbox-strict-1", with_bet=False))
+        path = _write_file(
+            inbox, "strict.json", _make_export_block("sandbox-strict-1", with_bet=False)
+        )
         store = TraceStore(db_path=str(db_path))
         with pytest.raises(ValueError, match="pre-persist validation"):
             ingest_traces.ingest_file(path, store, sidecar_dir=None, strict=True)
@@ -804,7 +798,9 @@ class TestPrePersistExportGate:
 
     def test_gate_error_says_rewrap_not_rerun_analyze(self, workspace):
         inbox, db_path = workspace
-        path = _write_file(inbox, "strict2.json", _make_export_block("sandbox-strict-2", with_bet=False))
+        path = _write_file(
+            inbox, "strict2.json", _make_export_block("sandbox-strict-2", with_bet=False)
+        )
         store = TraceStore(db_path=str(db_path))
         with pytest.raises(ValueError) as exc:
             ingest_traces.ingest_file(path, store, sidecar_dir=None, strict=True)

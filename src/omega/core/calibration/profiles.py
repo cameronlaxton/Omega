@@ -28,6 +28,35 @@ class ProfileStatus(str, Enum):
     REJECTED = "rejected"  # Failed evaluation or manually rejected
 
 
+class ProfileMaturity(str, Enum):
+    """Trust level of an *active* calibration profile (orthogonal to status).
+
+    ``status`` is the promotion state machine (candidate→production→archived).
+    ``maturity`` grades how much a *production*-status profile may move a
+    probability and how high a confidence it may support. This breaks the
+    all-or-nothing trap: a sparse market can apply a small, capped correction at
+    ``provisional`` maturity instead of waiting forever for full ``production``.
+
+    none        -> not trusted to apply (no correction).
+    provisional -> applies a small capped correction; confidence capped low.
+    probation   -> larger capped correction; confidence capped medium.
+    production  -> full correction; no maturity-based confidence cap.
+    retired     -> previously trusted, now withdrawn (no correction).
+    """
+
+    NONE = "none"
+    PROVISIONAL = "provisional"
+    PROBATION = "probation"
+    PRODUCTION = "production"
+    RETIRED = "retired"
+
+
+# Maturities whose calibration correction is trusted to be applied to live math.
+APPLYING_MATURITIES: frozenset[ProfileMaturity] = frozenset(
+    {ProfileMaturity.PROVISIONAL, ProfileMaturity.PROBATION, ProfileMaturity.PRODUCTION}
+)
+
+
 # Sentinel ID for the hardcoded static policy (pre-Phase-6c behavior)
 STATIC_FALLBACK_ID = "__static_v1__"
 
@@ -68,6 +97,16 @@ class CalibrationProfile(BaseModel):
         ),
     )
     status: ProfileStatus = ProfileStatus.CANDIDATE
+    maturity: ProfileMaturity | None = Field(
+        default=None,
+        description=(
+            "Trust level of an active profile, orthogonal to status. None on "
+            "legacy profiles -> derived from status via effective_maturity() "
+            "(PRODUCTION status -> PRODUCTION maturity, else NONE). provisional/"
+            "probation apply capped corrections and cap confidence; production "
+            "applies the full correction."
+        ),
+    )
 
     # Method parameters — passed as kwargs to calibrate_probability()
     params: dict[str, Any] = Field(
@@ -105,3 +144,32 @@ class CalibrationProfile(BaseModel):
             "promoted via the fail-closed CalibrationRegistry.promote()."
         ),
     )
+
+    def effective_maturity(self) -> ProfileMaturity:
+        """Maturity to use, deriving a default for legacy profiles.
+
+        Profiles persisted before the ``maturity`` field existed have it None;
+        they were either full production (status PRODUCTION) or not applied.
+        """
+        if self.maturity is not None:
+            return self.maturity
+        return (
+            ProfileMaturity.PRODUCTION
+            if self.status == ProfileStatus.PRODUCTION
+            else ProfileMaturity.NONE
+        )
+
+    @property
+    def ece(self) -> float | None:
+        """Expected Calibration Error from recorded metrics (held-out), if any."""
+        return self.metrics.get("calibration_error")
+
+    @property
+    def brier(self) -> float | None:
+        """Brier score from recorded metrics, if any."""
+        return self.metrics.get("brier_score")
+
+    @property
+    def log_loss(self) -> float | None:
+        """Log loss from recorded metrics, if any."""
+        return self.metrics.get("log_loss")

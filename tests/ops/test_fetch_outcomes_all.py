@@ -15,9 +15,7 @@ def _fake_run_factory(calls: list[list[str]]):
 
 def test_fetch_outcomes_all_routes_tennis_tours(monkeypatch):
     calls: list[list[str]] = []
-    monkeypatch.setattr(
-        "omega.ops.fetch_outcomes_all.subprocess.run", _fake_run_factory(calls)
-    )
+    monkeypatch.setattr("omega.ops.fetch_outcomes_all.subprocess.run", _fake_run_factory(calls))
 
     result = run_fetch_outcomes(
         leagues=["ATP", "wta", "grand_slam"],
@@ -38,9 +36,7 @@ def test_fetch_outcomes_all_routes_tennis_tours(monkeypatch):
 
 def test_fetch_outcomes_all_default_includes_tennis(monkeypatch):
     calls: list[list[str]] = []
-    monkeypatch.setattr(
-        "omega.ops.fetch_outcomes_all.subprocess.run", _fake_run_factory(calls)
-    )
+    monkeypatch.setattr("omega.ops.fetch_outcomes_all.subprocess.run", _fake_run_factory(calls))
 
     result = run_fetch_outcomes(dry_run=True)
 

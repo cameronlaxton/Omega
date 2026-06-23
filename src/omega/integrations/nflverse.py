@@ -55,8 +55,7 @@ logger = logging.getLogger("omega.integrations.nflverse")
 # the current direct Parquet asset. It carries all seasons and is filtered after
 # the raw cached pull.
 NFLVERSE_PLAYER_STATS_URL = (
-    "https://github.com/nflverse/nflverse-data/releases/download/"
-    "player_stats/player_stats.parquet"
+    "https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats.parquet"
 )
 
 _CACHE_TTL_SECONDS = 7 * 24 * 3600  # weekly refresh cadence
@@ -113,9 +112,7 @@ def _download_player_stats(url_opener: Callable[..., Any]) -> Any:
 
     assert_not_replay_mode("nflverse player-stats fetch")
     logger.info("fetching nflverse player stats: %s", NFLVERSE_PLAYER_STATS_URL)
-    with url_opener(
-        NFLVERSE_PLAYER_STATS_URL, timeout=_REQUEST_TIMEOUT_SECONDS
-    ) as resp:
+    with url_opener(NFLVERSE_PLAYER_STATS_URL, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
         raw = resp.read()
     return pd.read_parquet(io.BytesIO(raw))
 
@@ -136,9 +133,7 @@ def _filter_player_stats_season(df: Any, season: int | str) -> Any:
             detail = f"; available seasons: {available[0]}-{available[-1]}"
         else:
             detail = "; no valid seasons found"
-        raise ValueError(
-            f"nflverse player_stats contains no rows for season {season}{detail}"
-        )
+        raise ValueError(f"nflverse player_stats contains no rows for season {season}{detail}")
     return filtered
 
 
@@ -156,9 +151,7 @@ def fetch_player_stats(
     fitting zero priors.
     """
 
-    @cached_fetch(
-        "nflverse", ttl_seconds=_CACHE_TTL_SECONDS, fmt="parquet", cache_root=cache_root
-    )
+    @cached_fetch("nflverse", ttl_seconds=_CACHE_TTL_SECONDS, fmt="parquet", cache_root=cache_root)
     def _fetch() -> Any:
         return _download_player_stats(url_opener)
 
@@ -232,9 +225,7 @@ def build_dispersion_observations(
                 "because no alias entry existed",
                 len(unresolved),
             )
-            _emit_source_canonical_warning(
-                session_path, source=source, unresolved=unresolved
-            )
+            _emit_source_canonical_warning(session_path, source=source, unresolved=unresolved)
             unresolved = []
     else:  # no alias table -> normalize-only pass-through (matches wehoop)
         resolved_map = {name: name for name in unique_names}

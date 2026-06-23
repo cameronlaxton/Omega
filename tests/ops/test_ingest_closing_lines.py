@@ -203,4 +203,3 @@ class TestMissingTrace:
         with pytest.raises(ValueError, match="No trace found"):
             ingest_file(path, store)
         store.close()
-

@@ -118,9 +118,7 @@ def list_traces(
 
 
 @router.get("/traces/{trace_id}", response_model=TraceDetail)
-def get_trace(
-    trace_id: str, service: ConsoleService = Depends(get_service)
-) -> TraceDetail:
+def get_trace(trace_id: str, service: ConsoleService = Depends(get_service)) -> TraceDetail:
     detail = service.get_trace_detail(trace_id)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"trace {trace_id!r} not found")
@@ -156,9 +154,7 @@ def list_bets(
 
 
 @router.get("/bets/{ledger_id}", response_model=BetDetail)
-def get_bet(
-    ledger_id: str, service: ConsoleService = Depends(get_service)
-) -> BetDetail:
+def get_bet(ledger_id: str, service: ConsoleService = Depends(get_service)) -> BetDetail:
     detail = service.get_bet_detail(ledger_id)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"bet {ledger_id!r} not found")
@@ -177,9 +173,7 @@ def list_sessions(
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
-def get_session(
-    session_id: str, service: ConsoleService = Depends(get_service)
-) -> SessionDetail:
+def get_session(session_id: str, service: ConsoleService = Depends(get_service)) -> SessionDetail:
     detail = service.get_session_detail(session_id)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")

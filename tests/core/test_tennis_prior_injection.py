@@ -56,22 +56,37 @@ def _seed_store(store: TraceStore) -> None:
         upsert_tennis_prior(
             store,
             TennisPrior(
-                player=player, tour="ATP", surface="grass",
-                spw_pct=spw, rpw_pct=rpw, n_matches=20, as_of_date="2026-06-10",
+                player=player,
+                tour="ATP",
+                surface="grass",
+                spw_pct=spw,
+                rpw_pct=rpw,
+                n_matches=20,
+                as_of_date="2026-06-10",
             ),
         )
     upsert_pressure_deltas(
         store,
         [
             TennisPressureDelta(
-                player="Jannik Sinner", tour="ATP", surface="grass",
-                state="break_point_against", delta=-0.021, n_points=900,
-                source=PRESSURE_SOURCE_PLAYER, as_of_date="2026-06-10",
+                player="Jannik Sinner",
+                tour="ATP",
+                surface="grass",
+                state="break_point_against",
+                delta=-0.021,
+                n_points=900,
+                source=PRESSURE_SOURCE_PLAYER,
+                as_of_date="2026-06-10",
             ),
             TennisPressureDelta(
-                player=PRESSURE_GROUP_PLAYER_KEY, tour="ATP", surface="grass",
-                state="break_point_against", delta=-0.012, n_points=50_000,
-                source=PRESSURE_SOURCE_GROUP, as_of_date="2026-06-10",
+                player=PRESSURE_GROUP_PLAYER_KEY,
+                tour="ATP",
+                surface="grass",
+                state="break_point_against",
+                delta=-0.012,
+                n_points=50_000,
+                source=PRESSURE_SOURCE_GROUP,
+                as_of_date="2026-06-10",
             ),
         ],
     )
@@ -98,9 +113,13 @@ def test_injection_fills_rates_and_joins_pressure_with_provenance():
         assert merged["away_context"]["return_win_pct"] == pytest.approx(0.39)
 
         prior = merged["prior_payload"]
-        assert prior["pressure_coefficients"]["home"]["break_point_against"] == pytest.approx(-0.021)
+        assert prior["pressure_coefficients"]["home"]["break_point_against"] == pytest.approx(
+            -0.021
+        )
         # Djokovic has no player rows -> __group__ fallback, never zeros.
-        assert prior["pressure_coefficients"]["away"]["break_point_against"] == pytest.approx(-0.012)
+        assert prior["pressure_coefficients"]["away"]["break_point_against"] == pytest.approx(
+            -0.012
+        )
         assert prior["pressure_coefficient_source"] == {
             "home": PRESSURE_SOURCE_PLAYER,
             "away": PRESSURE_SOURCE_GROUP,
@@ -126,13 +145,9 @@ def test_recorded_request_with_coefficients_is_untouched():
     store = _store()
     try:
         _seed_store(store)
-        recorded = _payload(
-            prior_payload={"pressure_coefficients": {"home": {"tiebreak": -0.5}}}
-        )
+        recorded = _payload(prior_payload={"pressure_coefficients": {"home": {"tiebreak": -0.5}}})
         merged, event = inject_game_priors(recorded, store=store)
-        assert merged["prior_payload"]["pressure_coefficients"] == {
-            "home": {"tiebreak": -0.5}
-        }
+        assert merged["prior_payload"]["pressure_coefficients"] == {"home": {"tiebreak": -0.5}}
         assert event is None
     finally:
         store.close()

@@ -102,14 +102,19 @@ def run(
                 try:
                     from omega.trace.session_sidecar import append_audit_events
 
-                    append_audit_events(sidecar, [{
-                        "ts": datetime.now(timezone.utc).isoformat(),
-                        "event_type": "data_provenance",
-                        "step": "run_analyze:prior_injection",
-                        "status": "skipped",
-                        "notes": f"prior_injection_failed: {exc}",
-                        "trace_ids": [],
-                    }])
+                    append_audit_events(
+                        sidecar,
+                        [
+                            {
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                                "event_type": "data_provenance",
+                                "step": "run_analyze:prior_injection",
+                                "status": "skipped",
+                                "notes": f"prior_injection_failed: {exc}",
+                                "trace_ids": [],
+                            }
+                        ],
+                    )
                 except Exception as audit_exc:  # noqa: BLE001
                     logger.warning(
                         "prior injection audit event failed for session_id=%s: %s",
@@ -183,5 +188,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

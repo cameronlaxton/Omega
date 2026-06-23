@@ -160,4 +160,3 @@ def test_backfill_never_reads_outcomes_or_engine_outputs():
     assert summary.applied_rows == 0
     assert store.get_evidence_signals("t-outcome") == []
     store.close()
-

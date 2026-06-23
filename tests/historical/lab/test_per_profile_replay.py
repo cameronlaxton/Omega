@@ -95,21 +95,44 @@ def _dataset() -> ReplayDataset:
     target = _event("2023-10-01", "Team A", "Team C")
     events = [e1, e2, e3, target]
     outcomes = {
-        e1.event_id: HistoricalOutcome(event_id=e1.event_id, home_score=24, away_score=17, result="home_win"),
-        e2.event_id: HistoricalOutcome(event_id=e2.event_id, home_score=20, away_score=27, result="away_win"),
-        e3.event_id: HistoricalOutcome(event_id=e3.event_id, home_score=30, away_score=21, result="home_win"),
-        target.event_id: HistoricalOutcome(event_id=target.event_id, home_score=28, away_score=24, result="home_win"),
+        e1.event_id: HistoricalOutcome(
+            event_id=e1.event_id, home_score=24, away_score=17, result="home_win"
+        ),
+        e2.event_id: HistoricalOutcome(
+            event_id=e2.event_id, home_score=20, away_score=27, result="away_win"
+        ),
+        e3.event_id: HistoricalOutcome(
+            event_id=e3.event_id, home_score=30, away_score=21, result="home_win"
+        ),
+        target.event_id: HistoricalOutcome(
+            event_id=target.event_id, home_score=28, away_score=24, result="home_win"
+        ),
     }
     obs: list[OddsObservation] = []
     for ev in (e1, e2, e3):
         for sd, price in (("home", -110), ("away", -110)):
-            obs.append(OddsObservation(event_key=ev.event_id, market="moneyline", selection_descriptor=sd, odds=price))
-    obs.append(OddsObservation(event_key=target.event_id, market="moneyline", selection_descriptor="home", odds=200))
-    obs.append(OddsObservation(event_key=target.event_id, market="moneyline", selection_descriptor="away", odds=200))
+            obs.append(
+                OddsObservation(
+                    event_key=ev.event_id, market="moneyline", selection_descriptor=sd, odds=price
+                )
+            )
     obs.append(
         OddsObservation(
-            event_key=target.event_id, market="moneyline",
-            selection_descriptor="home", odds=-180, tier_hint="closing",
+            event_key=target.event_id, market="moneyline", selection_descriptor="home", odds=200
+        )
+    )
+    obs.append(
+        OddsObservation(
+            event_key=target.event_id, market="moneyline", selection_descriptor="away", odds=200
+        )
+    )
+    obs.append(
+        OddsObservation(
+            event_key=target.event_id,
+            market="moneyline",
+            selection_descriptor="home",
+            odds=-180,
+            tier_hint="closing",
         )
     )
     return ReplayDataset(events=events, outcomes=outcomes, odds=ReplayDataset.group_odds(obs))

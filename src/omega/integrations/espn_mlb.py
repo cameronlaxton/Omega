@@ -1,6 +1,7 @@
 """
 omega.integrations.espn_mlb -- ESPN public scoreboard for MLB final scores.
 """
+
 from __future__ import annotations
 
 import json
@@ -28,7 +29,14 @@ MLB_TEAMS: dict[str, list[str]] = {
     "Minnesota Twins": ["min", "twins", "minnesota"],
     "Houston Astros": ["hou", "astros", "houston"],
     "Los Angeles Angels": ["laa", "angels", "los angeles angels", "anaheim", "anaheim angels"],
-    "Athletics": ["oak", "a's", "oakland", "oakland athletics", "sacramento athletics", "sacramento"],
+    "Athletics": [
+        "oak",
+        "a's",
+        "oakland",
+        "oakland athletics",
+        "sacramento athletics",
+        "sacramento",
+    ],
     "Seattle Mariners": ["sea", "mariners", "seattle"],
     "Texas Rangers": ["tex", "rangers", "texas"],
     "Atlanta Braves": ["atl", "braves", "atlanta"],
@@ -106,9 +114,13 @@ def parse_scoreboard(payload: dict) -> list[FinalGame]:
         for competitor in comp.get("competitors") or []:
             team_blob = competitor.get("team") or {}
             display_name = team_blob.get("displayName") or team_blob.get("name") or ""
-            canonical = canonical_team(display_name) or canonical_team(team_blob.get("abbreviation", ""))
+            canonical = canonical_team(display_name) or canonical_team(
+                team_blob.get("abbreviation", "")
+            )
             if not canonical:
-                logger.warning("Unmapped ESPN team: %r (abbr=%r)", display_name, team_blob.get("abbreviation"))
+                logger.warning(
+                    "Unmapped ESPN team: %r (abbr=%r)", display_name, team_blob.get("abbreviation")
+                )
                 canonical = display_name
             score = int(competitor.get("score") or 0)
             if competitor.get("homeAway") == "home":
@@ -118,13 +130,15 @@ def parse_scoreboard(payload: dict) -> list[FinalGame]:
         if not home or not away:
             logger.debug("skipping event %s - missing home/away", event_id)
             continue
-        results.append(FinalGame(
-            event_id=event_id,
-            date=iso_date,
-            home_team=home,
-            away_team=away,
-            home_score=home_score,
-            away_score=away_score,
-            status=status_short,
-        ))
+        results.append(
+            FinalGame(
+                event_id=event_id,
+                date=iso_date,
+                home_team=home,
+                away_team=away,
+                home_score=home_score,
+                away_score=away_score,
+                status=status_short,
+            )
+        )
     return results

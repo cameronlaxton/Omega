@@ -663,9 +663,7 @@ class TestDbPathResolution:
         finally:
             store.close()
 
-    def test_network_fs_path_is_redirected_with_warning(
-        self, tmp_path, monkeypatch, caplog
-    ):
+    def test_network_fs_path_is_redirected_with_warning(self, tmp_path, monkeypatch, caplog):
         from omega.trace import store as store_mod
 
         monkeypatch.delenv("OMEGA_TRACE_DB", raising=False)
@@ -685,9 +683,7 @@ class TestDbPathResolution:
         # Pin the redirect target to a temp dir so we don't pollute the real
         # user runtime path during tests.
         redirect_target = tmp_path / "redirect" / "var/omega_traces.db"
-        monkeypatch.setattr(
-            store_mod, "_local_runtime_db_path", lambda: redirect_target
-        )
+        monkeypatch.setattr(store_mod, "_local_runtime_db_path", lambda: redirect_target)
 
         # Capture atexit registrations to assert nothing is hooked up.
         registered = []
@@ -701,9 +697,7 @@ class TestDbPathResolution:
             assert store.db_path == str(redirect_target)
             assert store.db_path_source == "auto_redirect_network_fs"
             assert store.empty_history_mode is True
-            assert any(
-                "network/FUSE mount" in record.message for record in caplog.records
-            )
+            assert any("network/FUSE mount" in record.message for record in caplog.records)
             assert registered == [], (
                 "TraceStore must not register an atexit sync-back hook; "
                 "archival is owned by tools/windows/sync_to_mount.ps1"

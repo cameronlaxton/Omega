@@ -38,7 +38,9 @@ def _event(date: str, home: str, away: str) -> HistoricalEvent:
 
 def _oc(ev, hs, as_):
     return HistoricalOutcome(
-        event_id=ev.event_id, home_score=hs, away_score=as_,
+        event_id=ev.event_id,
+        home_score=hs,
+        away_score=as_,
         result=HistoricalOutcome.derive_result(hs, as_),
     )
 
@@ -56,15 +58,28 @@ def _dataset():
     }
     obs: list[OddsObservation] = []
     for ev in (e1, e2, e3, target):
-        obs.append(OddsObservation(event_key=ev.event_id, market="moneyline", selection_descriptor="home", odds=-120))
-        obs.append(OddsObservation(event_key=ev.event_id, market="moneyline", selection_descriptor="away", odds=110))
+        obs.append(
+            OddsObservation(
+                event_key=ev.event_id, market="moneyline", selection_descriptor="home", odds=-120
+            )
+        )
+        obs.append(
+            OddsObservation(
+                event_key=ev.event_id, market="moneyline", selection_descriptor="away", odds=110
+            )
+        )
     obs.append(
         OddsObservation(
-            event_key=target.event_id, market="moneyline",
-            selection_descriptor="home", odds=-135, tier_hint="closing",
+            event_key=target.event_id,
+            market="moneyline",
+            selection_descriptor="home",
+            odds=-135,
+            tier_hint="closing",
         )
     )
-    return ReplayDataset(events=[e1, e2, e3, target], outcomes=outcomes, odds=ReplayDataset.group_odds(obs)), target
+    return ReplayDataset(
+        events=[e1, e2, e3, target], outcomes=outcomes, odds=ReplayDataset.group_odds(obs)
+    ), target
 
 
 def test_replay_draw_plane(backtest_store, tmp_path):
@@ -83,8 +98,10 @@ def test_replay_draw_plane(backtest_store, tmp_path):
     assert any(c["market"] == "moneyline" for c in closing)
 
     graded = backtest_store.query_traces(
-        execution_mode="historical_replay", has_outcome=True,
-        calibration_eligible_only=True, limit=100,
+        execution_mode="historical_replay",
+        has_outcome=True,
+        calibration_eligible_only=True,
+        limit=100,
     )
     preds, outs = CalibrationFitter().extract_draw_pairs(graded)
     assert len(preds) == len(outs) >= 1

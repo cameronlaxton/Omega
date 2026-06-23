@@ -5,8 +5,15 @@ from __future__ import annotations
 from omega.integrations.odds_resolver import best_price_quotes
 
 
-def _q(market_type, selection, price, *, line=None, bookmaker="bookA",
-       last_update="2026-05-17T20:00:00Z"):
+def _q(
+    market_type,
+    selection,
+    price,
+    *,
+    line=None,
+    bookmaker="bookA",
+    last_update="2026-05-17T20:00:00Z",
+):
     """Minimal normalized-quote dict, matching normalize_book_odds output shape."""
     return {
         "market_type": market_type,

@@ -107,7 +107,9 @@ def classify_market_output_mode(
     reasons: list[str] = []
     if base is OutputMode.RESEARCH_CANDIDATE:
         if profile_id is None:
-            reasons.append("No fitted calibration profile for this market - static fallback active.")
+            reasons.append(
+                "No fitted calibration profile for this market - static fallback active."
+            )
         if trace_count == 0:
             reasons.append("0 calibration-eligible traces for this market in window.")
         if not sidecar_valid:
@@ -119,15 +121,11 @@ def classify_market_output_mode(
     # metrics are treated as failing the floor: trustworthiness cannot be
     # confirmed, so the market stays research-only.
     if sample_size is None or sample_size < MIN_SAMPLES_FOR_ACTIONABLE:
-        reasons.append(
-            f"Profile sample_size {sample_size} < {MIN_SAMPLES_FOR_ACTIONABLE} floor."
-        )
+        reasons.append(f"Profile sample_size {sample_size} < {MIN_SAMPLES_FOR_ACTIONABLE} floor.")
     if calibration_error is None:
         reasons.append("Profile calibration_error missing - cannot verify quality floor.")
     elif calibration_error > MAX_ECE_FOR_ACTIONABLE:
-        reasons.append(
-            f"Profile ECE {calibration_error:.3f} > {MAX_ECE_FOR_ACTIONABLE} floor."
-        )
+        reasons.append(f"Profile ECE {calibration_error:.3f} > {MAX_ECE_FOR_ACTIONABLE} floor.")
     if reasons:
         return OutputMode.RESEARCH_CANDIDATE, reasons
     return OutputMode.ACTIONABLE, reasons

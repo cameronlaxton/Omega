@@ -4,22 +4,22 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 import pytest
+
 from omega.ops.session_run import (
+    _analysis_plan,
     _generate_session_id,
     _league_list,
     _soccer_leagues_in,
     _tennis_leagues_in,
-    _analysis_plan,
     run_session,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helper / utility function tests
@@ -234,14 +234,21 @@ def test_run_session_hard_failure_on_preflight_exit_1(capsys):
 def test_main_dry_run_exits_0():
     from omega.ops.session_run import main
 
-    rc = main([
-        "--leagues", "MLB,TENNIS",
-        "--session-id", "sess-cli-test",
-        "--date", "2026-06-19",
-        "--mlb-games", "3",
-        "--tennis-games", "5",
-        "--dry-run",
-    ])
+    rc = main(
+        [
+            "--leagues",
+            "MLB,TENNIS",
+            "--session-id",
+            "sess-cli-test",
+            "--date",
+            "2026-06-19",
+            "--mlb-games",
+            "3",
+            "--tennis-games",
+            "5",
+            "--dry-run",
+        ]
+    )
     assert rc == 0
 
 

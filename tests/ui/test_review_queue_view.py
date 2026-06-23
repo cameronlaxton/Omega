@@ -34,13 +34,25 @@ def test_review_buckets_count_and_sample(tmp_path):
         graded = make_trace("graded-1", kind="game")
         store.persist(graded)
         store.attach_outcome("graded-1", 100, 90)
-        store.record_ledger_bet(LedgerBet(
-            ledger_id="led-pending", trace_id="ungraded-1", bet_date="2026-03-21",
-            league="NBA", sport="basketball", matchup="A @ B", market="moneyline",
-            bookmaker="dk", selection="A ML", selection_descriptor="home_moneyline",
-            odds=-110.0, stake_amount=10.0, status=LedgerStatus.PENDING,
-            provenance=BetProvenance.USER_CONFIRMED, decision_timestamp="2026-03-21T12:00:00Z",
-        ))
+        store.record_ledger_bet(
+            LedgerBet(
+                ledger_id="led-pending",
+                trace_id="ungraded-1",
+                bet_date="2026-03-21",
+                league="NBA",
+                sport="basketball",
+                matchup="A @ B",
+                market="moneyline",
+                bookmaker="dk",
+                selection="A ML",
+                selection_descriptor="home_moneyline",
+                odds=-110.0,
+                stake_amount=10.0,
+                status=LedgerStatus.PENDING,
+                provenance=BetProvenance.USER_CONFIRMED,
+                decision_timestamp="2026-03-21T12:00:00Z",
+            )
+        )
         (sessions / "sess-bad.json").write_text("{ not json", encoding="utf-8")
 
     buckets = _buckets(_client(tmp_path, setup=setup))
@@ -67,15 +79,29 @@ def test_review_gate_fail_session_flagged(tmp_path):
     def setup(store, sessions):
         # A valid sidecar whose quality gate failed → flagged as a problem session.
         payload = {
-            "session_id": "sess-fail", "opened_at": "2026-03-21T11:00:00Z", "closed_at": None,
-            "model_version": "m", "purpose": "t", "league": "NBA", "window": None,
-            "effective_db_path": None, "runtime_db_status": None, "pipeline_status": {},
-            "next_required_action": None, "bankroll": 1000.0, "bankroll_confirmed": True,
-            "exec_stats": {}, "agent_notes": "",
-            "audit_events": [{
-                "ts": "2026-03-21T11:30:00Z", "event_type": "quality_gate",
-                "step": "final", "status": "fail",
-            }],
+            "session_id": "sess-fail",
+            "opened_at": "2026-03-21T11:00:00Z",
+            "closed_at": None,
+            "model_version": "m",
+            "purpose": "t",
+            "league": "NBA",
+            "window": None,
+            "effective_db_path": None,
+            "runtime_db_status": None,
+            "pipeline_status": {},
+            "next_required_action": None,
+            "bankroll": 1000.0,
+            "bankroll_confirmed": True,
+            "exec_stats": {},
+            "agent_notes": "",
+            "audit_events": [
+                {
+                    "ts": "2026-03-21T11:30:00Z",
+                    "event_type": "quality_gate",
+                    "step": "final",
+                    "status": "fail",
+                }
+            ],
         }
         (sessions / "sess-fail.json").write_text(json.dumps(payload), encoding="utf-8")
 

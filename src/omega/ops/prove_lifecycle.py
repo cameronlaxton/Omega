@@ -75,7 +75,9 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _event_record(step: str, status: str, notes: str, trace_ids: list[str] | None = None) -> dict[str, Any]:
+def _event_record(
+    step: str, status: str, notes: str, trace_ids: list[str] | None = None
+) -> dict[str, Any]:
     return {
         "ts": _utc_now(),
         "event_type": "step",
@@ -153,7 +155,9 @@ def _historical_event(date: str, home: str, away: str) -> HistoricalEvent:
     )
 
 
-def _historical_outcome(event: HistoricalEvent, home_score: int, away_score: int) -> HistoricalOutcome:
+def _historical_outcome(
+    event: HistoricalEvent, home_score: int, away_score: int
+) -> HistoricalOutcome:
     return HistoricalOutcome(
         event_id=event.event_id,
         home_score=home_score,
@@ -327,7 +331,9 @@ def _prove(work_dir: Path, *, skip_preflight: bool) -> LifecycleResult:
         append_audit_events(sidecar_path, [_event_record("ingest", "fail", detail, [trace_id])])
         return LifecycleResult(False, str(work_dir), stages)
     stages.append(StageResult("ingest", "pass", "trace export ingested", str(db_path)))
-    append_audit_events(sidecar_path, [_event_record("ingest", "ok", "trace export ingested", [trace_id])])
+    append_audit_events(
+        sidecar_path, [_event_record("ingest", "ok", "trace export ingested", [trace_id])]
+    )
 
     store = TraceStore(db_path=str(db_path))
     try:

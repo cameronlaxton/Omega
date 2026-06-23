@@ -62,4 +62,9 @@ def test_prove_lifecycle_json_cli(tmp_path, capsys):
     assert rc == 0
     assert payload["ok"] is True
     assert payload["work_dir"] == str(tmp_path)
-    assert {stage["stage"] for stage in payload["stages"]} >= {"ingest", "report", "audit", "replay"}
+    assert {stage["stage"] for stage in payload["stages"]} >= {
+        "ingest",
+        "report",
+        "audit",
+        "replay",
+    }

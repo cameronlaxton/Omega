@@ -64,8 +64,7 @@ class OddsCache:
             cols = {row[1] for row in conn.execute("PRAGMA table_info(odds_cache)")}
             if "entry_type" not in cols:
                 conn.execute(
-                    "ALTER TABLE odds_cache ADD COLUMN entry_type "
-                    "TEXT NOT NULL DEFAULT 'success'"
+                    "ALTER TABLE odds_cache ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'success'"
                 )
             if "market" not in cols:
                 conn.execute("ALTER TABLE odds_cache ADD COLUMN market TEXT")
@@ -96,6 +95,7 @@ class OddsCache:
             player_part = f":id:{player_id.strip().lower()}"
         elif player_name:
             from omega.integrations.espn_boxscore import normalize_player_name
+
             player_part = f":name:{normalize_player_name(player_name)}"
 
         bookmaker_part = ""
@@ -131,8 +131,7 @@ class OddsCache:
         with sqlite3.connect(str(self.db_path)) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT market_data, inserted_at, entry_type "
-                "FROM odds_cache WHERE cache_key = ?",
+                "SELECT market_data, inserted_at, entry_type FROM odds_cache WHERE cache_key = ?",
                 (cache_key,),
             )
             row = cursor.fetchone()
@@ -146,9 +145,15 @@ class OddsCache:
                             data["metadata"] = []
                         if "source: local_cache" not in data["metadata"]:
                             data["metadata"].append("source: local_cache")
-                        if entry_type == "negative" and "source: negative_cache" not in data["metadata"]:
+                        if (
+                            entry_type == "negative"
+                            and "source: negative_cache" not in data["metadata"]
+                        ):
                             data["metadata"].append("source: negative_cache")
-                        if entry_type == "event_list" and "cache_kind: event_list" not in data["metadata"]:
+                        if (
+                            entry_type == "event_list"
+                            and "cache_kind: event_list" not in data["metadata"]
+                        ):
                             data["metadata"].append("cache_kind: event_list")
                         return data
                     except json.JSONDecodeError:
@@ -187,7 +192,14 @@ class OddsCache:
                     (cache_key, league, market, market_data, inserted_at, entry_type)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (cache_key, league.upper(), market.strip().lower(), market_data_str, current_time, entry_type),
+                (
+                    cache_key,
+                    league.upper(),
+                    market.strip().lower(),
+                    market_data_str,
+                    current_time,
+                    entry_type,
+                ),
             )
             # Type-aware eviction: negatives expire at their own shorter TTL.
             conn.execute(
@@ -223,6 +235,7 @@ class OddsCache:
         norm_away = away_team.strip().lower()
 
         from omega.integrations.espn_boxscore import normalize_player_name
+
         target_name_norm = normalize_player_name(player_name) if player_name else None
         target_id_norm = player_id.strip().lower() if player_id else None
 
@@ -247,10 +260,18 @@ class OddsCache:
                             for q in quotes:
                                 q_player_name = q.get("player")
                                 q_player_id = q.get("player_id")
-                                if target_id_norm and q_player_id and str(q_player_id).strip().lower() == target_id_norm:
+                                if (
+                                    target_id_norm
+                                    and q_player_id
+                                    and str(q_player_id).strip().lower() == target_id_norm
+                                ):
                                     has_match = True
                                     break
-                                if target_name_norm and q_player_name and normalize_player_name(q_player_name) == target_name_norm:
+                                if (
+                                    target_name_norm
+                                    and q_player_name
+                                    and normalize_player_name(q_player_name) == target_name_norm
+                                ):
                                     has_match = True
                                     break
                             if not has_match:
@@ -280,6 +301,7 @@ class OddsCache:
         norm_event_id = event_id.strip()
 
         from omega.integrations.espn_boxscore import normalize_player_name
+
         target_name_norm = normalize_player_name(player_name) if player_name else None
         target_id_norm = player_id.strip().lower() if player_id else None
 
@@ -302,10 +324,18 @@ class OddsCache:
                             for q in quotes:
                                 q_player_name = q.get("player")
                                 q_player_id = q.get("player_id")
-                                if target_id_norm and q_player_id and str(q_player_id).strip().lower() == target_id_norm:
+                                if (
+                                    target_id_norm
+                                    and q_player_id
+                                    and str(q_player_id).strip().lower() == target_id_norm
+                                ):
                                     has_match = True
                                     break
-                                if target_name_norm and q_player_name and normalize_player_name(q_player_name) == target_name_norm:
+                                if (
+                                    target_name_norm
+                                    and q_player_name
+                                    and normalize_player_name(q_player_name) == target_name_norm
+                                ):
                                     has_match = True
                                     break
                             if not has_match:

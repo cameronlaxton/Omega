@@ -100,7 +100,12 @@ def _next_version(registry: CalibrationRegistry, league: str, method: str, marke
 
 
 def _unique_profile_id(
-    method: str, league: str, version: int, dataset_hash: str, market: str = "game", context_slice: str | None = None
+    method: str,
+    league: str,
+    version: int,
+    dataset_hash: str,
+    market: str = "game",
+    context_slice: str | None = None,
 ) -> str:
     """Build a profile_id that will not collide with any prior fit.
 
@@ -130,7 +135,9 @@ def fit_and_register(
     if method == "isotonic":
         profile = fitter.fit_isotonic(train_p, train_o, league=league, market=market)
     elif method == "shrinkage":
-        profile = fitter.fit_shrinkage(train_p, train_o, league=league, market=market, eligible_sample_size=len(train_p))
+        profile = fitter.fit_shrinkage(
+            train_p, train_o, league=league, market=market, eligible_sample_size=len(train_p)
+        )
     else:
         raise ValueError(f"Unknown method: {method!r}")
 
@@ -267,11 +274,26 @@ def main(argv: list[str] | None = None) -> int:
         default=_DEFAULT_MIN_SAMPLES,
         help=f"Refuse to fit with fewer total graded samples (default: {_DEFAULT_MIN_SAMPLES})",
     )
-    parser.add_argument("--shadow-min-samples", type=int, default=30, help="Minimum samples to fit a shadow profile")
-    parser.add_argument("--context-slice", type=str, default=None, help="Fit specific context slice only")
-    parser.add_argument("--all-context-slices", action="store_true", help="Fit all canonical slices")
-    parser.add_argument("--include-base-with-slices", action="store_true", help="Fit base slice when --all-context-slices is used")
-    parser.add_argument("--sport-family", type=str, default=None, help="Override sport family for context resolution")
+    parser.add_argument(
+        "--shadow-min-samples", type=int, default=30, help="Minimum samples to fit a shadow profile"
+    )
+    parser.add_argument(
+        "--context-slice", type=str, default=None, help="Fit specific context slice only"
+    )
+    parser.add_argument(
+        "--all-context-slices", action="store_true", help="Fit all canonical slices"
+    )
+    parser.add_argument(
+        "--include-base-with-slices",
+        action="store_true",
+        help="Fit base slice when --all-context-slices is used",
+    )
+    parser.add_argument(
+        "--sport-family",
+        type=str,
+        default=None,
+        help="Override sport family for context resolution",
+    )
     parser.add_argument("--db", type=str, default=None, help="SQLite path (live trace DB)")
     parser.add_argument(
         "--historical-db",
@@ -330,14 +352,10 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("--historical-only/--include-historical require --historical-db.")
         return 1
 
-    date_window = any(
-        [args.train_start, args.train_end, args.holdout_start, args.holdout_end]
-    )
+    date_window = any([args.train_start, args.train_end, args.holdout_start, args.holdout_end])
     if date_window:
         if not (args.train_end and args.holdout_start):
-            logger.error(
-                "date-windowed fit requires at least --train-end and --holdout-start."
-            )
+            logger.error("date-windowed fit requires at least --train-end and --holdout-start.")
             return 1
         if args.holdout_start <= args.train_end and not args.allow_same_season_shadow:
             logger.error(
@@ -353,9 +371,10 @@ def main(argv: list[str] | None = None) -> int:
     if not args.include_backfilled:
         pre_filter = len(graded)
         graded = [
-            t for t in graded
+            t
+            for t in graded
             if (t.get("trace_quality") or t.get("quality_gate") or {}).get("identity_status")
-               not in ("missing", "backfilled")
+            not in ("missing", "backfilled")
         ]
         excluded = pre_filter - len(graded)
         if excluded:
@@ -382,7 +401,11 @@ def main(argv: list[str] | None = None) -> int:
             # If sport is tennis, we have implicit sub-slices like "surface_clay".
             # For simplicity, if we are doing all slices, we only group by the explicit initial slices
             # plus any discovered surface sub-slices.
-            if slice_val is not BASE_CONTEXT_SLICE and slice_val not in INITIAL_CONTEXT_SLICES and not slice_val.startswith("surface_"):
+            if (
+                slice_val is not BASE_CONTEXT_SLICE
+                and slice_val not in INITIAL_CONTEXT_SLICES
+                and not slice_val.startswith("surface_")
+            ):
                 # We can just include all discovered low cardinality slices if they meet the sample threshold later.
                 pass
             groups.setdefault(slice_val, []).append(t)
@@ -394,7 +417,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         # Existing behaviour: base slice only, filtering out early_market natively if not opted in
         groups[BASE_CONTEXT_SLICE] = [
-            t for t in graded if context_slice_for_trace(t, sport_family=sport_family) is BASE_CONTEXT_SLICE
+            t
+            for t in graded
+            if context_slice_for_trace(t, sport_family=sport_family) is BASE_CONTEXT_SLICE
         ]
 
     methods = ["isotonic", "shrinkage"] if args.method == "both" else [args.method]
@@ -405,7 +430,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Dry run table header
     if args.dry_run:
-        print(f"{'League':<10} | {'Family':<15} | {'Market':<10} | {'Slice':<25} | {'N Pairs':<7} | {'Status':<15} | {'Threshold':<9}")
+        print(
+            f"{'League':<10} | {'Family':<15} | {'Market':<10} | {'Slice':<25} | {'N Pairs':<7} | {'Status':<15} | {'Threshold':<9}"
+        )
         print("-" * 110)
 
     for slice_name, slice_traces in groups.items():
@@ -425,7 +452,9 @@ def main(argv: list[str] | None = None) -> int:
             hold_p, hold_o, _ = _extract_plane_pairs(fitter, hold_traces, args.plane)
             n = len(train_p) + len(hold_p)
         else:
-            predictions, outcomes, pair_label = _extract_plane_pairs(fitter, slice_traces, args.plane)
+            predictions, outcomes, pair_label = _extract_plane_pairs(
+                fitter, slice_traces, args.plane
+            )
             n = len(predictions)
 
         status = "eligible"
@@ -438,13 +467,18 @@ def main(argv: list[str] | None = None) -> int:
             threshold = args.min_samples
 
         if args.dry_run:
-            print(f"{args.league:<10} | {sport_family:<15} | {market:<10} | {str(slice_name or 'base'):<25} | {n:<7} | {status:<15} | {threshold:<9}")
+            print(
+                f"{args.league:<10} | {sport_family:<15} | {market:<10} | {str(slice_name or 'base'):<25} | {n:<7} | {status:<15} | {threshold:<9}"
+            )
             continue
 
         if n < args.shadow_min_samples:
             logger.warning(
                 "Skipping slice %r: %d graded %s pairs available, minimum %d required.",
-                slice_name, n, pair_label, args.shadow_min_samples
+                slice_name,
+                n,
+                pair_label,
+                args.shadow_min_samples,
             )
             continue
 
@@ -456,7 +490,9 @@ def main(argv: list[str] | None = None) -> int:
                 logger.warning(
                     "Skipping slice %r: date-windowed split produced %d train / %d holdout "
                     "pairs (both must be non-empty).",
-                    slice_name, len(train_p), len(hold_p)
+                    slice_name,
+                    len(train_p),
+                    len(hold_p),
                 )
                 continue
             train_window = f"{args.train_start or 'min'}..{args.train_end}"
@@ -466,7 +502,12 @@ def main(argv: list[str] | None = None) -> int:
             )
         logger.info(
             "Loaded %d graded %s pairs for %s plane (slice=%r); split %d train / %d holdout.",
-            n, pair_label, args.plane, slice_name, len(train_p), len(hold_p)
+            n,
+            pair_label,
+            args.plane,
+            slice_name,
+            len(train_p),
+            len(hold_p),
         )
 
         for method in methods:
@@ -510,4 +551,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

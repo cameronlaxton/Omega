@@ -85,14 +85,8 @@ def existing_trace_ids() -> set[str]:
 
 def historical_trace_paths() -> list[str]:
     """Every inbox/traces JSON path ever ADDED in git history (deduped)."""
-    out = _git(
-        "log", "--all", "--diff-filter=A", "--pretty=format:", "--name-only"
-    )
-    paths = {
-        line.strip()
-        for line in out.splitlines()
-        if _TRACE_JSON_RE.match(line.strip())
-    }
+    out = _git("log", "--all", "--diff-filter=A", "--pretty=format:", "--name-only")
+    paths = {line.strip() for line in out.splitlines() if _TRACE_JSON_RE.match(line.strip())}
     return sorted(paths)
 
 
@@ -173,7 +167,9 @@ def stage(chosen: dict[str, tuple[str, str]]) -> list[Path]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--ingest", action="store_true", help="Run native ingest after staging")
-    ap.add_argument("--explain", action="store_true", help="Stage, then run ingest --explain (no DB writes)")
+    ap.add_argument(
+        "--explain", action="store_true", help="Stage, then run ingest --explain (no DB writes)"
+    )
     args = ap.parse_args()
 
     if not DB_PATH.exists():

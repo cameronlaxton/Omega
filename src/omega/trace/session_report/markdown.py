@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from omega.trace.session_report.models import AuditRow, ContextBullet, IntakeReportData, TraceReportCard
+from omega.trace.session_report.models import (
+    AuditRow,
+    ContextBullet,
+    IntakeReportData,
+    TraceReportCard,
+)
 
 
 def _clean(value: object) -> str:
@@ -77,6 +82,33 @@ def _engine_line(card: TraceReportCard) -> str:
     return "; ".join(bits)
 
 
+def _honesty_lines(card: TraceReportCard) -> list[str]:
+    """Truth-in-labeling block: how trustworthy is this recommendation?
+
+    Always rendered (both output modes) — these are honesty signals, not
+    protected edge/EV numbers.
+    """
+    ev = card.engine_view
+    return [
+        "**Honesty**",
+        f"- confidence tier: {_clean(ev.tier)}"
+        + (
+            f" (capped: {_clean(ev.confidence_cap_reason)})"
+            if ev.confidence_cap_reason
+            else ""
+        ),
+        f"- trace quality: {_clean(ev.aggregate_quality)}/100 ({_clean(ev.quality_band)})",
+        f"- evidence: mode={_clean(ev.evidence_mode)}, status={_clean(ev.evidence_status)}, "
+        f"signals={_clean(ev.evidence_signal_count)}, applied_factor={_clean(ev.evidence_applied_factor)}",
+        f"- calibration: path={_clean(ev.calibration_path)}, profile={_clean(ev.profile_id)}, "
+        f"status={_clean(ev.profile_status)}, maturity={_clean(ev.profile_maturity)}",
+        f"- profile metrics: n={_clean(ev.profile_sample_size)}, ECE={_clean(ev.profile_ece)}, "
+        f"Brier={_clean(ev.profile_brier)}",
+        f"- static_identity fallback used: {_clean(ev.static_identity_used)}",
+        "",
+    ]
+
+
 def _render_card(card: TraceReportCard) -> list[str]:
     ledger = card.ledger_view
     lines = [
@@ -92,6 +124,7 @@ def _render_card(card: TraceReportCard) -> list[str]:
         "**Engine View**",
         f"- {_engine_line(card)}",
         "",
+        *_honesty_lines(card),
         "**Reasoning Narrative**",
         f"- {_clean(card.reasoning_narrative)}",
         "",
@@ -120,10 +153,23 @@ def _render_card(card: TraceReportCard) -> list[str]:
 
 
 _AUDIT_HEADERS = [
-    "trace_id", "league", "matchup", "market", "selection",
-    "line", "odds", "bookmaker", "odds_at",
-    "output_mode", "tier", "calib_elig", "quality",
-    "evidence", "prior_status", "fallback", "ledger",
+    "trace_id",
+    "league",
+    "matchup",
+    "market",
+    "selection",
+    "line",
+    "odds",
+    "bookmaker",
+    "odds_at",
+    "output_mode",
+    "tier",
+    "calib_elig",
+    "quality",
+    "evidence",
+    "prior_status",
+    "fallback",
+    "ledger",
 ]
 
 
@@ -162,14 +208,38 @@ def _render_audit_table(rows: list[AuditRow]) -> list[str]:
         for row in rows:
             cells = _audit_row_cells(row)
             lines.append("| " + " | ".join(cells) + " |")
-    lines.extend([
-        "",
-        "_Legend: `odds_at` = timestamp of the odds snapshot used; "
-        "`prior_status` = data_provenance event from prior injection; "
-        "`fallback` = ⚠ N means N resolver warnings present._",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "_Legend: `odds_at` = timestamp of the odds snapshot used; "
+            "`prior_status` = data_provenance event from prior injection; "
+            "`fallback` = ⚠ N means N resolver warnings present._",
+            "",
+        ]
+    )
     return lines
+
+
+def _zero_evidence_block(data: IntakeReportData) -> list[str]:
+    """A prominent blocker section when too many traces reason blind."""
+    if not data.zero_evidence_blocked:
+        return []
+    shown = data.zero_evidence_trace_ids[:20]
+    more = (
+        f" (+{len(data.zero_evidence_trace_ids) - len(shown)} more)"
+        if len(data.zero_evidence_trace_ids) > len(shown)
+        else ""
+    )
+    return [
+        "## ⛔ BLOCKER: zero-evidence / empty-context",
+        "",
+        f"**{data.zero_evidence_count} of {data.trace_count} traces** have no structured "
+        "evidence AND no provided context. These cannot calibrate, cannot learn, and must "
+        "not produce actionable output. **This run summary is failed.**",
+        "",
+        f"Offending traces: {', '.join(f'`{t}`' for t in shown)}{more}",
+        "",
+    ]
 
 
 def render_intake_markdown(data: IntakeReportData) -> str:
@@ -178,10 +248,10 @@ def render_intake_markdown(data: IntakeReportData) -> str:
     title = "Daily Intake Overview + Trace Ledger"
     if data.source_session_id:
         title += f" - {data.source_session_id}"
+    lines.extend([f"# {title}", ""])
+    lines.extend(_zero_evidence_block(data))
     lines.extend(
         [
-            f"# {title}",
-            "",
             "## Snapshot",
             "",
             "| Field | Value |",

@@ -34,12 +34,12 @@ _LEAGUE_CONFIGS: dict[str, dict[str, Any]] = {
         "scoring": "points",
         "avg_total": 160.0,
         "avg_pace": 80.0,
-        "distribution": "normal",      # legacy fallback for FastScore path
+        "distribution": "normal",  # legacy fallback for FastScore path
         "home_advantage": 2.5,
         "std": 10.0,
         "default_game_backend": "markov_state_wnba",
         "default_prop_backend": "prop_distribution_router",
-        "liquidity_profile": "low",    # triggers early-morning line capture
+        "liquidity_profile": "low",  # triggers early-morning line capture
         "timezone": "America/New_York",  # EST/EDT
     },
     "NCAAB": {

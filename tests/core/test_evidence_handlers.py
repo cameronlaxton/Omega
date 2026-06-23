@@ -91,17 +91,22 @@ class TestModeResolution:
         monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "live")
         assert resolve_evidence_mode(_POLICY) == "live"
 
-    def test_env_override_shadow(self, monkeypatch):
+    def test_env_override_legacy_shadow_maps_to_score_only(self, monkeypatch):
+        # Legacy binary "shadow" normalizes to the graduated "score_only".
         monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "shadow")
-        assert resolve_evidence_mode(_POLICY) == "shadow"
+        assert resolve_evidence_mode(_POLICY) == "score_only"
+
+    def test_env_override_bounded_live(self, monkeypatch):
+        monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "bounded_live")
+        assert resolve_evidence_mode(_POLICY) == "bounded_live"
 
     def test_invalid_env_falls_through_to_policy(self, monkeypatch):
         monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "garbage")
         assert resolve_evidence_mode(_POLICY) == _POLICY.mode
 
-    def test_policy_default_is_shadow(self, monkeypatch):
+    def test_policy_default_is_score_only(self, monkeypatch):
         monkeypatch.delenv("OMEGA_EVIDENCE_MODE", raising=False)
-        assert resolve_evidence_mode(_POLICY) == "shadow"
+        assert resolve_evidence_mode(_POLICY) == "score_only"
 
 
 class TestComputePlayerAdjustment:
@@ -216,10 +221,11 @@ class TestZeroBehaviorChangeShadow:
                 session_id="s",
                 bankroll=1000.0,
             )
-        assert out["evidence_mode"] == "shadow"
+        assert out["evidence_mode"] == "score_only"
+        assert out["evidence_rollout_mode"] == "score_only"
         assert len(out["evidence_application"]) == 1
         app = out["evidence_application"][0]
-        assert app["applied"] is False  # shadow
+        assert app["applied"] is False  # score_only never applies to math
         assert app["factor"] > 1.0  # counterfactual still recorded
 
 
@@ -244,12 +250,8 @@ class TestTraceIdentity:
         monkeypatch.delenv("OMEGA_EVIDENCE_MODE", raising=False)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            a = analyze(
-                _prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0
-            )
-            b = analyze(
-                _prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0
-            )
+            a = analyze(_prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0)
+            b = analyze(_prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0)
         # trace_id = sandbox-<hash>-<nonce>; the hash prefix must be stable.
         assert a["trace_id"].rsplit("-", 1)[0] == b["trace_id"].rsplit("-", 1)[0]
 
@@ -258,9 +260,7 @@ class TestTraceIdentity:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             a = analyze(_prop_request(), session_id="s", bankroll=1000.0)
-            b = analyze(
-                _prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0
-            )
+            b = analyze(_prop_request(evidence=[_player_signal()]), session_id="s", bankroll=1000.0)
         assert a["trace_id"].rsplit("-", 1)[0] != b["trace_id"].rsplit("-", 1)[0]
 
 

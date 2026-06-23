@@ -63,15 +63,11 @@ def test_drift_writes_fail_status_provenance_event(tmp_path):
     rows = [{"player": "Sinner", "surface": "hard"}]  # missing spw_pct
 
     with pytest.raises(SourceSchemaDriftError):
-        validate_records(
-            rows, _SackmannRow, source="sackmann", session_path=sidecar_path
-        )
+        validate_records(rows, _SackmannRow, source="sackmann", session_path=sidecar_path)
 
     sidecar = SessionSidecar.from_path(sidecar_path)
     drift_events = [
-        e
-        for e in sidecar.audit_events
-        if e.event_type == "data_provenance" and e.status == "fail"
+        e for e in sidecar.audit_events if e.event_type == "data_provenance" and e.status == "fail"
     ]
     assert len(drift_events) == 1
     assert "sackmann" in drift_events[0].step

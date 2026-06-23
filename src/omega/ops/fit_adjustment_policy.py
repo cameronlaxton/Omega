@@ -70,10 +70,7 @@ def _aggregate_by_signal_type(
         bucket = totals.setdefault(st, [0, 0])
         bucket[0] += n
         bucket[1] += correct
-    return {
-        st: (n, (correct / n) if n else 0.0)
-        for st, (n, correct) in totals.items()
-    }
+    return {st: (n, (correct / n) if n else 0.0) for st, (n, correct) in totals.items()}
 
 
 def _next_version(registry: AdjustmentPolicyRegistry) -> int:
@@ -118,9 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     store.close()
 
     if not perf_rows:
-        logger.error(
-            "No signal-performance data. Run omega-score-evidence-signals first."
-        )
+        logger.error("No signal-performance data. Run omega-score-evidence-signals first.")
         return 1
 
     dataset_hash = str(perf_rows[0].get("dataset_hash") or "")
@@ -139,7 +134,9 @@ def main(argv: list[str] | None = None) -> int:
         if total_n < args.min_samples:
             logger.info(
                 "  skip %-22s n=%-3d (< %d) â€” keeps full trust",
-                signal_type, total_n, args.min_samples,
+                signal_type,
+                total_n,
+                args.min_samples,
             )
             continue
         weight = _reliability_weight(accuracy)
@@ -148,13 +145,14 @@ def main(argv: list[str] | None = None) -> int:
         fitted.append((signal_type, total_n, accuracy, weight))
         logger.info(
             "  fit  %-22s n=%-3d acc=%.3f -> reliability_weight=%.3f",
-            signal_type, total_n, accuracy, weight,
+            signal_type,
+            total_n,
+            accuracy,
+            weight,
         )
 
     if not fitted:
-        logger.error(
-            "No signal type met --min-samples=%d; nothing to fit.", args.min_samples
-        )
+        logger.error("No signal type met --min-samples=%d; nothing to fit.", args.min_samples)
         return 1
 
     version = _next_version(registry)
@@ -184,21 +182,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         logger.info(
             "DRY-RUN â€” candidate %s (version %d, mode=%s, %d signals fitted).",
-            policy_id, version, args.mode, len(fitted),
+            policy_id,
+            version,
+            args.mode,
+            len(fitted),
         )
     else:
         registry.register(candidate)
         logger.info(
             "Registered CANDIDATE %s (version %d, mode=%s). "
             "Review and promote with omega-promote-adjustment-policy.",
-            policy_id, version, args.mode,
+            policy_id,
+            version,
+            args.mode,
         )
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-

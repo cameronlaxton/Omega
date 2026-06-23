@@ -195,9 +195,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--apply", action="store_true", help="Write evidence rows (default: dry-run)"
     )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Scan and report only (the default)"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Scan and report only (the default)")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -225,6 +223,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-

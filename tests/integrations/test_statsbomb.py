@@ -16,7 +16,6 @@ from omega.integrations import statsbomb
 from omega.integrations._etl import SourceSchemaDriftError
 from omega.integrations._guards import OmegaReplayModeError
 
-
 _COMPETITIONS = [
     {
         "competition_id": 43,

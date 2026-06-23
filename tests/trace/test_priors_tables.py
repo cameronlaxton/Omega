@@ -161,9 +161,7 @@ def test_promotion_is_profile_scoped():
         for pid in ("fifa_intl_v1", "epl_v1"):
             upsert_dixon_coles_profile(
                 store,
-                DixonColesProfile(
-                    profile_id=pid, rho=-0.1, n_matches=500, as_of_date="2026-06-01"
-                ),
+                DixonColesProfile(profile_id=pid, rho=-0.1, n_matches=500, as_of_date="2026-06-01"),
             )
             promote_dixon_coles_profile(store, pid, "2026-06-01")
         assert get_production_dc_profile(store, "fifa_intl_v1") is not None

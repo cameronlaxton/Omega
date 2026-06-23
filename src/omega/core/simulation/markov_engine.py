@@ -120,7 +120,11 @@ class MarkovSimulator:
                 clamped_val = max(lo, min(hi, fval))
                 _log.warning(
                     "transition_modifier %r=%r clamped to %r (bounds [%s, %s])",
-                    key, fval, clamped_val, lo, hi,
+                    key,
+                    fval,
+                    clamped_val,
+                    lo,
+                    hi,
                 )
                 clamped[key] = clamped_val
             else:
@@ -242,7 +246,7 @@ class MarkovSimulator:
             "mean_home_score": round(mean_h, 2),
             "mean_away_score": round(mean_a, 2),
             "mean_total": round(mean_t, 2),
-            "std_total": round(var_t ** 0.5, 2),
+            "std_total": round(var_t**0.5, 2),
             "mean_spread": round(mean_s, 2),
             "expected_ppp_home": round(self._expected_ppp("home", 0), 4),
             "expected_ppp_away": round(self._expected_ppp("away", 0), 4),

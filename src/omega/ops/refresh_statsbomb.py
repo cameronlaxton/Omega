@@ -67,9 +67,7 @@ def _warm_profile(args: argparse.Namespace) -> int:
 
 
 def _refresh_xg(args: argparse.Namespace) -> int:
-    raw_matches = fetch_matches(
-        args.competition_id, args.season_id, cache_root=args.cache_root
-    )
+    raw_matches = fetch_matches(args.competition_id, args.season_id, cache_root=args.cache_root)
     matches = validate_records(raw_matches, SBMatch, source="statsbomb")
     if args.max_matches:
         matches = matches[: args.max_matches]

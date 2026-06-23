@@ -6,7 +6,7 @@
       "schema_version": 1,
       "version": 1,
       "status": "production",
-      "mode": "shadow",
+      "mode": "score_only",
       "coefficients": {
         "recent_form": { "weight": 0.35, "cap": 0.18 },
         "series_avg": { "weight": 0.30, "cap": 0.18 },
@@ -58,7 +58,7 @@
       "sample_size": 0,
       "dataset_hash": "",
       "metrics": {},
-      "notes": "Hand-seeded v1 priors. b2b_fatigue transcribes the legacy _B2B_FATIGUE constants verbatim; all other coefficients are conservative unfitted defaults. Mode is 'shadow' so nothing reaches live predictions until omega-fit-adjustment-policy produces a backtested candidate and an operator promotes it.",
+      "notes": "Hand-seeded v1 priors. b2b_fatigue transcribes the legacy _B2B_FATIGUE constants verbatim; all other coefficients are conservative unfitted defaults. Mode is 'score_only' (graduated ladder) so evidence is recorded and may feed retrospective learning but never reaches live predictions until omega-fit-adjustment-policy produces a backtested candidate and an operator flips the mode to bounded_live/live.",
       "created_at": "2026-05-22T00:00:00+00:00",
       "promoted_at": "2026-05-22T00:00:00+00:00",
       "rejected_at": null,

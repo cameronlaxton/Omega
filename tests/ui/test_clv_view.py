@@ -53,16 +53,29 @@ def _client(tmp_path: Path, *, setup=None) -> TestClient:
 
 def _seed_bet(store, ledger_id, trace_id, odds, *, descriptor="home_moneyline", closing=None):
     store.persist(make_trace(trace_id, kind="game", matchup="C @ D"))
-    store.record_ledger_bet(LedgerBet(
-        ledger_id=ledger_id, trace_id=trace_id, bet_date="2026-03-21", league="NBA",
-        sport="basketball", matchup="C @ D", market="moneyline", bookmaker="dk",
-        selection="C ML", selection_descriptor=descriptor, odds=float(odds),
-        stake_amount=25.0, status=LedgerStatus.WON, provenance=BetProvenance.USER_CONFIRMED,
-        decision_timestamp="2026-03-21T12:00:00Z",
-    ))
+    store.record_ledger_bet(
+        LedgerBet(
+            ledger_id=ledger_id,
+            trace_id=trace_id,
+            bet_date="2026-03-21",
+            league="NBA",
+            sport="basketball",
+            matchup="C @ D",
+            market="moneyline",
+            bookmaker="dk",
+            selection="C ML",
+            selection_descriptor=descriptor,
+            odds=float(odds),
+            stake_amount=25.0,
+            status=LedgerStatus.WON,
+            provenance=BetProvenance.USER_CONFIRMED,
+            decision_timestamp="2026-03-21T12:00:00Z",
+        )
+    )
     if closing is not None:
-        store.attach_closing_line(trace_id, "moneyline", descriptor, float(closing), None,
-                                  "2026-03-21T19:00:00Z", "dk")
+        store.attach_closing_line(
+            trace_id, "moneyline", descriptor, float(closing), None, "2026-03-21T19:00:00Z", "dk"
+        )
 
 
 def test_clv_row_computed_for_bet_with_closing_line(tmp_path):

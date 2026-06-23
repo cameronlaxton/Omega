@@ -344,9 +344,7 @@ class ConsoleService:
             },
         )
 
-    def _calibration_summary(
-        self, warnings: list[OperatorWarningModel]
-    ) -> CalibrationSummary:
+    def _calibration_summary(self, warnings: list[OperatorWarningModel]) -> CalibrationSummary:
         try:
             profiles = self._calibration_registry().list_profiles()
         except Exception:  # noqa: BLE001 — registry is optional/external
@@ -411,9 +409,7 @@ class ConsoleService:
         warnings: list[OperatorWarningModel] = []
 
         try:
-            profiles = self._calibration_registry().list_profiles(
-                league=league, status=status
-            )
+            profiles = self._calibration_registry().list_profiles(league=league, status=status)
         except Exception:  # noqa: BLE001
             warnings.append(
                 OperatorWarningModel(
@@ -487,9 +483,7 @@ class ConsoleService:
                 active.add(prod.profile_id)
         return active
 
-    def _calibration_row(
-        self, profile: Any, active_ids: set[str]
-    ) -> CalibrationProfileRow:
+    def _calibration_row(self, profile: Any, active_ids: set[str]) -> CalibrationProfileRow:
         metrics = profile.metrics or {}
         n_eval = metrics.get("n_eval")
         return CalibrationProfileRow(
@@ -514,9 +508,7 @@ class ConsoleService:
 
     # -- signal performance (Milestone B.3) ------------------------------
 
-    def signal_performance(
-        self, *, league: str | None = None
-    ) -> SignalPerformanceView:
+    def signal_performance(self, *, league: str | None = None) -> SignalPerformanceView:
         """The most recent signal-performance scoring run (optionally per league)."""
         league = _clean(league)
         filters = {"league": league}
@@ -587,10 +579,7 @@ class ConsoleService:
                         kind="trace",
                         id=str(t.get("trace_id") or ""),
                         label=t.get("matchup"),
-                        detail=" ".join(
-                            x for x in (t.get("league"), t.get("kind")) if x
-                        )
-                        or None,
+                        detail=" ".join(x for x in (t.get("league"), t.get("kind")) if x) or None,
                         href=f"/traces/{t.get('trace_id')}",
                     )
                     for t in ungraded[:_REVIEW_SAMPLE]
@@ -613,9 +602,7 @@ class ConsoleService:
                         kind="bet",
                         id=str(b.get("ledger_id") or ""),
                         label=b.get("selection"),
-                        detail=" · ".join(
-                            x for x in (b.get("market"), b.get("matchup")) if x
-                        )
+                        detail=" · ".join(x for x in (b.get("market"), b.get("matchup")) if x)
                         or None,
                         href=f"/bets/{b.get('ledger_id')}",
                     )
@@ -658,7 +645,7 @@ class ConsoleService:
                 ],
             )
         )
-        
+
         buckets.append(
             ReviewBucket(
                 code="qa_fail",
@@ -698,7 +685,10 @@ class ConsoleService:
                 source=Source.SIDECAR_PROCESS,
                 items=[
                     ReviewItem(
-                        kind="session", id=sid, label=sid, detail=reason,
+                        kind="session",
+                        id=sid,
+                        label=sid,
+                        detail=reason,
                         href=f"/sessions/{sid}",
                     )
                     for sid, reason in problems[:_REVIEW_SAMPLE]
@@ -847,9 +837,7 @@ class ConsoleService:
         else:
             # DB-native filters: league + an inclusive lower date bound. The upper
             # date bound and all secondary filters are applied in memory below.
-            raw = self.store.query_traces(
-                league=league, start=date_from, limit=self.max_scan
-            )
+            raw = self.store.query_traces(league=league, start=date_from, limit=self.max_scan)
             scan_capped = len(raw) >= self.max_scan
 
         rows: list[TraceRow] = []
@@ -906,9 +894,7 @@ class ConsoleService:
         # read-only normalizer; here we only convert its dataclass output into the
         # JSON-safe Pydantic mirror (dataclass -> asdict -> model_validate).
         view = build_trace_recommendation_view(trace, evidence_signals=evidence)
-        recommendation_view = TraceRecommendationViewModel.model_validate(
-            dataclasses.asdict(view)
-        )
+        recommendation_view = TraceRecommendationViewModel.model_validate(dataclasses.asdict(view))
         return TraceDetail(
             trace_id=trace_id,
             timestamp=trace.get("timestamp"),
@@ -981,9 +967,7 @@ class ConsoleService:
             },
         )
 
-    def get_trace_evidence_counts(
-        self, trace_ids: list[str]
-    ) -> dict[str, EvidenceCoverageSummary]:
+    def get_trace_evidence_counts(self, trace_ids: list[str]) -> dict[str, EvidenceCoverageSummary]:
         """Compact evidence counts for a small set of trace_ids (the visible row
         window). Backend-neutral: one ``get_evidence_signals`` read per id, scoped
         to the page so it never scans the whole table. Counts only — no score."""

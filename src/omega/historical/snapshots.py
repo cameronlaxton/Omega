@@ -279,11 +279,17 @@ def build_feature_snapshot(
     as_of_iso = parse_datetime_utc(as_of) if as_of else None
 
     home_ctx, home_default = _team_context(
-        home_rows, event.league, event.sport_family, history.league_baseline,
+        home_rows,
+        event.league,
+        event.sport_family,
+        history.league_baseline,
         shrink=shrink_ratings,
     )
     away_ctx, away_default = _team_context(
-        away_rows, event.league, event.sport_family, history.league_baseline,
+        away_rows,
+        event.league,
+        event.sport_family,
+        history.league_baseline,
         shrink=shrink_ratings,
     )
 

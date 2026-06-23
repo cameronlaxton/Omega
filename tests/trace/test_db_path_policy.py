@@ -170,9 +170,7 @@ class TestDbStatus:
         source = tmp_path / "traces.db"
         _make_db(source, 2)
 
-        code = db_status_cli.main(
-            ["--db", str(source), "--query-traces", "--limit", "5"]
-        )
+        code = db_status_cli.main(["--db", str(source), "--query-traces", "--limit", "5"])
 
         assert code == 0
         first = capsys.readouterr().out.splitlines()[0]

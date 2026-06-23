@@ -59,7 +59,9 @@ def test_main_refuses_non_loopback_without_optin(monkeypatch):
     def _fail_run(*a, **k):  # pragma: no cover - must never be reached
         raise AssertionError("uvicorn.run must not be called when bind is refused")
 
-    monkeypatch.setattr(console_server, "uvicorn", type("U", (), {"run": staticmethod(_fail_run)}), raising=False)
+    monkeypatch.setattr(
+        console_server, "uvicorn", type("U", (), {"run": staticmethod(_fail_run)}), raising=False
+    )
     with pytest.raises(RuntimeError):
         console_server.main(["--host", "0.0.0.0"])
 
@@ -94,15 +96,21 @@ def test_protected_route_200_with_token(token_client):
 def test_healthz_open_even_when_token_required(token_client):
     assert token_client.get("/healthz").status_code == 200
     assert token_client.get("/api/healthz").status_code == 401
-    assert token_client.get(
-        "/api/healthz",
-        headers={"Authorization": "Bearer secret-token"},
-    ).status_code == 200
+    assert (
+        token_client.get(
+            "/api/healthz",
+            headers={"Authorization": "Bearer secret-token"},
+        ).status_code
+        == 200
+    )
 
 
 def test_html_pages_gated_when_token_required(token_client):
     assert token_client.get("/traces").status_code == 401
-    assert token_client.get("/traces", headers={"Authorization": "Bearer secret-token"}).status_code == 200
+    assert (
+        token_client.get("/traces", headers={"Authorization": "Bearer secret-token"}).status_code
+        == 200
+    )
 
 
 def test_loopback_app_has_no_auth_middleware(app):

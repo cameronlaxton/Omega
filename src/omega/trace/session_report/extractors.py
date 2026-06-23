@@ -20,6 +20,7 @@ from omega.trace.session_report.models import (
     LedgerView,
     TraceReportCard,
 )
+from omega.trace.quality import summarize_zero_evidence
 from omega.trace.session_sidecar import load_sidecar_safe
 from omega.trace.store import TraceStore
 
@@ -61,6 +62,36 @@ def _first_dict(*values: Any) -> dict[str, Any]:
     return {}
 
 
+def _primary_calibration_audit(trace: dict[str, Any]) -> dict[str, Any]:
+    """The calibration audit for a trace's recommended side/edge (or {})."""
+    result = _first_dict(trace.get("result"))
+    side = result.get("recommendation")
+    if side == "over":
+        return _first_dict(result.get("over_calibration_audit"))
+    if side == "under":
+        return _first_dict(result.get("under_calibration_audit"))
+    edges = result.get("edges")
+    if isinstance(edges, list) and edges and isinstance(edges[0], dict):
+        return _first_dict(edges[0].get("calibration_audit"))
+    return {}
+
+
+def _evidence_applied_factor(trace: dict[str, Any]) -> tuple[float, bool]:
+    """Product of applied evidence factors and whether any were applied."""
+    apps = trace.get("evidence_application")
+    factor = 1.0
+    applied_any = False
+    if isinstance(apps, list):
+        for a in apps:
+            if isinstance(a, dict) and a.get("applied"):
+                applied_any = True
+                try:
+                    factor *= float(a.get("factor", 1.0))
+                except (TypeError, ValueError):
+                    pass
+    return factor, applied_any
+
+
 def _extract_engine_view(trace: dict[str, Any]) -> EngineView:
     result = _first_dict(trace.get("result"))
     best = _first_dict(result.get("best_bet"))
@@ -69,6 +100,14 @@ def _extract_engine_view(trace: dict[str, Any]) -> EngineView:
     rec = recs[0] if isinstance(recs, list) and recs and isinstance(recs[0], dict) else {}
     edge = _first_dict(best, recommendation, rec, result)
     tq = _first_dict(trace.get("trace_quality"))
+    audit = _primary_calibration_audit(trace)
+    factor, applied_any = _evidence_applied_factor(trace)
+    # Prefer the recommended edge's own cap reason; fall back to the result/edge.
+    cap_reason = (
+        edge.get("confidence_cap_reason")
+        or result.get("confidence_cap_reason")
+        or _primary_edge_cap_reason(result)
+    )
     return EngineView(
         model_probability=_format_number(
             result.get("model_prob")
@@ -82,19 +121,54 @@ def _extract_engine_view(trace: dict[str, Any]) -> EngineView:
         units=_format_number(edge.get("recommended_units") or edge.get("units")),
         tier=_cell(edge.get("confidence_tier")),
         calibration_status=_cell(tq.get("calibration_status") or tq.get("status")),
+        confidence_cap_reason=_cell(cap_reason),
+        aggregate_quality=_cell(tq.get("aggregate_quality")),
+        quality_band=_cell(tq.get("quality_band")),
+        evidence_mode=_cell(trace.get("evidence_rollout_mode") or trace.get("evidence_mode")),
+        evidence_status=_cell(tq.get("evidence_status")),
+        evidence_signal_count=_cell(
+            len(trace["evidence_application"])
+            if isinstance(trace.get("evidence_application"), list)
+            else None
+        ),
+        evidence_applied_factor=(f"{factor:.4f}" if applied_any else "1.0000 (not applied)"),
+        calibration_path=_cell(audit.get("path") or tq.get("calibration_path")),
+        profile_id=_cell(audit.get("profile_id")),
+        profile_status=_cell(audit.get("profile_status")),
+        profile_maturity=_cell(audit.get("profile_maturity")),
+        profile_sample_size=_cell(audit.get("sample_size")),
+        profile_ece=_format_number(audit.get("ece")),
+        profile_brier=_format_number(audit.get("brier")),
+        static_identity_used=_cell(audit.get("path") == "static_identity"),
     )
 
 
-def _decision_fields(trace: dict[str, Any], ledger_rows: list[dict[str, Any]]) -> dict[str, str | None]:
+def _primary_edge_cap_reason(result: dict[str, Any]) -> Any:
+    """First non-null confidence_cap_reason among a game's edges."""
+    edges = result.get("edges")
+    if isinstance(edges, list):
+        for e in edges:
+            if isinstance(e, dict) and e.get("confidence_cap_reason"):
+                return e.get("confidence_cap_reason")
+    return None
+
+
+def _decision_fields(
+    trace: dict[str, Any], ledger_rows: list[dict[str, Any]]
+) -> dict[str, str | None]:
     first_ledger = ledger_rows[0] if ledger_rows else {}
     result = _first_dict(trace.get("result"))
     best = _first_dict(result.get("best_bet"))
     recs = trace.get("recommendations")
     rec = recs[0] if isinstance(recs, list) and recs and isinstance(recs[0], dict) else {}
     return {
-        "selection": _cell(first_ledger.get("selection") or best.get("selection") or rec.get("selection")),
+        "selection": _cell(
+            first_ledger.get("selection") or best.get("selection") or rec.get("selection")
+        ),
         "market": _cell(first_ledger.get("market") or rec.get("market") or trace.get("kind")),
-        "book": _cell(first_ledger.get("bookmaker") or trace.get("input_snapshot", {}).get("bookmaker")),
+        "book": _cell(
+            first_ledger.get("bookmaker") or trace.get("input_snapshot", {}).get("bookmaker")
+        ),
         "stake_status": _cell(first_ledger.get("status") or "no ledger row"),
     }
 
@@ -157,7 +231,9 @@ def _context_for_trace(
                 source_title=str(source),
             )
         )
-    input_snapshot = trace.get("input_snapshot") if isinstance(trace.get("input_snapshot"), dict) else {}
+    input_snapshot = (
+        trace.get("input_snapshot") if isinstance(trace.get("input_snapshot"), dict) else {}
+    )
     captured = [
         key
         for key in ("home_context", "away_context", "player_context", "game_context", "evidence")
@@ -314,10 +390,7 @@ def _build_audit_row(
                 break
 
     # Odds metadata: pulled from the odds resolver output embedded in snapshot
-    line_val = (
-        _cell(odds_input.get("line"))
-        or _cell(first_ledger.get("line"))
-    )
+    line_val = _cell(odds_input.get("line")) or _cell(first_ledger.get("line"))
     odds_val = (
         _cell(odds_input.get("odds_over"))
         or _cell(odds_input.get("moneyline_home"))
@@ -336,7 +409,9 @@ def _build_audit_row(
         event_id=_cell(snap.get("event_id") or odds_input.get("event_id")),
         matchup=_cell(trace.get("matchup")),
         market_type=_cell(first_ledger.get("market") or trace.get("kind")),
-        selection=_cell(first_ledger.get("selection") or best.get("selection") or rec.get("selection")),
+        selection=_cell(
+            first_ledger.get("selection") or best.get("selection") or rec.get("selection")
+        ),
         line=line_val,
         odds=odds_val,
         bookmaker=_cell(first_ledger.get("bookmaker") or snap.get("bookmaker")),
@@ -380,7 +455,9 @@ def extract_intake_report(
     sidecar = sidecar_obj.to_report_dict() if sidecar_obj is not None else None
 
     trace_ids = {str(t.get("trace_id")) for t in traces}
-    ledger_rows = store.query_ledger(league=league.upper() if league else None, start=since, end=until, limit=100_000)
+    ledger_rows = store.query_ledger(
+        league=league.upper() if league else None, start=since, end=until, limit=100_000
+    )
     ledger_by_trace: dict[str, list[dict[str, Any]]] = {}
     for row in ledger_rows:
         ledger_by_trace.setdefault(str(row.get("trace_id")), []).append(row)
@@ -411,9 +488,7 @@ def extract_intake_report(
         )
         decision = _decision_fields(trace, ledgers)
         tq = _first_dict(trace.get("trace_quality"))
-        audit_rows.append(
-            _build_audit_row(trace, ledger_rows=ledgers, evidence_rows=evidence)
-        )
+        audit_rows.append(_build_audit_row(trace, ledger_rows=ledgers, evidence_rows=evidence))
         cards.append(
             TraceReportCard(
                 trace_id=trace_id,
@@ -443,6 +518,7 @@ def extract_intake_report(
         )
 
     unmatched = sorted(tid for tid in ledger_by_trace if tid not in trace_ids)
+    zero_evidence = summarize_zero_evidence(traces)
     return IntakeReportData(
         generated_at=datetime.now(UTC).isoformat(),
         source_db_path=store.db_path,
@@ -455,9 +531,15 @@ def extract_intake_report(
         sidecar_status=_sidecar_status(session_id, sidecar),
         coverage=_coverage_rows(traces),
         ledger_linkage=[CoverageRow(label=k, count=v) for k, v in sorted(linkage_counter.items())],
-        provenance_split=[CoverageRow(label=k, count=v) for k, v in sorted(provenance_counter.items())],
+        provenance_split=[
+            CoverageRow(label=k, count=v) for k, v in sorted(provenance_counter.items())
+        ],
         cards=cards,
         audit_rows=audit_rows,
         unmatched_ledger_rows=unmatched,
         ignored_context_entries=ignored_context_entries,
+        zero_evidence_count=zero_evidence.count,
+        zero_evidence_blocked=zero_evidence.blocked,
+        zero_evidence_trace_ids=zero_evidence.trace_ids,
+        zero_evidence_diagnostic=zero_evidence.diagnostic or None,
     )

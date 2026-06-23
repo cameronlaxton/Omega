@@ -169,7 +169,9 @@ def test_no_sidecar_numeric_source_in_normalized_payload(tmp_path):
     client = _client(
         tmp_path,
         lambda s: s.persist(_prop_handoff_trace()),
-        sidecars=[{"session_id": "sess-b1", "exec_stats": {"fake_edge": 999.0}, "agent_notes": "edge 999"}],
+        sidecars=[
+            {"session_id": "sess-b1", "exec_stats": {"fake_edge": 999.0}, "agent_notes": "edge 999"}
+        ],
     )
     rv = client.get("/api/traces/prop-1").json()["recommendation_view"]
     fields: list[dict] = []
@@ -183,10 +185,25 @@ def test_no_sidecar_numeric_source_in_normalized_payload(tmp_path):
 
 def test_game_trace_normalizes_multiple_recommendations(tmp_path):
     edges = [
-        {"side": "home", "team": "Lakers", "market": "moneyline", "true_prob": 0.58,
-         "calibrated_prob": 0.6, "market_odds": -150, "edge_pct": 4.2, "confidence_tier": "A"},
-        {"side": "away", "team": "Celtics", "market": "moneyline", "true_prob": 0.42,
-         "market_odds": 130, "edge_pct": 1.1, "confidence_tier": "C"},
+        {
+            "side": "home",
+            "team": "Lakers",
+            "market": "moneyline",
+            "true_prob": 0.58,
+            "calibrated_prob": 0.6,
+            "market_odds": -150,
+            "edge_pct": 4.2,
+            "confidence_tier": "A",
+        },
+        {
+            "side": "away",
+            "team": "Celtics",
+            "market": "moneyline",
+            "true_prob": 0.42,
+            "market_odds": 130,
+            "edge_pct": 1.1,
+            "confidence_tier": "C",
+        },
     ]
     trace = make_trace("game-multi", kind="game", recommendations=edges)
     client = _client(tmp_path, lambda s: s.persist(trace))
@@ -242,7 +259,9 @@ def test_session_health_present_even_when_sidecar_invalid(tmp_path):
     with store.autolog_suppressed():
         setup(store)
     store.close()
-    (sessions / "sess-bad.json").write_text('{ "session_id": "sess-bad", NOT JSON', encoding="utf-8")
+    (sessions / "sess-bad.json").write_text(
+        '{ "session_id": "sess-bad", NOT JSON', encoding="utf-8"
+    )
     client = TestClient(build_console_app(db_path=db, sessions_dir=str(sessions)))
 
     h = client.get("/api/sessions/sess-bad").json()["health"]
@@ -256,12 +275,19 @@ def test_session_health_pipeline_failure_from_audit_event(tmp_path):
     client = _client(
         tmp_path,
         _session_setup,
-        sidecars=[{
-            "session_id": "sess-h",
-            "audit_events": [
-                {"ts": "2026-03-21T11:30:00Z", "event_type": "step", "step": "analysis", "status": "fail"}
-            ],
-        }],
+        sidecars=[
+            {
+                "session_id": "sess-h",
+                "audit_events": [
+                    {
+                        "ts": "2026-03-21T11:30:00Z",
+                        "event_type": "step",
+                        "step": "analysis",
+                        "status": "fail",
+                    }
+                ],
+            }
+        ],
     )
     h = client.get("/api/sessions/sess-h").json()["health"]
     assert "analysis" in h["pipeline_steps_failed"]
@@ -281,7 +307,9 @@ def test_trace_list_shows_evidence_counts_for_visible_rows(tmp_path):
         t = make_trace(
             "ev-1",
             kind="game",
-            input_snapshot={"evidence": [{"signal_type": "injury", "confidence": 0.8, "window": "last_5"}]},
+            input_snapshot={
+                "evidence": [{"signal_type": "injury", "confidence": 0.8, "window": "last_5"}]
+            },
             evidence_application=[{"applied": True, "factor": 1.1}],
         )
         store.persist(t)
@@ -321,8 +349,12 @@ def test_trace_detail_structured_card_present_and_raw_json_collapsed(tmp_path):
 def test_trace_detail_card_escapes_injected_html(tmp_path):
     def setup(store: TraceStore) -> None:
         store.persist(
-            make_trace("xss-card", kind="game", matchup=SCRIPT,
-                       recommendations=[{"side": SCRIPT, "market": SCRIPT, "confidence_tier": "A"}])
+            make_trace(
+                "xss-card",
+                kind="game",
+                matchup=SCRIPT,
+                recommendations=[{"side": SCRIPT, "market": SCRIPT, "confidence_tier": "A"}],
+            )
         )
 
     html = _client(tmp_path, setup).get("/traces/xss-card").text
@@ -336,12 +368,19 @@ def test_session_health_warning_text_is_escaped(tmp_path):
     client = _client(
         tmp_path,
         _session_setup,
-        sidecars=[{
-            "session_id": "sess-h",
-            "audit_events": [
-                {"ts": "2026-03-21T11:30:00Z", "event_type": "step", "step": IMG, "status": "fail"}
-            ],
-        }],
+        sidecars=[
+            {
+                "session_id": "sess-h",
+                "audit_events": [
+                    {
+                        "ts": "2026-03-21T11:30:00Z",
+                        "event_type": "step",
+                        "step": IMG,
+                        "status": "fail",
+                    }
+                ],
+            }
+        ],
     )
     # Confirm it actually reaches the warning, then confirm it is escaped in HTML.
     h = client.get("/api/sessions/sess-h").json()["health"]

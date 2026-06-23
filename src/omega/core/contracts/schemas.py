@@ -9,7 +9,6 @@ These models define the JSON interface between:
 
 from __future__ import annotations
 
-import warnings
 from enum import Enum
 from typing import Any, Literal
 
@@ -26,6 +25,7 @@ class SoccerDerivativeMarket(str, Enum):
     both_teams_to_score = "both_teams_to_score"
     correct_score = "correct_score"
     first_half_total = "first_half_total"
+
 
 # -- Request Models ----------------------------------------------------------
 
@@ -229,7 +229,7 @@ class GameAnalysisRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _enforce_missing_game_context_keys(self) -> "GameAnalysisRequest":
+    def _enforce_missing_game_context_keys(self) -> GameAnalysisRequest:
         gc = self.game_context or {}
         missing = [k for k in ("is_playoff", "rest_days") if k not in gc]
         if missing:
@@ -268,12 +268,20 @@ class BatchAnalysisEntry(BaseModel):
     home_team: str = Field(description="Home team name")
     away_team: str = Field(description="Away team name")
     game_date: str | None = Field(default=None, description="YYYY-MM-DD; defaults to today")
-    game_context: dict[str, Any] = Field(default_factory=dict, description="Calibration context (is_playoff, rest_days, …)")
+    game_context: dict[str, Any] = Field(
+        default_factory=dict, description="Calibration context (is_playoff, rest_days, …)"
+    )
     n_iterations: int = Field(default=10000, ge=100, le=100000)
-    seed: int | None = Field(default=None, description="RNG seed; auto-derived from content hash if None")
+    seed: int | None = Field(
+        default=None, description="RNG seed; auto-derived from content hash if None"
+    )
     evidence: list[dict[str, Any]] = Field(default_factory=list, description="EvidenceSignal dicts")
-    reasoning_narrative: str | None = Field(default=None, description="2–4 sentence summary of reasoning")
-    reasoning_sources: list[str] = Field(default_factory=list, description="Sources consulted, e.g. espn.com")
+    reasoning_narrative: str | None = Field(
+        default=None, description="2–4 sentence summary of reasoning"
+    )
+    reasoning_sources: list[str] = Field(
+        default_factory=list, description="Sources consulted, e.g. espn.com"
+    )
     # prop-only
     player_name: str | None = Field(default=None, description="Player name (kind='prop' only)")
     prop_type: str | list[str] | None = Field(
@@ -288,7 +296,9 @@ class BatchAnalysisEntry(BaseModel):
     odds_over: float | None = Field(default=None, description="American odds for Over (prop)")
     odds_under: float | None = Field(default=None, description="American odds for Under (prop)")
     line: float | None = Field(default=None, description="Prop line; auto-resolved if absent")
-    odds: dict[str, Any] | None = Field(default=None, description="Game odds dict (kind='game'); auto-resolved if absent")
+    odds: dict[str, Any] | None = Field(
+        default=None, description="Game odds dict (kind='game'); auto-resolved if absent"
+    )
 
 
 class PlayerPropRequest(BaseModel):
@@ -338,7 +348,7 @@ class PlayerPropRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _enforce_missing_game_context_keys(self) -> "PlayerPropRequest":
+    def _enforce_missing_game_context_keys(self) -> PlayerPropRequest:
         gc = self.game_context or {}
         missing = [k for k in ("is_playoff", "rest_days") if k not in gc]
         if missing:
@@ -372,9 +382,7 @@ class SimulationResult(BaseModel):
     predicted_total: float = Field(description="Predicted combined score")
     predicted_home_score: float
     predicted_away_score: float
-    context_source: str = Field(
-        default="provided", description="'provided' or 'league_default'"
-    )
+    context_source: str = Field(default="provided", description="'provided' or 'league_default'")
     baseline_used: bool = Field(default=False)
     simulation_backend: str | None = None
     component_version: str | None = None
@@ -400,6 +408,11 @@ class EdgeDetail(BaseModel):
     ev_pct: float = Field(description="Expected value percentage")
     market_odds: float = Field(description="American odds used for this side")
     confidence_tier: str = Field(description="A (high), B (medium), C (low), or Pass")
+    confidence_cap_reason: str | None = Field(
+        default=None,
+        description="Why confidence was capped below A (e.g. 'no_production_profile_calibration', "
+        "'trace_quality_cap', 'static_identity', 'insufficient_iterations'); None when uncapped.",
+    )
     recommended_units: float = Field(default=0.0, description="Kelly-sized stake in units")
     spread_coverage_prob: float | None = Field(
         default=None,
@@ -445,6 +458,36 @@ class CalibrationAudit(BaseModel):
             "'static_identity': no profile, within threshold, returned raw unchanged"
         )
     )
+    # Profile maturity + quality provenance (None on static paths). Surfaced so
+    # the confidence layer and reports can be honest about how trustworthy the
+    # applied calibration was.
+    profile_status: str | None = Field(
+        default=None, description="Lifecycle status of the applied profile (e.g. 'production')."
+    )
+    profile_maturity: str | None = Field(
+        default=None,
+        description="Trust level: none|provisional|probation|production|retired. "
+        "provisional/probation apply capped corrections and cap confidence.",
+    )
+    sample_size: int | None = Field(
+        default=None, description="Training sample size of the applied profile."
+    )
+    ece: float | None = Field(
+        default=None, description="Expected Calibration Error of the applied profile, if recorded."
+    )
+    brier: float | None = Field(
+        default=None, description="Brier score of the applied profile, if recorded."
+    )
+    fallback_level: str | None = Field(
+        default=None,
+        description="Hierarchical level the profile came from: league|sport_family|global. "
+        "None on static paths.",
+    )
+
+    @property
+    def static_identity_used(self) -> bool:
+        """True when no calibration moved the probability (raw returned unchanged)."""
+        return self.path == "static_identity"
 
 
 class AnalysisMetadata(BaseModel):
@@ -520,6 +563,10 @@ class PlayerPropResponse(BaseModel):
     edge_under: float | None = Field(default=None, description="Edge on Under in pct points")
     recommendation: str | None = Field(default=None, description="'over', 'under', or 'pass'")
     confidence_tier: str | None = None
+    confidence_cap_reason: str | None = Field(
+        default=None,
+        description="Why confidence was capped below A; None when uncapped.",
+    )
     kelly_fraction: float | None = Field(
         default=None,
         description="Scaled Kelly fraction for the recommended prop side; null for pass or unsourced odds",

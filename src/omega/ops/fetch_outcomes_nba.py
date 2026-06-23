@@ -125,9 +125,7 @@ def main(
         "--since", default="yesterday", help="Start date (YYYY-MM-DD | today | yesterday)"
     )
     parser.add_argument("--until", default=None, help="End date inclusive (default = since)")
-    parser.add_argument(
-        "--db", default=None, help="SQLite path (default: var/omega_traces.db)"
-    )
+    parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -273,8 +271,3 @@ def main(
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-
-

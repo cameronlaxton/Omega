@@ -202,8 +202,14 @@ def test_resolve_output_modes_quality_floor_holds_weak_prop():
 
 def test_aggregate_scalar_mode_is_conservative():
     actionable, research = OutputMode.ACTIONABLE, OutputMode.RESEARCH_CANDIDATE
-    assert report_calibration._aggregate_scalar_mode({"game": actionable, "prop": actionable}) is actionable
-    assert report_calibration._aggregate_scalar_mode({"game": research, "prop": actionable}) is research
+    assert (
+        report_calibration._aggregate_scalar_mode({"game": actionable, "prop": actionable})
+        is actionable
+    )
+    assert (
+        report_calibration._aggregate_scalar_mode({"game": research, "prop": actionable})
+        is research
+    )
     assert report_calibration._aggregate_scalar_mode({}) is research
 
 

@@ -43,9 +43,7 @@ def test_resolve_rest_days_from_scoreboard():
 
 
 def test_b2b_flag_when_played_previous_night():
-    sb = _scoreboard(
-        {"2026-05-09": [_final("2026-05-09", "Boston Celtics", "Indiana Pacers")]}
-    )
+    sb = _scoreboard({"2026-05-09": [_final("2026-05-09", "Boston Celtics", "Indiana Pacers")]})
     out = resolve_game_context(
         "NBA", "Boston Celtics", "Indiana Pacers", "2026-05-10", scoreboard_fn=sb
     )
@@ -69,7 +67,10 @@ def test_missing_schedule_lands_in_needs_manual():
 
 def test_applicable_evidence_includes_markov_flag_and_suggestions():
     out = resolve_game_context(
-        "NBA", "Boston Celtics", "Indiana Pacers", "2026-05-10",
+        "NBA",
+        "Boston Celtics",
+        "Indiana Pacers",
+        "2026-05-10",
         scoreboard_fn=_scoreboard({}),
         odds_client=SimpleNamespace(fetch_scores=lambda *a, **k: []),
     )
@@ -85,7 +86,10 @@ def test_applicable_evidence_includes_markov_flag_and_suggestions():
 
 def test_rivalry_suggests_motivation_edge():
     out = resolve_game_context(
-        "NBA", "Boston Celtics", "Los Angeles Lakers", "2026-05-10",
+        "NBA",
+        "Boston Celtics",
+        "Los Angeles Lakers",
+        "2026-05-10",
         scoreboard_fn=_scoreboard({}),
         odds_client=SimpleNamespace(fetch_scores=lambda *a, **k: []),
     )
@@ -95,7 +99,10 @@ def test_rivalry_suggests_motivation_edge():
 
 def test_mlb_park_factor_resolved():
     out = resolve_game_context(
-        "MLB", "Colorado Rockies", "San Diego Padres", "2026-07-04",
+        "MLB",
+        "Colorado Rockies",
+        "San Diego Padres",
+        "2026-07-04",
         scoreboard_fn=_scoreboard({}),
         odds_client=SimpleNamespace(fetch_scores=lambda *a, **k: []),
     )
@@ -117,7 +124,10 @@ def test_odds_scores_fallback_for_league_without_scoreboard():
         ]
     )
     out = resolve_game_context(
-        "NHL", "Boston Bruins", "Toronto Maple Leafs", "2026-05-10",
+        "NHL",
+        "Boston Bruins",
+        "Toronto Maple Leafs",
+        "2026-05-10",
         odds_client=fake_client,
     )
     assert out["game_context"]["home_rest_days"] == 1

@@ -32,7 +32,9 @@ def _csv_list(value: str | None) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a walk-forward backtest over replay traces.")
     parser.add_argument("--manifest-id", required=True)
-    parser.add_argument("--backtest-db", required=True, help="Isolated backtest DB (NOT production)")
+    parser.add_argument(
+        "--backtest-db", required=True, help="Isolated backtest DB (NOT production)"
+    )
     parser.add_argument("--root", default=None, help="Artifact root (default var/historical)")
     parser.add_argument("--replay-id", default=None, help="Replay run id (default derived)")
     parser.add_argument("--mode", choices=["expanding", "rolling"], default="expanding")

@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "src"))
 
-import pytest
+from omega.integrations.odds_api import OddsApiKeyMissing
 from omega.integrations.odds_resolver import (
     SKIP_MARKET_UNAVAILABLE,
     SKIP_MISSING_PARAMETERS,
@@ -26,8 +26,6 @@ from omega.integrations.odds_resolver import (
     _classify_skip_code,
     resolve_odds,
 )
-from omega.integrations.odds_api import OddsApiKeyMissing
-
 
 # ---------------------------------------------------------------------------
 # _classify_skip_code unit tests
@@ -39,7 +37,9 @@ def test_classify_no_api_key():
 
 
 def test_classify_no_event_match():
-    assert _classify_skip_code(["no exact event match for Yankees @ Red Sox"]) == SKIP_NO_EVENT_MATCH
+    assert (
+        _classify_skip_code(["no exact event match for Yankees @ Red Sox"]) == SKIP_NO_EVENT_MATCH
+    )
 
 
 def test_classify_event_id_required():
@@ -76,11 +76,13 @@ def test_classify_missing_parameters():
 
 def test_classify_empty_returns_unknown():
     from omega.integrations.odds_resolver import SKIP_UNKNOWN
+
     assert _classify_skip_code([]) == SKIP_UNKNOWN
 
 
 def test_classify_unknown_string():
     from omega.integrations.odds_resolver import SKIP_UNKNOWN
+
     assert _classify_skip_code(["some unexpected error message"]) == SKIP_UNKNOWN
 
 
@@ -184,8 +186,13 @@ def test_missing_player_name_produces_skip_code():
     client = MagicMock()
     client.last_quota_headers = {}
     client.fetch_events.return_value = [
-        MagicMock(event_id="e1", home_team="Yankees", away_team="Red Sox",
-                  commence_time="2026-06-20T19:00:00Z", sport_key="baseball_mlb"),
+        MagicMock(
+            event_id="e1",
+            home_team="Yankees",
+            away_team="Red Sox",
+            commence_time="2026-06-20T19:00:00Z",
+            sport_key="baseball_mlb",
+        ),
     ]
 
     result = resolve_odds(
@@ -193,7 +200,7 @@ def test_missing_player_name_produces_skip_code():
         league="MLB",
         home_team="Yankees",
         away_team="Red Sox",
-        player_name=None,   # missing
+        player_name=None,  # missing
         prop_type="strikeouts_pitched",
         line=7.5,
         event_id="e1",

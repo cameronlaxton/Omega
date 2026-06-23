@@ -73,9 +73,7 @@ def test_resolve_entities_excludes_unresolved_and_warns(tmp_path):
 
     sidecar = SessionSidecar.from_path(sidecar_path)
     warn_events = [
-        e
-        for e in sidecar.audit_events
-        if e.event_type == "data_provenance" and e.status == "warn"
+        e for e in sidecar.audit_events if e.event_type == "data_provenance" and e.status == "warn"
     ]
     assert len(warn_events) == 1
     assert "Ghost Player" in warn_events[0].notes

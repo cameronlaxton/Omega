@@ -65,7 +65,9 @@ def test_best_of_five_raises_ace_volume():
     backend = TennisServePropBackend()
     bo3 = backend.run(_request())
     bo5 = backend.run(
-        _request(prior_payload={"ace_rate": 0.12, "serve_win_pct": 0.67, "match_format": "best_of_5"})
+        _request(
+            prior_payload={"ace_rate": 0.12, "serve_win_pct": 0.67, "match_format": "best_of_5"}
+        )
     )
     assert bo5["mean"] > bo3["mean"]
 

@@ -72,9 +72,7 @@ def test_bet_numbers_unaffected_by_sidecar(seeded):
     from omega.ops.console_server import build_console_app
     from tests.ui.conftest import write_valid_sidecar
 
-    write_valid_sidecar(
-        seeded["sessions_dir"], "sess-test-1", exec_stats={"net_pnl": 9999.0}
-    )
+    write_valid_sidecar(seeded["sessions_dir"], "sess-test-1", exec_stats={"net_pnl": 9999.0})
     client = TestClient(
         build_console_app(db_path=seeded["db_path"], sessions_dir=str(seeded["sessions_dir"]))
     )

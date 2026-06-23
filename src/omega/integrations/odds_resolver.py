@@ -23,13 +23,13 @@ from omega.integrations._guards import assert_not_replay_mode
 from omega.integrations.odds_api import (
     DEFAULT_BOOKMAKER,
     DEFAULT_MARKETS,
+    TENNIS_TOUR_KEY_PREFIXES,
     BookOdds,
     EventOdds,
     HistoricalEvent,
     OddsApiBudgetExceeded,
     OddsApiClient,
     OddsApiKeyMissing,
-    TENNIS_TOUR_KEY_PREFIXES,
     resolve_tennis_sport_keys,
 )
 from omega.integrations.odds_cache import OddsCache
@@ -214,25 +214,38 @@ def _resolve_event_id(
             if event.event_id == event_id:
                 return event_id, event.sport_key or None, event_fetch_skips, event_fetch_codes
         if _is_tennis_tour(league):
-            return None, None, [
-                *event_fetch_skips,
-                f"no active tennis tournament key matched event_id={event_id!r}",
-            ], [*event_fetch_codes, "no_exact_event_match"]
+            return (
+                None,
+                None,
+                [
+                    *event_fetch_skips,
+                    f"no active tennis tournament key matched event_id={event_id!r}",
+                ],
+                [*event_fetch_codes, "no_exact_event_match"],
+            )
         return event_id, None, event_fetch_skips, event_fetch_codes
     if not home_team or not away_team:
-        return None, None, ["event_id or exact home_team+away_team is required"], [
-            "no_exact_event_match"
-        ]
+        return (
+            None,
+            None,
+            ["event_id or exact home_team+away_team is required"],
+            ["no_exact_event_match"],
+        )
     for event in events:
         if _norm(event.home_team) == _norm(home_team) and _norm(event.away_team) == _norm(
             away_team
         ):
             return event.event_id, event.sport_key or None, event_fetch_skips, event_fetch_codes
-    return None, None, [
-        *event_fetch_skips,
-        f"no exact event match for {away_team} @ {home_team}",
-        f"candidate_events={len(events)}",
-    ], [*event_fetch_codes, "no_exact_event_match"]
+    return (
+        None,
+        None,
+        [
+            *event_fetch_skips,
+            f"no exact event match for {away_team} @ {home_team}",
+            f"candidate_events={len(events)}",
+        ],
+        [*event_fetch_codes, "no_exact_event_match"],
+    )
 
 
 def _is_tennis_tour(league: str) -> bool:
@@ -249,12 +262,16 @@ def _fetch_events_for_resolution(
 ) -> tuple[list[HistoricalEvent], list[str], list[str]]:
     """Fetch current events, resolving ATP/WTA's active tournament keys first."""
     if not _is_tennis_tour(league):
-        return client.fetch_events(
-            league,
-            commence_time_from=commence_time_from,
-            commence_time_to=commence_time_to,
-            request_cost=request_cost,
-        ), [], []
+        return (
+            client.fetch_events(
+                league,
+                commence_time_from=commence_time_from,
+                commence_time_to=commence_time_to,
+                request_cost=request_cost,
+            ),
+            [],
+            [],
+        )
 
     try:
         sport_keys = resolve_tennis_sport_keys(client, league)
@@ -264,9 +281,11 @@ def _fetch_events_for_resolution(
         return [], [f"tennis sport-key resolution failed: {exc}"], ["market_unavailable"]
 
     if not sport_keys:
-        return [], [f"no active tennis tournament key available for {league.upper()}"], [
-            "market_unavailable"
-        ]
+        return (
+            [],
+            [f"no active tennis tournament key available for {league.upper()}"],
+            ["market_unavailable"],
+        )
 
     events: list[HistoricalEvent] = []
     skipped: list[str] = []
@@ -511,7 +530,9 @@ def list_events(
         "metadata": ["source: live_api", "cache_kind: event_list"],
         "quota": dict(client.last_quota_headers),
         "skipped_reasons": event_skips if events else (event_skips or ["no events returned"]),
-        "reason_codes": reason_codes if reason_codes else ([] if events else ["market_unavailable"]),
+        "reason_codes": reason_codes
+        if reason_codes
+        else ([] if events else ["market_unavailable"]),
     }
     cache.set(key, league, "events", payload, entry_type="event_list")
     return payload
@@ -794,15 +815,24 @@ def resolve_odds(
     market = (prop_type or "") if kind == "prop" else "game"
     norm_home = (home_team or "").strip().lower()
     norm_away = (away_team or "").strip().lower()
-    game_date = (commence_time_from or "").strip().split("T")[0] if commence_time_from else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    game_date = (
+        (commence_time_from or "").strip().split("T")[0]
+        if commence_time_from
+        else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    )
 
     cached_payload: dict[str, Any] | None = None
     negative_key: str | None = None
 
     if norm_home and norm_away:
         cache_key = cache.compute_cache_key(
-            league, market, norm_home, norm_away, game_date,
-            player_name=player_name, player_id=player_id,
+            league,
+            market,
+            norm_home,
+            norm_away,
+            game_date,
+            player_name=player_name,
+            player_id=player_id,
             bookmaker=bookmaker,
             line_shopping=line_shopping,
             all_books=all_books,
@@ -811,14 +841,12 @@ def resolve_odds(
         cached_payload = cache.get(cache_key)
         if not cached_payload:
             cached_payload = cache.find_by_teams(
-                league, market, norm_home, norm_away,
-                player_name=player_name, player_id=player_id
+                league, market, norm_home, norm_away, player_name=player_name, player_id=player_id
             )
 
     if not cached_payload and event_id:
         cached_payload = cache.find_by_event_id(
-            league, market, event_id,
-            player_name=player_name, player_id=player_id
+            league, market, event_id, player_name=player_name, player_id=player_id
         )
 
     if cached_payload:
@@ -854,22 +882,26 @@ def resolve_odds(
     prop_type_by_market: dict[str, str] = {}
     if kind == "prop":
         if not player_name or not prop_type:
-            return _fail(_unavailable(
-                kind,
-                league,
-                bookmaker,
-                ["player_name and prop_type are required for prop odds"],
-                client,
-            ))
+            return _fail(
+                _unavailable(
+                    kind,
+                    league,
+                    bookmaker,
+                    ["player_name and prop_type are required for prop odds"],
+                    client,
+                )
+            )
         market_key = provider_market_for_prop(league, prop_type)
         if not market_key:
-            return _fail(_unavailable(
-                kind,
-                league,
-                bookmaker,
-                [f"no provider market mapping for {league.upper()} prop_type={prop_type!r}"],
-                client,
-            ))
+            return _fail(
+                _unavailable(
+                    kind,
+                    league,
+                    bookmaker,
+                    [f"no provider market mapping for {league.upper()} prop_type={prop_type!r}"],
+                    client,
+                )
+            )
         available, availability_skips = _prop_market_available(
             client,
             league,
@@ -936,9 +968,11 @@ def resolve_odds(
             if not (line_shopping or all_books)
             else "no exact market match"
         )
-        return _fail(_unavailable(
-            kind, league, bookmaker, skipped, client, quotes=output_quotes, event=event
-        ))
+        return _fail(
+            _unavailable(
+                kind, league, bookmaker, skipped, client, quotes=output_quotes, event=event
+            )
+        )
 
     result_payload = {
         "status": "success",

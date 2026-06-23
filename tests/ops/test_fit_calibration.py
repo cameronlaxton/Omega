@@ -78,8 +78,16 @@ def test_fit_and_register_prop_candidate_carries_prop_market(tmp_path):
     hold_o = [0, 1, 1, 1, 0]
 
     profile = fit_calibration.fit_and_register(
-        fitter, registry, "MLB", "isotonic",
-        train_p, train_o, hold_p, hold_o, dry_run=False, market="prop",
+        fitter,
+        registry,
+        "MLB",
+        "isotonic",
+        train_p,
+        train_o,
+        hold_p,
+        hold_o,
+        dry_run=False,
+        market="prop",
     )
 
     assert profile.market == "prop"

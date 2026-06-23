@@ -218,8 +218,7 @@ def validate_records(
             validated.append(model.model_validate(record))
         except ValidationError as exc:
             detail = "; ".join(
-                f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}"
-                for err in exc.errors()
+                f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()
             )
             if session_path is not None:
                 _emit_provenance_event(

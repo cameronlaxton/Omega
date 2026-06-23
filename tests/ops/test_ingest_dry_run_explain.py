@@ -73,4 +73,3 @@ def test_explain_reports_valid_and_reject_without_writing(tmp_path, monkeypatch,
         assert store.count() == 0
     finally:
         store.close()
-

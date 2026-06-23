@@ -41,13 +41,10 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import subprocess
 import sys
-import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SRC_ROOT = _REPO_ROOT / "src"
@@ -58,11 +55,23 @@ logger = logging.getLogger("omega.ops.session_run")
 UTC = timezone.utc
 
 # League codes classified by sport family
-_SOCCER_LEAGUES = frozenset({
-    "EPL", "MLS", "LA_LIGA", "BUNDESLIGA", "SERIE_A", "LIGUE_1",
-    "CHAMPIONS_LEAGUE", "WORLD_CUP", "FIFA_WORLD_CUP_2026", "FIFA_INTL",
-    "FIFA_FRIENDLY", "FIFA_NATIONS_LEAGUE", "FIFA_QUALIFIERS",
-})
+_SOCCER_LEAGUES = frozenset(
+    {
+        "EPL",
+        "MLS",
+        "LA_LIGA",
+        "BUNDESLIGA",
+        "SERIE_A",
+        "LIGUE_1",
+        "CHAMPIONS_LEAGUE",
+        "WORLD_CUP",
+        "FIFA_WORLD_CUP_2026",
+        "FIFA_INTL",
+        "FIFA_FRIENDLY",
+        "FIFA_NATIONS_LEAGUE",
+        "FIFA_QUALIFIERS",
+    }
+)
 _TENNIS_LEAGUES = frozenset({"ATP", "WTA", "GRAND_SLAM", "TENNIS"})
 _PROP_CAPABLE_LEAGUES = frozenset({"MLB", "NBA", "NFL", "NHL", "WNBA"})
 
@@ -102,7 +111,9 @@ def _phase_preflight(dry_run: bool) -> int:
     print("\n[Phase 2] Running cowork preflight gate...")
     rc = _run_subprocess(["omega-cowork-preflight"], label="preflight", dry_run=dry_run)
     if rc != 0 and not dry_run:
-        print(f"[FAIL] omega-cowork-preflight exited {rc}. Fix the reported issues before proceeding.")
+        print(
+            f"[FAIL] omega-cowork-preflight exited {rc}. Fix the reported issues before proceeding."
+        )
         return rc
     print("[OK] Preflight passed." if rc == 0 else "[DRY-RUN] Preflight skipped.")
     return rc
@@ -139,8 +150,10 @@ def _phase_soccer_gate(
             )
             downgraded.append(league)
         elif rc != 0 and rc != 2 and not dry_run:
-            print(f"  [ERROR] Soccer prior coverage check for {league} failed (exit {rc}). "
-                  "Session can proceed but FIFA outputs may be unreliable.")
+            print(
+                f"  [ERROR] Soccer prior coverage check for {league} failed (exit {rc}). "
+                "Session can proceed but FIFA outputs may be unreliable."
+            )
 
     return 0, downgraded
 
@@ -209,50 +222,50 @@ def _analysis_plan(
         "  See batch_rule in AGENTS.md for exact contract.",
         "",
         "  omega_run_batch(",
-        f"    session_id=\"{session_id}\",",
+        f'    session_id="{session_id}",',
         "    bankroll=1000.0,",
         "    entries=[",
         "      # Game Entry Example:",
         "      {",
-        "        \"kind\": \"game\",",
-        f"        \"league\": \"{leagues[0] if leagues else 'MLB'}\",",
-        "        \"home_team\": \"Home Team\",",
-        "        \"away_team\": \"Away Team\",",
-        f"        \"game_date\": \"{date}\",",
-        "        \"home_context\": {\"off_rating\": 4.5, \"def_rating\": 3.8},",
-        "        \"away_context\": {\"off_rating\": 4.1, \"def_rating\": 4.2},",
-        "        \"game_context\": {\"is_playoff\": False, \"rest_days\": 4},",
-        "        \"evidence\": [",
+        '        "kind": "game",',
+        f'        "league": "{leagues[0] if leagues else "MLB"}",',
+        '        "home_team": "Home Team",',
+        '        "away_team": "Away Team",',
+        f'        "game_date": "{date}",',
+        '        "home_context": {"off_rating": 4.5, "def_rating": 3.8},',
+        '        "away_context": {"off_rating": 4.1, "def_rating": 4.2},',
+        '        "game_context": {"is_playoff": False, "rest_days": 4},',
+        '        "evidence": [',
         "          {",
-        "            \"signal_type\": \"rest_advantage\",",
-        "            \"category\": \"situational\",",
-        "            \"plane\": \"game\",",
-        "            \"value\": 2,",
-        "            \"source\": \"agent_reasoning\",",
-        "            \"confidence\": 0.8,",
-        "            \"window\": \"matchup\",",
-        "            \"direction\": \"home\"",
+        '            "signal_type": "rest_advantage",',
+        '            "category": "situational",',
+        '            "plane": "game",',
+        '            "value": 2,',
+        '            "source": "agent_reasoning",',
+        '            "confidence": 0.8,',
+        '            "window": "matchup",',
+        '            "direction": "home"',
         "          }",
         "        ],",
-        "        \"reasoning_narrative\": \"Narrative summary of reasoning here...\",",
-        "        \"reasoning_sources\": [\"espn.com\"]",
+        '        "reasoning_narrative": "Narrative summary of reasoning here...",',
+        '        "reasoning_sources": ["espn.com"]',
         "      },",
         "      # Player Prop Entry Example:",
         "      {",
-        "        \"kind\": \"prop\",",
-        f"        \"league\": \"{leagues[0] if leagues else 'MLB'}\",",
-        "        \"home_team\": \"Home Team\",",
-        "        \"away_team\": \"Away Team\",",
-        f"        \"game_date\": \"{date}\",",
-        "        \"player_name\": \"Player Name\",",
-        "        \"prop_type\": \"strikeouts_pitched\",  # or other stat key",
-        "        \"player_context\": {",
-        "          \"strikeouts_pitched_mean\": 5.8,",
-        "          \"strikeouts_pitched_std\": 2.1,",
-        "          \"sample_size\": 10",
+        '        "kind": "prop",',
+        f'        "league": "{leagues[0] if leagues else "MLB"}",',
+        '        "home_team": "Home Team",',
+        '        "away_team": "Away Team",',
+        f'        "game_date": "{date}",',
+        '        "player_name": "Player Name",',
+        '        "prop_type": "strikeouts_pitched",  # or other stat key',
+        '        "player_context": {',
+        '          "strikeouts_pitched_mean": 5.8,',
+        '          "strikeouts_pitched_std": 2.1,',
+        '          "sample_size": 10',
         "        },",
-        "        \"game_context\": {\"is_playoff\": False, \"rest_days\": 4},",
-        "        \"evidence\": []",
+        '        "game_context": {"is_playoff": False, "rest_days": 4},',
+        '        "evidence": []',
         "      }",
         "    ]",
     ]
@@ -274,7 +287,9 @@ def _analysis_plan(
         effective_mode = "research_candidate" if downgraded_leagues else mode
         lines += [
             f"    # FIFA/Soccer Info: {fifa_games} matches planned",
-            f"    # output_mode={effective_mode!r} (downgraded due to prior coverage)" if downgraded_leagues else "",
+            f"    # output_mode={effective_mode!r} (downgraded due to prior coverage)"
+            if downgraded_leagues
+            else "",
             "    # Requires: rho prior (injected automatically from priors_dixon_coles)",
         ]
 
@@ -287,9 +302,9 @@ def _analysis_plan(
         "",
         "After engine phase completes, export traces to var/inbox/traces/ and run:",
         "",
-        f"  omega-ingest-traces                          # ingest exported traces",
-        f"  omega-render-session-report \\",
-        f"    --kind intake \\",
+        "  omega-ingest-traces                          # ingest exported traces",
+        "  omega-render-session-report \\",
+        "    --kind intake \\",
         f"    --session-id {session_id}                  # render audit report",
         "",
         "Or re-invoke session-run with the same --session-id plus --ingest --render-report.",
@@ -364,10 +379,7 @@ def run_session(
     date = date or datetime.now(UTC).strftime("%Y-%m-%d")
     session_id = session_id or _generate_session_id(date)
 
-    print(
-        f"\nomega-session-run  |  session={session_id}  date={date}  "
-        f"leagues={','.join(leagues)}"
-    )
+    print(f"\nomega-session-run  |  session={session_id}  date={date}  leagues={','.join(leagues)}")
     if dry_run:
         print("  [DRY-RUN MODE — no subprocess calls will be executed]")
 
@@ -404,7 +416,7 @@ def run_session(
         downgraded_leagues=downgraded,
         require_actionable_min=require_actionable_min,
     )
-    print(f"\n[Phase 5] Analysis Plan\n")
+    print("\n[Phase 5] Analysis Plan\n")
     print(plan)
 
     overall_rc = 2 if downgraded else 0
@@ -427,10 +439,7 @@ def run_session(
         if rc != 0 and not dry_run:
             overall_rc = 1
 
-    print(
-        f"\nomega-session-run complete  |  session={session_id}  "
-        f"exit={overall_rc}"
-    )
+    print(f"\nomega-session-run complete  |  session={session_id}  exit={overall_rc}")
     return overall_rc
 
 
@@ -454,10 +463,18 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="Comma-separated Omega league codes (e.g. MLB,TENNIS,FIFA_WORLD_CUP_2026).",
     )
-    parser.add_argument("--mlb-games", type=int, default=0, help="Number of MLB game analyses to plan.")
-    parser.add_argument("--mlb-props", type=int, default=0, help="Number of MLB prop analyses to plan.")
-    parser.add_argument("--tennis-games", type=int, default=0, help="Number of tennis match analyses to plan.")
-    parser.add_argument("--fifa-games", type=int, default=0, help="Number of FIFA/soccer game analyses to plan.")
+    parser.add_argument(
+        "--mlb-games", type=int, default=0, help="Number of MLB game analyses to plan."
+    )
+    parser.add_argument(
+        "--mlb-props", type=int, default=0, help="Number of MLB prop analyses to plan."
+    )
+    parser.add_argument(
+        "--tennis-games", type=int, default=0, help="Number of tennis match analyses to plan."
+    )
+    parser.add_argument(
+        "--fifa-games", type=int, default=0, help="Number of FIFA/soccer game analyses to plan."
+    )
     parser.add_argument(
         "--mode",
         default="research-lean",
@@ -485,7 +502,7 @@ def main(argv: list[str] | None = None) -> int:
         "--ingest",
         action="store_true",
         help="After printing the plan, run omega-ingest-traces. "
-             "Use this when re-invoking after the engine phase has completed.",
+        "Use this when re-invoking after the engine phase has completed.",
     )
     parser.add_argument(
         "--render-report",
@@ -503,7 +520,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip the cowork-preflight gate (not recommended for production sessions).",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Print plan only; do not execute any subprocess.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print plan only; do not execute any subprocess."
+    )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--db", default=None, help="SQLite path override for DB-dependent phases.")
 

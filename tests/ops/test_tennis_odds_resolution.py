@@ -11,15 +11,16 @@ if str(_REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 import pytest
+
 from omega.integrations.odds_api import (
+    TENNIS_TOUR_KEY_PREFIXES,
     HistoricalEvent,
     OddsApiKeyMissing,
     SportInfo,
-    TENNIS_TOUR_KEY_PREFIXES,
     resolve_tennis_sport_keys,
 )
+from omega.integrations.odds_cache import OddsCache
 from omega.integrations.odds_resolver import list_events
-
 
 # ---------------------------------------------------------------------------
 # Helpers / stubs
@@ -52,9 +53,10 @@ def _make_client(sports: list[SportInfo], events_per_key: dict[str, list]) -> Ma
     client.fetch_sports.return_value = sports
     client.last_quota_headers = {}
 
-    def _fetch_events(league, commence_time_from=None, commence_time_to=None,
-                      sport_key=None, request_cost=0):
-        return events_per_key.get(sport_key, [])
+    def _fetch_events(
+        league, commence_time_from=None, commence_time_to=None, sport_key=None, request_cost=0
+    ):
+        return events_per_key.get(sport_key, []) if sport_key is not None else []
 
     client.fetch_events.side_effect = _fetch_events
     return client
@@ -89,8 +91,8 @@ def test_atp_keys_filtered_from_sports_index(tmp_path):
     sports = [
         _make_sport("tennis_atp_wimbledon"),
         _make_sport("tennis_atp_us_open"),
-        _make_sport("tennis_wta_wimbledon"),   # should be excluded
-        _make_sport("basketball_nba"),          # should be excluded
+        _make_sport("tennis_wta_wimbledon"),  # should be excluded
+        _make_sport("basketball_nba"),  # should be excluded
         _make_sport("tennis_atp_inactive", active=False),  # inactive, excluded
     ]
     client = MagicMock()
@@ -103,7 +105,7 @@ def test_atp_keys_filtered_from_sports_index(tmp_path):
 def test_wta_keys_filtered_from_sports_index(tmp_path):
     sports = [
         _make_sport("tennis_wta_french_open"),
-        _make_sport("tennis_atp_french_open"),   # ATP excluded
+        _make_sport("tennis_atp_french_open"),  # ATP excluded
         _make_sport("tennis_wta_wimbledon"),
     ]
     client = MagicMock()
@@ -124,7 +126,6 @@ def test_stale_cache_served_on_fetch_failure(tmp_path):
     cache_file = tmp_path / "tennis_keys_atp.json"
     cache_file.write_text('["tennis_atp_wimbledon"]', encoding="utf-8")
 
-    import time
     # Make mtime old enough that it's past the TTL, but override ttl to 0 for the test
     client = MagicMock()
     client.fetch_sports.side_effect = RuntimeError("network down")
@@ -146,16 +147,24 @@ def test_cold_failure_without_cache_raises(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-class _NoCache:
+class _NoCache(OddsCache):
     """Stub cache that always misses so we hit the fetch path."""
 
-    def get(self, key):
-        return None
-
-    def set(self, key, league, market, payload, **kwargs):
+    def __init__(self) -> None:
         pass
 
-    def compute_event_list_cache_key(self, league, **kwargs):
+    def get(self, cache_key: str):
+        return None
+
+    def set(self, cache_key: str, league: str, market: str, market_data, **kwargs):
+        pass
+
+    @staticmethod
+    def compute_event_list_cache_key(
+        league: str,
+        commence_time_from: str | None = None,
+        commence_time_to: str | None = None,
+    ) -> str:
         return f"events:{league}"
 
 
@@ -171,9 +180,10 @@ def test_atp_list_events_aggregates_from_multiple_keys():
     client = MagicMock()
     client.last_quota_headers = {}
 
-    def _fetch_events(league, commence_time_from=None, commence_time_to=None,
-                      sport_key=None, request_cost=0):
-        return events_per_key.get(sport_key, [])
+    def _fetch_events(
+        league, commence_time_from=None, commence_time_to=None, sport_key=None, request_cost=0
+    ):
+        return events_per_key.get(sport_key, []) if sport_key is not None else []
 
     client.fetch_events.side_effect = _fetch_events
 
@@ -195,7 +205,7 @@ def test_wta_list_events_returns_wta_events():
     }
     client = MagicMock()
     client.last_quota_headers = {}
-    client.fetch_events.side_effect = lambda l, **kw: events_per_key.get(kw.get("sport_key"), [])
+    client.fetch_events.side_effect = lambda _, **kw: events_per_key.get(kw.get("sport_key"), [])
 
     with patch(_TENNIS_RESOLVER, return_value=wta_keys):
         result = list_events(league="WTA", client=client, cache=_NoCache())
@@ -224,7 +234,9 @@ def test_api_key_missing_propagates_gracefully():
         result = list_events(league="ATP", client=client, cache=_NoCache())
 
     assert result["status"] == "unavailable"
-    assert any("OMEGA_ODDS_API_KEY" in r or "api_key" in r.lower() for r in result["skipped_reasons"])
+    assert any(
+        "OMEGA_ODDS_API_KEY" in r or "api_key" in r.lower() for r in result["skipped_reasons"]
+    )
 
 
 def test_non_tennis_list_events_not_affected():

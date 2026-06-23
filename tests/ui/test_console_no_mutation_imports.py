@@ -140,11 +140,11 @@ def test_service_constructs_read_only_store_only():
             is_direct = isinstance(node.func, ast.Name) and node.func.id == "TraceStore"
             is_attr = isinstance(node.func, ast.Attribute) and node.func.attr == "TraceStore"
             if is_direct or is_attr:
-                has_ro = any(
-                    kw.arg == "read_only" and _is_true(kw.value) for kw in node.keywords
-                )
+                has_ro = any(kw.arg == "read_only" and _is_true(kw.value) for kw in node.keywords)
                 if not has_ro:
-                    offenders.append(f"{path.name}:{node.lineno} TraceStore(...) without read_only=True")
+                    offenders.append(
+                        f"{path.name}:{node.lineno} TraceStore(...) without read_only=True"
+                    )
     assert offenders == [], f"non read-only TraceStore construction: {offenders}"
 
 
@@ -182,10 +182,7 @@ def test_console_imports_only_approved_first_party_modules():
                     offenders.append(f"{path.name}:{node.lineno} from {module}")
             elif isinstance(node, ast.Import):
                 for alias in node.names:
-                    if (
-                        alias.name.startswith("omega.")
-                        and alias.name not in APPROVED_OMEGA_IMPORTS
-                    ):
+                    if alias.name.startswith("omega.") and alias.name not in APPROVED_OMEGA_IMPORTS:
                         offenders.append(f"{path.name}:{node.lineno} import {alias.name}")
     assert offenders == [], (
         "console modules import unapproved first-party modules "

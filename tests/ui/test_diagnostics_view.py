@@ -13,16 +13,30 @@ from omega.trace.store import TraceStore
 from tests.ui.conftest import make_trace
 
 
-def _profile(pid: str, *, league: str = "NBA", status: ProfileStatus = ProfileStatus.PRODUCTION,
-             version: int = 1, metrics: dict | None = None) -> CalibrationProfile:
+def _profile(
+    pid: str,
+    *,
+    league: str = "NBA",
+    status: ProfileStatus = ProfileStatus.PRODUCTION,
+    version: int = 1,
+    metrics: dict | None = None,
+) -> CalibrationProfile:
     return CalibrationProfile(
-        profile_id=pid, version=version, method="isotonic", league=league, status=status,
-        training_window="2024-01-01/2024-12-31", sample_size=500, dataset_hash="h",
+        profile_id=pid,
+        version=version,
+        method="isotonic",
+        league=league,
+        status=status,
+        training_window="2024-01-01/2024-12-31",
+        sample_size=500,
+        dataset_hash="h",
         metrics=metrics or {},
     )
 
 
-def _client(tmp_path: Path, *, traces: int = 0, profiles=(), registry_path: str | None = None) -> TestClient:
+def _client(
+    tmp_path: Path, *, traces: int = 0, profiles=(), registry_path: str | None = None
+) -> TestClient:
     db = str(tmp_path / "b2.db")
     sessions = tmp_path / "sessions"
     sessions.mkdir(exist_ok=True)
@@ -36,12 +50,15 @@ def _client(tmp_path: Path, *, traces: int = 0, profiles=(), registry_path: str 
         reg = CalibrationRegistry(reg_path)
         for p in profiles:
             reg.register(p)
-    return TestClient(build_console_app(db_path=db, sessions_dir=str(sessions), calibration_registry=reg_path))
+    return TestClient(
+        build_console_app(db_path=db, sessions_dir=str(sessions), calibration_registry=reg_path)
+    )
 
 
 def test_diagnostics_returns_db_and_registry_summary(tmp_path):
     client = _client(
-        tmp_path, traces=2,
+        tmp_path,
+        traces=2,
         profiles=[
             _profile("iso_nba_v2", league="NBA", status=ProfileStatus.PRODUCTION),
             _profile("iso_nba_v1", league="NBA", status=ProfileStatus.ARCHIVED),

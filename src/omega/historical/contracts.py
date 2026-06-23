@@ -259,9 +259,7 @@ class HistoricalFeatureSnapshot(BaseModel):
     away_context: dict[str, Any] = Field(default_factory=dict)
     game_context: dict[str, Any] = Field(default_factory=dict)
     context_labels: dict[str, Any] = Field(default_factory=dict)
-    context_source: str = Field(
-        default="provided", description="provided | backfilled | default"
-    )
+    context_source: str = Field(default="provided", description="provided | backfilled | default")
     is_stale: bool = Field(default=False, description="True when as-of data is older than policy")
     as_of: str | None = Field(default=None, description="Latest source row date used")
     feature_snapshot_hash: str = Field(default="")
@@ -399,7 +397,9 @@ class WalkForwardConfig(BaseModel):
         default=None, description="Rolling train width in days; None = all prior (expanding)"
     )
     test_window_days: int = Field(default=30, ge=1)
-    step_days: int | None = Field(default=None, description="Fold step; defaults to test_window_days")
+    step_days: int | None = Field(
+        default=None, description="Fold step; defaults to test_window_days"
+    )
     min_train_samples: int = Field(default=50, ge=1)
     min_slice_samples: int = Field(default=30, ge=1)
     markets: list[str] = Field(

@@ -120,8 +120,7 @@ class TestConfidenceEnabled:
             policy_id="p2",
             version=1,
             enable_confidence_weighting=True,
-            coefficients={"usage_spike": {"scale": 1.0, "cap": 0.5,
-                                          "reliability_weight": 0.5}},
+            coefficients={"usage_spike": {"scale": 1.0, "cap": 0.5, "reliability_weight": 0.5}},
         )
         rec = _player_adj(policy, confidence=0.5).records[0]
         assert rec.reliability_adjusted_factor == pytest.approx(1.10)

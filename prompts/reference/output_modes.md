@@ -87,6 +87,61 @@ block in the report body restates the per-market modes in human form.
 
 ---
 
+## Graduated evidence application modes
+
+Structured evidence no longer flows through a binary shadow/live switch. The active
+`AdjustmentPolicy.mode` is one rung of a graduated ladder (`OMEGA_EVIDENCE_MODE` overrides it):
+
+| Mode | Computed? | Recorded? | Feeds learning? | Moves prediction math? |
+|---|---|---|---|---|
+| `disabled` | no | no | no | no |
+| `observe` | yes | yes | no | no |
+| `score_only` *(default)* | yes | yes | yes | no |
+| `bounded_live` | yes | yes | yes | **yes, under hard caps** |
+| `live` | yes | yes | yes | yes (policy caps) |
+
+- Legacy `shadow` normalizes to `score_only` on load.
+- `bounded_live` enforces hard per-signal / family / plane caps and **cannot lift a recommendation
+  to `A`** unless the policy's evidence metrics have passed promotion gates.
+- The seed policy ships at `score_only` (records, never moves predictions) until an operator flips
+  it with an explicit, audited `set_mode`.
+
+## Calibration profile maturity
+
+Profiles are no longer all-or-nothing. A profile carries a `maturity` orthogonal to its lifecycle
+`status`: `none | provisional | probation | production | retired`. Selection walks a hierarchical
+fallback — **league → sport/archetype → league-market → global → static** — and a lower rung lowers
+trust. `provisional`/`probation` profiles apply **small, capped** probability corrections and **cap
+confidence below `A`**, so a sparse market can leave permanent research mode with a thin profile
+instead of waiting forever for a full `production` fit.
+
+## Per-recommendation honesty fields (always shown)
+
+Every recommendation — in **either** output mode — must surface an honesty block. These are
+truth-in-labeling, **not** protected betting numbers, so they are permitted even in
+`RESEARCH_CANDIDATE`:
+
+- confidence tier **and** the cap reason (why it is not higher);
+- trace quality score (`aggregate_quality`, 0–100) and band;
+- evidence mode, evidence status, number of evidence signals, applied factor;
+- calibration path, profile id, profile status/maturity, profile sample size, profile ECE/Brier;
+- whether the `static_identity` fallback was used (no real calibration applied).
+
+`A` confidence is reserved: it requires a real `production`-maturity profile with a passing ECE and
+enough samples, a strong trace (`aggregate_quality ≥ 75`), provided context, complete identity, and
+sufficient iterations. **Iteration count alone never earns an `A`.** Zero evidence with empty/baseline
+context can never produce actionable `A/B/C` output — it is forced to `Pass`.
+
+## Zero-evidence is not harmless — the session blocker
+
+A trace with **no structured evidence AND no provided context** (`zero_evidence_empty_context`)
+cannot calibrate, cannot learn, and must not produce actionable output. The run/report layer
+surfaces these explicitly: when a session contains **more than 10**, the run summary is **failed**
+with a diagnostic (the session-report renderer shows a `⛔ BLOCKER` section and
+`render_session_report` exits non-zero). Do not paper over a blind session as "no edges found".
+
+---
+
 ## `RESEARCH_CANDIDATE` — permitted vs forbidden
 
 These rules apply **per market**: when a market (game or prop) is `RESEARCH_CANDIDATE`, its
@@ -97,6 +152,9 @@ user-facing output is restricted as below, independently of the other market's m
 - Qualitative matchup narrative, news synthesis, recent form.
 - Listed sportsbook lines from a cited source.
 - Research-only lean / missing-data watchlist labels (no protected numbers).
+- The **honesty block** (trace quality score, confidence cap reason, evidence mode/status,
+  calibration path + profile maturity, `static_identity` flag) — truth-in-labeling, not protected
+  numbers.
 - Stake guidance capped at **≤ 1u**.
 
 **Forbidden in the user-facing reply** (these stay in the DB trace, not the response):

@@ -95,9 +95,7 @@ def is_loopback_host(host: str) -> bool:
         return False
 
 
-def resolve_bind_policy(
-    host: str, *, allow_remote: bool, token: str | None
-) -> str | None:
+def resolve_bind_policy(host: str, *, allow_remote: bool, token: str | None) -> str | None:
     """Validate a bind host; return the bearer token to enforce (or None).
 
     Loopback binds are zero-config: a configured token is honored but not
@@ -215,9 +213,7 @@ def build_console_app(
     )
 
     if auth_token:
-        app.add_middleware(
-            _BearerAuthMiddleware, token=auth_token, open_paths=_OPEN_PATHS
-        )
+        app.add_middleware(_BearerAuthMiddleware, token=auth_token, open_paths=_OPEN_PATHS)
 
     app.include_router(api_router)
 
@@ -245,7 +241,9 @@ def build_console_app(
     @app.get("/", response_class=HTMLResponse)
     def page_index(request: Request, service=Depends(get_service)):
         return templates.TemplateResponse(
-            request, "index.html", _ctx(request, health=service.health().model_dump(), active="home")
+            request,
+            "index.html",
+            _ctx(request, health=service.health().model_dump(), active="home"),
         )
 
     @app.get("/traces", response_class=HTMLResponse)
@@ -286,7 +284,8 @@ def build_console_app(
         detail = service.get_trace_detail(trace_id)
         if detail is None:
             return templates.TemplateResponse(
-                request, "trace_detail.html",
+                request,
+                "trace_detail.html",
                 _ctx(request, detail=None, not_found_id=trace_id, active="traces"),
                 status_code=404,
             )
@@ -330,7 +329,8 @@ def build_console_app(
         detail = service.get_bet_detail(ledger_id)
         if detail is None:
             return templates.TemplateResponse(
-                request, "bet_detail.html",
+                request,
+                "bet_detail.html",
                 _ctx(request, detail=None, not_found_id=ledger_id, active="bets"),
                 status_code=404,
             )
@@ -353,25 +353,27 @@ def build_console_app(
         )
 
     @app.get("/sessions/{session_id}", response_class=HTMLResponse)
-    def page_session_detail(
-        request: Request, session_id: str, service=Depends(get_service)
-    ):
+    def page_session_detail(request: Request, session_id: str, service=Depends(get_service)):
         detail = service.get_session_detail(session_id)
         if detail is None:
             return templates.TemplateResponse(
-                request, "session_detail.html",
+                request,
+                "session_detail.html",
                 _ctx(request, detail=None, not_found_id=session_id, active="sessions"),
                 status_code=404,
             )
         return templates.TemplateResponse(
-            request, "session_detail.html", _ctx(request, detail=detail.model_dump(), active="sessions")
+            request,
+            "session_detail.html",
+            _ctx(request, detail=detail.model_dump(), active="sessions"),
         )
 
     @app.get("/diagnostics", response_class=HTMLResponse)
     def page_diagnostics(request: Request, service=Depends(get_service)):
         data = service.diagnostics()
         return templates.TemplateResponse(
-            request, "diagnostics.html",
+            request,
+            "diagnostics.html",
             _ctx(request, data=data.model_dump(), active="diagnostics"),
         )
 
@@ -384,7 +386,8 @@ def build_console_app(
     ):
         data = service.calibration_status(league=league, status=status)
         return templates.TemplateResponse(
-            request, "calibration.html",
+            request,
+            "calibration.html",
             _ctx(request, data=data.model_dump(), active="calibration"),
         )
 
@@ -396,7 +399,8 @@ def build_console_app(
     ):
         data = service.signal_performance(league=league)
         return templates.TemplateResponse(
-            request, "signals.html",
+            request,
+            "signals.html",
             _ctx(request, data=data.model_dump(), active="signals"),
         )
 
@@ -404,7 +408,8 @@ def build_console_app(
     def page_review(request: Request, service=Depends(get_service)):
         data = service.review_queue()
         return templates.TemplateResponse(
-            request, "review.html",
+            request,
+            "review.html",
             _ctx(request, data=data.model_dump(), active="review"),
         )
 
@@ -416,7 +421,8 @@ def build_console_app(
     ):
         data = service.clv_report(league=league)
         return templates.TemplateResponse(
-            request, "clv.html",
+            request,
+            "clv.html",
             _ctx(request, data=data.model_dump(), active="clv"),
         )
 

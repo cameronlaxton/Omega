@@ -1,5 +1,3 @@
-import pytest
-
 from omega.core.calibration.sport_family import sport_family_for_league
 
 

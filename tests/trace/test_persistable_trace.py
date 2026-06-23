@@ -84,4 +84,3 @@ def test_trace_store_accepts_persistable_trace_model(tmp_path):
     assert retrieved is not None
     assert retrieved["recommendations"]["recommendation"] == "over"
     assert retrieved["context_labels"] == {"is_playoff": True}
-

@@ -50,9 +50,7 @@ def _tmp_db() -> str:
 
 
 def _stamped_versions(store: TraceStore) -> set[int]:
-    return {
-        row[0] for row in store.conn.execute("SELECT version FROM schema_versions").fetchall()
-    }
+    return {row[0] for row in store.conn.execute("SELECT version FROM schema_versions").fetchall()}
 
 
 def _objects(store: TraceStore, obj_type: str) -> set[str]:

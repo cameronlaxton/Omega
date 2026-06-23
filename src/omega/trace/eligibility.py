@@ -93,9 +93,7 @@ def calibration_exclusion_reasons(
     if result_status != "success":
         reasons.append(REASON_ENGINE_SKIPPED)
     if context_source != "provided":
-        reasons.append(
-            REASON_BASELINE_CONTEXT if baseline_used else REASON_LEGACY_MISSING_CONTEXT
-        )
+        reasons.append(REASON_BASELINE_CONTEXT if baseline_used else REASON_LEGACY_MISSING_CONTEXT)
     if identity_status != "complete":
         reasons.append(REASON_LEGACY_MISSING_IDENTITY)
     reasons.extend(str(r) for r in result_downgrades)
@@ -157,9 +155,7 @@ def evidence_learning_eligibility(
     """
     tq = trace_quality or {}
     if qa_verdict == "fail":
-        return EligibilityResult(
-            False, EV_INELIGIBLE_QA_FAILED, "trace-scoped QA verdict failed"
-        )
+        return EligibilityResult(False, EV_INELIGIBLE_QA_FAILED, "trace-scoped QA verdict failed")
     status = tq.get("evidence_status")
     if status == "present":
         return EligibilityResult(True, EV_ELIGIBLE_ORIGINAL)

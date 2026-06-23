@@ -40,7 +40,12 @@ def _prop_trace(trace_id: str, game_date: str) -> dict[str, Any]:
         "odds_snapshot": {},
         "downgrades": [],
         "kind": "prop",
-        "result": {"status": "success", "recommendation": "over", "over_prob": 0.5, "under_prob": 0.5},
+        "result": {
+            "status": "success",
+            "recommendation": "over",
+            "over_prob": 0.5,
+            "under_prob": 0.5,
+        },
         "input_snapshot": {
             "player_name": "Test Player",
             "prop_type": "points",
@@ -85,4 +90,3 @@ def test_dry_run_reports_db_window_and_ungraded_count(tmp_path, monkeypatch, cap
     assert "Outcome window (UTC): 2026-05-20 .. 2026-05-20" in text
     assert "ungraded traces in window" in text
     assert str(db) in text  # effective DB path surfaced
-

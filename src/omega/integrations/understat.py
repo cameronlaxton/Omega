@@ -59,9 +59,7 @@ class UnderstatTeamSeason(BaseModel):
     xg_against_total: float
 
 
-def _download_league_html(
-    league_slug: str, season: str, url_opener: Callable[..., Any]
-) -> str:
+def _download_league_html(league_slug: str, season: str, url_opener: Callable[..., Any]) -> str:
     """Raw network fetch — replay-guarded; wrapped by cached_fetch upstream."""
     assert_not_replay_mode("understat league fetch")
     url = f"{_BASE_URL}/{league_slug}/{season}"
@@ -136,10 +134,7 @@ def build_xg_priors(
         rows, UnderstatTeamSeason, source="understat", session_path=session_path
     )
     return build_team_xg_priors(
-        (
-            (row.team, row.xg_for_total, row.xg_against_total, row.matches)
-            for row in validated
-        ),
+        ((row.team, row.xg_for_total, row.xg_against_total, row.matches) for row in validated),
         competition=league,
         season=season,
         as_of_date=as_of_date,
@@ -211,9 +206,7 @@ def load_xg_priors(
     url_opener: Callable[..., Any] = urllib.request.urlopen,
 ) -> tuple[list[XgPrior], list[str]]:
     """Fetch (cached) + parse + validate one league season into XgPrior rows."""
-    html = fetch_league_html(
-        league, season, cache_root=cache_root, url_opener=url_opener
-    )
+    html = fetch_league_html(league, season, cache_root=cache_root, url_opener=url_opener)
     rows = parse_teams_data(html)
     return build_xg_priors(
         rows,

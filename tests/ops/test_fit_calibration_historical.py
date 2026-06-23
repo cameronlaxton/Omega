@@ -124,13 +124,18 @@ def test_cli_dry_run_sees_historical(tmp_path):
     _build_history_db(hist)
     rc = fit_calibration.main(
         [
-            "--league", LEAGUE,
-            "--db", str(tmp_path / "live.db"),
+            "--league",
+            LEAGUE,
+            "--db",
+            str(tmp_path / "live.db"),
             "--historical-only",
-            "--historical-db", hist,
+            "--historical-db",
+            hist,
             "--dry-run",
-            "--shadow-min-samples", "1",
-            "--min-samples", "1",
+            "--shadow-min-samples",
+            "1",
+            "--min-samples",
+            "1",
         ]
     )
     assert rc == 0
@@ -145,13 +150,18 @@ def test_same_season_guard_blocks(tmp_path):
     hist = str(tmp_path / "hist.db")
     _build_history_db(hist)
     common = [
-        "--league", LEAGUE,
-        "--db", str(tmp_path / "live.db"),
+        "--league",
+        LEAGUE,
+        "--db",
+        str(tmp_path / "live.db"),
         "--historical-only",
-        "--historical-db", hist,
+        "--historical-db",
+        hist,
         "--dry-run",
-        "--shadow-min-samples", "1",
-        "--min-samples", "1",
+        "--shadow-min-samples",
+        "1",
+        "--min-samples",
+        "1",
     ]
     # Overlapping windows (holdout_start < train_end) → blocked.
     rc_blocked = fit_calibration.main(
@@ -161,7 +171,13 @@ def test_same_season_guard_blocks(tmp_path):
     # Explicit shadow override → allowed.
     rc_allowed = fit_calibration.main(
         common
-        + ["--train-end", "2023-09-30", "--holdout-start", "2023-09-01", "--allow-same-season-shadow"]
+        + [
+            "--train-end",
+            "2023-09-30",
+            "--holdout-start",
+            "2023-09-01",
+            "--allow-same-season-shadow",
+        ]
     )
     assert rc_allowed == 0
 
@@ -171,15 +187,22 @@ def test_disjoint_date_windows_ok(tmp_path):
     _build_history_db(hist)
     rc = fit_calibration.main(
         [
-            "--league", LEAGUE,
-            "--db", str(tmp_path / "live.db"),
+            "--league",
+            LEAGUE,
+            "--db",
+            str(tmp_path / "live.db"),
             "--historical-only",
-            "--historical-db", hist,
+            "--historical-db",
+            hist,
             "--dry-run",
-            "--shadow-min-samples", "1",
-            "--min-samples", "1",
-            "--train-end", "2023-09-20",
-            "--holdout-start", "2023-09-21",
+            "--shadow-min-samples",
+            "1",
+            "--min-samples",
+            "1",
+            "--train-end",
+            "2023-09-20",
+            "--holdout-start",
+            "2023-09-21",
         ]
     )
     assert rc == 0
@@ -188,10 +211,12 @@ def test_disjoint_date_windows_ok(tmp_path):
 def test_mutually_exclusive_flags(tmp_path):
     rc = fit_calibration.main(
         [
-            "--league", LEAGUE,
+            "--league",
+            LEAGUE,
             "--historical-only",
             "--include-historical",
-            "--historical-db", str(tmp_path / "hist.db"),
+            "--historical-db",
+            str(tmp_path / "hist.db"),
             "--dry-run",
         ]
     )

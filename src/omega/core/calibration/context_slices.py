@@ -68,10 +68,10 @@ def normalize_context_label(value: Any) -> str | None:
     if not val:
         return None
     # Replace spaces, hyphens, slashes, and dots with underscores
-    val = re.sub(r'[\s\-\/\.]+', '_', val)
+    val = re.sub(r"[\s\-\/\.]+", "_", val)
     # Collapse duplicate underscores
-    val = re.sub(r'_+', '_', val)
-    val = val.strip('_')
+    val = re.sub(r"_+", "_", val)
+    val = val.strip("_")
     if not val:
         return None
     return val
@@ -84,12 +84,24 @@ def labels_from_trace(trace: Mapping[str, Any]) -> set[str]:
     locations = [
         trace.get("context_labels"),
         trace.get("context_slice"),
-        trace.get("input", {}).get("context_labels") if isinstance(trace.get("input"), dict) else None,
-        trace.get("metadata", {}).get("context_labels") if isinstance(trace.get("metadata"), dict) else None,
-        trace.get("run_context", {}).get("context_labels") if isinstance(trace.get("run_context"), dict) else None,
-        trace.get("market", {}).get("context_labels") if isinstance(trace.get("market"), dict) else None,
-        trace.get("features", {}).get("context_labels") if isinstance(trace.get("features"), dict) else None,
-        trace.get("calibration", {}).get("context_hints") if isinstance(trace.get("calibration"), dict) else None,
+        trace.get("input", {}).get("context_labels")
+        if isinstance(trace.get("input"), dict)
+        else None,
+        trace.get("metadata", {}).get("context_labels")
+        if isinstance(trace.get("metadata"), dict)
+        else None,
+        trace.get("run_context", {}).get("context_labels")
+        if isinstance(trace.get("run_context"), dict)
+        else None,
+        trace.get("market", {}).get("context_labels")
+        if isinstance(trace.get("market"), dict)
+        else None,
+        trace.get("features", {}).get("context_labels")
+        if isinstance(trace.get("features"), dict)
+        else None,
+        trace.get("calibration", {}).get("context_hints")
+        if isinstance(trace.get("calibration"), dict)
+        else None,
         trace.get("context_hints"),
         trace.get("tags"),
         trace.get("labels"),
@@ -223,7 +235,9 @@ def _map_aliases(raw_labels: set[str], sport_family: str | None = None) -> set[s
     return mapped
 
 
-def context_slice_for_trace(trace: Mapping[str, Any], *, sport_family: str | None = None) -> str | None:
+def context_slice_for_trace(
+    trace: Mapping[str, Any], *, sport_family: str | None = None
+) -> str | None:
     """Determine the best single context_slice from normalized labels based on precedence."""
     raw_labels = labels_from_trace(trace)
     if not raw_labels:
@@ -241,7 +255,12 @@ def context_slice_for_trace(trace: Mapping[str, Any], *, sport_family: str | Non
             # Special case for tennis surface subslices (e.g., surface_clay)
             if candidate == "surface":
                 # Check if a specific surface subslice is present
-                for surface_type in ("surface_clay", "surface_grass", "surface_hard", "surface_indoor_hard"):
+                for surface_type in (
+                    "surface_clay",
+                    "surface_grass",
+                    "surface_hard",
+                    "surface_indoor_hard",
+                ):
                     if surface_type in mapped_labels:
                         return surface_type
             return candidate

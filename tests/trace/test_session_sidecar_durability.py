@@ -108,9 +108,7 @@ class TestTraceScopedQualityGateVerdict:
         assert verdict.scope == "no_sidecar"
 
     def test_failed_gate_for_trace_a_does_not_fail_trace_b(self):
-        sidecar = _sidecar_with(
-            [_gate("fail", ts="2026-05-28T12:00:00Z", trace_ids=["trace-A"])]
-        )
+        sidecar = _sidecar_with([_gate("fail", ts="2026-05-28T12:00:00Z", trace_ids=["trace-A"])])
         a = quality_gate_verdict_for_trace(sidecar, "trace-A", "2026-05-28T12:00:00Z")
         b = quality_gate_verdict_for_trace(sidecar, "trace-B", "2026-05-28T12:00:00Z")
         assert a.verdict == "fail" and a.scope == "trace_id"
@@ -188,7 +186,10 @@ class TestJsonlMirror:
     def test_mirror_survives_truncated_summary(self, tmp_path):
         path = tmp_path / "s.json"
         _open(path)
-        append_audit_events(path, [_event(event_type="engine_run"), _event(status="fail", event_type="quality_gate")])
+        append_audit_events(
+            path,
+            [_event(event_type="engine_run"), _event(status="fail", event_type="quality_gate")],
+        )
         jsonl = path.with_suffix(".events.jsonl")
 
         # Simulate a truncated summary JSON.
@@ -263,6 +264,7 @@ class TestNotedBugFixes:
         nested_event["inputs"] = {"traces": [{"edge_pct": 0.05}]}
 
         import pytest
+
         with pytest.raises(ProtectedValueError) as excinfo:
             append_audit_events(path, [nested_event])
         assert "contains protected engine field" in str(excinfo.value)

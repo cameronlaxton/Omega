@@ -133,9 +133,7 @@ def fit_group_k(
     estimable over-dispersion signal. Returns ``(k, used_group_data)`` so
     downstream provenance can distinguish real group fits from league cold starts.
     """
-    player_ks = [
-        k for values in values_by_entity.values() if (k := _mom_k(values)) is not None
-    ]
+    player_ks = [k for values in values_by_entity.values() if (k := _mom_k(values)) is not None]
     if not player_ks:
         return league_default_k, False
     return sum(player_ks) / len(player_ks), True
@@ -159,9 +157,7 @@ def shrink_entity_k(
     player_k = _mom_k(player_values)
     if player_k is None:
         source = NB_K_SOURCE_GROUP if group_k_from_data else NB_K_SOURCE_LEAGUE
-        return EntityDispersionFit(
-            k=group_k, weight=0.0, source=source, n_observations=n
-        )
+        return EntityDispersionFit(k=group_k, weight=0.0, source=source, n_observations=n)
     shrunk = weight * player_k + (1.0 - weight) * group_k
     return EntityDispersionFit(
         k=shrunk,
@@ -186,9 +182,7 @@ def fit_dispersions(
     ``upsert_nfl_dispersion`` — no store/IO.
     """
     # group -> stat_type -> entity -> [values]; entity -> position_group.
-    grouped: dict[tuple[str, str], dict[str, list[float]]] = defaultdict(
-        lambda: defaultdict(list)
-    )
+    grouped: dict[tuple[str, str], dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     entity_group: dict[tuple[str, str], str] = {}
     for obs in observations:
         grouped[(obs.position_group, obs.stat_type)][obs.entity].append(obs.value)
@@ -280,9 +274,7 @@ def main() -> int:
         return 1
 
     try:
-        observations = load_dispersion_observations(
-            args.season, cache_root=args.cache_root
-        )
+        observations = load_dispersion_observations(args.season, cache_root=args.cache_root)
     except Exception as exc:  # noqa: BLE001 - surface ETL failures loudly
         logger.error("could not load nflverse observations for %s: %s", args.season, exc)
         return 1

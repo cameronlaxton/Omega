@@ -142,7 +142,5 @@ class TestDampingFamilyRegistry:
 
     def test_default_field_is_none(self):
         # Most specs declare no family; the field exists and defaults to None.
-        ungrouped = [
-            s for s in SIGNAL_REGISTRY.values() if s.damping_family is None
-        ]
+        ungrouped = [s for s in SIGNAL_REGISTRY.values() if s.damping_family is None]
         assert ungrouped, "expected most signals to remain singletons in Phase 1"

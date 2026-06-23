@@ -19,12 +19,15 @@ from omega.trace.ledger_bet import BetProvenance, LedgerStatus
 
 
 class TestCoerceOdds:
-    @pytest.mark.parametrize("value,expected", [
-        (-110, -110.0),
-        (150, 150.0),
-        (100, 100.0),
-        (-100, -100.0),
-    ])
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (-110, -110.0),
+            (150, 150.0),
+            (100, 100.0),
+            (-100, -100.0),
+        ],
+    )
     def test_valid_american(self, value, expected):
         assert coerce_american_odds(value) == expected
 
@@ -107,10 +110,23 @@ def _game_trace() -> dict:
         "input_snapshot": {"league": "NBA", "home_team": "B", "away_team": "A"},
         "result": {
             "edges": [
-                {"side": "home", "team": "B", "market": "spread", "line": -3.5,
-                 "ev_pct": 4.2, "market_odds": -110, "confidence_tier": "B"},
-                {"side": "away", "team": "A", "market": "moneyline",
-                 "ev_pct": 1.0, "market_odds": 120, "confidence_tier": "Pass"},
+                {
+                    "side": "home",
+                    "team": "B",
+                    "market": "spread",
+                    "line": -3.5,
+                    "ev_pct": 4.2,
+                    "market_odds": -110,
+                    "confidence_tier": "B",
+                },
+                {
+                    "side": "away",
+                    "team": "A",
+                    "market": "moneyline",
+                    "ev_pct": 1.0,
+                    "market_odds": 120,
+                    "confidence_tier": "Pass",
+                },
             ],
             "best_bet": {"selection": "B -3.5", "odds": -110, "confidence_tier": "B"},
         },
@@ -125,8 +141,12 @@ def _prop_trace() -> dict:
         "kind": "prop",
         "league": "NBA",
         "input_snapshot": {
-            "league": "NBA", "player_name": "Jayson Tatum",
-            "prop_type": "points", "line": 27.5, "odds_over": -115, "odds_under": -105,
+            "league": "NBA",
+            "player_name": "Jayson Tatum",
+            "prop_type": "points",
+            "line": 27.5,
+            "odds_over": -115,
+            "odds_under": -105,
         },
         "result": {"recommendation": "over", "confidence_tier": "A", "bet_side_odds": -115},
     }
@@ -181,10 +201,19 @@ class TestBookProvenance:
         trace = _game_trace()
         trace["input_snapshot"]["odds"] = {
             "markets": [
-                {"market_type": "spread", "selection": "B", "line": -3.5,
-                 "price": -110, "bookmaker": "draftkings"},
-                {"market_type": "moneyline", "selection": "A", "price": 120,
-                 "bookmaker": "fanduel"},
+                {
+                    "market_type": "spread",
+                    "selection": "B",
+                    "line": -3.5,
+                    "price": -110,
+                    "bookmaker": "draftkings",
+                },
+                {
+                    "market_type": "moneyline",
+                    "selection": "A",
+                    "price": 120,
+                    "bookmaker": "fanduel",
+                },
             ]
         }
         bet = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL).bet
@@ -195,10 +224,18 @@ class TestBookProvenance:
         # No spread quote for the chosen selection, but every quote is one book.
         trace["input_snapshot"]["odds"] = {
             "markets": [
-                {"market_type": "moneyline", "selection": "A", "price": 120,
-                 "bookmaker": "caesars"},
-                {"market_type": "moneyline", "selection": "B", "price": -140,
-                 "bookmaker": "caesars"},
+                {
+                    "market_type": "moneyline",
+                    "selection": "A",
+                    "price": 120,
+                    "bookmaker": "caesars",
+                },
+                {
+                    "market_type": "moneyline",
+                    "selection": "B",
+                    "price": -140,
+                    "bookmaker": "caesars",
+                },
             ]
         }
         bet = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL).bet
@@ -208,10 +245,18 @@ class TestBookProvenance:
         trace = _game_trace()
         trace["input_snapshot"]["odds"] = {
             "markets": [
-                {"market_type": "moneyline", "selection": "A", "price": 120,
-                 "bookmaker": "caesars"},
-                {"market_type": "moneyline", "selection": "B", "price": -140,
-                 "bookmaker": "fanduel"},
+                {
+                    "market_type": "moneyline",
+                    "selection": "A",
+                    "price": 120,
+                    "bookmaker": "caesars",
+                },
+                {
+                    "market_type": "moneyline",
+                    "selection": "B",
+                    "price": -140,
+                    "bookmaker": "fanduel",
+                },
             ]
         }
         bet = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL).bet
@@ -229,18 +274,36 @@ class TestBookProvenance:
         # back to consensus rather than borrowing the moneyline book.
         trace = _game_trace()
         trace["result"]["edges"] = [
-            {"side": "home", "team": "B", "market": "spread", "line": -3.5,
-             "ev_pct": 1.0, "market_odds": -110, "confidence_tier": "Pass"},
+            {
+                "side": "home",
+                "team": "B",
+                "market": "spread",
+                "line": -3.5,
+                "ev_pct": 1.0,
+                "market_odds": -110,
+                "confidence_tier": "Pass",
+            },
         ]
         trace["result"]["best_bet"] = {
-            "selection": "B -3.5", "odds": -110, "confidence_tier": "B",
+            "selection": "B -3.5",
+            "odds": -110,
+            "confidence_tier": "B",
         }
         trace["input_snapshot"]["odds"] = {
             "markets": [
-                {"market_type": "moneyline", "selection": "B", "price": -140,
-                 "bookmaker": "betmgm"},
-                {"market_type": "spread", "selection": "B", "line": -4.5, "price": -110,
-                 "bookmaker": "draftkings"},
+                {
+                    "market_type": "moneyline",
+                    "selection": "B",
+                    "price": -140,
+                    "bookmaker": "betmgm",
+                },
+                {
+                    "market_type": "spread",
+                    "selection": "B",
+                    "line": -4.5,
+                    "price": -110,
+                    "bookmaker": "draftkings",
+                },
             ]
         }
         bet = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL).bet

@@ -14,8 +14,17 @@ from omega.core.betting.portfolio_selection import (
 from omega.core.betting.staking_policy import FractionalKellyByTier, StakingContext
 
 
-def _cand(selection, ev, *, edge=5.0, prob=0.62, odds=-110, tier="A",
-          market="moneyline", keys=("game:NBA:A @ B",)):
+def _cand(
+    selection,
+    ev,
+    *,
+    edge=5.0,
+    prob=0.62,
+    odds=-110,
+    tier="A",
+    market="moneyline",
+    keys=("game:NBA:A @ B",),
+):
     return BetCandidate(
         selection=selection,
         selection_descriptor=selection.lower().replace(" ", "_"),
@@ -41,13 +50,17 @@ def test_filters_non_actionable():
     cands = [
         _cand("a", 5.0, tier="C"),
         _cand("b", 5.0, tier="Pass"),
-        _cand("c", -1.0, tier="A"),   # ev <= 0
-        _cand("d", 3.0, tier="B"),    # kept
+        _cand("c", -1.0, tier="A"),  # ev <= 0
+        _cand("d", 3.0, tier="B"),  # kept
     ]
     sel = select_portfolio(cands, bankroll=1000.0)
     assert [b.candidate.selection for b in sel.bets] == ["d"]
     reasons = {c.selection: r for c, r in sel.skipped}
-    assert reasons == {"a": "tier_or_ev_filtered", "b": "tier_or_ev_filtered", "c": "tier_or_ev_filtered"}
+    assert reasons == {
+        "a": "tier_or_ev_filtered",
+        "b": "tier_or_ev_filtered",
+        "c": "tier_or_ev_filtered",
+    }
 
 
 # --- ordering / determinism ----------------------------------------------------
@@ -61,7 +74,7 @@ def test_sorted_by_ev_desc():
 def test_order_independent():
     cands = [
         _cand("a", 9.0, edge=4.0, keys=()),
-        _cand("b", 9.0, edge=6.0, keys=()),   # same EV, higher edge -> ranks first
+        _cand("b", 9.0, edge=6.0, keys=()),  # same EV, higher edge -> ranks first
         _cand("c", 3.0, keys=()),
     ]
     base = select_portfolio(cands, bankroll=1000.0, budget_pct=1.0)
@@ -116,7 +129,7 @@ def test_budget_exhaustion_skips_remainder():
     assert [b.candidate.selection for b in sel.bets] == ["first"]
     assert sel.bets[0].stake_amount == pytest.approx(5.0)
     assert "budget" in sel.bets[0].capped_by
-    assert ("second" in {c.selection for c, _ in sel.skipped})
+    assert "second" in {c.selection for c, _ in sel.skipped}
 
 
 def test_max_bets_limits_count():
@@ -139,9 +152,17 @@ def _edges():
 
     def e(side, team, ev, edge, market="moneyline", line=None, odds=-110, prob=0.6, tier="A"):
         return EdgeDetail(
-            side=side, team=team, market=market, line=line,
-            true_prob=prob, calibrated_prob=prob, market_implied=0.5,
-            edge_pct=edge, ev_pct=ev, market_odds=odds, confidence_tier=tier,
+            side=side,
+            team=team,
+            market=market,
+            line=line,
+            true_prob=prob,
+            calibrated_prob=prob,
+            market_implied=0.5,
+            edge_pct=edge,
+            ev_pct=ev,
+            market_odds=odds,
+            confidence_tier=tier,
         )
 
     return [

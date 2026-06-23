@@ -119,7 +119,9 @@ def game_edge(
     return edge
 
 
-def game_trace(edges: list[dict[str, Any]], *, simulation: dict[str, Any] | None = None) -> dict[str, Any]:
+def game_trace(
+    edges: list[dict[str, Any]], *, simulation: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """A persisted game trace: predictions = simulation block (0–100 scale);
     recommendations = list of edge dicts."""
     return {
@@ -292,9 +294,7 @@ def test_raw_below_implied_warning():
 
 def test_kelly_no_edge_warning():
     # Positive Kelly, but no engine edge and no computable edge (odds missing).
-    view = build_trace_recommendation_view(
-        prop_trace(kelly_fraction=0.0384, bet_side_odds=None)
-    )
+    view = build_trace_recommendation_view(prop_trace(kelly_fraction=0.0384, bet_side_odds=None))
     rec = _primary(view)
     assert rec.engine_edge.value is None
     assert rec.computed_edge.value is None
@@ -302,9 +302,7 @@ def test_kelly_no_edge_warning():
 
 
 def test_units_no_kelly_warning():
-    view = build_trace_recommendation_view(
-        prop_trace(recommended_units=3.84, kelly_fraction=None)
-    )
+    view = build_trace_recommendation_view(prop_trace(recommended_units=3.84, kelly_fraction=None))
     rec = _primary(view)
     assert rec.recommended_units.value == pytest.approx(3.84)
     assert rec.kelly_fraction.value is None
@@ -509,8 +507,10 @@ def test_evidence_avg_confidence():
 
 def test_evidence_low_avg_confidence_info_warning():
     cov = build_evidence_coverage(
-        [{"applied": 1, "signal_type": "a", "confidence": 0.1},
-         {"applied": 1, "signal_type": "b", "confidence": 0.2}]
+        [
+            {"applied": 1, "signal_type": "a", "confidence": 0.1},
+            {"applied": 1, "signal_type": "b", "confidence": 0.2},
+        ]
     )
     assert cov.avg_confidence == pytest.approx(0.15)
     warn = {w.code: w for w in cov.warnings}
@@ -596,12 +596,20 @@ def test_session_health_numbers_come_from_trace_facts_not_prose():
         SessionTraceFacts("b", evidence_signal_count=4, has_outcome=False, has_bet=False),
     ]
     base = build_session_health_view(
-        session_id="s", quality_gate_status="pass", trace_facts=facts,
-        sidecar_valid=True, assumption_count=0, bug_count=0,
+        session_id="s",
+        quality_gate_status="pass",
+        trace_facts=facts,
+        sidecar_valid=True,
+        assumption_count=0,
+        bug_count=0,
     )
     noisy = build_session_health_view(
-        session_id="s", quality_gate_status="pass", trace_facts=facts,
-        sidecar_valid=True, assumption_count=99, bug_count=99,
+        session_id="s",
+        quality_gate_status="pass",
+        trace_facts=facts,
+        sidecar_valid=True,
+        assumption_count=99,
+        bug_count=99,
     )
     assert base.total_evidence_signals == noisy.total_evidence_signals == 6
     assert base.traces_with_outcomes == noisy.traces_with_outcomes == 1
@@ -619,12 +627,19 @@ def test_warning_severity_levels():
     # Gather warnings from a rich recommendation + a session view; every severity
     # must be in the valid vocabulary.
     view = build_trace_recommendation_view(
-        prop_trace(recommendation="over", over_prob=0.30, bet_side_odds=165,
-                   kelly_fraction=0.04, recommended_units=3.0, confidence_tier=None)
+        prop_trace(
+            recommendation="over",
+            over_prob=0.30,
+            bet_side_odds=165,
+            kelly_fraction=0.04,
+            recommended_units=3.0,
+            confidence_tier=None,
+        )
     )
     session = _session(
         trace_facts=[SessionTraceFacts("a", evidence_signal_count=0)],
-        sidecar_valid=False, bug_count=1,
+        sidecar_valid=False,
+        bug_count=1,
         audit_events=[{"step": "x", "status": "fail"}],
     )
     all_warnings = list(_primary(view).warnings) + list(session.warnings)
@@ -639,8 +654,14 @@ def test_normalizers_do_not_import_mutation_modules():
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
     forbidden_substrings = (
-        "settle_bets", "ingest_traces", "promote_profile", "quarantine_",
-        "backfill_", "omega.mcp", "omega.trace.store", "omega.trace.repository",
+        "settle_bets",
+        "ingest_traces",
+        "promote_profile",
+        "quarantine_",
+        "backfill_",
+        "omega.mcp",
+        "omega.trace.store",
+        "omega.trace.repository",
     )
     approved_omega = {"omega.ui.schemas"}
 

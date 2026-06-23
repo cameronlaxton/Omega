@@ -58,7 +58,9 @@ class PersistableTrace(BaseModel):
     model_version: str | None = None
     bankroll: float | None = None
     trace_quality: dict[str, Any] = Field(default_factory=dict)
-    quality_gate: dict[str, Any] | None = None  # backward-compat read alias; never written by new code
+    quality_gate: dict[str, Any] | None = (
+        None  # backward-compat read alias; never written by new code
+    )
 
     # LLM reasoning fields — populated by the agent orchestrator before filing the trace.
     reasoning_narrative: str | None = None
@@ -125,9 +127,7 @@ class PersistableTrace(BaseModel):
         """
         tq = self.trace_quality or self.quality_gate or {}
         identity_status = tq.get("identity_status")
-        prob = probability_calibration_eligibility(
-            predictions=self.predictions, trace_quality=tq
-        )
+        prob = probability_calibration_eligibility(predictions=self.predictions, trace_quality=tq)
         evidence = evidence_learning_eligibility(trace_quality=tq)
         return {
             "probability_calibration": prob.eligible,

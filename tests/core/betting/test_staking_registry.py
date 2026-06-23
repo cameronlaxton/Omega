@@ -25,7 +25,9 @@ def registry(tmp_path):
     return StakingRegistry(path=str(tmp_path / "staking_policies.json"))
 
 
-def _entry(policy_id="flat_kelly", league="NBA", market="prop", version=1, params=None, status="candidate"):
+def _entry(
+    policy_id="flat_kelly", league="NBA", market="prop", version=1, params=None, status="candidate"
+):
     return StakingPolicyEntry(
         entry_id=StakingPolicyEntry.make_entry_id(policy_id, league, market, version),
         policy_id=policy_id,
@@ -50,7 +52,9 @@ def test_empty_registry_returns_default_policy(registry):
 def test_build_policy_known_ids():
     assert isinstance(build_policy("fractional_kelly_by_tier"), FractionalKellyByTier)
     assert isinstance(build_policy("flat_kelly", {"multiplier": 0.3}), FlatKelly)
-    assert isinstance(build_policy("capped_fractional_kelly", {"max_kelly_fraction": 0.02}), CappedFractionalKelly)
+    assert isinstance(
+        build_policy("capped_fractional_kelly", {"max_kelly_fraction": 0.02}), CappedFractionalKelly
+    )
 
 
 def test_build_policy_unknown_id_raises():
@@ -152,7 +156,9 @@ def test_entry_params_round_trip(registry):
     # reconstructed policy honors persisted params (unit cap of 3, not 5)
     registry.activate(e.entry_id)
     policy = registry.get_production("NBA", "prop")
-    decision = policy.size(StakingContext(true_prob=0.99, odds=250, bankroll=1000.0, confidence_tier="A"))
+    decision = policy.size(
+        StakingContext(true_prob=0.99, odds=250, bankroll=1000.0, confidence_tier="A")
+    )
     assert decision.units == 3.0
     assert "unit_cap" in decision.capped_by
 

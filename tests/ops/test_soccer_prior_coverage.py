@@ -10,12 +10,12 @@ if str(_REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 import pytest
+
 from omega.ops.soccer_prior_coverage import (
     TIER_MODERATE,
     TIER_NONE,
     TIER_STRONG,
     TIER_WEAK,
-    TeamXgCoverage,
     build_coverage_report,
     gate_output_mode,
 )
@@ -28,7 +28,6 @@ from omega.trace.priors import (
     upsert_xg_prior,
 )
 from omega.trace.store import TraceStore
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

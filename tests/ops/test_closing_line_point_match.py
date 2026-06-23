@@ -34,8 +34,7 @@ def _book(market: str, selection: str, point: float | None, price: float = -110.
 def test_spread_rejects_wrong_point():
     books = [_book("spreads", HOME, -5.5), _book("spreads", AWAY, 5.5)]
     assert (
-        _match_outcome("spread", "home_spread_-3", HOME, AWAY, books, None, line_taken=-3.0)
-        is None
+        _match_outcome("spread", "home_spread_-3", HOME, AWAY, books, None, line_taken=-3.0) is None
     )
 
 
@@ -50,7 +49,9 @@ def test_away_spread_exact_point_sign_consistent():
     # line_taken and the book's away .point share the away-perspective sign, so
     # exact-point matching must work for away spreads (the highest-stakes path).
     wrong = [_book("spreads", HOME, -5.5), _book("spreads", AWAY, 5.5)]
-    assert _match_outcome("spread", "away_spread_3", HOME, AWAY, wrong, None, line_taken=3.0) is None
+    assert (
+        _match_outcome("spread", "away_spread_3", HOME, AWAY, wrong, None, line_taken=3.0) is None
+    )
     exact = [_book("spreads", HOME, -3.0), _book("spreads", AWAY, 3.0)]
     m = _match_outcome("spread", "away_spread_3", HOME, AWAY, exact, None, line_taken=3.0)
     assert m is not None and m.selection == AWAY and m.point == 3.0
@@ -67,8 +68,7 @@ def test_spread_null_book_point_falls_back_to_side_when_line_known():
 def test_total_rejects_wrong_point():
     books = [_book("totals", "Over", 45.5), _book("totals", "Under", 45.5)]
     assert (
-        _match_outcome("total", "over_total_47.5", HOME, AWAY, books, None, line_taken=47.5)
-        is None
+        _match_outcome("total", "over_total_47.5", HOME, AWAY, books, None, line_taken=47.5) is None
     )
 
 

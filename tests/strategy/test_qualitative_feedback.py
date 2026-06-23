@@ -136,7 +136,9 @@ class TestClassifyTrace:
         trace = {
             "trace_id": "t",
             "evidence_mode": "markov_transition",
-            "evidence_application": [{"signal_type": "x", "applied": True, "effective_scalar": 1.0}],
+            "evidence_application": [
+                {"signal_type": "x", "applied": True, "effective_scalar": 1.0}
+            ],
         }
         assert classify_trace(trace).backend_path == "markov"
 
@@ -157,7 +159,12 @@ class TestClassifyTrace:
 class TestBuildReport:
     def test_status_counts(self):
         report = build_report(
-            [_enriched_prop_trace(), _enriched_markov_trace(), _legacy_trace(), _no_evidence_trace()]
+            [
+                _enriched_prop_trace(),
+                _enriched_markov_trace(),
+                _legacy_trace(),
+                _no_evidence_trace(),
+            ]
         )
         assert report.total_traces == 4
         assert report.sufficient == 2
@@ -202,9 +209,7 @@ class TestBuildReport:
 
 
 def test_render_report_markdown_labels_insufficient():
-    report = build_report(
-        [_enriched_prop_trace(), _legacy_trace(), _no_evidence_trace()]
-    )
+    report = build_report([_enriched_prop_trace(), _legacy_trace(), _no_evidence_trace()])
     md = render_report_markdown(report)
     assert "schema_version=" in md  # machine-detectable format marker
     assert "# Qualitative Signal Feedback" in md

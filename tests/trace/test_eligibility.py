@@ -86,12 +86,15 @@ class TestProbabilityCalibration:
 
 class TestExclusionReasons:
     def test_clean_inputs_have_no_reasons(self):
-        assert calibration_exclusion_reasons(
-            result_status="success",
-            context_source="provided",
-            baseline_used=False,
-            identity_status="complete",
-        ) == []
+        assert (
+            calibration_exclusion_reasons(
+                result_status="success",
+                context_source="provided",
+                baseline_used=False,
+                identity_status="complete",
+            )
+            == []
+        )
 
     def test_reason_strings_are_preserved(self):
         reasons = calibration_exclusion_reasons(
@@ -229,7 +232,9 @@ class TestQueryFilterCharacterization:
             store.persist(rec)
             store.attach_outcome(rec["trace_id"], home_score=110, away_score=104)
 
-        new_ids = {t["trace_id"] for t in store.query_traces(calibration_eligible_only=True, limit=1000)}
+        new_ids = {
+            t["trace_id"] for t in store.query_traces(calibration_eligible_only=True, limit=1000)
+        }
         old_ids = {row[0] for row in store.conn.execute(_OLD_ELIGIBLE_SQL).fetchall()}
         assert new_ids == old_ids
         # And the eligible trace is actually present.

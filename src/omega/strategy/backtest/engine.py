@@ -409,9 +409,27 @@ class BacktestEngine:
         # the game calibration plane (cold-start) until exotic profiles exist.
         # (price_key, sim_prob_key, side, team_label, market_type)
         exotic_specs = [
-            ("dc_home_draw", "double_chance_home_draw_prob", "home_draw", "Home or Draw", "double_chance"),
-            ("dc_home_away", "double_chance_home_away_prob", "home_away", "Home or Away", "double_chance"),
-            ("dc_away_draw", "double_chance_away_draw_prob", "away_draw", "Away or Draw", "double_chance"),
+            (
+                "dc_home_draw",
+                "double_chance_home_draw_prob",
+                "home_draw",
+                "Home or Draw",
+                "double_chance",
+            ),
+            (
+                "dc_home_away",
+                "double_chance_home_away_prob",
+                "home_away",
+                "Home or Away",
+                "double_chance",
+            ),
+            (
+                "dc_away_draw",
+                "double_chance_away_draw_prob",
+                "away_draw",
+                "Away or Draw",
+                "double_chance",
+            ),
             ("dnb_home", "dnb_home_prob", "home", home_team, "draw_no_bet"),
             ("dnb_away", "dnb_away_prob", "away", away_team, "draw_no_bet"),
             ("btts_yes", "btts_yes_prob", "yes", "BTTS Yes", "both_teams_to_score"),
@@ -506,7 +524,10 @@ class BacktestEngine:
                 if price is None or sim_prob is None:
                     continue
                 cal = apply_calibration(
-                    sim_prob / 100.0, league=league, context_hints=game_ctx or None, market=cal_market
+                    sim_prob / 100.0,
+                    league=league,
+                    context_hints=game_ctx or None,
+                    market=cal_market,
                 )
                 bet = self._evaluate_side(
                     side=side,

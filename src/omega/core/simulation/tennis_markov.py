@@ -230,12 +230,10 @@ def p_set(
 ) -> float:
     """P(player A wins the set); exact recursion over game scores."""
     tb_a = p_tiebreak(
-        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB),
-        first_server_a=True
+        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB), first_server_a=True
     )
     tb_b = p_tiebreak(
-        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB),
-        first_server_a=False
+        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB), first_server_a=False
     )
     cache: dict[tuple[int, int, bool], float] = {}
 
@@ -268,10 +266,10 @@ def p_set(
 def _p_set_avg(pa, pb, coeffs_a, coeffs_b, *, a_clinch=False, b_clinch=False) -> float:
     """Set-win probability averaged over the two first-server cases."""
     return 0.5 * (
-        p_set(pa, pb, coeffs_a, coeffs_b, a_clinch=a_clinch, b_clinch=b_clinch,
-              first_server_a=True)
-        + p_set(pa, pb, coeffs_a, coeffs_b, a_clinch=a_clinch, b_clinch=b_clinch,
-                first_server_a=False)
+        p_set(pa, pb, coeffs_a, coeffs_b, a_clinch=a_clinch, b_clinch=b_clinch, first_server_a=True)
+        + p_set(
+            pa, pb, coeffs_a, coeffs_b, a_clinch=a_clinch, b_clinch=b_clinch, first_server_a=False
+        )
     )
 
 
@@ -318,12 +316,10 @@ def match_set_score_distribution(
 def _simulate_match(rng, pa, pb, coeffs_a, coeffs_b, sets_to_win):
     """One match at game level. Returns (sets_a, sets_b, games, set1_games, set1_a_won)."""
     tb_a = p_tiebreak(
-        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB),
-        first_server_a=True
+        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB), first_server_a=True
     )
     tb_b = p_tiebreak(
-        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB),
-        first_server_a=False
+        pa, pb, _coeff(coeffs_a, _STATE_TB), _coeff(coeffs_b, _STATE_TB), first_server_a=False
     )
     sets_a = sets_b = total_games = 0
     set1_games = 0
@@ -434,7 +430,9 @@ class TennisMarkovBackend:
         league = request.league.upper()
         if np is None:
             return _skip_result(
-                request.home_team, request.away_team, league,
+                request.home_team,
+                request.away_team,
+                league,
                 skip_reason="numpy is required for the tennis Markov backend",
                 missing_requirements=["numpy"],
             )
@@ -443,7 +441,9 @@ class TennisMarkovBackend:
         missing += _validate_required_keys(request.away_context, "away", _REQUIRED_KEYS, league)
         if missing:
             return _skip_result(
-                request.home_team, request.away_team, league,
+                request.home_team,
+                request.away_team,
+                league,
                 skip_reason=(
                     "Missing tennis serve/return inputs (no defaults; supply "
                     "priors_tennis rates): " + ", ".join(missing)
@@ -456,7 +456,9 @@ class TennisMarkovBackend:
             best_of = _resolve_best_of(get_league_config(league), prior)
         except (TypeError, ValueError) as exc:
             return _skip_result(
-                request.home_team, request.away_team, league,
+                request.home_team,
+                request.away_team,
+                league,
                 skip_reason=f"Invalid match_format: {exc}",
                 missing_requirements=["match_format"],
             )
@@ -465,21 +467,27 @@ class TennisMarkovBackend:
         home_ctx = request.home_context or {}
         away_ctx = request.away_context or {}
         # Bradley-Terry-style blend of own SPW% vs opponent RPW% (legacy blend).
-        pa = _clamp((float(home_ctx["serve_win_pct"]) + (1.0 - float(away_ctx["return_win_pct"]))) / 2.0)
-        pb = _clamp((float(away_ctx["serve_win_pct"]) + (1.0 - float(home_ctx["return_win_pct"]))) / 2.0)
+        pa = _clamp(
+            (float(home_ctx["serve_win_pct"]) + (1.0 - float(away_ctx["return_win_pct"]))) / 2.0
+        )
+        pb = _clamp(
+            (float(away_ctx["serve_win_pct"]) + (1.0 - float(home_ctx["return_win_pct"]))) / 2.0
+        )
         coeffs_a = _side_coeffs(prior, "home")
         coeffs_b = _side_coeffs(prior, "away")
 
         if request.dispersion is not None and request.dispersion.variance_multiplier != 1.0:
             import math
+
             mult = request.dispersion.variance_multiplier
+
             def _scale_coeffs(c: dict[str, float] | None) -> dict[str, float] | None:
                 if c is None:
                     return None
                 return {
-                    k: math.copysign(min(abs(v * mult), _PRESSURE_CAP), v)
-                    for k, v in c.items()
+                    k: math.copysign(min(abs(v * mult), _PRESSURE_CAP), v) for k, v in c.items()
                 }
+
             coeffs_a = _scale_coeffs(coeffs_a)
             coeffs_b = _scale_coeffs(coeffs_b)
             if coeffs_a is not None or coeffs_b is not None:
@@ -500,9 +508,7 @@ class TennisMarkovBackend:
         set1_games_samples: list[float] = []
         set1_wins = 0
         for _ in range(n):
-            sa, sb, games, s1g, s1w = _simulate_match(
-                rng, pa, pb, coeffs_a, coeffs_b, sets_to_win
-            )
+            sa, sb, games, s1g, s1w = _simulate_match(rng, pa, pb, coeffs_a, coeffs_b, sets_to_win)
             sets_a_samples.append(float(sa))
             sets_b_samples.append(float(sb))
             games_samples.append(float(games))

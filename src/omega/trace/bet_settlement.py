@@ -127,9 +127,7 @@ def build_selection_descriptor(
 
     if market.startswith("player_prop"):
         stat_name = stat or (market.split(":", 1)[1] if ":" in market else "")
-        descriptor = "_".join(
-            p for p in (_slug(player), s, line_str, _slug(stat_name)) if p
-        )
+        descriptor = "_".join(p for p in (_slug(player), s, line_str, _slug(stat_name)) if p)
         label = f"{player or ''} {s.title()} {line_str} {stat_name}".strip()
         return descriptor, label
 
@@ -235,11 +233,7 @@ def _resolve_game_book(
                 pass
         if q.get("bookmaker"):
             return str(q["bookmaker"])
-    books = {
-        str(q["bookmaker"])
-        for q in markets
-        if isinstance(q, dict) and q.get("bookmaker")
-    }
+    books = {str(q["bookmaker"]) for q in markets if isinstance(q, dict) and q.get("bookmaker")}
     return books.pop() if len(books) == 1 else CONSENSUS_BOOK
 
 
@@ -330,7 +324,10 @@ def extract_recommended_bet(
         # No structured actionable edge. best_bet alone lacks side/line for safe
         # settlement, so we only log it as a moneyline-style flat bet if its tier
         # is actionable and its odds parse.
-        if isinstance(best_bet, dict) and str(best_bet.get("confidence_tier") or "").lower() != "pass":
+        if (
+            isinstance(best_bet, dict)
+            and str(best_bet.get("confidence_tier") or "").lower() != "pass"
+        ):
             sel = str(best_bet.get("selection") or "").strip()
             if not sel:
                 return ExtractResult(None, REASON_SKIP_NO_EDGE)

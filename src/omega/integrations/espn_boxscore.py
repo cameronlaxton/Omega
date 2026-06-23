@@ -213,8 +213,7 @@ def _summary_url(league: str, event_id: str) -> str:
     slug = SOCCER_LEAGUE_SLUGS.get(league_upper)
     if slug:
         return (
-            f"{_SOCCER_SUMMARY_BASE}/{slug}/summary"
-            f"?{urllib.parse.urlencode({'event': event_id})}"
+            f"{_SOCCER_SUMMARY_BASE}/{slug}/summary?{urllib.parse.urlencode({'event': event_id})}"
         )
     raise ValueError(f"No ESPN summary endpoint configured for league={league!r}")
 

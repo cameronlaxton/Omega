@@ -21,7 +21,9 @@ logger = logging.getLogger("omega.ops.report_replay_leakage")
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Aggregate replay leakage/identity/odds issues.")
     parser.add_argument("--replay-id", default=None)
-    parser.add_argument("--manifest-id", default=None, help="Derive replay-id from manifest if unset")
+    parser.add_argument(
+        "--manifest-id", default=None, help="Derive replay-id from manifest if unset"
+    )
     parser.add_argument("--root", default=None, help="Artifact root (default var/historical)")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)

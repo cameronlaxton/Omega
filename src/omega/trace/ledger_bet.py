@@ -78,9 +78,7 @@ class LedgerBet(BaseModel):
     payout_amount: float | None = Field(
         default=None, description="Total returned incl. stake; None while pending"
     )
-    net_pnl: float | None = Field(
-        default=None, description="payout - stake; None while pending"
-    )
+    net_pnl: float | None = Field(default=None, description="payout - stake; None while pending")
     bankroll_at_open: float | None = Field(
         default=DEFAULT_BANKROLL, description="Bankroll snapshot for future dynamic sizing"
     )

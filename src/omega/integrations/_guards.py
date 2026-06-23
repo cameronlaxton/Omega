@@ -1,4 +1,5 @@
 """Shared guards for omega.integrations live-data modules."""
+
 from __future__ import annotations
 
 import os

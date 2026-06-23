@@ -123,9 +123,7 @@ def test_qa_failed_graded_trace_is_skipped_by_status():
     # Mark a failed QA verdict for this trace.
     from omega.trace.session_sidecar import TraceQaVerdict
 
-    store.write_qa_verdict(
-        "t-qa", TraceQaVerdict(verdict="fail", scope="trace_id"), session_id="s"
-    )
+    store.write_qa_verdict("t-qa", TraceQaVerdict(verdict="fail", scope="trace_id"), session_id="s")
     graded = store.query_traces(has_outcome=True, limit=1000)
     scored, summary = score_evidence_signals.collect_scores(store, graded)
 
@@ -133,4 +131,3 @@ def test_qa_failed_graded_trace_is_skipped_by_status():
     assert summary.evidence_present == 0
     assert scored == []
     store.close()
-

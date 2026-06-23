@@ -13,7 +13,6 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from omega.mcp import http_app
 from omega.mcp.http_app import (
     _enforce_bind_policy,
     _is_loopback_host,

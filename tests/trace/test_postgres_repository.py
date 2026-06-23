@@ -166,19 +166,27 @@ def _semantic_shape(engine) -> dict:
 
     insp = inspect(engine)
     tables = {t for t in insp.get_table_names() if t != "alembic_version"}
-    shape: dict = {"tables": tables, "views": set(insp.get_view_names()), "columns": {}, "unique": {}, "fks": {}, "indexes": {}}
+    shape: dict = {
+        "tables": tables,
+        "views": set(insp.get_view_names()),
+        "columns": {},
+        "unique": {},
+        "fks": {},
+        "indexes": {},
+    }
     for table in tables:
         pk_cols = set(insp.get_pk_constraint(table).get("constrained_columns", []))
         shape["columns"][table] = {
-            col["name"]: (False if col["name"] in pk_cols else bool(col["nullable"]), _type_category(col["type"]))
+            col["name"]: (
+                False if col["name"] in pk_cols else bool(col["nullable"]),
+                _type_category(col["type"]),
+            )
             for col in insp.get_columns(table)
         }
         # Unique coverage = explicit unique constraints + unique indexes, by the
         # *set of columns* they cover (names/representation ignored). This makes a
         # SQLite unique index equivalent to a Postgres UNIQUE constraint.
-        unique = {
-            frozenset(uc["column_names"]) for uc in insp.get_unique_constraints(table)
-        }
+        unique = {frozenset(uc["column_names"]) for uc in insp.get_unique_constraints(table)}
         nonunique = set()
         for idx in insp.get_indexes(table):
             cols = frozenset(c for c in idx["column_names"] if c is not None)

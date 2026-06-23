@@ -1,5 +1,3 @@
-import pytest
-
 from omega.core.calibration.context_slices import (
     BASE_CONTEXT_SLICE,
     context_slice_for_trace,

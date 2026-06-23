@@ -69,7 +69,9 @@ class TestCanonicalTeam:
 
 class TestParseScoreboard:
     def test_home_win_parsed(self):
-        games = espn_soccer.parse_scoreboard({"events": [_event("Arsenal", "Chelsea", 2, 1)]}, league="EPL")
+        games = espn_soccer.parse_scoreboard(
+            {"events": [_event("Arsenal", "Chelsea", 2, 1)]}, league="EPL"
+        )
         assert len(games) == 1
         g = games[0]
         assert g.home_team == "Arsenal"
@@ -79,21 +81,31 @@ class TestParseScoreboard:
         assert g.league == "EPL"
 
     def test_draw_is_equal_scores(self):
-        games = espn_soccer.parse_scoreboard({"events": [_event("Inter", "Milan", 1, 1)]}, league="SERIE_A")
+        games = espn_soccer.parse_scoreboard(
+            {"events": [_event("Inter", "Milan", 1, 1)]}, league="SERIE_A"
+        )
         g = games[0]
         assert g.home_score == g.away_score == 1
         assert g.status == "final"
 
     def test_in_progress_not_marked_final(self):
-        ev = _event("Arsenal", "Chelsea", 1, 0, completed=False, state="in", name="STATUS_FIRST_HALF")
+        ev = _event(
+            "Arsenal", "Chelsea", 1, 0, completed=False, state="in", name="STATUS_FIRST_HALF"
+        )
         games = espn_soccer.parse_scoreboard({"events": [ev]}, league="EPL")
         assert games[0].status != "final"
 
     def test_missing_competitors_skipped(self):
-        ev = {"id": "X", "date": "2026-05-17T19:00Z", "competitions": [{"status": {"type": {"completed": True}}, "competitors": []}]}
+        ev = {
+            "id": "X",
+            "date": "2026-05-17T19:00Z",
+            "competitions": [{"status": {"type": {"completed": True}}, "competitors": []}],
+        }
         assert espn_soccer.parse_scoreboard({"events": [ev]}, league="EPL") == []
 
     def test_alias_applied_during_parse(self):
-        games = espn_soccer.parse_scoreboard({"events": [_event("Man City", "Spurs", 3, 0)]}, league="EPL")
+        games = espn_soccer.parse_scoreboard(
+            {"events": [_event("Man City", "Spurs", 3, 0)]}, league="EPL"
+        )
         assert games[0].home_team == "Manchester City"
         assert games[0].away_team == "Tottenham Hotspur"

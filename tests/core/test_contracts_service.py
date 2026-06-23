@@ -887,7 +887,9 @@ class TestGameMarkets:
     def test_edge_detail_serializes_market_and_line(self):
         resp = analyze_game(self._request("fast_score"))
 
-        spread = next(edge for edge in resp.edges if edge.market == "spread" and edge.side == "home")
+        spread = next(
+            edge for edge in resp.edges if edge.market == "spread" and edge.side == "home"
+        )
         total = next(edge for edge in resp.edges if edge.market == "total" and edge.side == "over")
         assert spread.line == pytest.approx(-2.5)
         assert total.line == pytest.approx(218.5)
@@ -1117,7 +1119,9 @@ class TestApplyGameContext:
             player_context={"pts_mean": 12.0, "pts_std": 5.0},
             game_context=_GAME_CONTEXT,
         )
-        playoff_req = base_req.model_copy(update={"game_context": {"is_playoff": True, "rest_days": 2}})
+        playoff_req = base_req.model_copy(
+            update={"game_context": {"is_playoff": True, "rest_days": 2}}
+        )
         resp_base = analyze_player_prop(base_req)
         resp_playoff = analyze_player_prop(playoff_req)
         assert resp_base.status == "success"

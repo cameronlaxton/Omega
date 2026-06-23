@@ -104,9 +104,7 @@ def test_register_rejects_non_candidate_status():
     store = _store()
     try:
         with pytest.raises(ValueError, match="candidates only"):
-            register_parameter_profile(
-                store, _profile(status=ParameterProfileStatus.PRODUCTION)
-            )
+            register_parameter_profile(store, _profile(status=ParameterProfileStatus.PRODUCTION))
     finally:
         store.close()
 
@@ -121,7 +119,9 @@ def test_promote_fails_closed_without_evidence():
         assert "BACKTEST_PARITY" in exc.value.report.failed_gates
         assert "CLV_NON_REG" in exc.value.report.failed_gates
         # Unchanged: still a candidate, still no production.
-        assert get_parameter_profile(store, prof.profile_id).status == ParameterProfileStatus.CANDIDATE
+        assert (
+            get_parameter_profile(store, prof.profile_id).status == ParameterProfileStatus.CANDIDATE
+        )
         assert get_production_parameter_profile(store, prof.backend_name, "FIFA_INTL") is None
     finally:
         store.close()
@@ -183,7 +183,10 @@ def test_second_promotion_requires_brier_improvement_and_archives_incumbent():
         with pytest.raises(PromotionGateError) as exc:
             promote_parameter_profile(store, v2_flat.profile_id, **_CONFIRMS)
         assert "BRIER_IMPROVES" in exc.value.report.failed_gates
-        assert get_production_parameter_profile(store, v1.backend_name, "FIFA_INTL").profile_id == v1.profile_id
+        assert (
+            get_production_parameter_profile(store, v1.backend_name, "FIFA_INTL").profile_id
+            == v1.profile_id
+        )
 
         # A genuinely better candidate archives the incumbent and takes over.
         v2_better = _profile(
@@ -342,7 +345,9 @@ def test_parameter_pin_status_ok_for_pinned_trace():
         got, event = parameter_pin_status(store, "t-pinned")
         assert got is not None
         assert event["status"] == "ok"
-        assert event["outputs"]["parameter_profile_ref"]["param_profile_id"] == ref["param_profile_id"]
+        assert (
+            event["outputs"]["parameter_profile_ref"]["param_profile_id"] == ref["param_profile_id"]
+        )
     finally:
         store.close()
 

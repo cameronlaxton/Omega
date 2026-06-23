@@ -74,10 +74,12 @@ def _graded(n=40):
     graded = []
     for i in range(n):
         p = 0.3 + 0.4 * ((i % 5) / 4)
-        graded.append({
-            "predictions": {"home_win_prob": p},
-            "_outcome": {"result": "home_win" if i % 2 == 0 else "away_win"},
-        })
+        graded.append(
+            {
+                "predictions": {"home_win_prob": p},
+                "_outcome": {"result": "home_win" if i % 2 == 0 else "away_win"},
+            }
+        )
     return graded
 
 

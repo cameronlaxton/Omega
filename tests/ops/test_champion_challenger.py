@@ -25,4 +25,3 @@ def test_load_graded_traces_filters_null_league_without_fallback(monkeypatch):
 
 def test_trace_to_game_skips_unusable_rows_individually():
     assert _trace_to_game({"matchup": "bad", "league": None}) is None
-

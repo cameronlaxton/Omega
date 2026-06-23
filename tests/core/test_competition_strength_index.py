@@ -100,15 +100,11 @@ class TestBackendApplication:
         assert "competition_strength_adjustment" not in result
 
     def test_neutral_index_is_a_noop(self):
-        result = SoccerPoissonBackend().run(
-            _backend_request({"home": 1.0, "away": 1.0})
-        )
+        result = SoccerPoissonBackend().run(_backend_request({"home": 1.0, "away": 1.0}))
         assert "competition_strength_adjustment" not in result
 
     def test_applied_payload_carries_raw_and_adjusted(self):
-        result = SoccerPoissonBackend().run(
-            _backend_request({"home": 1.2, "away": 1.0})
-        )
+        result = SoccerPoissonBackend().run(_backend_request({"home": 1.2, "away": 1.0}))
         csi = result["competition_strength_adjustment"]
         assert csi["index"] == {"home": 1.2, "away": 1.0}
         # home attack scaled up by 1.2, home concede divided by 1.2
@@ -124,32 +120,35 @@ class TestBackendApplication:
 
     def test_directional_lambda_effect(self):
         # Home strong vs away strong: home_lambda should move opposite to away_lambda.
-        home_strong = SoccerPoissonBackend().run(
-            _backend_request({"home": 1.3, "away": 1.0})
-        )["competition_strength_adjustment"]
-        away_strong = SoccerPoissonBackend().run(
-            _backend_request({"home": 1.0, "away": 1.3})
-        )["competition_strength_adjustment"]
+        home_strong = SoccerPoissonBackend().run(_backend_request({"home": 1.3, "away": 1.0}))[
+            "competition_strength_adjustment"
+        ]
+        away_strong = SoccerPoissonBackend().run(_backend_request({"home": 1.0, "away": 1.3}))[
+            "competition_strength_adjustment"
+        ]
         assert home_strong["home_lambda"] > away_strong["home_lambda"]
         assert home_strong["away_lambda"] < away_strong["away_lambda"]
 
     def test_index_shifts_win_probability(self):
         # Exact eval -> deterministic; a stronger home raises home win prob.
         base = SoccerPoissonBackend().run(_backend_request(None))
-        stronger_home = SoccerPoissonBackend().run(
-            _backend_request({"home": 1.3, "away": 0.9})
-        )
+        stronger_home = SoccerPoissonBackend().run(_backend_request({"home": 1.3, "away": 0.9}))
         assert stronger_home["home_win_prob"] > base["home_win_prob"]
 
 
 class TestResolveHelper:
     @pytest.mark.parametrize(
         "value",
-        [None, {}, {"home": 1.0, "away": 1.0}, {"home": 0.0, "away": 1.2},
-         {"home": "x"},
-         # non-finite must be rejected — nan/inf slip past the <=0 / ==1 guards
-         {"home": float("nan"), "away": 1.2},
-         {"home": 1.2, "away": float("inf")}],
+        [
+            None,
+            {},
+            {"home": 1.0, "away": 1.0},
+            {"home": 0.0, "away": 1.2},
+            {"home": "x"},
+            # non-finite must be rejected — nan/inf slip past the <=0 / ==1 guards
+            {"home": float("nan"), "away": 1.2},
+            {"home": 1.2, "away": float("inf")},
+        ],
     )
     def test_noop_cases_return_none(self, value):
         assert _resolve_competition_strength_index(value) is None
@@ -180,9 +179,7 @@ def _game_request(evidence, league="EPL") -> GameAnalysisRequest:
 
 
 def _flag_on() -> AdjustmentPolicy:
-    return AdjustmentPolicy(
-        policy_id="csi-on", version=1, enable_competition_strength_index=True
-    )
+    return AdjustmentPolicy(policy_id="csi-on", version=1, enable_competition_strength_index=True)
 
 
 class TestServiceExtraction:

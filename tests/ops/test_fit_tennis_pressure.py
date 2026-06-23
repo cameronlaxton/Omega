@@ -25,8 +25,14 @@ from omega.trace.priors import (
 
 def _point(match_id="m1", set1=0, set2=0, gm1=2, gm2=2, pts="15-0", svr=1, winner=1):
     return ChartingPointRow(
-        match_id=match_id, Set1=set1, Set2=set2, Gm1=gm1, Gm2=gm2,
-        Pts=pts, Svr=svr, PtWinner=winner,
+        match_id=match_id,
+        Set1=set1,
+        Set2=set2,
+        Gm1=gm1,
+        Gm2=gm2,
+        Pts=pts,
+        Svr=svr,
+        PtWinner=winner,
     )
 
 
@@ -69,13 +75,9 @@ def test_serving_for_set_populations_are_disjoint():
 
 def test_clinch_set_upgrades_to_match_states():
     assert (
-        _classify(_point(set1=1, gm1=5, gm2=3, pts="40-15"), server_sets=1)
-        == "match_point_serving"
+        _classify(_point(set1=1, gm1=5, gm2=3, pts="40-15"), server_sets=1) == "match_point_serving"
     )
-    assert (
-        _classify(_point(set1=1, gm1=5, gm2=3, pts="0-15"), server_sets=1)
-        == "serving_for_match"
-    )
+    assert _classify(_point(set1=1, gm1=5, gm2=3, pts="0-15"), server_sets=1) == "serving_for_match"
 
 
 def test_server_two_perspective():
@@ -108,10 +110,7 @@ def test_player_deltas_hand_computed():
     acc = accumulate_pressure_stats(points, matches)
     rows = build_pressure_deltas(acc, tour="ATP", as_of_date="2026-06-10")
 
-    a_bp = next(
-        r for r in rows
-        if r.player == "Player A" and r.state == "break_point_against"
-    )
+    a_bp = next(r for r in rows if r.player == "Player A" and r.state == "break_point_against")
     # Baseline 680/1000 = .68; BP SPW 120/200 = .60 -> delta -0.08.
     assert a_bp.delta == pytest.approx(-0.08, abs=1e-4)
     assert a_bp.source == PRESSURE_SOURCE_PLAYER
@@ -136,9 +135,7 @@ def test_set_point_delta_is_residual_over_serving_for_set():
         points.append(_point(gm1=5, gm2=3, pts="40-30", winner=1 if i < 120 else 2))
 
     acc = accumulate_pressure_stats(points, [_match()])
-    rows = build_pressure_deltas(
-        acc, tour="ATP", as_of_date="2026-06-10", min_points=500
-    )
+    rows = build_pressure_deltas(acc, tour="ATP", as_of_date="2026-06-10", min_points=500)
     by_state = {r.state: r for r in rows if r.player == "Player A"}
     assert by_state["serving_for_set"].delta == pytest.approx(-0.014, abs=1e-4)
     assert by_state["set_point_serving"].delta == pytest.approx(-0.02, abs=1e-4)
@@ -181,7 +178,8 @@ def test_sub_threshold_player_has_no_rows_and_resolves_to_group_at_lookup():
     # Player B (200 charted points < 500) gets no rows of its own.
     assert [r for r in rows if r.player == "Player B"] == []
     group_bp = next(
-        r for r in rows
+        r
+        for r in rows
         if r.player == PRESSURE_GROUP_PLAYER_KEY and r.state == "break_point_against"
     )
     assert group_bp.delta != 0.0

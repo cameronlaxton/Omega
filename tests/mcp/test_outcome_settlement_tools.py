@@ -169,9 +169,7 @@ def _fake_run_factory(calls: list[list[str]]):
 
 def test_fetch_outcomes_excludes_soccer_when_omitted(monkeypatch):
     calls: list[list[str]] = []
-    monkeypatch.setattr(
-        "omega.ops.fetch_outcomes_all.subprocess.run", _fake_run_factory(calls)
-    )
+    monkeypatch.setattr("omega.ops.fetch_outcomes_all.subprocess.run", _fake_run_factory(calls))
 
     result = omega_fetch_outcomes(leagues=["nba", "mlb", "props"], dry_run=True)
 
@@ -187,9 +185,7 @@ def test_fetch_outcomes_excludes_soccer_when_omitted(monkeypatch):
 
 def test_fetch_outcomes_accepts_tennis_tours(monkeypatch):
     calls: list[list[str]] = []
-    monkeypatch.setattr(
-        "omega.ops.fetch_outcomes_all.subprocess.run", _fake_run_factory(calls)
-    )
+    monkeypatch.setattr("omega.ops.fetch_outcomes_all.subprocess.run", _fake_run_factory(calls))
 
     result = omega_fetch_outcomes(leagues=["ATP", "WTA"], dry_run=True)
 

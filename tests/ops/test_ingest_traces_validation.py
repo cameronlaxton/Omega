@@ -231,4 +231,3 @@ class TestBug5DriftWarnings:
             ingest_traces.ingest_file(path, store)
         assert not any("drift" in r.message for r in caplog.records)
         store.close()
-

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from datetime import date
 
 import pytest
@@ -17,7 +16,6 @@ from omega.ops.fetch_outcomes_tennis import (
     collect_sackmann_results,
     parse_sets_from_score,
 )
-
 
 # ---------------------------------------------------------------------------
 # Score-string parsing (sackmann backfill)
@@ -84,7 +82,7 @@ def test_collect_sackmann_results_matches_window(tmp_path):
         cache_root=str(tmp_path / "cache"),
     )
     assert len(results) == 1
-    ((pair, played), sets_map), = results.items()
+    (((pair, played), sets_map),) = results.items()
     assert played == date(2026, 6, 29)  # keyed by tourney start date
     assert sorted(sets_map.values()) == [0, 3]
 
@@ -186,7 +184,10 @@ def test_resolve_tennis_sport_keys_stale_fallback(tmp_path):
     )
     failing = _FakeClient(fail_sports=True)
     keys = resolve_tennis_sport_keys(
-        failing, "ATP", cache_dir=tmp_path, ttl_seconds=0  # force refresh attempt
+        failing,
+        "ATP",
+        cache_dir=tmp_path,
+        ttl_seconds=0,  # force refresh attempt
     )
     assert keys == ["tennis_atp_old_open"]  # last-good served
 

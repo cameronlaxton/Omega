@@ -83,9 +83,7 @@ def replay_window_betting(
         ]
         graded = store.get_graded_traces(league=league, limit=1_000_000)
         outcomes_by_event = {
-            t["event_id"]: t["_outcome"]
-            for t in graded
-            if t.get("event_id") and t.get("_outcome")
+            t["event_id"]: t["_outcome"] for t in graded if t.get("event_id") and t.get("_outcome")
         }
         closing_by_trace = {s.trace_id: store.get_closing_lines(s.trace_id) for s in sels}
         return betting_metrics(sels, outcomes_by_event, closing_by_trace)

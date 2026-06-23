@@ -52,7 +52,9 @@ _LEGACY_DIRNAMES = ("inbox", "reports")
 @dataclass
 class MigrationPlan:
     moves: list[tuple[Path, Path]] = field(default_factory=list)  # (src, dst): move src -> dst
-    skips: list[tuple[Path, Path]] = field(default_factory=list)  # (src, dst): dst newer -> drop src
+    skips: list[tuple[Path, Path]] = field(
+        default_factory=list
+    )  # (src, dst): dst newer -> drop src
 
 
 def _newer(a: Path, b: Path) -> bool:
@@ -151,7 +153,9 @@ def main(argv: list[str] | None = None) -> int:
         description="Migrate legacy root inbox/ and reports/ into the canonical var/ runtime root."
     )
     parser.add_argument(
-        "--apply", action="store_true", help="Perform the move + delete root dirs (default: dry-run)."
+        "--apply",
+        action="store_true",
+        help="Perform the move + delete root dirs (default: dry-run).",
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -193,7 +197,9 @@ def main(argv: list[str] | None = None) -> int:
     for src, dst in plan.skips:
         print(f"  DROP  {src.relative_to(root)} (newer copy at {dst})")
     if legacy_dirs:
-        print(f"  PRUNE empty legacy dirs after move: {[str(p.relative_to(root)) for p in legacy_dirs]}")
+        print(
+            f"  PRUNE empty legacy dirs after move: {[str(p.relative_to(root)) for p in legacy_dirs]}"
+        )
 
     if not args.apply:
         print("\nDRY RUN — re-run with --apply to perform the migration.")

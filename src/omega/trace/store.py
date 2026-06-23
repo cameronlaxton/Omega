@@ -38,6 +38,7 @@ from omega.trace.market_snapshot import (
     MarketMovement,
     MarketSnapshot,
 )
+from omega.trace.parameter_profiles import extract_parameter_profile_ref
 from omega.trace.prop_outcome import derive_prop_outcome_result, normalize_prop_side
 from omega.trace.schema import (
     CURRENT_VERSION,
@@ -61,7 +62,6 @@ from omega.trace.schema import (
     apply_v15_migration,
     apply_v20_migration,
 )
-from omega.trace.parameter_profiles import extract_parameter_profile_ref
 
 if TYPE_CHECKING:
     from omega.trace.session_sidecar import TraceQaVerdict
@@ -173,7 +173,11 @@ def _is_network_filesystem(path: str | os.PathLike[str]) -> bool:
             continue
         mount_point = left[4]
         fs_type = right[0]
-        if mount_point == "/" or resolved_str.startswith(mount_point.rstrip("/") + "/") or resolved_str == mount_point:
+        if (
+            mount_point == "/"
+            or resolved_str.startswith(mount_point.rstrip("/") + "/")
+            or resolved_str == mount_point
+        ):
             if len(mount_point) > len(best_mount):
                 best_mount = mount_point
                 best_fs = fs_type
@@ -410,7 +414,9 @@ def db_status(requested: str | None = None) -> dict[str, Any]:
         "default_exists": Path(default_path).exists(),
         "effective_exists": Path(effective_path).exists(),
         "runtime_exists": Path(runtime_path).exists(),
-        "default_integrity_ok": _integrity_ok(default_path) if Path(default_path).exists() else None,
+        "default_integrity_ok": _integrity_ok(default_path)
+        if Path(default_path).exists()
+        else None,
         "effective_integrity_ok": _integrity_ok(effective_path)
         if Path(effective_path).exists()
         else None,
@@ -594,7 +600,9 @@ class TraceStore:
 
             self._conn = sqlite3.connect(self._db_path)
             requested = self._requested_journal_mode
-            desired = "DELETE" if requested == "AUTO" and os.environ.get("COWORK_SANDBOX") else requested
+            desired = (
+                "DELETE" if requested == "AUTO" and os.environ.get("COWORK_SANDBOX") else requested
+            )
             if desired == "AUTO":
                 desired = "WAL"
             try:
@@ -804,7 +812,11 @@ class TraceStore:
 
         migrated = 0
         for r in rows:
-            status = LedgerStatus(r["status"]) if r["status"] in {s.value for s in LedgerStatus} else LedgerStatus.PENDING
+            status = (
+                LedgerStatus(r["status"])
+                if r["status"] in {s.value for s in LedgerStatus}
+                else LedgerStatus.PENDING
+            )
             bankroll = DEFAULT_BANKROLL
             stake = round((r["stake_units"] or 0.0) * (bankroll / 100.0), 2) or 25.0
             odds = float(r["odds_taken"]) if r["odds_taken"] is not None else 0.0
@@ -1252,9 +1264,7 @@ class TraceStore:
     # Signal performance (Phase 6i — retrospective evidence scoring)
     # ------------------------------------------------------------------
 
-    def upsert_signal_performance(
-        self, rows: list[Any], dataset_hash: str
-    ) -> int:
+    def upsert_signal_performance(self, rows: list[Any], dataset_hash: str) -> int:
         """Write retrospective signal-performance aggregates for one scoring run.
 
         ``rows`` are SignalPerformanceRow-shaped objects (see
@@ -1811,9 +1821,7 @@ class TraceStore:
     ) -> None:
         """Settle a ledger bet: write status + money + graded_at."""
         if self._repo is not None:
-            return self._repo.grade_ledger_bet(
-                ledger_id, status, payout_amount, net_pnl
-            )
+            return self._repo.grade_ledger_bet(ledger_id, status, payout_amount, net_pnl)
         status_val = status.value if isinstance(status, LedgerStatus) else str(status)
         self.conn.execute(
             """UPDATE bet_ledger
@@ -1835,8 +1843,7 @@ class TraceStore:
         if self._repo is not None:
             return self._repo.get_ledger_bets(trace_id)
         rows = self.conn.execute(
-            f"SELECT {self._LEDGER_COLUMNS} FROM bet_ledger "
-            "WHERE trace_id = ? ORDER BY created_at",
+            f"SELECT {self._LEDGER_COLUMNS} FROM bet_ledger WHERE trace_id = ? ORDER BY created_at",
             (trace_id,),
         ).fetchall()
         return [self._decode_ledger_row(row) for row in rows]
@@ -1990,7 +1997,6 @@ class TraceStore:
         self.conn.commit()
         return closing_id
 
-
     def get_session_trace_facts_batch(self, trace_ids: list[str]) -> dict[str, dict[str, Any]]:
         """Return session trace facts (evidence counts, has_outcome, has_bet) for a batch of traces."""
         if self._repo is not None:
@@ -1998,7 +2004,7 @@ class TraceStore:
         out: dict[str, dict[str, Any]] = {}
         if not trace_ids:
             return out
-        
+
         placeholders = ",".join("?" * len(trace_ids))
         sql = f"""
             SELECT t.trace_id,
@@ -2306,9 +2312,7 @@ class TraceStore:
             # independent structural prerequisite (a probability to fit).
             # Default-deny: legacy rows without the flag set are excluded.
             clauses.append("t.predictions IS NOT NULL")
-            clauses.append(
-                "json_extract(t.full_trace, '$.trace_quality.calibration_eligible') = 1"
-            )
+            clauses.append("json_extract(t.full_trace, '$.trace_quality.calibration_eligible') = 1")
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         params.append(limit)

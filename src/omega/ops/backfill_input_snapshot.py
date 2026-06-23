@@ -164,7 +164,9 @@ def run(db_path: str, apply: bool) -> int:
             n_patched += 1
             logger.info(
                 "trace %s â€” recovered %s; unrecoverable %s",
-                trace_id, recovered, unrecoverable or "none",
+                trace_id,
+                recovered,
+                unrecoverable or "none",
             )
         else:
             n_unrecoverable += 1
@@ -177,7 +179,9 @@ def run(db_path: str, apply: bool) -> int:
 
     logger.info(
         "Summary: %d recoverable (patched), %d unrecoverable (tagged missing), %d no-op",
-        n_patched, n_unrecoverable, n_noop,
+        n_patched,
+        n_unrecoverable,
+        n_noop,
     )
 
     if not apply:
@@ -238,7 +242,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-

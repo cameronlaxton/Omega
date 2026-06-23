@@ -72,14 +72,18 @@ def test_game_context_has_required_keys():
 def test_required_team_keys_per_sport():
     nfl = build_feature_snapshot(
         _event(),
-        MatchupHistory(home_rows=[TeamGameRow(date="2023-09-15", points_for=21, points_against=17)]),
+        MatchupHistory(
+            home_rows=[TeamGameRow(date="2023-09-15", points_for=21, points_against=17)]
+        ),
         DECISION,
     )
     assert {"off_rating", "def_rating"} <= set(nfl.home_context)
 
     nba = build_feature_snapshot(
         _event(league="NBA", family="basketball"),
-        MatchupHistory(home_rows=[TeamGameRow(date="2023-09-30", points_for=110, points_against=104)]),
+        MatchupHistory(
+            home_rows=[TeamGameRow(date="2023-09-30", points_for=110, points_against=104)]
+        ),
         DECISION,
     )
     assert {"off_rating", "def_rating", "pace"} <= set(nba.home_context)
@@ -150,7 +154,5 @@ def test_basketball_back_to_back_slice():
     history = MatchupHistory(
         home_rows=[TeamGameRow(date="2023-09-30", points_for=110, points_against=108)],
     )
-    snap = build_feature_snapshot(
-        _event(league="NBA", family="basketball"), history, DECISION
-    )
+    snap = build_feature_snapshot(_event(league="NBA", family="basketball"), history, DECISION)
     assert snap.context_labels.get("back_to_back") is True

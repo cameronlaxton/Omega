@@ -90,7 +90,9 @@ def test_walk_forward_runs_and_separates_metrics(backtest_store):
         home_win = rng.random() < p / 100.0
         _persist(backtest_store, i, p, home_win, dt)
 
-    cfg = WalkForwardConfig(mode="expanding", test_window_days=20, step_days=20, min_train_samples=30)
+    cfg = WalkForwardConfig(
+        mode="expanding", test_window_days=20, step_days=20, min_train_samples=30
+    )
     report = run_walk_forward(
         backtest_store, config=cfg, league="NFL", replay_id="r", dataset_manifest_id="m"
     )

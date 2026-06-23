@@ -114,7 +114,7 @@ class TestDampingEnabled:
     def test_sign_preserved_for_suppressing_family(self):
         evidence = [
             _sig("recent_form", [20.0, 20.0, 20.0]),  # raw 0.93
-            _sig("series_avg", 22.0),                  # raw 0.964
+            _sig("series_avg", 22.0),  # raw 0.964
         ]
         adj = _player_adj(_policy(damping=True), evidence)
         assert adj.mean_factor < 1.0  # never flips to a boost
@@ -161,7 +161,9 @@ class TestGamePlaneDamping:
             _sig("def_matchup_weak", True, direction="home"),
         ]
         adj = compute_game_adjustment(
-            evidence=evidence, league="NBA", policy=_policy(damping=True),
+            evidence=evidence,
+            league="NBA",
+            policy=_policy(damping=True),
             evidence_mode="live",
         )
         # each raw 1.06 -> damped 1 + 0.06 + 0.06*0.5 = 1.09
@@ -174,7 +176,9 @@ class TestGamePlaneDamping:
             _sig("def_matchup_weak", True, direction="away"),
         ]
         adj = compute_game_adjustment(
-            evidence=evidence, league="NBA", policy=_policy(damping=True),
+            evidence=evidence,
+            league="NBA",
+            policy=_policy(damping=True),
             evidence_mode="live",
         )
         # different buckets -> each is a singleton on its own side, no damping

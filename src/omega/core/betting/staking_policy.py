@@ -125,9 +125,7 @@ class FractionalKellyByTier(StakingPolicy):
 
     def _scaled_kelly(self, ctx: StakingContext) -> float:
         raw = kelly_fraction(ctx.true_prob, ctx.odds)
-        mult = self._tier_multipliers.get(
-            ctx.confidence_tier.upper(), self._tier_multipliers["B"]
-        )
+        mult = self._tier_multipliers.get(ctx.confidence_tier.upper(), self._tier_multipliers["B"])
         return raw * mult
 
     def size(self, ctx: StakingContext) -> StakingDecision:

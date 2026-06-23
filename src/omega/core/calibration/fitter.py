@@ -454,7 +454,9 @@ class CalibrationFitter:
                 logger.info(
                     "Sharpening factor %f did not improve validation Brier score "
                     "(%f >= %f); capping at 1.0.",
-                    best_factor, cand_val_brier, baseline_val_brier
+                    best_factor,
+                    cand_val_brier,
+                    baseline_val_brier,
                 )
                 best_factor = 1.0
 
@@ -467,7 +469,9 @@ class CalibrationFitter:
             method="shrinkage",
             league=league.upper(),
             market=market,
-            params={"shrink_factor": best_factor},  # Retained shrink_factor for DB schema compatibility
+            params={
+                "shrink_factor": best_factor
+            },  # Retained shrink_factor for DB schema compatibility
             training_window=_infer_window(predictions),
             sample_size=len(predictions),
             dataset_hash=dataset_hash,

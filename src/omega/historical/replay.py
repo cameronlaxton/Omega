@@ -48,7 +48,6 @@ from omega.trace.store import TraceStore
 ARTIFACT_SCHEMA_VERSION = 1
 
 
-
 class LeakageError(RuntimeError):
     """Raised when an event fails the leakage guard under ``policy='fail'``."""
 
@@ -131,6 +130,7 @@ def _normalize_timestamp(ts: str) -> str:
     s = ts.strip()
     iso = s[:-1] + "+00:00" if s.endswith("Z") else s
     from datetime import datetime, timezone
+
     dt = datetime.fromisoformat(iso)
     if not dt.tzinfo:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -251,10 +251,14 @@ class ReplayEngine:
 
     def _replay_event(self, ev, dataset, team_hist, replay_id):
         decision_time = ev.start_time
-        league_mean = as_of_league_mean(
-            getattr(self, "_league_index", ([], [0.0])), decision_time
+        league_mean = as_of_league_mean(getattr(self, "_league_index", ([], [0.0])), decision_time)
+        is_team_sport = ev.sport_family in (
+            "basketball",
+            "american_football",
+            "baseball",
+            "hockey",
+            "soccer",
         )
-        is_team_sport = ev.sport_family in ("basketball", "american_football", "baseball", "hockey", "soccer")
         league_baseline = (
             {"off_rating": league_mean, "def_rating": league_mean}
             if (is_team_sport and league_mean is not None)
@@ -433,7 +437,11 @@ class ReplayEngine:
             po_by_key = {(po.player_name, po.stat_type): po for po in outcome.prop_outcomes}
 
         for m in markets:
-            ctx = dict(dataset.prop_context.get(prop_context_key(ev.event_id, m.player_name, m.stat_type), {}))
+            ctx = dict(
+                dataset.prop_context.get(
+                    prop_context_key(ev.event_id, m.player_name, m.stat_type), {}
+                )
+            )
             seed = derive_seed(self.config, f"{ev.event_id}|{m.player_name}|{m.stat_type}")
             request = PlayerPropRequest(
                 player_name=m.player_name,

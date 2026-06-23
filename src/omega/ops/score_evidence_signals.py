@@ -58,8 +58,14 @@ logger = logging.getLogger("score_evidence_signals")
 def _dataset_hash(scored: list[ScoredSignal]) -> str:
     """Deterministic hash of the scored observation set."""
     payload = sorted(
-        (s.signal_type, s.source, s.obs_window, s.league,
-         round(s.confidence, 6), s.direction_correct)
+        (
+            s.signal_type,
+            s.source,
+            s.obs_window,
+            s.league,
+            round(s.confidence, 6),
+            s.direction_correct,
+        )
         for s in scored
     )
     return hashlib.sha256(str(payload).encode("utf-8")).hexdigest()
@@ -180,19 +186,29 @@ def main(argv: list[str] | None = None) -> int:
     dataset_hash = _dataset_hash(all_scored)
 
     if args.dry_run:
-        logger.info("DRY-RUN â€” %d signal-performance rows (dataset_hash=%s):",
-                    len(rows), dataset_hash[:12])
+        logger.info(
+            "DRY-RUN â€” %d signal-performance rows (dataset_hash=%s):",
+            len(rows),
+            dataset_hash[:12],
+        )
     else:
         written = store.upsert_signal_performance(rows, dataset_hash)
-        logger.info("Wrote %d signal-performance rows (dataset_hash=%s).",
-                    written, dataset_hash[:12])
+        logger.info(
+            "Wrote %d signal-performance rows (dataset_hash=%s).", written, dataset_hash[:12]
+        )
 
     for r in rows:
         logger.info(
-            "  %-22s src=%-18s win=%-7s league=%-6s n=%-3d acc=%.2f "
-            "conf=%.2f gap=%+.2f brier=%.3f",
-            r.signal_type, r.source, r.obs_window, r.league, r.sample_size,
-            r.direction_accuracy, r.mean_confidence, r.calibration_gap, r.brier,
+            "  %-22s src=%-18s win=%-7s league=%-6s n=%-3d acc=%.2f conf=%.2f gap=%+.2f brier=%.3f",
+            r.signal_type,
+            r.source,
+            r.obs_window,
+            r.league,
+            r.sample_size,
+            r.direction_accuracy,
+            r.mean_confidence,
+            r.calibration_gap,
+            r.brier,
         )
 
     store.close()
@@ -201,7 +217,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-

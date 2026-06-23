@@ -69,14 +69,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--league", default=None, help="Filter to one league (default: all)")
     parser.add_argument(
-        "--window-days", type=int, default=None,
+        "--window-days",
+        type=int,
+        default=None,
         help="Only classify traces newer than N days (default: all history)",
     )
     parser.add_argument("--session", default=None, help="Restrict to one session_id")
     parser.add_argument("--db", default=None, help="SQLite path")
     parser.add_argument("--limit", type=int, default=100_000, help="Max traces to load")
     parser.add_argument(
-        "--out", default=None,
+        "--out",
+        default=None,
         help="Directory to write the Markdown report (default: print only)",
     )
     parser.add_argument("--verbose", action="store_true")
@@ -104,7 +107,10 @@ def main(argv: list[str] | None = None) -> int:
 
     logger.info(
         "Classified %d traces: %d sufficient, %d insufficient, %d no-evidence.",
-        report.total_traces, report.sufficient, report.insufficient, report.no_evidence,
+        report.total_traces,
+        report.sufficient,
+        report.insufficient,
+        report.no_evidence,
     )
     print(markdown)
 

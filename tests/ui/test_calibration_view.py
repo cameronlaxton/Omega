@@ -12,18 +12,36 @@ from omega.ops.console_server import build_console_app
 from omega.trace.store import TraceStore
 
 
-def _profile(pid: str, *, league: str = "NBA", status: ProfileStatus = ProfileStatus.PRODUCTION,
-             version: int = 1, market: str = "game", context_slice: str | None = None,
-             metrics: dict | None = None, promoted_at: str | None = None) -> CalibrationProfile:
+def _profile(
+    pid: str,
+    *,
+    league: str = "NBA",
+    status: ProfileStatus = ProfileStatus.PRODUCTION,
+    version: int = 1,
+    market: str = "game",
+    context_slice: str | None = None,
+    metrics: dict | None = None,
+    promoted_at: str | None = None,
+) -> CalibrationProfile:
     return CalibrationProfile(
-        profile_id=pid, version=version, method="isotonic", league=league, status=status,
-        market=market, context_slice=context_slice,
-        training_window="2024-01-01/2024-12-31", sample_size=750, dataset_hash="h",
-        metrics=metrics or {}, promoted_at=promoted_at,
+        profile_id=pid,
+        version=version,
+        method="isotonic",
+        league=league,
+        status=status,
+        market=market,
+        context_slice=context_slice,
+        training_window="2024-01-01/2024-12-31",
+        sample_size=750,
+        dataset_hash="h",
+        metrics=metrics or {},
+        promoted_at=promoted_at,
     )
 
 
-def _client(tmp_path: Path, *, profiles=(), registry_path: str | None = None) -> tuple[TestClient, str]:
+def _client(
+    tmp_path: Path, *, profiles=(), registry_path: str | None = None
+) -> tuple[TestClient, str]:
     db = str(tmp_path / "b2.db")
     sessions = tmp_path / "sessions"
     sessions.mkdir(exist_ok=True)
@@ -38,12 +56,28 @@ def _client(tmp_path: Path, *, profiles=(), registry_path: str | None = None) ->
 
 
 def test_calibration_lists_profiles_and_marks_active(tmp_path):
-    client, _ = _client(tmp_path, profiles=[
-        _profile("iso_nba_v3", status=ProfileStatus.PRODUCTION,
-                 metrics={"brier_score": 0.21, "calibration_error": 0.03, "log_loss": 0.55, "n_eval": 400},
-                 promoted_at="2026-05-01T00:00:00Z"),
-        _profile("iso_nba_v2", status=ProfileStatus.ARCHIVED, version=2, metrics={"brier_score": 0.24}),
-    ])
+    client, _ = _client(
+        tmp_path,
+        profiles=[
+            _profile(
+                "iso_nba_v3",
+                status=ProfileStatus.PRODUCTION,
+                metrics={
+                    "brier_score": 0.21,
+                    "calibration_error": 0.03,
+                    "log_loss": 0.55,
+                    "n_eval": 400,
+                },
+                promoted_at="2026-05-01T00:00:00Z",
+            ),
+            _profile(
+                "iso_nba_v2",
+                status=ProfileStatus.ARCHIVED,
+                version=2,
+                metrics={"brier_score": 0.24},
+            ),
+        ],
+    )
     rows = {r["profile_id"]: r for r in client.get("/api/calibration").json()["rows"]}
     assert rows["iso_nba_v3"]["is_active"] is True
     assert rows["iso_nba_v2"]["is_active"] is False
@@ -64,10 +98,13 @@ def test_calibration_empty_registry_warns(tmp_path):
 
 
 def test_calibration_filters_by_league_and_status(tmp_path):
-    client, _ = _client(tmp_path, profiles=[
-        _profile("iso_nba_v3", league="NBA", status=ProfileStatus.PRODUCTION),
-        _profile("shr_epl_v1", league="EPL", status=ProfileStatus.CANDIDATE),
-    ])
+    client, _ = _client(
+        tmp_path,
+        profiles=[
+            _profile("iso_nba_v3", league="NBA", status=ProfileStatus.PRODUCTION),
+            _profile("shr_epl_v1", league="EPL", status=ProfileStatus.CANDIDATE),
+        ],
+    )
     nba = client.get("/api/calibration?league=NBA").json()["rows"]
     assert {r["profile_id"] for r in nba} == {"iso_nba_v3"}
     prod = client.get("/api/calibration?status=production").json()["rows"]
@@ -75,9 +112,12 @@ def test_calibration_filters_by_league_and_status(tmp_path):
 
 
 def test_calibration_no_production_profile_warning(tmp_path):
-    client, _ = _client(tmp_path, profiles=[
-        _profile("shr_epl_v1", league="EPL", status=ProfileStatus.CANDIDATE),
-    ])
+    client, _ = _client(
+        tmp_path,
+        profiles=[
+            _profile("shr_epl_v1", league="EPL", status=ProfileStatus.CANDIDATE),
+        ],
+    )
     body = client.get("/api/calibration").json()
     warn = {w["code"]: w for w in body["warnings"]}
     assert "no_production_profile" in warn
@@ -85,10 +125,16 @@ def test_calibration_no_production_profile_warning(tmp_path):
 
 
 def test_calibration_page_renders_and_escapes(tmp_path):
-    client, _ = _client(tmp_path, profiles=[
-        _profile("<script>alert(1)</script>", status=ProfileStatus.PRODUCTION,
-                 metrics={"brier_score": 0.2}),
-    ])
+    client, _ = _client(
+        tmp_path,
+        profiles=[
+            _profile(
+                "<script>alert(1)</script>",
+                status=ProfileStatus.PRODUCTION,
+                metrics={"brier_score": 0.2},
+            ),
+        ],
+    )
     html = client.get("/calibration").text
     assert "<h1>Calibration Status</h1>" in html
     assert "badge-prod" in html  # active badge rendered

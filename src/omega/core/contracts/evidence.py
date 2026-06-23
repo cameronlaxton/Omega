@@ -64,9 +64,7 @@ class EvidenceSignal(BaseModel):
     signal_type: str = Field(
         description="Registry key, e.g. 'usage_spike', 'def_matchup_weak', 'recent_form'."
     )
-    category: SignalCategory = Field(
-        description="player_form | matchup | situational | team_form"
-    )
+    category: SignalCategory = Field(description="player_form | matchup | situational | team_form")
     plane: SignalPlane = Field(
         description="'player' adjusts player_context means; 'game' adjusts team context."
     )
@@ -339,9 +337,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             "def_matchup_weak",
             "matchup",
             "both",
-            applies_to_sports=frozenset(
-                {"basketball", "american_football", "hockey", "soccer"}
-            ),
+            applies_to_sports=frozenset({"basketball", "american_football", "hockey", "soccer"}),
             requires_stat_key=True,
             damping_family="def_matchup",
             description=(
@@ -353,9 +349,7 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             "def_matchup_strong",
             "matchup",
             "both",
-            applies_to_sports=frozenset(
-                {"basketball", "american_football", "hockey", "soccer"}
-            ),
+            applies_to_sports=frozenset({"basketball", "american_football", "hockey", "soccer"}),
             requires_stat_key=True,
             damping_family="def_matchup",
             description=(

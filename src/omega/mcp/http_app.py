@@ -179,13 +179,14 @@ def _parse_cors_origins(raw: str | None = None) -> list[str]:
 
 def _require_fastmcp_http_helpers(mcp: Any) -> None:
     missing = [
-        name for name in ("sse_app", "streamable_http_app") if not callable(getattr(mcp, name, None))
+        name
+        for name in ("sse_app", "streamable_http_app")
+        if not callable(getattr(mcp, name, None))
     ]
     if missing:
         raise RuntimeError(
             "Omega MCP HTTP transport requires mcp[cli]>=1.27 with "
-            "FastMCP.sse_app() and FastMCP.streamable_http_app(); missing: "
-            + ", ".join(missing)
+            "FastMCP.sse_app() and FastMCP.streamable_http_app(); missing: " + ", ".join(missing)
         )
 
 
@@ -221,8 +222,7 @@ def build_http_app(auth_token: str | None = None):
         from fastapi.middleware.cors import CORSMiddleware
     except ImportError as exc:
         raise RuntimeError(
-            "Omega MCP HTTP app requires FastAPI and uvicorn: "
-            "python -m pip install -e .[mcp]"
+            "Omega MCP HTTP app requires FastAPI and uvicorn: python -m pip install -e .[mcp]"
         ) from exc
 
     mcp = build_server()

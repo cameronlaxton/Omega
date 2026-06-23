@@ -1,4 +1,3 @@
-
 from omega.core.calibration.profiles import CalibrationProfile
 from omega.core.calibration.registry import CalibrationRegistry
 
@@ -19,8 +18,8 @@ def test_gating_incumbent_slice_isolation(monkeypatch):
             dataset_hash="x",
             training_window="365d",
             sample_size=1000,
-            params={"x": [0,1], "y": [0,1]},
-            metrics={}
+            params={"x": [0, 1], "y": [0, 1]},
+            metrics={},
         ),
         CalibrationProfile(
             profile_id="base_nba_spread",
@@ -33,11 +32,19 @@ def test_gating_incumbent_slice_isolation(monkeypatch):
             dataset_hash="x",
             training_window="365d",
             sample_size=1000,
-            params={"x": [0,1], "y": [0,1]},
-            metrics={}
-        )
+            params={"x": [0, 1], "y": [0, 1]},
+            metrics={},
+        ),
     ]
-    monkeypatch.setattr(registry, "list_profiles", lambda **kwargs: [p for p in profiles if kwargs.get("status") == "production" and kwargs.get("league") == "NBA"])
+    monkeypatch.setattr(
+        registry,
+        "list_profiles",
+        lambda **kwargs: [
+            p
+            for p in profiles
+            if kwargs.get("status") == "production" and kwargs.get("league") == "NBA"
+        ],
+    )
 
     # Playoff candidate should NOT gate against base
     candidate_playoff = CalibrationProfile(
@@ -52,7 +59,7 @@ def test_gating_incumbent_slice_isolation(monkeypatch):
         training_window="365d",
         sample_size=1000,
         params={},
-        metrics={}
+        metrics={},
     )
     incumbent = registry.gating_incumbent(candidate_playoff)
     assert incumbent is None
@@ -70,7 +77,7 @@ def test_gating_incumbent_slice_isolation(monkeypatch):
         training_window="365d",
         sample_size=1000,
         params={},
-        metrics={}
+        metrics={},
     )
     incumbent2 = registry.gating_incumbent(candidate_base)
     assert incumbent2 is not None
@@ -88,6 +95,6 @@ def test_gating_incumbent_slice_isolation(monkeypatch):
         training_window="365d",
         sample_size=1000,
         params={},
-        metrics={}
+        metrics={},
     )
     assert registry.gating_incumbent(candidate_spread) is None

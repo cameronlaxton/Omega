@@ -66,14 +66,10 @@ class TestEvidenceSignalValidation:
 
     def test_value_accepts_bool_and_scalar_and_series(self):
         EvidenceSignal(
-            **_known_signal(
-                signal_type="last_game_outlier", category="player_form", value=True
-            )
+            **_known_signal(signal_type="last_game_outlier", category="player_form", value=True)
         )
         EvidenceSignal(
-            **_known_signal(
-                signal_type="opponent_stat_rank", category="matchup", value=3
-            )
+            **_known_signal(signal_type="opponent_stat_rank", category="matchup", value=3)
         )
         EvidenceSignal(**_known_signal(value=[10.0, 12.5]))
 

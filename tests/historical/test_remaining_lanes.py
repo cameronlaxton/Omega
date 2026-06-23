@@ -11,9 +11,7 @@ from omega.historical.walk_forward import _slice_of
 
 
 def _replay(events, outcomes, league, backtest_store, tmp_path, **extra):
-    dataset = ReplayDataset(
-        events=events, outcomes={o.event_id: o for o in outcomes}, **extra
-    )
+    dataset = ReplayDataset(events=events, outcomes={o.event_id: o for o in outcomes}, **extra)
     config = ReplayConfig(
         dataset_manifest_id=f"{league}-fixture",
         backtest_db_path=str(tmp_path / "bt.db"),

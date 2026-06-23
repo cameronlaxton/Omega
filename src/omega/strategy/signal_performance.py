@@ -182,9 +182,7 @@ def accumulate_signal_performance(
         n_correct = sum(1 for s in group if s.direction_correct)
         accuracy = n_correct / n
         mean_conf = sum(s.confidence for s in group) / n
-        brier = sum(
-            (s.confidence - (1.0 if s.direction_correct else 0.0)) ** 2 for s in group
-        ) / n
+        brier = sum((s.confidence - (1.0 if s.direction_correct else 0.0)) ** 2 for s in group) / n
         rows.append(
             SignalPerformanceRow(
                 signal_type=signal_type,

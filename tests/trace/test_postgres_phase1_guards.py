@@ -42,9 +42,7 @@ def test_sqlite_only_ops_raise_clear_phase1_error(monkeypatch):
         (report_calibration.main, ["cmd", "--league", "NBA"]),
     ],
 )
-def test_sqlite_only_no_argv_ops_raise_clear_phase1_error(
-    monkeypatch, module_main, argv
-):
+def test_sqlite_only_no_argv_ops_raise_clear_phase1_error(monkeypatch, module_main, argv):
     monkeypatch.setenv("DATABASE_URL", POSTGRES_URL)
     monkeypatch.setattr(sys, "argv", argv)
 

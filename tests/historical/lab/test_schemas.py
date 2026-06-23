@@ -68,9 +68,7 @@ def test_window_rejects_reversed_range():
 
 def test_windows_overlap_adjacent_is_not_overlap():
     assert not windows_overlap(TRAIN, VALID)
-    assert windows_overlap(
-        Window(start="2023-01-01", end="2023-04-15"), VALID
-    )
+    assert windows_overlap(Window(start="2023-01-01", end="2023-04-15"), VALID)
 
 
 # --- HistoricalLabRun -----------------------------------------------------
@@ -163,13 +161,17 @@ def test_assert_consistent_passes(tmp_path):
 
 def test_assert_consistent_count_mismatch(tmp_path):
     run = _lab_run(tmp_path, attempted_variant_count=5, profile_grid_hash="g")
-    ledger = AttemptedVariantLedger(lab_run_id="lab_001", profile_grid_hash="g", variants=[_variant()])
+    ledger = AttemptedVariantLedger(
+        lab_run_id="lab_001", profile_grid_hash="g", variants=[_variant()]
+    )
     with pytest.raises(ValueError, match="attempted_variant_count"):
         assert_consistent(run, ledger)
 
 
 def test_assert_consistent_grid_hash_mismatch(tmp_path):
     run = _lab_run(tmp_path, attempted_variant_count=1, profile_grid_hash="g")
-    ledger = AttemptedVariantLedger(lab_run_id="lab_001", profile_grid_hash="OTHER", variants=[_variant()])
+    ledger = AttemptedVariantLedger(
+        lab_run_id="lab_001", profile_grid_hash="OTHER", variants=[_variant()]
+    )
     with pytest.raises(ValueError, match="profile_grid_hash"):
         assert_consistent(run, ledger)

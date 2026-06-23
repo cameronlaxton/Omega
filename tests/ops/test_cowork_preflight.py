@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import errno
-import os
 import importlib.metadata
+import os
 import subprocess
 from pathlib import Path
 
@@ -327,13 +327,13 @@ def test_formal_output_gate_runs_smoke_when_clean(monkeypatch, tmp_path):
 # Sentinel check tests (Deliverable 1)
 # ---------------------------------------------------------------------------
 
+
 def test_sentinel_present_in_script():
     """The EOF sentinel must be the final non-empty content in cowork_preflight.py."""
     script = Path(__file__).parent.parent.parent / "src" / "omega" / "ops" / "cowork_preflight.py"
     text = script.read_text(encoding="utf-8")
     assert cowork_preflight._PREFLIGHT_SENTINEL in text, (
-        "cowork_preflight.py is missing its EOF sentinel. "
-        "The file may have been truncated."
+        "cowork_preflight.py is missing its EOF sentinel. The file may have been truncated."
     )
 
 
@@ -348,6 +348,7 @@ def test_sentinel_missing_is_detectable(tmp_path):
 # ---------------------------------------------------------------------------
 # Empty stdout guard: run_checks always emits stdout before returning
 # ---------------------------------------------------------------------------
+
 
 def test_run_checks_is_not_silent_on_success(monkeypatch, tmp_path, capsys):
     """run_checks should not return silently with exit 0 and empty stdout on success;
@@ -371,6 +372,7 @@ def test_run_checks_is_not_silent_on_success(monkeypatch, tmp_path, capsys):
 # ---------------------------------------------------------------------------
 # Git health checks (Deliverable 1)
 # ---------------------------------------------------------------------------
+
 
 def test_git_health_relocates_index_lock_and_continues(monkeypatch, tmp_path, capsys):
     git_dir = tmp_path / ".git"
@@ -454,8 +456,11 @@ def test_git_health_fails_when_git_status_errors(monkeypatch, tmp_path):
 def test_git_health_passes_in_clean_git_repo(tmp_path):
     """A valid git repo with no index.lock should pass health check."""
     import subprocess as sp
+
     sp.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-    sp.run(["git", "config", "user.email", "t@t.com"], cwd=tmp_path, check=True, capture_output=True)
+    sp.run(
+        ["git", "config", "user.email", "t@t.com"], cwd=tmp_path, check=True, capture_output=True
+    )
     sp.run(["git", "config", "user.name", "T"], cwd=tmp_path, check=True, capture_output=True)
 
     failures = cowork_preflight.check_git_health(tmp_path)
@@ -466,6 +471,7 @@ def test_git_health_passes_in_clean_git_repo(tmp_path):
 # ---------------------------------------------------------------------------
 # Repair taint lockfile (Deliverable 2)
 # ---------------------------------------------------------------------------
+
 
 def test_repair_writes_taint_lockfile(tmp_path):
     """A successful --repair-from-git run must write the repair taint lockfile."""

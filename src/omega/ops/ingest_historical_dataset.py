@@ -85,7 +85,11 @@ def _merge_prop_outcomes(
 def _build_bundle(args: argparse.Namespace) -> IngestBundle:
     games = args.games
     if args.source in ("nflfast", "nba_csv"):
-        a = NflfastCsvAdapter(args.league) if args.source == "nflfast" else NbaCsvAdapter(args.league)
+        a = (
+            NflfastCsvAdapter(args.league)
+            if args.source == "nflfast"
+            else NbaCsvAdapter(args.league)
+        )
         return IngestBundle(
             events=a.read_events(games),
             outcomes=a.read_outcomes(games),
@@ -140,17 +144,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source", required=True, choices=SOURCES)
     parser.add_argument("--league", required=True, help="League code, e.g. NFL, EPL, ATP")
     parser.add_argument("--games", required=True, help="Path to the games/matches CSV")
-    parser.add_argument("--odds", default=None, help="Optional separate odds CSV (csv_games source)")
-    parser.add_argument("--player-stats", default=None, help="Optional player-stats CSV (prop outcomes)")
     parser.add_argument(
-        "--prop-markets", default=None, help="Optional prop-markets CSV (decision-time lines/prices)"
+        "--odds", default=None, help="Optional separate odds CSV (csv_games source)"
+    )
+    parser.add_argument(
+        "--player-stats", default=None, help="Optional player-stats CSV (prop outcomes)"
+    )
+    parser.add_argument(
+        "--prop-markets",
+        default=None,
+        help="Optional prop-markets CSV (decision-time lines/prices)",
     )
     parser.add_argument(
         "--prop-context", default=None, help="Optional prop player-context JSON (as-of means)"
     )
     parser.add_argument("--root", default=None, help="Artifact root (default var/historical)")
     parser.add_argument(
-        "--limitations", action="append", default=[], help="Documented dataset limitation (repeatable)"
+        "--limitations",
+        action="append",
+        default=[],
+        help="Documented dataset limitation (repeatable)",
     )
     parser.add_argument(
         "--odds-timing-class",
@@ -159,7 +172,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Override source odds timing class (default: per-source registry).",
     )
     parser.add_argument(
-        "--quarantine-root", default=None, help="Quarantine root (default data/historical/quarantine)"
+        "--quarantine-root",
+        default=None,
+        help="Quarantine root (default data/historical/quarantine)",
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)

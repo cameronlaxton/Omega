@@ -16,7 +16,6 @@ from omega.integrations._etl import SourceSchemaDriftError
 from omega.integrations._guards import OmegaReplayModeError
 from omega.trace.priors import XgPrior
 
-
 # ---------------------------------------------------------------------------
 # Understat
 # ---------------------------------------------------------------------------
@@ -68,9 +67,7 @@ def test_understat_structure_drift_fails_loud():
 def test_understat_schema_drift_fails_loud():
     rows = [{"team": "Arsenal", "matches": 2}]  # missing xg totals
     with pytest.raises(SourceSchemaDriftError):
-        understat.build_xg_priors(
-            rows, league="EPL", season="2025", as_of_date="2026-06-10"
-        )
+        understat.build_xg_priors(rows, league="EPL", season="2025", as_of_date="2026-06-10")
 
 
 def test_understat_unknown_league_raises():
@@ -81,16 +78,12 @@ def test_understat_unknown_league_raises():
 def test_understat_cache_hit_makes_no_network_call(tmp_path):
     cache_dir = tmp_path / "understat"
     cache_dir.mkdir(parents=True)
-    (cache_dir / "EPL_2025.html").write_text(
-        _understat_html(_UNDERSTAT_TEAMS), encoding="utf-8"
-    )
+    (cache_dir / "EPL_2025.html").write_text(_understat_html(_UNDERSTAT_TEAMS), encoding="utf-8")
 
     def _never(*_a, **_kw):
         raise AssertionError("network fetch should not happen on a cache hit")
 
-    html = understat.fetch_league_html(
-        "EPL", "2025", cache_root=str(tmp_path), url_opener=_never
-    )
+    html = understat.fetch_league_html("EPL", "2025", cache_root=str(tmp_path), url_opener=_never)
     assert "teamsData" in html
 
 

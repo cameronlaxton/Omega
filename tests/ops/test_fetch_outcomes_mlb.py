@@ -167,7 +167,9 @@ class TestFetchOutcomesMLB:
 
         sb = _sb({"2026-05-17": [_final("New York Yankees", "Boston Red Sox", 5, 3)]})
         for _ in range(2):
-            rc = fetch_outcomes_mlb.main(["--since", "2026-05-17", "--db", db], scoreboard_fetcher=sb)
+            rc = fetch_outcomes_mlb.main(
+                ["--since", "2026-05-17", "--db", db], scoreboard_fetcher=sb
+            )
             assert rc == 0
 
         store = TraceStore(db_path=db)
@@ -187,4 +189,3 @@ class TestFetchOutcomesMLB:
         store = TraceStore(db_path=db)
         assert _game_outcomes(store, "sandbox-mlb-unmapped") == []
         store.close()
-

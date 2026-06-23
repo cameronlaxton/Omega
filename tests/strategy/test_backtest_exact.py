@@ -35,12 +35,16 @@ def _soccer_slate() -> list[HistoricalGame]:
                     "away_team": away,
                     "league": "EPL",
                     "home_context": {
-                        "off_rating": h_xg, "def_rating": h_xga,
-                        "xg_for": h_xg, "xg_against": h_xga,
+                        "off_rating": h_xg,
+                        "def_rating": h_xga,
+                        "xg_for": h_xg,
+                        "xg_against": h_xga,
                     },
                     "away_context": {
-                        "off_rating": a_xg, "def_rating": a_xga,
-                        "xg_for": a_xg, "xg_against": a_xga,
+                        "off_rating": a_xg,
+                        "def_rating": a_xga,
+                        "xg_for": a_xg,
+                        "xg_against": a_xga,
                     },
                     "odds": {
                         "moneyline_home": ml_h,
@@ -141,8 +145,11 @@ def test_nba_exact_decisions_match_high_n_mc():
     """Normal-archetype decision-agreement gate: NBA exact vs 200k MC."""
     games = _nba_slate()
     strat = StrategyEntry(
-        strategy_id="nba", name="nba",
-        leagues=["NBA"], edge_threshold=0.02, confidence_tiers=["A", "B", "C"],
+        strategy_id="nba",
+        name="nba",
+        leagues=["NBA"],
+        edge_threshold=0.02,
+        confidence_tiers=["A", "B", "C"],
     )
     exact = BacktestEngine(n_iterations=1000, exact_eval=True).run(strat, games)
     mc = BacktestEngine(n_iterations=200_000, exact_eval=False).run(strat, games)

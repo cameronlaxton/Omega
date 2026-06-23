@@ -23,8 +23,6 @@ def derive_prop_outcome_result(
         return "void", side_norm
     if stat_value == line:
         return "push", side_norm
-    if (side_norm == "over" and stat_value > line) or (
-        side_norm == "under" and stat_value < line
-    ):
+    if (side_norm == "over" and stat_value > line) or (side_norm == "under" and stat_value < line):
         return "win", side_norm
     return "loss", side_norm

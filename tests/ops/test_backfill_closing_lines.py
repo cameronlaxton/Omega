@@ -6,7 +6,11 @@ import tempfile
 
 import pytest
 
-from omega.ops.backfill_closing_lines import _identity, _load_canonicalizer, _pending_bets_needing_close
+from omega.ops.backfill_closing_lines import (
+    _identity,
+    _load_canonicalizer,
+    _pending_bets_needing_close,
+)
 from omega.trace.ledger_bet import BetProvenance, LedgerBet, LedgerStatus
 from omega.trace.store import TraceStore
 
@@ -47,18 +51,20 @@ def store(monkeypatch):
 
 
 def _persist_trace(store, trace_id, league="WORLD_CUP"):
-    store.persist({
-        "trace_id": trace_id,
-        "run_id": "r",
-        "timestamp": "2026-06-02T18:00:00Z",
-        "prompt": "p",
-        "league": league,
-        "matchup": "Saudi Arabia @ Ecuador",
-        "execution_mode": "native_sim",
-        "kind": "game",
-        "input_snapshot": {"home_team": "Ecuador", "away_team": "Saudi Arabia"},
-        "result": {"status": "success"},
-    })
+    store.persist(
+        {
+            "trace_id": trace_id,
+            "run_id": "r",
+            "timestamp": "2026-06-02T18:00:00Z",
+            "prompt": "p",
+            "league": league,
+            "matchup": "Saudi Arabia @ Ecuador",
+            "execution_mode": "native_sim",
+            "kind": "game",
+            "input_snapshot": {"home_team": "Ecuador", "away_team": "Saudi Arabia"},
+            "result": {"status": "success"},
+        }
+    )
 
 
 def _ledger_bet(trace_id, provenance, *, ledger_id, status=LedgerStatus.WON):

@@ -132,7 +132,9 @@ def _grade_fields(
     )
 
 
-def _grade(store: TraceStore, bet: LedgerBet) -> tuple[LedgerStatus, float | None, float | None] | None:
+def _grade(
+    store: TraceStore, bet: LedgerBet
+) -> tuple[LedgerStatus, float | None, float | None] | None:
     return grade_ledger_bet(store, bet)
 
 
@@ -162,9 +164,7 @@ def run_backfill(
 ) -> BackfillSummary:
     summary = BackfillSummary()
 
-    for tid, trace in _iter_trace_rows(
-        store, league=league, start=start, end=end, limit=limit
-    ):
+    for tid, trace in _iter_trace_rows(store, league=league, start=start, end=end, limit=limit):
         summary.traces_scanned += 1
         result: ExtractResult = extract_recommended_bet(
             trace,
@@ -199,9 +199,7 @@ def run_backfill(
         if apply:
             store.record_ledger_bet(bet)
             if grade is not None:
-                store.grade_ledger_bet(
-                    bet.ledger_id, bet.status, bet.payout_amount, bet.net_pnl
-                )
+                store.grade_ledger_bet(bet.ledger_id, bet.status, bet.payout_amount, bet.net_pnl)
             logger.debug(
                 "logged %s %s @ %s [%s]",
                 bet.market,
@@ -233,14 +231,22 @@ def _print_summary(summary: BackfillSummary, *, apply: bool) -> None:
     logger.info("Traces scanned:                %d", summary.traces_scanned)
     logger.info("Already in ledger:             %d", summary.already_present)
     logger.info("Eligible (new bets):           %d", summary.eligible)
-    logger.info("  graded won/lost/push/void:   %d / %d / %d / %d",
-                summary.graded.get("won", 0), summary.graded.get("lost", 0),
-                summary.graded.get("push", 0), summary.graded.get("void", 0))
+    logger.info(
+        "  graded won/lost/push/void:   %d / %d / %d / %d",
+        summary.graded.get("won", 0),
+        summary.graded.get("lost", 0),
+        summary.graded.get("push", 0),
+        summary.graded.get("void", 0),
+    )
     logger.info("  pending (no outcome):        %d", summary.pending)
     if regraded_total:
-        logger.info("Re-graded prior pending rows:  %d (won %d / lost %d / push %d)",
-                    regraded_total, summary.regraded.get("won", 0),
-                    summary.regraded.get("lost", 0), summary.regraded.get("push", 0))
+        logger.info(
+            "Re-graded prior pending rows:  %d (won %d / lost %d / push %d)",
+            regraded_total,
+            summary.regraded.get("won", 0),
+            summary.regraded.get("lost", 0),
+            summary.regraded.get("push", 0),
+        )
     for reason, n in sorted(summary.skipped.items()):
         logger.info("Skipped (%s):%s%d", reason, " " * max(1, 18 - len(reason)), n)
     logger.info("Total staked (graded):         $%.2f", staked)

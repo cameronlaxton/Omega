@@ -56,7 +56,9 @@ def _resolve_frozen_prior_payload(args: argparse.Namespace) -> dict | None:
     from omega.trace.priors import get_production_dc_profile
 
     if not args.priors_db:
-        logger.error("Must provide --priors-db when using --rho-profile to ensure replay isolation.")
+        logger.error(
+            "Must provide --priors-db when using --rho-profile to ensure replay isolation."
+        )
         raise SystemExit(2)
     priors_db = args.priors_db
     store = TraceStore(db_path=priors_db)

@@ -49,8 +49,12 @@ def test_read_prop_outcomes_preserves_void_rows(tmp_path):
 
 def test_normalized_dataset_round_trips_props(tmp_path):
     ev = HistoricalEvent(
-        event_id="evt1", league="NBA", sport_family="basketball",
-        start_time="2024-01-22T00:00:00+00:00", home_team="Lakers", away_team="Heat",
+        event_id="evt1",
+        league="NBA",
+        sport_family="basketball",
+        start_time="2024-01-22T00:00:00+00:00",
+        home_team="Lakers",
+        away_team="Heat",
         source_name="test",
     )
     oc = HistoricalOutcome(event_id="evt1", home_score=112, away_score=104)
@@ -59,8 +63,12 @@ def test_normalized_dataset_round_trips_props(tmp_path):
     )
     ctx = {"evt1|LeBron James|pts": {"pts_mean": 27.0}}
     save_normalized_dataset(
-        "m1", events=[ev], outcomes=[oc],
-        prop_markets={"evt1": [market]}, prop_context=ctx, root=tmp_path,
+        "m1",
+        events=[ev],
+        outcomes=[oc],
+        prop_markets={"evt1": [market]},
+        prop_context=ctx,
+        root=tmp_path,
     )
     loaded = load_normalized_dataset("m1", root=tmp_path)
     assert loaded["prop_markets"]["evt1"][0].line == 24.5

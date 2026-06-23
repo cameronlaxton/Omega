@@ -71,7 +71,9 @@ def _labels_of(trace: dict) -> dict:
 _SLICE_PREDICATES = {
     "playoff": lambda m: bool(m.get("is_playoff")),
     "neutral_site": lambda m: bool(m.get("neutral_site")),
-    "back_to_back": lambda m: 0 in (m.get("rest_days"), m.get("home_rest_days"), m.get("away_rest_days")),
+    "back_to_back": lambda m: (
+        0 in (m.get("rest_days"), m.get("home_rest_days"), m.get("away_rest_days"))
+    ),
     "short_week": lambda m: m.get("rest_days") is not None and m["rest_days"] <= 3,
     "congested_fixture": lambda m: m.get("rest_days") is not None and m["rest_days"] <= 3,
     "rest_disadvantage": lambda m: (
@@ -137,7 +139,9 @@ def partition_fold(
     return train, test, tr_start_iso
 
 
-def _generate_folds(dates_iso: list[str], config: WalkForwardConfig) -> list[tuple[datetime, datetime]]:
+def _generate_folds(
+    dates_iso: list[str], config: WalkForwardConfig
+) -> list[tuple[datetime, datetime]]:
     if not dates_iso:
         return []
     ordered = sorted(_dt(d) for d in dates_iso)
@@ -227,13 +231,9 @@ def run_walk_forward(
 
     selections = selections or []
     outcomes_by_event = {
-        t["event_id"]: t["_outcome"]
-        for t in graded
-        if t.get("event_id") and t.get("_outcome")
+        t["event_id"]: t["_outcome"] for t in graded if t.get("event_id") and t.get("_outcome")
     }
-    closing_by_trace = {
-        sel.trace_id: store.get_closing_lines(sel.trace_id) for sel in selections
-    }
+    closing_by_trace = {sel.trace_id: store.get_closing_lines(sel.trace_id) for sel in selections}
 
     folds: list[FoldResult] = []
     agg_pairs: dict[str, tuple[list[float], list[float], list[int]]] = defaultdict(

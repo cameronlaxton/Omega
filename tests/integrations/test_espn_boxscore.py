@@ -176,7 +176,7 @@ class TestParseBoxScoreNBA:
                                     {
                                         "athlete": {"displayName": "Triple Zero"},
                                         "stats": ["0", "0", "0"],
-                                    }
+                                    },
                                 ],
                             }
                         ],
@@ -307,16 +307,16 @@ class TestParseBoxScoreMLB:
         fixture["plays"] = [
             {
                 "type": {"text": "Single"},
-                "participants": [{"athlete": {"id": "12345"}, "type": "batter"}]
+                "participants": [{"athlete": {"id": "12345"}, "type": "batter"}],
             },
             {
                 "type": {"text": "Double"},
-                "participants": [{"athlete": {"id": "12345"}, "type": "batter"}]
+                "participants": [{"athlete": {"id": "12345"}, "type": "batter"}],
             },
             {
                 "type": {"text": "Home Run"},
-                "participants": [{"athlete": {"id": "12345"}, "type": "batter"}]
-            }
+                "participants": [{"athlete": {"id": "12345"}, "type": "batter"}],
+            },
         ]
         stats = parse_box_score(fixture, "MLB")
         # 1 Single (1) + 1 Double (2) + 1 HR (4) = 7.0
@@ -489,10 +489,10 @@ class TestParseBoxScoreSoccer:
                             "plays": [
                                 {"didScore": True},
                                 {"didAssist": True},
-                                {"yellowCard": True}
-                            ]
+                                {"yellowCard": True},
+                            ],
                         }
-                    ]
+                    ],
                 }
             ]
         }

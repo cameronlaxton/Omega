@@ -122,9 +122,7 @@ def test_analyze_game_tool_injects_exploratory_iterations(monkeypatch):
     assert result["trace"]["input_snapshot"]["n_iterations"] == 300
     assert result["trace_quality"]["calibration_eligible"] is False
     assert "mcp_exploratory_iterations" in result["trace_quality"]["downgrades"]
-    assert "mcp_exploratory_iterations" in result["trace_quality"][
-        "calibration_exclusion_reasons"
-    ]
+    assert "mcp_exploratory_iterations" in result["trace_quality"]["calibration_exclusion_reasons"]
 
 
 def test_analyze_game_tool_blocks_when_formal_gate_fails(monkeypatch):
@@ -198,9 +196,7 @@ def test_analyze_prop_tool_injects_exploratory_iterations(monkeypatch):
     assert result["mcp_defaults"]["n_iterations"] == 500
     assert result["trace"]["input_snapshot"]["n_iterations"] == 500
     assert result["trace_quality"]["calibration_eligible"] is False
-    assert "mcp_exploratory_iterations" in result["trace_quality"][
-        "calibration_exclusion_reasons"
-    ]
+    assert "mcp_exploratory_iterations" in result["trace_quality"]["calibration_exclusion_reasons"]
 
 
 def test_replay_bundle_tool_marks_replay_mode_without_live_fetch():

@@ -37,9 +37,7 @@ class LabStepError(RuntimeError):
         self.step = step
         self.exit_code = exit_code
         self.allowed = tuple(allowed)
-        super().__init__(
-            f"lab step {step!r} failed: exit {exit_code} (allowed {self.allowed})"
-        )
+        super().__init__(f"lab step {step!r} failed: exit {exit_code} (allowed {self.allowed})")
 
 
 class LabCommandRunner:

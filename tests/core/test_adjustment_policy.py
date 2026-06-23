@@ -48,10 +48,17 @@ class TestSeedPolicy:
         assert policy.version == 1
         assert policy.status is ProfileStatus.PRODUCTION
 
-    def test_seed_is_shadow_mode(self):
-        # Behavior-neutral: shadow means nothing reaches live predictions.
+    def test_seed_is_score_only_mode(self):
+        # Graduated ladder: score_only records (and may feed learning) but never
+        # reaches live predictions. Replaces the legacy binary "shadow".
         policy = AdjustmentPolicyRegistry().get_production_policy()
-        assert policy.mode == "shadow"
+        assert policy.mode == "score_only"
+
+    def test_seed_evidence_metrics_do_not_pass_gate(self):
+        # Unfitted priors (sample_size=0, metrics={}) must not clear the gate
+        # that would let bounded_live evidence lift a rec to A.
+        policy = AdjustmentPolicyRegistry().get_production_policy()
+        assert policy.evidence_metrics_passed() is False
 
     def test_seed_b2b_transcribes_legacy_constants(self):
         # b2b_fatigue must match the legacy _B2B_FATIGUE table verbatim.
@@ -90,6 +97,43 @@ class TestPolicyModel:
     def test_version_must_be_positive(self):
         with pytest.raises(ValueError):
             AdjustmentPolicy(policy_id="bad", version=0)
+
+    def test_legacy_shadow_maps_to_score_only_on_load(self):
+        # A policy persisted with the legacy binary mode parses cleanly.
+        policy = AdjustmentPolicy(policy_id="legacy", version=1, mode="shadow")
+        assert policy.mode == "score_only"
+
+    def test_all_graduated_modes_parse(self):
+        for mode in ("disabled", "observe", "score_only", "bounded_live", "live"):
+            assert AdjustmentPolicy(policy_id="m", version=1, mode=mode).mode == mode
+
+    def test_invalid_mode_rejected(self):
+        with pytest.raises(ValueError):
+            AdjustmentPolicy(policy_id="bad", version=1, mode="turbo")
+
+    def test_default_mode_is_score_only(self):
+        assert AdjustmentPolicy(policy_id="d", version=1).mode == "score_only"
+
+    def test_bounded_live_effective_forces_hard_caps(self):
+        # No caps configured -> bounded_live supplies its hard defaults and
+        # turns family damping on.
+        eff = _policy("p1", mode="bounded_live").bounded_live_effective()
+        assert eff.single_cap_ceiling == 0.10
+        assert eff.family_cap == 0.15
+        assert eff.plane_cap == 0.20
+        assert eff.enable_correlation_damping is True
+
+    def test_bounded_live_effective_keeps_tighter_existing_caps(self):
+        eff = _policy("p1", mode="bounded_live", plane_cap=0.05).bounded_live_effective()
+        assert eff.plane_cap == 0.05  # tighter than the 0.20 default is kept
+
+    def test_evidence_metrics_passed_requires_samples_and_metrics(self):
+        assert _policy("p1").evidence_metrics_passed() is False
+        assert _policy("p2", sample_size=200).evidence_metrics_passed() is False  # no metrics
+        assert (
+            _policy("p3", sample_size=200, metrics={"ece": 0.04}).evidence_metrics_passed()
+            is True
+        )
 
 
 class TestRegistryWorkflow:

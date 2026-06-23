@@ -273,7 +273,9 @@ def main(argv: list[str] | None = None) -> int:
         except RuntimeError as exc:
             print(f"SEED REFUSED: {exc}", file=sys.stderr)
             return 1
-        print(f"SEEDED {result['runtime']} from {result['source']} ({result['trace_count']} traces)")
+        print(
+            f"SEEDED {result['runtime']} from {result['source']} ({result['trace_count']} traces)"
+        )
         status = db_status(args.db)
 
     if args.query_traces:
@@ -313,6 +315,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-

@@ -57,6 +57,7 @@ def test_crps_empirical_markov_uses_normal_approximation():
 
     # Must match closed-form normal CRPS with the same moments
     from omega.strategy.distribution_metrics import crps_normal
+
     expected = round(crps_normal(108.5, 9.2, observed), 6)
     assert metric["value"] == pytest.approx(expected, abs=1e-9)
 

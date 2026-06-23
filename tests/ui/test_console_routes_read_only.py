@@ -50,7 +50,12 @@ def test_post_to_existing_resource_is_405(client):
 
 def test_unimplemented_paths_stay_absent(client):
     # Paths that were never implemented must not silently exist (no stray surface).
-    for path in ("/api/market-movement", "/api/review-queue", "/api/signal-performance", "/api/nonsense"):
+    for path in (
+        "/api/market-movement",
+        "/api/review-queue",
+        "/api/signal-performance",
+        "/api/nonsense",
+    ):
         assert client.get(path).status_code == 404, f"{path} unexpectedly exists"
 
 

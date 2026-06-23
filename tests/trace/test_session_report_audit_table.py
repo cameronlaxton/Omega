@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -11,11 +10,11 @@ if str(_REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 import pytest
+
 from omega.trace.session_report.extractors import extract_intake_report
 from omega.trace.session_report.markdown import _render_audit_table, render_intake_markdown
-from omega.trace.session_report.models import AuditRow, IntakeReportData
+from omega.trace.session_report.models import AuditRow
 from omega.trace.store import TraceStore
-
 
 # ---------------------------------------------------------------------------
 # Helpers

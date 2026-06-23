@@ -97,9 +97,7 @@ class TestReplayParityFlagsOff:
             _game_sig("def_matchup_weak", direction="away"),
         ]
         legacy = signals_to_transition_modifiers(sigs, home_team="Lakers")
-        seed = compute_transition_modifier_adjustment(
-            sigs, "Lakers", policy=seed_policy
-        ).modifiers
+        seed = compute_transition_modifier_adjustment(sigs, "Lakers", policy=seed_policy).modifiers
         assert seed == legacy
 
     def test_handler_factor_ignores_confidence_under_seed_policy(self, seed_policy):
@@ -125,9 +123,7 @@ class TestFlagsAreTheLever:
     def test_confidence_flag_changes_markov_modifiers(self, seed_policy):
         sigs = [_game_sig("rest_advantage", direction="home", confidence=0.5)]
         off = compute_transition_modifier_adjustment(sigs, "Lakers", policy=seed_policy).modifiers
-        on_policy = AdjustmentPolicy(
-            policy_id="on", version=1, enable_confidence_weighting=True
-        )
+        on_policy = AdjustmentPolicy(policy_id="on", version=1, enable_confidence_weighting=True)
         on = compute_transition_modifier_adjustment(sigs, "Lakers", policy=on_policy).modifiers
         assert off["home_score_rate_scalar"] == pytest.approx(1.04)
         assert on["home_score_rate_scalar"] == pytest.approx(1.02)  # 1 + 0.5*0.04
@@ -152,13 +148,24 @@ class TestFlagsAreTheLever:
             warnings.simplefilter("ignore")
             evidence = [
                 EvidenceSignal(
-                    signal_type="recent_form", category="player_form", plane="player",
-                    value=[40.0, 40.0, 40.0], source="t", confidence=1.0,
-                    window="last_5", stat_key="pts",
+                    signal_type="recent_form",
+                    category="player_form",
+                    plane="player",
+                    value=[40.0, 40.0, 40.0],
+                    source="t",
+                    confidence=1.0,
+                    window="last_5",
+                    stat_key="pts",
                 ),
                 EvidenceSignal(
-                    signal_type="series_avg", category="player_form", plane="player",
-                    value=40.0, source="t", confidence=1.0, window="series", stat_key="pts",
+                    signal_type="series_avg",
+                    category="player_form",
+                    plane="player",
+                    value=40.0,
+                    source="t",
+                    confidence=1.0,
+                    window="series",
+                    stat_key="pts",
                 ),
             ]
         adj = compute_player_adjustment(

@@ -48,7 +48,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--production-db", default=None, help="Live DB for historical-live parity (read-only)"
     )
-    parser.add_argument("--train-window", required=True, type=_window, help="START..END (ISO dates)")
+    parser.add_argument(
+        "--train-window", required=True, type=_window, help="START..END (ISO dates)"
+    )
     parser.add_argument("--validation-window", required=True, type=_window, help="START..END")
     parser.add_argument("--holdout-window", required=True, type=_window, help="START..END")
     parser.add_argument(
@@ -59,7 +61,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--methods", nargs="+", default=["isotonic", "shrinkage"])
     parser.add_argument("--slices", nargs="*", default=[])
     parser.add_argument("--sport-family", default=None)
-    parser.add_argument("--rho-profile", default=None, help="Frozen Dixon-Coles rho for soccer replay")
+    parser.add_argument(
+        "--rho-profile", default=None, help="Frozen Dixon-Coles rho for soccer replay"
+    )
     parser.add_argument("--lab-run-id", default=None)
     parser.add_argument("--root", default=None, help="Artifact root (default var/historical)")
     parser.add_argument("--verbose", action="store_true")

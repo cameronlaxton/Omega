@@ -25,7 +25,11 @@ from omega.trace.store import TraceStore
 
 _SEED_POLICY = (
     Path(__file__).resolve().parents[2]
-    / "src" / "omega" / "core" / "calibration" / "adjustment_policies.json"
+    / "src"
+    / "omega"
+    / "core"
+    / "calibration"
+    / "adjustment_policies.json"
 )
 
 
@@ -130,13 +134,31 @@ def _seed_signal_performance(db_path: str) -> None:
     rows = [
         # noise signal â€” accuracy 0.50 -> reliability 0
         SignalPerformanceRow(
-            "last_game_outlier", "agent_reasoning", "last_3", "NBA",
-            40, 20, 0.50, 0.70, 0.50, 0.20, 0.30,
+            "last_game_outlier",
+            "agent_reasoning",
+            "last_3",
+            "NBA",
+            40,
+            20,
+            0.50,
+            0.70,
+            0.50,
+            0.20,
+            0.30,
         ),
         # predictive signal â€” accuracy 0.75 -> reliability 0.5
         SignalPerformanceRow(
-            "opponent_stat_rank", "boxscore_derived", "season", "NBA",
-            40, 30, 0.75, 0.70, 0.75, -0.05, 0.18,
+            "opponent_stat_rank",
+            "boxscore_derived",
+            "season",
+            "NBA",
+            40,
+            30,
+            0.75,
+            0.70,
+            0.75,
+            -0.05,
+            0.18,
         ),
     ]
     store.upsert_signal_performance(rows, dataset_hash="testhash123456")
@@ -149,9 +171,7 @@ class TestFitAndPromoteLifecycle:
         _seed_signal_performance(db)
         policy_path = _tmp_policy_registry()
 
-        rc = fit_mod.main(
-            ["--db", db, "--policy-path", policy_path, "--min-samples", "30"]
-        )
+        rc = fit_mod.main(["--db", db, "--policy-path", policy_path, "--min-samples", "30"])
         assert rc == 0
 
         registry = AdjustmentPolicyRegistry(path=policy_path)
@@ -184,15 +204,31 @@ class TestFitAndPromoteLifecycle:
 
         # Auto-promote without backtest confirmation must fail the gate.
         rc = promote_mod.main(
-            ["--candidate-id", cand_id, "--policy-path", policy_path,
-             "--auto", "--min-samples", "1"]
+            [
+                "--candidate-id",
+                cand_id,
+                "--policy-path",
+                policy_path,
+                "--auto",
+                "--min-samples",
+                "1",
+            ]
         )
         assert rc == 1  # BACKTEST_IMPROVES gate fails
 
         # With confirmation + go-live it promotes and flips to live.
         rc = promote_mod.main(
-            ["--candidate-id", cand_id, "--policy-path", policy_path,
-             "--auto", "--min-samples", "1", "--confirm-backtest", "--go-live"]
+            [
+                "--candidate-id",
+                cand_id,
+                "--policy-path",
+                policy_path,
+                "--auto",
+                "--min-samples",
+                "1",
+                "--confirm-backtest",
+                "--go-live",
+            ]
         )
         assert rc == 0
         prod = AdjustmentPolicyRegistry(path=policy_path).get_production_policy()
@@ -205,4 +241,3 @@ class TestFitAndPromoteLifecycle:
         policy_path = _tmp_policy_registry()
         rc = fit_mod.main(["--db", db, "--policy-path", policy_path])
         assert rc == 1
-

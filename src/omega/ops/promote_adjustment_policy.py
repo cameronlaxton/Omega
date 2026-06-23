@@ -62,9 +62,7 @@ def _evaluate_gates(
     results: list[tuple[str, bool, str]] = []
 
     n = candidate.sample_size
-    results.append(
-        ("SAMPLE_SIZE", n >= min_samples, f"sample_size={n}, required>={min_samples}")
-    )
+    results.append(("SAMPLE_SIZE", n >= min_samples, f"sample_size={n}, required>={min_samples}"))
     results.append(
         (
             "BACKTEST_IMPROVES",
@@ -153,8 +151,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    logger.info("Candidate: %s (version=%d, mode=%s)", candidate.policy_id,
-                candidate.version, candidate.mode)
+    logger.info(
+        "Candidate: %s (version=%d, mode=%s)",
+        candidate.policy_id,
+        candidate.version,
+        candidate.mode,
+    )
     incumbent = registry.get_production_policy()
     logger.info("Incumbent: %s", incumbent.policy_id if incumbent else "NONE")
 
@@ -169,8 +171,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.go_live:
             registry.set_mode(candidate.policy_id, "live")
             logger.warning(
-                "Policy %s is now mode=LIVE â€” structured evidence will adjust "
-                "live predictions.",
+                "Policy %s is now mode=LIVE â€” structured evidence will adjust live predictions.",
                 candidate.policy_id,
             )
         else:
@@ -203,7 +204,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-

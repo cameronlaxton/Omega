@@ -78,6 +78,7 @@ def _load_canonicalizer(league: str) -> Callable[[str], str | None]:
         try:
             from omega.integrations._etl import load_alias_table, resolve_entity
             from omega.integrations.espn_boxscore import normalize_player_name
+
             alias_table = load_alias_table("TENNIS")
             return lambda name: resolve_entity(name, alias_table) or normalize_player_name(name)
         except (ImportError, FileNotFoundError, OSError) as exc:
@@ -287,6 +288,7 @@ def _process_league(
 ) -> tuple[int, list[str]]:
     if league.upper() in ("ATP", "WTA", "GRAND_SLAM"):
         from omega.integrations.odds_api import resolve_tennis_sport_keys
+
         try:
             sport_keys = resolve_tennis_sport_keys(client, league)
         except Exception as exc:
@@ -327,7 +329,9 @@ def _process_league(
                 logger.error("Budget exceeded: %s", exc)
                 return attached, skipped + [f"{b['bet_id']} (budget exceeded)" for b in ts_bets]
             except Exception as exc:  # noqa: BLE001
-                logger.error("Historical fetch failed for %s (sport_key=%s) at %s: %s", league, skey, ts, exc)
+                logger.error(
+                    "Historical fetch failed for %s (sport_key=%s) at %s: %s", league, skey, ts, exc
+                )
                 if len(sport_keys) == 1:
                     skipped.extend(f"{b['bet_id']} (api fetch failed: {exc})" for b in ts_bets)
 
@@ -391,7 +395,7 @@ def _process_league(
                         event = prop_snapshot.events[0] if prop_snapshot.events else None
                         if event is None:
                             continue
-                    except Exception as exc:  # noqa: BLE001
+                    except Exception:  # noqa: BLE001
                         continue
                     bet_with_league = {**bet, "league": league}
                     candidate_outcome = _match_prop_outcome(bet_with_league, event.books)
@@ -401,13 +405,24 @@ def _process_league(
                 else:
                     is_reversed = False
                     if candidate_event.home_team and candidate_event.away_team:
-                        api_home_canon = canonicalize(candidate_event.home_team) or candidate_event.home_team
-                        api_away_canon = canonicalize(candidate_event.away_team) or candidate_event.away_team
-                        if api_home_canon.lower() == away.lower() or api_away_canon.lower() == home.lower():
+                        api_home_canon = (
+                            canonicalize(candidate_event.home_team) or candidate_event.home_team
+                        )
+                        api_away_canon = (
+                            canonicalize(candidate_event.away_team) or candidate_event.away_team
+                        )
+                        if (
+                            api_home_canon.lower() == away.lower()
+                            or api_away_canon.lower() == home.lower()
+                        ):
                             is_reversed = True
 
-                    match_home = candidate_event.away_team if is_reversed else candidate_event.home_team
-                    match_away = candidate_event.home_team if is_reversed else candidate_event.away_team
+                    match_home = (
+                        candidate_event.away_team if is_reversed else candidate_event.home_team
+                    )
+                    match_away = (
+                        candidate_event.home_team if is_reversed else candidate_event.away_team
+                    )
 
                     candidate_outcome = _match_outcome(
                         bet_market=bet["market"],
@@ -483,7 +498,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Backfill missed closing-line windows via the paid Odds API historical endpoint"
     )
-    parser.add_argument("--league", default=None, help="Restrict to one league (NBA, MLB, NFL, â€¦)")
+    parser.add_argument(
+        "--league", default=None, help="Restrict to one league (NBA, MLB, NFL, â€¦)"
+    )
     parser.add_argument(
         "--since",
         default=None,
@@ -509,9 +526,7 @@ def main() -> int:
         help=f"Hours to add to decision_timestamp to infer the close time (default: {_DEFAULT_CLOSE_OFFSET_HOURS}). "
         "Ignored when --at is provided.",
     )
-    parser.add_argument(
-        "--db", default=None, help="SQLite path (default: var/omega_traces.db)"
-    )
+    parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
@@ -585,5 +600,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

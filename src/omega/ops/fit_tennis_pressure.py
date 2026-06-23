@@ -79,9 +79,7 @@ _RESIDUAL_PARENT = {
 }
 
 
-def classify_point_state(
-    point, *, server_sets: int, sets_to_win: int
-) -> str | None:
+def classify_point_state(point, *, server_sets: int, sets_to_win: int) -> str | None:
     """Return the single (exclusive) fit population a charted point belongs to.
 
     None means the point is in no fit population: ordinary points, plain-game
@@ -97,9 +95,7 @@ def classify_point_state(
         return "tiebreak"
 
     clinch = server_sets == sets_to_win - 1
-    serving_for_set = (srv_games == 5 and ret_games <= 4) or (
-        srv_games == 6 and ret_games == 5
-    )
+    serving_for_set = (srv_games == 5 and ret_games <= 4) or (srv_games == 6 and ret_games == 5)
     if serving_for_set:
         if point.Pts in _BP_SCORES:
             return None  # overlap node: predicted additively, never fit
@@ -144,9 +140,7 @@ def accumulate_pressure_stats(
         bucket = acc[(server, surface)]
         bucket.total_pts += 1
         bucket.total_won += won
-        state = classify_point_state(
-            point, server_sets=server_sets, sets_to_win=sets_to_win
-        )
+        state = classify_point_state(point, server_sets=server_sets, sets_to_win=sets_to_win)
         if state is not None:
             bucket.state_pts[state] += 1
             bucket.state_won[state] += won

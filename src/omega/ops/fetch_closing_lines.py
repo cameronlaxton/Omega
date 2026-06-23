@@ -90,6 +90,7 @@ def _load_canonicalizer(league: str) -> Callable[[str], str | None]:
         try:
             from omega.integrations._etl import load_alias_table, resolve_entity
             from omega.integrations.espn_boxscore import normalize_player_name
+
             alias_table = load_alias_table("TENNIS")
             return lambda name: resolve_entity(name, alias_table) or normalize_player_name(name)
         except (ImportError, FileNotFoundError, OSError) as exc:
@@ -286,6 +287,7 @@ def _process_league(
     Returns ``(attached_count, skipped_messages)``."""
     if league.upper() in ("ATP", "WTA", "GRAND_SLAM"):
         from omega.integrations.odds_api import resolve_tennis_sport_keys
+
         try:
             sport_keys = resolve_tennis_sport_keys(client, league)
         except Exception as exc:
@@ -373,7 +375,7 @@ def _process_league(
                         bookmakers=book_query,
                         sport_key=candidate_event.sport_key or None,
                     )
-                except Exception as exc:  # noqa: BLE001
+                except Exception:  # noqa: BLE001
                     continue
                 bet_with_league = {**bet, "league": league}
                 candidate_outcome = _match_prop_outcome(bet_with_league, event.books)
@@ -383,9 +385,16 @@ def _process_league(
             else:
                 is_reversed = False
                 if candidate_event.home_team and candidate_event.away_team:
-                    api_home_canon = canonicalize(candidate_event.home_team) or candidate_event.home_team
-                    api_away_canon = canonicalize(candidate_event.away_team) or candidate_event.away_team
-                    if api_home_canon.lower() == away.lower() or api_away_canon.lower() == home.lower():
+                    api_home_canon = (
+                        canonicalize(candidate_event.home_team) or candidate_event.home_team
+                    )
+                    api_away_canon = (
+                        canonicalize(candidate_event.away_team) or candidate_event.away_team
+                    )
+                    if (
+                        api_home_canon.lower() == away.lower()
+                        or api_away_canon.lower() == home.lower()
+                    ):
                         is_reversed = True
 
                 match_home = candidate_event.away_team if is_reversed else candidate_event.home_team
@@ -453,9 +462,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Capture closing lines for pending bets across mapped leagues"
     )
-    parser.add_argument(
-        "--db", default=None, help="SQLite path (default: var/omega_traces.db)"
-    )
+    parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument(
         "--league",
         default=None,
@@ -520,4 +527,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

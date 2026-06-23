@@ -84,4 +84,3 @@ def test_quarantine_apply_tags_without_deleting(tmp_path):
     assert trace["trace_quality"]["context_source"] == "league_default"
     assert "baseline_default_context" in trace["trace_quality"]["calibration_exclusion_reasons"]
     reopened.close()
-

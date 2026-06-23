@@ -131,7 +131,12 @@ def _artifacts_with_skippable() -> list[FrozenArtifact]:
     for i in range(40):
         month = 1 if i < 20 else 2
         arts.append(
-            _artifact(i, f"2026-{month:02d}-{(i % 20) + 1:02d}", home_win=(i % 2 == 0), skippable=(i % 4 == 0))
+            _artifact(
+                i,
+                f"2026-{month:02d}-{(i % 20) + 1:02d}",
+                home_win=(i % 2 == 0),
+                skippable=(i % 4 == 0),
+            )
         )
     for i in range(40, 60):
         arts.append(_artifact(i, f"2026-03-{(i - 40) + 1:02d}", home_win=(i % 2 == 0)))
@@ -150,7 +155,9 @@ def test_winner_is_the_better_calibrated_variant():
     by_id = {s.profile_id: s for s in report.scores}
     assert by_id[unbiased.profile_id].validation.raw_ece < 0.05
     assert by_id[biased.profile_id].validation.raw_ece > 0.20
-    assert by_id[unbiased.profile_id].validation.raw_ece < by_id[biased.profile_id].validation.raw_ece
+    assert (
+        by_id[unbiased.profile_id].validation.raw_ece < by_id[biased.profile_id].validation.raw_ece
+    )
 
 
 def test_holdout_is_sealed_only_winner_scored():
@@ -195,8 +202,11 @@ def test_empty_candidates_raises():
 def test_holdout_after_validation_required():
     with pytest.raises(ValueError, match="strictly after"):
         sweep_backend_variants(
-            _artifacts(), [_candidate(0.0, 1)],
-            validation_start="2026-03-01", holdout_start="2026-01-01", n_iterations=1,
+            _artifacts(),
+            [_candidate(0.0, 1)],
+            validation_start="2026-03-01",
+            holdout_start="2026-01-01",
+            n_iterations=1,
         )
 
 

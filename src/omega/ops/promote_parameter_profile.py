@@ -89,7 +89,9 @@ def _print_gates(report: GateReport) -> None:
 
 def _list_candidates(store: TraceStore, backend: str | None, bucket: str | None) -> int:
     candidates = list_parameter_profiles(
-        store, backend_name=backend, competition_bucket=bucket,
+        store,
+        backend_name=backend,
+        competition_bucket=bucket,
         status=ParameterProfileStatus.CANDIDATE,
     )
     if not candidates:
@@ -116,8 +118,12 @@ def main() -> int:
         description="Promote a CANDIDATE backend parameter profile to PRODUCTION (fail-closed)."
     )
     parser.add_argument("--profile-id", help="profile_id of the CANDIDATE to promote")
-    parser.add_argument("--auto", action="store_true", help="Perform the promotion (default: dry-run)")
-    parser.add_argument("--list-candidates", action="store_true", help="List CANDIDATE profiles and exit")
+    parser.add_argument(
+        "--auto", action="store_true", help="Perform the promotion (default: dry-run)"
+    )
+    parser.add_argument(
+        "--list-candidates", action="store_true", help="List CANDIDATE profiles and exit"
+    )
     parser.add_argument("--backend", help="Filter/scope by backend_name (for --list-candidates)")
     parser.add_argument("--bucket", help="Filter by competition_bucket (for --list-candidates)")
     parser.add_argument("--min-samples", type=int, default=DEFAULT_MIN_SAMPLES)
@@ -125,15 +131,19 @@ def main() -> int:
     parser.add_argument("--log-loss-tol", type=float, default=DEFAULT_LOG_LOSS_TOL)
     parser.add_argument("--ece-floor", type=float, default=DEFAULT_ECE_FLOOR)
     parser.add_argument(
-        "--confirm-backtest-parity", action="store_true",
+        "--confirm-backtest-parity",
+        action="store_true",
         help="Confirm gate BACKTEST_PARITY. REQUIRES --parity-report (pass-indicating).",
     )
     parser.add_argument(
-        "--confirm-clv-non-regression", action="store_true",
+        "--confirm-clv-non-regression",
+        action="store_true",
         help="Confirm gate CLV_NON_REG. REQUIRES --clv-report (pass-indicating).",
     )
     parser.add_argument("--parity-report", default=None, help="Path to a parity report JSON.")
-    parser.add_argument("--clv-report", default=None, help="Path to a CLV/non-regression report JSON.")
+    parser.add_argument(
+        "--clv-report", default=None, help="Path to a CLV/non-regression report JSON."
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -160,7 +170,8 @@ def main() -> int:
     if candidate.status != ParameterProfileStatus.CANDIDATE:
         logger.error(
             "Profile %s has status=%s; only CANDIDATE profiles can be promoted",
-            candidate.profile_id, candidate.status.value,
+            candidate.profile_id,
+            candidate.status.value,
         )
         return 2
 
@@ -169,12 +180,15 @@ def main() -> int:
     )
     logger.info(
         "Candidate: %s (backend=%s, bucket=%s)",
-        candidate.profile_id, candidate.backend_name, candidate.competition_bucket,
+        candidate.profile_id,
+        candidate.backend_name,
+        candidate.competition_bucket,
     )
     logger.info("Incumbent: %s", incumbent.profile_id if incumbent else "NONE")
 
     report = evaluate_promotion_gates(
-        candidate, incumbent,
+        candidate,
+        incumbent,
         min_samples=args.min_samples,
         brier_improvement=args.brier_improvement,
         log_loss_tol=args.log_loss_tol,
@@ -196,7 +210,8 @@ def main() -> int:
 
     try:
         promote_parameter_profile(
-            store, candidate.profile_id,
+            store,
+            candidate.profile_id,
             confirm_backtest_parity=args.confirm_backtest_parity,
             confirm_clv_non_regression=args.confirm_clv_non_regression,
             parity_evidence=parity_evidence,

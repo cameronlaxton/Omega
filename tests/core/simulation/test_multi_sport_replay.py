@@ -7,6 +7,7 @@ from omega.core.simulation.tennis_markov import TennisMarkovBackend
 
 def test_soccer_replay_parity(monkeypatch):
     import omega.core.config.leagues
+
     monkeypatch.setattr(
         omega.core.config.leagues,
         "get_league_config",
@@ -24,7 +25,7 @@ def test_soccer_replay_parity(monkeypatch):
         away_context={"xg_for": 1.0, "xg_against": 1.5},
         prior_payload={"rho": 0.05},
         exact=False,
-        dispersion=DispersionPolicy(variance_multiplier=1.2)
+        dispersion=DispersionPolicy(variance_multiplier=1.2),
     )
 
     res1 = backend.run(input1)
@@ -36,6 +37,7 @@ def test_soccer_replay_parity(monkeypatch):
 
 def test_tennis_replay_parity(monkeypatch):
     import omega.core.config.leagues
+
     monkeypatch.setattr(
         omega.core.config.leagues,
         "get_league_config",
@@ -58,7 +60,7 @@ def test_tennis_replay_parity(monkeypatch):
             }
         },
         exact=False,
-        dispersion=DispersionPolicy(variance_multiplier=1.5)
+        dispersion=DispersionPolicy(variance_multiplier=1.5),
     )
 
     res1 = backend.run(input1)
@@ -80,7 +82,7 @@ def test_prop_replay_parity():
         projection_mean=16.0,
         prior_payload={"nb_dispersion_k": 3.0},
         exact=False,
-        dispersion=DispersionPolicy(variance_multiplier=2.0)
+        dispersion=DispersionPolicy(variance_multiplier=2.0),
     )
 
     res1 = backend.run(input1)

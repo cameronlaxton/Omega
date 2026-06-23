@@ -40,18 +40,18 @@ _MAX_CUMULATIVE_SHIFT: float = 1.15
 # Validated at import time via _validate_registry_membership().
 _SIGNAL_TO_MODIFIER: dict[str, tuple[str, float]] = {
     # Pace signals
-    "pace_up":              ("pace_scalar",              1.06),
-    "pace_down":            ("pace_scalar",              0.92),
+    "pace_up": ("pace_scalar", 1.06),
+    "pace_down": ("pace_scalar", 0.92),
     # Rest / fatigue
-    "rest_advantage":       ("home_score_rate_scalar",   1.04),
-    "b2b_fatigue":          ("home_score_rate_scalar",   0.94),
+    "rest_advantage": ("home_score_rate_scalar", 1.04),
+    "b2b_fatigue": ("home_score_rate_scalar", 0.94),
     # Matchup quality signals (applied to the defensive opponent's concession rate)
-    "def_matchup_weak":     ("away_score_rate_scalar",   1.05),
-    "def_matchup_strong":   ("away_score_rate_scalar",   0.95),
+    "def_matchup_weak": ("away_score_rate_scalar", 1.05),
+    "def_matchup_strong": ("away_score_rate_scalar", 0.95),
     # Role / injury-driven usage change
-    "usage_role_change":    ("home_score_rate_scalar",   0.93),
+    "usage_role_change": ("home_score_rate_scalar", 0.93),
     # Blowout risk suppresses momentum variance
-    "blowout_risk":         ("home_momentum_scalar",     0.98),
+    "blowout_risk": ("home_momentum_scalar", 0.98),
 }
 
 # Exported for introspection (e.g. champion/challenger reporting).
@@ -64,14 +64,44 @@ MAPPED_SIGNAL_TYPES: frozenset[str] = frozenset(_SIGNAL_TO_MODIFIER)
 # Used by omega_markov_evidence_guide() in the MCP server and by the cowork
 # prompt section so the LLM's vocabulary is always in sync with this dict.
 MARKOV_SIGNAL_VOCABULARY: tuple[tuple[str, str, float, str], ...] = (
-    ("pace_up",           "pace_scalar",            1.06, "+6% pace; matchup faster than league baseline"),
-    ("pace_down",         "pace_scalar",            0.92, "-8% pace; matchup slower than league baseline"),
-    ("rest_advantage",    "home_score_rate_scalar",  1.04, "+4% home scoring rate; directional (home/away)"),
-    ("b2b_fatigue",       "home_score_rate_scalar",  0.94, "-6% scoring rate for the fatigued team; directional"),
-    ("def_matchup_weak",  "away_score_rate_scalar",  1.05, "+5% offensive scoring vs. weak defender; directional"),
-    ("def_matchup_strong","away_score_rate_scalar",  0.95, "-5% offensive scoring vs. strong defender; directional"),
-    ("usage_role_change", "home_score_rate_scalar",  0.93, "-7% team scoring rate when key player role is restricted; directional"),
-    ("blowout_risk",      "home_momentum_scalar",    0.98, "-2% momentum acceleration; suppresses runaway variance"),
+    ("pace_up", "pace_scalar", 1.06, "+6% pace; matchup faster than league baseline"),
+    ("pace_down", "pace_scalar", 0.92, "-8% pace; matchup slower than league baseline"),
+    (
+        "rest_advantage",
+        "home_score_rate_scalar",
+        1.04,
+        "+4% home scoring rate; directional (home/away)",
+    ),
+    (
+        "b2b_fatigue",
+        "home_score_rate_scalar",
+        0.94,
+        "-6% scoring rate for the fatigued team; directional",
+    ),
+    (
+        "def_matchup_weak",
+        "away_score_rate_scalar",
+        1.05,
+        "+5% offensive scoring vs. weak defender; directional",
+    ),
+    (
+        "def_matchup_strong",
+        "away_score_rate_scalar",
+        0.95,
+        "-5% offensive scoring vs. strong defender; directional",
+    ),
+    (
+        "usage_role_change",
+        "home_score_rate_scalar",
+        0.93,
+        "-7% team scoring rate when key player role is restricted; directional",
+    ),
+    (
+        "blowout_risk",
+        "home_momentum_scalar",
+        0.98,
+        "-2% momentum acceleration; suppresses runaway variance",
+    ),
 )
 
 
@@ -86,7 +116,7 @@ def build_markov_vocabulary_table() -> str:
         "Markov-eligible signal types (simulation_backend='markov_state' only):",
         "",
         f"  {'signal_type':<24} {'modifier':<26} {'scalar':>6}  description",
-        f"  {'-'*24} {'-'*26} {'-'*6}  {'-'*45}",
+        f"  {'-' * 24} {'-' * 26} {'-' * 6}  {'-' * 45}",
     ]
     for sig, mod, scalar, desc in MARKOV_SIGNAL_VOCABULARY:
         lines.append(f"  {sig:<24} {mod:<26} {scalar:>6.2f}  {desc}")
@@ -109,9 +139,7 @@ def _validate_registry_membership() -> None:
 
     unknown = MAPPED_SIGNAL_TYPES - frozenset(SIGNAL_REGISTRY)
     if unknown:
-        raise ImportError(
-            f"evidence_to_modifier: keys not in SIGNAL_REGISTRY: {sorted(unknown)}"
-        )
+        raise ImportError(f"evidence_to_modifier: keys not in SIGNAL_REGISTRY: {sorted(unknown)}")
 
 
 _validate_registry_membership()
@@ -168,9 +196,7 @@ def compute_transition_modifier_adjustment(
             # Carry the no-op enrichment markers so a trace whose signals are all
             # unmapped is still recognized as enriched-pipeline output by the
             # qualitative-feedback gate (not misclassified as insufficient).
-            confidence, confidence_defaulted = resolve_confidence(
-                getattr(sig, "confidence", None)
-            )
+            confidence, confidence_defaulted = resolve_confidence(getattr(sig, "confidence", None))
             applications.append(
                 {
                     "signal_type": signal_type,
@@ -195,9 +221,7 @@ def compute_transition_modifier_adjustment(
                 modifier_key, base_scalar, direction
             )
         raw_scalar = effective_scalar
-        confidence, confidence_defaulted = resolve_confidence(
-            getattr(sig, "confidence", None)
-        )
+        confidence, confidence_defaulted = resolve_confidence(getattr(sig, "confidence", None))
         if enable_confidence:
             effective_scalar = 1.0 + confidence * (raw_scalar - 1.0)
 
@@ -260,7 +284,10 @@ def _aggregate_modifier_keys(
         if clamped != raw_value:
             _log.warning(
                 "cumulative modifier %r=%r clamped to %r (cap ±%.0f%%)",
-                key, raw_value, clamped, (_MAX_CUMULATIVE_SHIFT - 1) * 100,
+                key,
+                raw_value,
+                clamped,
+                (_MAX_CUMULATIVE_SHIFT - 1) * 100,
             )
         modifiers[key] = clamped
         aggregation_records.append(
@@ -293,9 +320,7 @@ def signals_to_transition_modifiers(
     return compute_transition_modifier_adjustment(signals, home_team).modifiers
 
 
-def _resolve_direction(
-    modifier_key: str, scalar: float, direction: str
-) -> tuple[str, float]:
+def _resolve_direction(modifier_key: str, scalar: float, direction: str) -> tuple[str, float]:
     """Swap home/away modifier key when the signal targets the non-default side.
 
     The default mapping table is written from the home team's perspective.

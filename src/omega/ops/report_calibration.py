@@ -508,9 +508,7 @@ def _signal_guidance(signal_perf: list[dict[str, Any]]) -> dict[str, list[dict[s
         else:
             buckets["warnings"].append(normalized)
 
-    buckets["trusted"].sort(
-        key=lambda r: (-r["direction_accuracy"], r["brier"], -r["sample_size"])
-    )
+    buckets["trusted"].sort(key=lambda r: (-r["direction_accuracy"], r["brier"], -r["sample_size"]))
     buckets["warnings"].sort(
         key=lambda r: (r["direction_accuracy"], -r["calibration_gap"], -r["sample_size"])
     )
@@ -518,7 +516,9 @@ def _signal_guidance(signal_perf: list[dict[str, Any]]) -> dict[str, list[dict[s
     return buckets
 
 
-def _section_pending_candidates(registry: CalibrationRegistry, league: str | None) -> list[dict[str, Any]]:
+def _section_pending_candidates(
+    registry: CalibrationRegistry, league: str | None
+) -> list[dict[str, Any]]:
     candidates = registry.list_profiles(league=league, status=ProfileStatus.CANDIDATE.value)
     out = []
     for p in candidates:
@@ -536,7 +536,9 @@ def _section_pending_candidates(registry: CalibrationRegistry, league: str | Non
     return out
 
 
-def _section_production_profiles(registry: CalibrationRegistry, league: str | None) -> list[dict[str, Any]]:
+def _section_production_profiles(
+    registry: CalibrationRegistry, league: str | None
+) -> list[dict[str, Any]]:
     profiles = registry.list_profiles(league=league, status=ProfileStatus.PRODUCTION.value)
     out = []
     for p in sorted(
@@ -607,6 +609,7 @@ def _select_market_profiles(
     profiles: list[CalibrationProfile],
 ) -> dict[str, CalibrationProfile | None]:
     """Pick the most conservative representative production profile per market."""
+
     def _calibration_error(profile: CalibrationProfile) -> float:
         try:
             return float(profile.metrics.get("calibration_error", 1.0))
@@ -697,8 +700,8 @@ def _render(
     lines.append(
         "**Permitted in a RESEARCH_CANDIDATE market:** qualitative matchup "
         "narrative, news synthesis, recent form, listed sportsbook lines from a "
-        "cited source. **Forbidden language:** \"best bet\", \"Tier A\", "
-        "\"Tier B\", \"engine-confirmed\", \"actionable bet\". Stake cap on a "
+        'cited source. **Forbidden language:** "best bet", "Tier A", '
+        '"Tier B", "engine-confirmed", "actionable bet". Stake cap on a '
         "research market: <= 1u."
     )
     lines.append("")
@@ -751,13 +754,21 @@ def _render(
     lines.append("| Metric | Count |")
     lines.append("|---|---|")
     lines.append(f"| Traces (all) | {counts['traces']} |")
-    lines.append(f"| Traces with model predictions (calibration-eligible) | {counts['with_predictions']} |")
+    lines.append(
+        f"| Traces with model predictions (calibration-eligible) | {counts['with_predictions']} |"
+    )
     lines.append(f"| Graded (any outcome) | {counts['graded']} |")
     lines.append(f"| &nbsp;&nbsp;of which game-graded | {counts['graded_game']} |")
     lines.append(f"| &nbsp;&nbsp;of which prop-graded | {counts['graded_prop']} |")
-    lines.append(f"| **Graded + calibration-eligible (usable pairs)** | **{counts['graded_calibration']}** |")
-    lines.append(f"| With bet_record _(wager tracking only â€” not used for calibration)_ | {counts['with_bet']} |")
-    lines.append(f"| With closing_line _(CLV only â€” not required for grading)_ | {counts['with_close']} |")
+    lines.append(
+        f"| **Graded + calibration-eligible (usable pairs)** | **{counts['graded_calibration']}** |"
+    )
+    lines.append(
+        f"| With bet_record _(wager tracking only â€” not used for calibration)_ | {counts['with_bet']} |"
+    )
+    lines.append(
+        f"| With closing_line _(CLV only â€” not required for grading)_ | {counts['with_close']} |"
+    )
     lines.append("")
 
     lines.append("## 1B. Portfolio summary")
@@ -775,7 +786,9 @@ def _render(
     lines.append(f"| Pending exposure | ${portfolio['pending_exposure']:.2f} |")
     lines.append("")
     if portfolio["active_ledgers"]:
-        lines.append("| ledger_id | league | market | status | stake | potential_payout | last_updated |")
+        lines.append(
+            "| ledger_id | league | market | status | stake | potential_payout | last_updated |"
+        )
         lines.append("|---|---|---|---|---:|---:|---|")
         for row in portfolio["active_ledgers"][:20]:
             lines.append(
@@ -785,7 +798,9 @@ def _render(
                 f"{row.get('last_updated') or '?'} |"
             )
         if len(portfolio["active_ledgers"]) > 20:
-            lines.append(f"| ... | ... | ... | ... | ... | ... | {len(portfolio['active_ledgers']) - 20} more |")
+            lines.append(
+                f"| ... | ... | ... | ... | ... | ... | {len(portfolio['active_ledgers']) - 20} more |"
+            )
     else:
         lines.append("_No open ledger positions._")
     lines.append("")
@@ -795,7 +810,9 @@ def _render(
     if not production_profiles:
         lines.append("**None** â€” calibration is using the static fallback policy.")
     else:
-        lines.append("| league | market | context_slice | profile_id | method | n | brier | ece | promoted |")
+        lines.append(
+            "| league | market | context_slice | profile_id | method | n | brier | ece | promoted |"
+        )
         lines.append("|---|---|---|---|---|---:|---:|---:|---|")
         for p in production_profiles:
             m = p["metrics"]
@@ -915,7 +932,9 @@ def _render(
     if not candidates:
         lines.append("_No pending candidates._")
     else:
-        lines.append("| league | market | profile_id | method | n | brier | ece | log_loss | created |")
+        lines.append(
+            "| league | market | profile_id | method | n | brier | ece | log_loss | created |"
+        )
         lines.append("|---|---|---|---|---|---|---|---|---|")
         for c in candidates:
             m = c["metrics"]
@@ -973,8 +992,7 @@ def main() -> int:
         "--league",
         default=None,
         help=(
-            "Deprecated compatibility argument. latest.md is always an overall "
-            "cross-league report."
+            "Deprecated compatibility argument. latest.md is always an overall cross-league report."
         ),
     )
     parser.add_argument("--window-days", type=int, default=30)

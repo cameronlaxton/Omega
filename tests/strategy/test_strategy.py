@@ -335,23 +335,26 @@ class TestBacktestEngine:
         from omega.strategy.backtest.engine import _grade_selection
 
         # Spread — home laying -4.5 (line is the home spread).
-        assert _grade_selection("spread", "home", 105, 100, -4.5) == (True, False)   # win by 5
+        assert _grade_selection("spread", "home", 105, 100, -4.5) == (True, False)  # win by 5
         assert _grade_selection("spread", "home", 104, 100, -4.5) == (False, False)  # win by 4
-        assert _grade_selection("spread", "home", 103, 100, -3.0) == (False, True)   # exact -> push
+        assert _grade_selection("spread", "home", 103, 100, -3.0) == (False, True)  # exact -> push
         # Spread — away getting +4.5 (line is the negated home spread).
-        assert _grade_selection("spread", "away", 104, 100, 4.5) == (True, False)    # lose by 4, covers
-        assert _grade_selection("spread", "away", 105, 100, 4.5) == (False, False)   # lose by 5
-        assert _grade_selection("spread", "away", 103, 100, 3.0) == (False, True)    # exact -> push
+        assert _grade_selection("spread", "away", 104, 100, 4.5) == (
+            True,
+            False,
+        )  # lose by 4, covers
+        assert _grade_selection("spread", "away", 105, 100, 4.5) == (False, False)  # lose by 5
+        assert _grade_selection("spread", "away", 103, 100, 3.0) == (False, True)  # exact -> push
         assert _grade_selection("spread", "home", 105, 100, None) == (False, False)  # no line
 
         # Total.
-        assert _grade_selection("total", "over", 120, 105, 220.5) == (True, False)   # 225 > 220.5
+        assert _grade_selection("total", "over", 120, 105, 220.5) == (True, False)  # 225 > 220.5
         assert _grade_selection("total", "over", 110, 105, 220.5) == (False, False)  # 215
-        assert _grade_selection("total", "over", 110, 110, 220.0) == (False, True)   # 220 -> push
+        assert _grade_selection("total", "over", 110, 110, 220.0) == (False, True)  # 220 -> push
         assert _grade_selection("total", "under", 110, 105, 220.5) == (True, False)  # 215 < 220.5
         assert _grade_selection("total", "under", 120, 105, 220.5) == (False, False)  # 225
         assert _grade_selection("total", "under", 110, 110, 220.0) == (False, True)  # 220 -> push
-        assert _grade_selection("total", "over", 120, 105, None) == (False, False)   # no line
+        assert _grade_selection("total", "over", 120, 105, None) == (False, False)  # no line
 
     def test_backtest_passes_game_context_to_calibration(self, monkeypatch):
         import omega.strategy.backtest.engine as engine_mod
