@@ -25,8 +25,10 @@ from typing import Any
 from omega.core.calibration.league_buckets import resolve_calibration_bucket
 from omega.core.calibration.profiles import (
     CalibrationProfile,
+    ProfileMaturity,
     ProfileStatus,
 )
+from omega.core.calibration.sport_family import sport_family_for_league
 from omega.core.calibration.promotion import (
     DEFAULT_BRIER_IMPROVEMENT,
     DEFAULT_ECE_FLOOR,
@@ -43,6 +45,16 @@ logger = logging.getLogger("omega.core.calibration.registry")
 
 _DEFAULT_PATH = Path(__file__).parent / "profiles.json"
 _SCHEMA_VERSION = 1
+
+# Bucket token for a single cross-sport global fallback profile (last resort
+# before the static policy in the hierarchical applicable-profile walk).
+GLOBAL_BUCKET = "GLOBAL"
+
+# Provisional promotion thresholds: a candidate that clears these (but not the
+# full production gate) may apply small, capped corrections at provisional
+# maturity instead of being rejected — escaping the all-or-nothing trap.
+PROVISIONAL_MIN_SAMPLES = 30
+PROVISIONAL_MAX_ECE = 0.10
 
 
 class CalibrationRegistry:
@@ -126,6 +138,47 @@ class CalibrationRegistry:
         if resolved is None and market != "game":
             resolved = self._resolve_market(league_uc, context_slice, "game")
         return resolved
+
+    def get_applicable(
+        self,
+        league: str,
+        context_slice: str | None = None,
+        market: str = "game",
+    ) -> tuple[CalibrationProfile | None, str | None]:
+        """Highest-trust profile to APPLY, walking the hierarchical fallback.
+
+        Lookup ladder (each rung lowers trust, which downstream tightens the
+        confidence cap):
+
+            league (exact slice -> base, market -> game)   -> level "league"
+            sport_family(league)                            -> level "sport_family"
+            GLOBAL                                          -> level "global"
+            none                                            -> static policy
+
+        Returns ``(profile, fallback_level)`` where ``fallback_level`` is None
+        when no applicable profile exists (caller falls back to the static
+        policy). A returned profile may be provisional/probation maturity —
+        callers read ``profile.effective_maturity()`` to cap the correction
+        magnitude and the confidence tier. ``get_production`` is intentionally
+        left unchanged for legacy exact-key callers.
+        """
+        profile = self.get_production(league, context_slice=context_slice, market=market)
+        if profile is not None:
+            return profile, "league"
+
+        family = sport_family_for_league(league)
+        if family and family != "unknown":
+            profile = self.get_production(
+                family.upper(), context_slice=context_slice, market=market
+            )
+            if profile is not None:
+                return profile, "sport_family"
+
+        profile = self.get_production(GLOBAL_BUCKET, context_slice=context_slice, market=market)
+        if profile is not None:
+            return profile, "global"
+
+        return None, None
 
     def _resolve_market(
         self,
@@ -232,9 +285,65 @@ class CalibrationRegistry:
             raise PromotionGateError(report)
 
         self._apply_promotion(
-            profile_id, incumbent_id=report.incumbent_id, gate_report=report.to_dict()
+            profile_id,
+            incumbent_id=report.incumbent_id,
+            gate_report=report.to_dict(),
+            maturity=ProfileMaturity.PRODUCTION,
         )
         return report
+
+    def promote_provisional(self, profile_id: str) -> None:
+        """Activate a CANDIDATE at PROVISIONAL maturity (capped corrections).
+
+        The escape hatch from all-or-nothing promotion: a candidate with some
+        signal but below the full production gate may still apply a small, capped
+        correction. Requires ``sample_size >= PROVISIONAL_MIN_SAMPLES`` and a
+        recorded ECE ``<= PROVISIONAL_MAX_ECE``. The resulting profile is
+        status=PRODUCTION (it is the active profile for its key) but
+        maturity=PROVISIONAL, so calibration damps its correction and confidence
+        is capped. Full production still requires the fail-closed
+        :meth:`promote`.
+        """
+        candidate = self.get_profile(profile_id)
+        if candidate is None:
+            raise ValueError(f"Profile not found: {profile_id}")
+        if candidate.status != ProfileStatus.CANDIDATE:
+            raise ValueError(
+                f"Cannot promote profile with status={candidate.status.value} "
+                f"(must be {ProfileStatus.CANDIDATE.value})"
+            )
+        if candidate.sample_size < PROVISIONAL_MIN_SAMPLES:
+            raise ValueError(
+                f"Provisional promotion needs sample_size >= {PROVISIONAL_MIN_SAMPLES}, "
+                f"got {candidate.sample_size}"
+            )
+        ece = candidate.ece
+        if ece is None or ece > PROVISIONAL_MAX_ECE:
+            raise ValueError(
+                f"Provisional promotion needs calibration_error <= {PROVISIONAL_MAX_ECE}, "
+                f"got {ece}"
+            )
+        incumbent = self.gating_incumbent(candidate)
+        self._apply_promotion(
+            profile_id,
+            incumbent_id=incumbent.profile_id if incumbent else None,
+            maturity=ProfileMaturity.PROVISIONAL,
+        )
+
+    def set_maturity(self, profile_id: str, maturity: ProfileMaturity) -> None:
+        """Transition an existing profile's maturity (e.g. provisional→probation).
+
+        Does not touch lifecycle status. ``retired`` withdraws a profile from
+        application without archiving it.
+        """
+        data = self._load()
+        for p in data["profiles"]:
+            if p["profile_id"] == profile_id:
+                p["maturity"] = ProfileMaturity(maturity).value
+                self._save(data)
+                logger.info("Set profile %s maturity=%s", profile_id, p["maturity"])
+                return
+        raise ValueError(f"Profile not found: {profile_id}")
 
     def _apply_promotion(
         self,
@@ -242,6 +351,7 @@ class CalibrationRegistry:
         *,
         incumbent_id: str | None = None,
         gate_report: dict[str, Any] | None = None,
+        maturity: ProfileMaturity = ProfileMaturity.PRODUCTION,
     ) -> None:
         """Mechanical archival + status transition for a candidate.
 
@@ -288,13 +398,19 @@ class CalibrationRegistry:
                 )
 
         target["status"] = ProfileStatus.PRODUCTION.value
+        target["maturity"] = ProfileMaturity(maturity).value
         target["promoted_at"] = now
         if incumbent_id is not None:
             target["incumbent_id"] = incumbent_id
         if gate_report is not None:
             target["promotion_gate_report"] = gate_report
         self._save(data)
-        logger.info("Promoted profile %s to production for league %s", profile_id, league)
+        logger.info(
+            "Activated profile %s (status=production, maturity=%s) for league %s",
+            profile_id,
+            target["maturity"],
+            league,
+        )
 
     def reject(self, profile_id: str, reason: str) -> None:
         """Reject a candidate profile with a documented reason."""

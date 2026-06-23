@@ -12,10 +12,11 @@ Key properties:
   - Unknown ``signal_type`` -> no handler -> recorded as skipped, never applied.
   - A signal is gated on sport (``signal_applies``) and on plane (player vs game).
   - Every factor is capped to ``1 +/- coeffs['cap']`` so one signal can never
-    swing a mean unboundedly.
-  - Shadow mode computes and records factors but the effective mean/std factor
-    returned to the engine is 1.0 — predictions are unchanged until a policy is
-    promoted to ``mode='live'``.
+    swing a mean unboundedly (bounded_live tightens this to a hard ceiling).
+  - Non-applying modes (disabled/observe/score_only) compute and record factors
+    but the effective mean/std factor returned to the engine is 1.0 —
+    predictions are unchanged until an operator flips the policy to
+    ``bounded_live`` (applied under hard caps) or ``live``.
 """
 
 from __future__ import annotations
@@ -26,7 +27,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from omega.core.calibration.adjustment_policy import AdjustmentPolicy
+from omega.core.calibration.adjustment_policy import (
+    APPLYING_MODES,
+    AdjustmentPolicy,
+    normalize_evidence_mode,
+)
 from omega.core.contracts.evidence import (
     EvidenceSignal,
     damping_family_for,
@@ -44,7 +49,9 @@ from omega.core.simulation.evidence_aggregation import (
 from omega.core.simulation.evidence_aggregation import cap_factor as _cap_factor
 
 # Environment override for the rollout gate. When unset, the policy's own
-# ``mode`` field governs. Accepts "shadow" or "live" (case-insensitive).
+# ``mode`` field governs. Accepts any graduated mode — disabled | observe |
+# score_only | bounded_live | live — or legacy "shadow"/"live"
+# (case-insensitive); an unrecognized value is ignored.
 _ENV_MODE_VAR = "OMEGA_EVIDENCE_MODE"
 
 
@@ -149,17 +156,20 @@ class PlaneAdjustment:
 
 
 def resolve_evidence_mode(policy: AdjustmentPolicy | None) -> str:
-    """Resolve the effective rollout mode.
+    """Resolve the effective graduated rollout mode.
 
     Order: ``OMEGA_EVIDENCE_MODE`` env override, else the policy's ``mode``,
-    else ``shadow``. An invalid env value is ignored (falls through to policy).
+    else ``score_only``. Legacy ``shadow`` normalizes to ``score_only``; an
+    invalid env value is ignored (falls through to the policy/default).
     """
     env = (os.environ.get(_ENV_MODE_VAR) or "").strip().lower()
-    if env in ("shadow", "live"):
-        return env
-    if policy is not None and policy.mode in ("shadow", "live"):
-        return policy.mode
-    return "shadow"
+    if env:
+        normalized = normalize_evidence_mode(env, default="")
+        if normalized:
+            return normalized
+    if policy is not None and policy.mode:
+        return normalize_evidence_mode(policy.mode, default="score_only")
+    return "score_only"
 
 
 # ---------------------------------------------------------------------------
@@ -400,7 +410,12 @@ def _evaluate_signal(
     # so the hand-seeded v1 policy behaves exactly as the raw handler.
     reliability = max(0.0, min(1.0, float(coeffs.get("reliability_weight", 1.0))))
     reliability_adjusted = reliability_adjusted_factor(raw_factor, reliability)  # step 2
-    per_signal_capped = _cap_factor(reliability_adjusted, float(coeffs.get("cap", 0.0)))  # step 3
+    # step 3 — per-signal cap. bounded_live tightens the coeff cap to the policy's
+    # single_cap_ceiling so one signal can never exceed the hard bound.
+    single_cap = float(coeffs.get("cap", 0.0))
+    if policy.single_cap_ceiling is not None:
+        single_cap = min(single_cap, policy.single_cap_ceiling)
+    per_signal_capped = _cap_factor(reliability_adjusted, single_cap)
 
     # Steps 4-5 (correlation damping) are wired in Phase 3. Until then every
     # signal is processed as its own singleton family, so these are identity.
@@ -416,7 +431,7 @@ def _evaluate_signal(
         confidence_adjusted = family_capped
 
     final = confidence_adjusted
-    applied = evidence_mode == "live" and target != "skip" and final != 1.0
+    applied = evidence_mode in APPLYING_MODES and target != "skip" and final != 1.0
     reason = (
         f"{signal.signal_type}: {target} x{final:.4f} "
         f"(raw {raw_factor:.4f}, mode={evidence_mode}"
@@ -536,7 +551,11 @@ def _apply_correlation_damping(
             rec = pairs[i][1]
             if i == primary_i:
                 final = confidence_adjusted
-                applied = rec.evidence_mode == "live" and rec.target != "skip" and final != 1.0
+                applied = (
+                    rec.evidence_mode in APPLYING_MODES
+                    and rec.target != "skip"
+                    and final != 1.0
+                )
                 out[i] = dataclasses.replace(
                     rec,
                     factor=final,

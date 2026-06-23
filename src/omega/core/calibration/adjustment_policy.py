@@ -16,10 +16,14 @@ Unlike calibration profiles, an adjustment policy is global (not per-league):
 its ``coefficients`` are keyed by ``signal_type`` and the handlers apply
 sport-awareness internally. At most one PRODUCTION policy exists at a time.
 
-``mode`` gates the rollout: in ``shadow`` the handlers compute and record
-adjustments but the engine does not apply them to the live prediction; in
-``live`` the factor is applied. Shadow is the safe default because the seed
-coefficients are unfitted priors.
+``mode`` gates the rollout along a graduated ladder (see :data:`EvidenceMode`):
+``disabled`` < ``observe`` < ``score_only`` < ``bounded_live`` < ``live``. In the
+three non-applying modes the handlers compute and record adjustments but the
+engine does not move the live prediction; in ``bounded_live`` the factor is
+applied under hard per-signal/family/plane caps; in ``live`` it is applied under
+the policy's own caps. ``score_only`` is the safe default because the seed
+coefficients are unfitted priors — they are recorded and may feed retrospective
+learning, but never move a prediction until an operator flips the mode.
 
 Storage: omega/core/calibration/adjustment_policies.json
 """
@@ -33,7 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from omega.core.calibration.profiles import ProfileStatus
 
@@ -44,7 +48,60 @@ logger = logging.getLogger("omega.core.calibration.adjustment_policy")
 _DEFAULT_PATH = Path(__file__).parent / "adjustment_policies.json"
 _SCHEMA_VERSION = 1
 
-AdjustmentMode = Literal["shadow", "live"]
+# Graduated evidence-application ladder. Each rung strictly contains the audit
+# guarantees of the one before it and adds (at most) one new effect:
+#   disabled     -> evidence is neither computed nor recorded.
+#   observe      -> computed + recorded for audit only; no learning, no math.
+#   score_only   -> computed + recorded; feeds retrospective evidence learning;
+#                   never moves a prediction. (legacy ``shadow`` maps here.)
+#   bounded_live -> applied to simulation inputs under HARD single/family/plane
+#                   caps; cannot lift confidence to A unless the policy's
+#                   evidence metrics pass promotion gates.
+#   live         -> applied under the policy's own caps (reserved for a fully
+#                   gated, fitted policy).
+EvidenceMode = Literal["disabled", "observe", "score_only", "bounded_live", "live"]
+
+# Backward-compatible alias. The historical binary type was
+# ``Literal["shadow", "live"]``; external importers keep working, but new code
+# should reference :data:`EvidenceMode`.
+AdjustmentMode = EvidenceMode
+
+# Legacy persisted/env values -> graduated mode. ``shadow`` becomes
+# ``score_only`` (records + learning, no math) — the behaviour-preserving map
+# confirmed for this remediation. ``live`` is unchanged.
+LEGACY_MODE_MAP: dict[str, str] = {"shadow": "score_only", "live": "live"}
+
+# The five valid graduated modes (mirrors the Literal above for runtime checks).
+EVIDENCE_MODES: frozenset[str] = frozenset(
+    {"disabled", "observe", "score_only", "bounded_live", "live"}
+)
+
+# Modes in which evidence actually moves the prediction math.
+APPLYING_MODES: frozenset[str] = frozenset({"bounded_live", "live"})
+
+# Hard caps enforced when mode == "bounded_live", supplied as effective
+# overrides when the policy itself leaves them unset. Expressed as max absolute
+# fractional deviation of a factor from 1.0.
+BOUNDED_LIVE_SINGLE_CAP = 0.10
+BOUNDED_LIVE_FAMILY_CAP = 0.15
+BOUNDED_LIVE_PLANE_CAP = 0.20
+
+# Minimum fitted sample size before an adjustment policy's evidence metrics are
+# considered to have "passed gates" — the gate that lets bounded_live evidence
+# contribute to an A-tier recommendation.
+MIN_EVIDENCE_SAMPLES_FOR_GATE = 100
+
+
+def normalize_evidence_mode(value: str | None, *, default: str = "score_only") -> str:
+    """Map a raw mode string (incl. legacy ``shadow``) to a valid graduated mode.
+
+    Unknown values fall back to ``default``. Case-insensitive.
+    """
+    if not value:
+        return default
+    v = value.strip().lower()
+    v = LEGACY_MODE_MAP.get(v, v)
+    return v if v in EVIDENCE_MODES else default
 
 
 class AdjustmentPolicy(BaseModel):
@@ -60,10 +117,28 @@ class AdjustmentPolicy(BaseModel):
     schema_version: int = 1
     version: int = Field(ge=1, description="Monotonically increasing")
     status: ProfileStatus = ProfileStatus.CANDIDATE
-    mode: AdjustmentMode = Field(
-        default="shadow",
-        description="'shadow' records adjustments without applying them; 'live' applies them.",
+    mode: EvidenceMode = Field(
+        default="score_only",
+        description=(
+            "Graduated rollout: disabled | observe | score_only | bounded_live | "
+            "live. Non-applying modes (disabled/observe/score_only) record but "
+            "never move predictions; bounded_live applies under hard caps; live "
+            "applies under the policy's own caps. Legacy 'shadow' maps to "
+            "'score_only' on load."
+        ),
     )
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _map_legacy_mode(cls, v: Any) -> Any:
+        """Map legacy ``shadow``/``live`` strings to graduated modes on load.
+
+        Runs before Literal validation so a policy persisted with mode='shadow'
+        parses cleanly as 'score_only' instead of raising.
+        """
+        if isinstance(v, str):
+            return LEGACY_MODE_MAP.get(v.strip().lower(), v)
+        return v
 
     # Coefficients consumed by evidence_handlers.py
     coefficients: dict[str, dict[str, Any]] = Field(
@@ -114,6 +189,13 @@ class AdjustmentPolicy(BaseModel):
         description="Max absolute fractional deviation of the aggregated plane "
         "factor from 1.0 (sequence step 8). None = no plane cap; must be >= 0 when set.",
     )
+    single_cap_ceiling: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="Hard ceiling on every signal's per-signal cap (sequence step "
+        "3): the effective cap is min(coeff cap, ceiling). None = no extra "
+        "ceiling (legacy). Set by bounded_live to bound single-signal impact.",
+    )
 
     # Training provenance (empty for the hand-seeded v1 priors)
     training_window: str = ""
@@ -132,6 +214,47 @@ class AdjustmentPolicy(BaseModel):
     def coeffs_for(self, signal_type: str) -> dict[str, Any]:
         """Return a copy of the coefficient dict for one signal type (may be empty)."""
         return dict(self.coefficients.get(signal_type, {}))
+
+    def evidence_metrics_passed(self) -> bool:
+        """Whether this policy's evidence metrics clear the gate.
+
+        Gate for "bounded_live evidence may contribute to an A-tier rec": the
+        policy must be fitted on enough data (``sample_size >=
+        MIN_EVIDENCE_SAMPLES_FOR_GATE``) and carry recorded fit ``metrics``. The
+        hand-seeded v1 priors (sample_size=0, metrics={}) deliberately fail this,
+        so bounded_live on unfitted priors can never manufacture an A.
+        """
+        return self.sample_size >= MIN_EVIDENCE_SAMPLES_FOR_GATE and bool(self.metrics)
+
+    def bounded_live_effective(self) -> AdjustmentPolicy:
+        """Return a copy with bounded_live's hard caps forced on.
+
+        bounded_live guarantees the three caps regardless of how the policy was
+        configured: per-signal ceiling, family damping + cap, and plane cap. Caps
+        the policy already sets tighter than the bounded_live default are kept
+        (``min``); looser or unset ones are pulled to the bounded_live default.
+        Used by the plane orchestrators when the resolved mode is bounded_live.
+        """
+        family_cap = self.family_cap
+        family_cap = (
+            BOUNDED_LIVE_FAMILY_CAP if family_cap is None else min(family_cap, BOUNDED_LIVE_FAMILY_CAP)
+        )
+        plane_cap = self.plane_cap
+        plane_cap = (
+            BOUNDED_LIVE_PLANE_CAP if plane_cap is None else min(plane_cap, BOUNDED_LIVE_PLANE_CAP)
+        )
+        ceiling = self.single_cap_ceiling
+        ceiling = (
+            BOUNDED_LIVE_SINGLE_CAP if ceiling is None else min(ceiling, BOUNDED_LIVE_SINGLE_CAP)
+        )
+        return self.model_copy(
+            update={
+                "enable_correlation_damping": True,
+                "family_cap": family_cap,
+                "plane_cap": plane_cap,
+                "single_cap_ceiling": ceiling,
+            }
+        )
 
 
 class AdjustmentPolicyRegistry:
@@ -226,21 +349,26 @@ class AdjustmentPolicyRegistry:
                 return
         raise ValueError(f"Adjustment policy not found: {policy_id}")
 
-    def set_mode(self, policy_id: str, mode: AdjustmentMode) -> None:
-        """Set a policy's rollout mode ('shadow' or 'live').
+    def set_mode(self, policy_id: str, mode: str) -> None:
+        """Set a policy's graduated rollout mode.
 
         The single behavior-changing edit in the rollout: flipping the
-        production policy to 'live' is what makes structured evidence affect
-        predictions. Kept as an explicit, auditable registry operation.
+        production policy to 'bounded_live' (or 'live') is what makes structured
+        evidence affect predictions. Kept as an explicit, auditable registry
+        operation. Legacy 'shadow' is accepted and normalized to 'score_only'.
         """
-        if mode not in ("shadow", "live"):
-            raise ValueError(f"mode must be 'shadow' or 'live', got {mode!r}")
+        normalized = normalize_evidence_mode(mode, default="")
+        if normalized not in EVIDENCE_MODES:
+            raise ValueError(
+                f"mode must be one of {sorted(EVIDENCE_MODES)} (or legacy "
+                f"'shadow'), got {mode!r}"
+            )
         data = self._load()
         for p in data["policies"]:
             if p["policy_id"] == policy_id:
-                p["mode"] = mode
+                p["mode"] = normalized
                 self._save(data)
-                logger.info("Set adjustment policy %s mode=%s", policy_id, mode)
+                logger.info("Set adjustment policy %s mode=%s", policy_id, normalized)
                 return
         raise ValueError(f"Adjustment policy not found: {policy_id}")
 

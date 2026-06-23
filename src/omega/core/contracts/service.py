@@ -22,11 +22,20 @@ from omega.core.betting.odds import (
     implied_probability,
 )
 from omega.core.calibration.adjustment_policy import (
+    APPLYING_MODES,
     AdjustmentPolicy,
     AdjustmentPolicyRegistry,
 )
 from omega.core.calibration.market import calibration_market_for_plane
 from omega.core.calibration.probability import apply_calibration, apply_calibration_audited
+from omega.core.contracts.confidence import (
+    assign_confidence,
+    cap_tier,
+    combine_trace_caps,
+    most_restrictive_constraint,
+    tier_rank,
+)
+from omega.trace.quality import aggregate_quality
 from omega.core.config.leagues import get_league_config
 from omega.core.contracts.market_quotes import market_quote
 from omega.core.contracts.schemas import (
@@ -91,7 +100,15 @@ class EvidenceExecutionPlan:
 
     adjustment: PlaneAdjustment | None = None
     transition_modifiers: dict[str, float] | None = None
-    evidence_mode: str = "shadow"
+    evidence_mode: str = "score_only"
+    # Unambiguous graduated rollout mode (disabled|observe|score_only|
+    # bounded_live|live). Distinct from ``evidence_mode`` because the Markov path
+    # overloads that field with a routing label ("markov_transition"); readers
+    # that need the rollout decision (trace quality, confidence, reports) use this.
+    rollout_mode: str = "score_only"
+    # Whether the active policy's evidence metrics cleared the promotion gate.
+    # Gates whether bounded_live evidence may contribute to an A-tier rec.
+    evidence_metrics_passed: bool = False
     evidence_application: list[dict[str, Any]] = field(default_factory=list)
     # Per-modifier-key (Markov) or per-family (plane) aggregate math, kept apart
     # from the per-signal applications so grouped/clamped effects are not
@@ -209,6 +226,148 @@ def _result_baseline_used(result: Any) -> bool:
     return bool(getattr(result, "baseline_used", False))
 
 
+# Calibration-path trust ordering (least → most trustworthy) for summarizing a
+# trace's representative calibration path.
+_PATH_TRUST = {
+    "static_identity": 0,
+    "static_calibrated": 1,
+    "base_profile_fallback": 2,
+    "profile": 3,
+}
+
+
+def _collect_calibration_audits(result: Any) -> list[Any]:
+    """Gather every CalibrationAudit present on a result (game edges + prop sides)."""
+    audits: list[Any] = []
+    for edge in getattr(result, "edges", None) or []:
+        audit = getattr(edge, "calibration_audit", None)
+        if audit is not None:
+            audits.append(audit)
+    for name in ("over_calibration_audit", "under_calibration_audit"):
+        audit = getattr(result, name, None)
+        if audit is not None:
+            audits.append(audit)
+    return audits
+
+
+def _result_calibration_path(result: Any) -> str | None:
+    """Representative calibration path for a trace.
+
+    The most common path across the result's edges/sides, tie-broken toward the
+    least-trusted path so a partially-uncalibrated trace is summarized honestly.
+    Returns None when no calibration audit is present.
+    """
+    paths = [getattr(a, "path", None) for a in _collect_calibration_audits(result)]
+    paths = [p for p in paths if p]
+    if not paths:
+        return None
+    from collections import Counter
+
+    counts = Counter(paths)
+    top = max(counts.values())
+    tied = [p for p, c in counts.items() if c == top]
+    return min(tied, key=lambda p: _PATH_TRUST.get(p, 3))
+
+
+def _result_imputed_fraction(result: Any) -> float | None:
+    """Fraction of a prop's observations that were imputed (None when N/A)."""
+    val = getattr(result, "imputed_fraction", None)
+    try:
+        return float(val) if val is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _restake_units(prob: float | None, odds: float | None, bankroll: float, tier: str) -> float:
+    """Re-derive stake units for a (possibly lowered) tier; 0.0 for Pass/missing."""
+    if tier == "Pass" or prob is None or odds is None:
+        return 0.0
+    return recommend_stake(
+        true_prob=prob, odds=odds, bankroll=bankroll, confidence_tier=tier
+    )["units"]
+
+
+def _apply_confidence_caps(
+    result: Any,
+    *,
+    trace_confidence_cap: str | None,
+    evidence_mode: str,
+    evidence_metrics_passed: bool,
+    bankroll: float,
+    league: str | None = None,
+    matchup: str | None = None,
+) -> None:
+    """Stage 2: lower every recommendation to the trace-level confidence ceiling.
+
+    Applies the most restrictive of the trace-quality cap and the
+    evidence-metrics gate to each game edge and to the prop recommendation,
+    re-deriving stake so a demoted tier never keeps an inflated stake, and
+    re-picking the headline ``best_bet`` from the capped edges so it never
+    advertises a stale tier. Mutates ``result`` in place. (Prop imputation is
+    already capped inline upstream.)
+    """
+    caps = combine_trace_caps(
+        trace_confidence_cap=trace_confidence_cap,
+        evidence_mode=evidence_mode,
+        evidence_metrics_passed=evidence_metrics_passed,
+        imputed_fraction=None,
+    )
+    binding = most_restrictive_constraint(caps)
+    if binding is None:
+        return
+    ceiling, reason = binding
+
+    # Game edges.
+    edges_changed = False
+    for edge in getattr(result, "edges", None) or []:
+        capped = cap_tier(edge.confidence_tier, ceiling)
+        if tier_rank(capped) < tier_rank(edge.confidence_tier):
+            edge.confidence_tier = capped
+            edge.confidence_cap_reason = reason
+            edge.recommended_units = _restake_units(
+                edge.calibrated_prob, edge.market_odds, bankroll, capped
+            )
+            edges_changed = True
+
+    # Headline best_bet was selected from the Stage-1 tiers; re-pick from the
+    # capped edges so a demoted edge can no longer surface as the best bet.
+    if edges_changed and hasattr(result, "best_bet"):
+        result.best_bet = _pick_best_bet(
+            getattr(result, "edges", None) or [], bankroll, league=league, matchup=matchup
+        )
+
+    # Prop recommendation (confidence_tier is None when already a pass).
+    current = getattr(result, "confidence_tier", None)
+    if hasattr(result, "recommendation") and current is not None:
+        capped = cap_tier(current, ceiling)
+        if tier_rank(capped) < tier_rank(current):
+            result.confidence_cap_reason = reason
+            if capped == "Pass":
+                result.confidence_tier = None
+                result.recommendation = "pass"
+                result.recommended_units = None
+                result.kelly_fraction = None
+                result.bet_side_odds = None
+            else:
+                result.confidence_tier = capped
+                side = result.recommendation
+                audit = (
+                    result.over_calibration_audit
+                    if side == "over"
+                    else result.under_calibration_audit
+                )
+                cal_prob = getattr(audit, "calibrated_prob", None)
+                if cal_prob is not None and result.bet_side_odds is not None:
+                    stake = recommend_stake(
+                        true_prob=cal_prob,
+                        odds=result.bet_side_odds,
+                        bankroll=bankroll,
+                        confidence_tier=capped,
+                    )
+                    result.kelly_fraction = stake["kelly_fraction"]
+                    result.recommended_units = stake["units"]
+
+
 def _identity_status(kind: str, request: Any) -> str:
     if kind == "prop":
         missing = [
@@ -291,11 +450,15 @@ def analyze(
 
     # Evidence application — aligned by index with input_snapshot.evidence so the
     # trace store can explode it into the evidence_signals table (V9).
-    evidence_mode = "shadow"
+    evidence_mode = "score_only"
+    rollout_mode = "score_only"
+    evidence_metrics_passed = False
     evidence_application: list[dict[str, Any]] = []
     evidence_aggregation: list[dict[str, Any]] = []
     if evidence_plan is not None:
         evidence_mode = evidence_plan.evidence_mode
+        rollout_mode = evidence_plan.rollout_mode
+        evidence_metrics_passed = evidence_plan.evidence_metrics_passed
         evidence_application = evidence_plan.evidence_application
         evidence_aggregation = evidence_plan.aggregation_records
 
@@ -340,8 +503,38 @@ def analyze(
     )
     calibration_eligible = not calibration_exclusion_reasons
 
+    # Graded trace quality — replaces the long-standing `aggregate_quality: None`
+    # stub. No QA verdict exists at analyze time (no sidecar yet); ingest folds a
+    # failed trace-scoped verdict into the weights/cap later via the same module.
+    calibration_path = _result_calibration_path(result)
+    imputed_fraction = _result_imputed_fraction(result)
+    quality = aggregate_quality(
+        evidence_status=evidence_status,
+        evidence_count=len(evidence_signals),
+        context_source=context_source,
+        baseline_used=baseline_used,
+        identity_status=identity_status,
+        calibration_eligible=calibration_eligible,
+        calibration_path=calibration_path,
+        qa_verdict=None,
+        imputed_fraction=imputed_fraction,
+        evidence_mode=rollout_mode,
+    )
+
+    # Stage 2 confidence: lower every recommendation to the trace-level ceiling
+    # (graded quality cap + evidence-metrics gate) and re-derive stake. This is
+    # the single choke point that enforces zero_evidence_empty_context -> Pass,
+    # static_identity/usable-band -> B/C, and "bounded_live needs gated metrics".
+    _apply_confidence_caps(
+        result,
+        trace_confidence_cap=quality.confidence_cap,
+        evidence_mode=rollout_mode,
+        evidence_metrics_passed=evidence_metrics_passed,
+        bankroll=bankroll,
+        league=getattr(typed_req, "league", None),
+    )
+
     engine_trace_quality: dict[str, Any] = {
-        "aggregate_quality": None,
         "downgrades": result_downgrades,
         "passed": len(result_downgrades) == 0,
         "evidence_status": evidence_status,
@@ -351,6 +544,8 @@ def analyze(
         "baseline_used": baseline_used,
         "calibration_eligible": calibration_eligible,
         "calibration_exclusion_reasons": calibration_exclusion_reasons,
+        "calibration_path": calibration_path,
+        **quality.as_dict(),
     }
     if trace_quality:
         merged_downgrades = sorted({*trace_quality.get("downgrades", []), *result_downgrades})
@@ -365,6 +560,9 @@ def analyze(
             "baseline_used": baseline_used,
             "calibration_eligible": calibration_eligible,
             "calibration_exclusion_reasons": calibration_exclusion_reasons,
+            "calibration_path": calibration_path,
+            # Engine-computed graded quality; caller cannot override.
+            **quality.as_dict(),
         }
 
     return {
@@ -379,8 +577,13 @@ def analyze(
         "downgrades": result_downgrades,
         "context_labels": context_labels,
         "evidence_mode": evidence_mode,
+        "evidence_rollout_mode": rollout_mode,
+        "evidence_metrics_passed": evidence_metrics_passed,
         "evidence_application": evidence_application,
         "evidence_aggregation": evidence_aggregation,
+        # Mirror the graded score (0-100) to the top level so the denormalized DB
+        # column and UI are honest instead of the long-standing 0.0/NULL default.
+        "aggregate_quality": engine_trace_quality["aggregate_quality"],
         "trace_quality": engine_trace_quality,
     }
 
@@ -418,6 +621,12 @@ def _calibrate_audited(
         context_slice=d.get("context_slice"),
         resolved_slice=d.get("resolved_slice"),
         path=d["path"],
+        profile_status=d.get("profile_status"),
+        profile_maturity=d.get("maturity"),
+        sample_size=d.get("sample_size"),
+        ece=d.get("ece"),
+        brier=d.get("brier"),
+        fallback_level=d.get("fallback_level"),
     )
     return calibrated, audit
 
@@ -554,6 +763,9 @@ def _player_evidence_plan_for(request: PlayerPropRequest) -> EvidenceExecutionPl
         return EvidenceExecutionPlan()
 
     evidence_mode = resolve_evidence_mode(policy)
+    # bounded_live forces hard per-signal/family/plane caps regardless of how the
+    # policy was configured; the handlers receive an effective copy with caps on.
+    handler_policy = policy.bounded_live_effective() if evidence_mode == "bounded_live" else policy
     suppressed = _suppressed_player_signal_indices(evidence)
     handler_evidence = [
         _signal_with_suppressed_player_plane(sig) if idx in suppressed else sig
@@ -564,13 +776,15 @@ def _player_evidence_plan_for(request: PlayerPropRequest) -> EvidenceExecutionPl
         evidence=handler_evidence,
         league=request.league,
         prop_type=request.prop_type,
-        policy=policy,
+        policy=handler_policy,
         evidence_mode=evidence_mode,
     )
     adjustment = _with_suppression_records(adjustment, evidence, suppressed)
     return EvidenceExecutionPlan(
         adjustment=adjustment,
         evidence_mode=adjustment.evidence_mode,
+        rollout_mode=evidence_mode,
+        evidence_metrics_passed=policy.evidence_metrics_passed(),
         evidence_application=adjustment.applications(),
     )
 
@@ -633,17 +847,31 @@ def _game_evidence_plan_for(request: GameAnalysisRequest) -> EvidenceExecutionPl
     suppressed = _suppressed_player_signal_indices(evidence)
     backend = resolve_game_backend(_effective_game_backend_name(request))
     if _uses_transition_modifiers(backend):
+        markov_policy = _load_adjustment_policy()
+        # The Markov path now honors the graduated rollout mode like the plane
+        # path: in a non-applying mode the modifiers are computed and recorded
+        # but NOT routed to the backend, so evidence never moves the prediction
+        # until an operator flips the policy to bounded_live/live.
+        rollout_mode = resolve_evidence_mode(markov_policy)
+        applying = rollout_mode in APPLYING_MODES
         active_evidence = [sig for idx, sig in enumerate(evidence) if idx not in suppressed]
         markov = compute_transition_modifier_adjustment(
             active_evidence,
             home_team=request.home_team,
-            policy=_load_adjustment_policy(),
+            policy=markov_policy,
         )
         applications = _merge_markov_applications(evidence, suppressed, markov.applications)
+        if not applying:
+            # Honest provenance: mapped but not applied in a non-applying mode.
+            applications = [{**a, "applied": False} for a in applications]
         return EvidenceExecutionPlan(
             adjustment=None,
-            transition_modifiers=markov.modifiers or None,
+            transition_modifiers=(markov.modifiers or None) if applying else None,
             evidence_mode="markov_transition",
+            rollout_mode=rollout_mode,
+            evidence_metrics_passed=bool(
+                markov_policy is not None and markov_policy.evidence_metrics_passed()
+            ),
             evidence_application=applications,
             aggregation_records=markov.aggregation_records,
         )
@@ -652,16 +880,19 @@ def _game_evidence_plan_for(request: GameAnalysisRequest) -> EvidenceExecutionPl
     if policy is None:
         return EvidenceExecutionPlan()
     evidence_mode = resolve_evidence_mode(policy)
+    handler_policy = policy.bounded_live_effective() if evidence_mode == "bounded_live" else policy
     adjustment = compute_game_adjustment(
         evidence=evidence,
         league=request.league,
-        policy=policy,
+        policy=handler_policy,
         evidence_mode=evidence_mode,
     )
     adjustment = _with_suppression_records(adjustment, evidence, suppressed)
     return EvidenceExecutionPlan(
         adjustment=adjustment,
         evidence_mode=adjustment.evidence_mode,
+        rollout_mode=evidence_mode,
+        evidence_metrics_passed=policy.evidence_metrics_passed(),
         evidence_application=adjustment.applications(),
         competition_strength_index=_competition_strength_index(request, policy),
     )
@@ -771,9 +1002,19 @@ def _build_edge(
     market_prob = implied_probability(market_odds)
     edge_pct = edge_percentage(calibrated_prob, market_prob)
     ev_pct = expected_value_percent(calibrated_prob, market_odds)
-    tier = "A" if n_iterations >= 1000 else "B"
-    if abs(edge_pct) < 3.0:
-        tier = "Pass"
+    # Stage 1 confidence: market + profile + simulation signals only. The fake
+    # "A iff n_iterations >= 1000" rule is gone — A now requires a real
+    # production-maturity profile with a passing ECE and enough samples/iters.
+    conf = assign_confidence(
+        edge_pct=edge_pct,
+        ev_pct=ev_pct,
+        calibration_path=getattr(calibration_audit, "path", None),
+        profile_maturity=getattr(calibration_audit, "profile_maturity", None),
+        profile_sample_size=getattr(calibration_audit, "sample_size", None),
+        profile_ece=getattr(calibration_audit, "ece", None),
+        n_iterations=n_iterations,
+    )
+    tier = conf.tier
 
     stake = recommend_stake(
         true_prob=calibrated_prob,
@@ -781,6 +1022,7 @@ def _build_edge(
         bankroll=bankroll,
         confidence_tier=tier,
     )
+    units = 0.0 if tier == "Pass" else stake["units"]
 
     return EdgeDetail(
         side=side,
@@ -794,7 +1036,8 @@ def _build_edge(
         ev_pct=round(ev_pct, 2),
         market_odds=market_odds,
         confidence_tier=tier,
-        recommended_units=stake["units"],
+        confidence_cap_reason=conf.cap_reason,
+        recommended_units=units,
         calibration_audit=calibration_audit,
     )
 
@@ -1845,27 +2088,59 @@ def analyze_player_prop(
     else:
         notes.append("odds_unsourced_under")
 
+    # Select the recommended side by edge, then assign honest Stage 1 confidence
+    # for that side (no fake "A iff n_iterations >= 1000"). Trace-level caps
+    # (trace quality, evidence metrics) are applied later in analyze().
+    cap_reason: str | None = None
     if edge_over is not None and edge_under is not None:
         if edge_over > 3.0 and edge_over > edge_under:
             recommendation = "over"
-            tier = "A" if request.n_iterations >= 1000 else "B"
         elif edge_under > 3.0:
             recommendation = "under"
-            tier = "A" if request.n_iterations >= 1000 else "B"
     elif edge_over is not None and edge_over > 3.0:
         recommendation = "over"
-        tier = "A" if request.n_iterations >= 1000 else "B"
     elif edge_under is not None and edge_under > 3.0:
         recommendation = "under"
-        tier = "A" if request.n_iterations >= 1000 else "B"
+
+    side_conf = None
+    if recommendation == "over" and request.odds_over is not None:
+        side_conf = assign_confidence(
+            edge_pct=edge_over,
+            ev_pct=expected_value_percent(cal_over, request.odds_over),
+            calibration_path=getattr(over_audit, "path", None),
+            profile_maturity=getattr(over_audit, "profile_maturity", None),
+            profile_sample_size=getattr(over_audit, "sample_size", None),
+            profile_ece=getattr(over_audit, "ece", None),
+            n_iterations=request.n_iterations,
+        )
+    elif recommendation == "under" and request.odds_under is not None:
+        side_conf = assign_confidence(
+            edge_pct=edge_under,
+            ev_pct=expected_value_percent(cal_under, request.odds_under),
+            calibration_path=getattr(under_audit, "path", None),
+            profile_maturity=getattr(under_audit, "profile_maturity", None),
+            profile_sample_size=getattr(under_audit, "sample_size", None),
+            profile_ece=getattr(under_audit, "ece", None),
+            n_iterations=request.n_iterations,
+        )
+    if side_conf is not None:
+        if side_conf.tier == "Pass":
+            recommendation = "pass"
+            tier = None
+            cap_reason = side_conf.cap_reason
+        else:
+            tier = side_conf.tier
+            cap_reason = side_conf.cap_reason
 
     # B2 cap: imputation discipline supersedes engine tier
     if imputed_fraction is not None and imputed_fraction > 0.4:
         tier = None
         recommendation = "pass"
+        cap_reason = "insufficient_real_observations"
         notes.append("insufficient_real_observations")
     elif imputed_fraction is not None and imputed_fraction > 0.2 and tier == "A":
         tier = "B"
+        cap_reason = "tier_capped_imputation"
         notes.append("tier_capped_imputation")
 
     kelly: float | None = None
@@ -1910,6 +2185,7 @@ def analyze_player_prop(
         edge_under=edge_under,
         recommendation=recommendation,
         confidence_tier=tier,
+        confidence_cap_reason=cap_reason,
         kelly_fraction=kelly,
         recommended_units=units,
         bet_side_odds=bet_side_odds,

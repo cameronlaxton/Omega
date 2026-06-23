@@ -35,7 +35,7 @@ def _target_path(out_dir: Path, *, kind: str, league: str | None, session_id: st
     return out_dir / f"{ts}_{kind}_{safe_scope}.md"
 
 
-def _render_one(args: argparse.Namespace, kind: str) -> Path:
+def _render_one(args: argparse.Namespace, kind: str):
     if kind != "intake":
         raise NotImplementedError(f"{kind} report is not implemented in the intake vertical slice")
     bundle = (
@@ -65,10 +65,10 @@ def _render_one(args: argparse.Namespace, kind: str) -> Path:
     out = _target_path(args.out_dir, kind=kind, league=args.league, session_id=args.session_id)
     if args.dry_run:
         logger.info("DRY-RUN would write %s", out)
-        return out
+        return data
     atomic_write_text(out, markdown)
     logger.info("wrote %s", out)
-    return out
+    return data
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -86,6 +86,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--context-bundle", type=Path, default=None)
     parser.add_argument("--fail-on-context-mismatch", action="store_true")
+    parser.add_argument(
+        "--allow-zero-evidence",
+        action="store_true",
+        help="Render the report but do NOT fail the run when too many traces are "
+        "zero-evidence/empty-context (the blocker section still appears).",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
@@ -104,16 +110,31 @@ def main(argv: list[str] | None = None) -> int:
 
     kinds = ["intake"] if args.kind == "all" else [args.kind]
     failures = 0
+    blocked = False
     for kind in kinds:
         try:
-            _render_one(args, kind)
+            data = _render_one(args, kind)
+            if getattr(data, "zero_evidence_blocked", False):
+                blocked = True
+                logger.error(
+                    "ZERO-EVIDENCE BLOCKER (%s report):\n%s",
+                    kind,
+                    data.zero_evidence_diagnostic,
+                )
         except (ContextBundleError, ValueError, NotImplementedError) as exc:
             logger.error("%s report failed: %s", kind, exc)
             failures += 1
         except Exception as exc:  # noqa: BLE001
             logger.exception("%s report failed unexpectedly: %s", kind, exc)
             failures += 1
-    return 1 if failures else 0
+    if failures:
+        return 1
+    # The run summary is failed when the session reasons blind, unless an
+    # operator explicitly opts out. Distinct exit code (3) so automation can
+    # tell a zero-evidence block from a render error (1) or arg error (2).
+    if blocked and not args.allow_zero_evidence:
+        return 3
+    return 0
 
 
 if __name__ == "__main__":

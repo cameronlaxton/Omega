@@ -245,28 +245,16 @@ def apply_calibration(
 
     Returns:
         Calibrated probability as a float.
+
+    Delegates to :func:`apply_calibration_audited` so both the value-only and
+    audited paths share ONE selection + damping implementation (the drift rule):
+    hierarchical fallback (league → sport_family → global → static) and maturity
+    damping apply identically here.
     """
-    raw_prob = max(0.0, min(1.0, raw_prob))
-
-    # Profile-driven path (when league is provided)
-    if league is not None:
-        context_slice = _derive_context_slice(context_hints, league)
-        profile = _get_active_profile(league, context_slice=context_slice, market=market)
-        if profile is not None:
-            result = calibrate_probability(raw_prob, method=profile.method, **profile.params)
-            return result["calibrated"]
-
-    # Static fallback (current behavior, unchanged)
-    if not should_apply_calibration(raw_prob, strict_cap=False):
-        return raw_prob
-    result = calibrate_probability(
-        raw_prob,
-        method=_POLICY_METHOD,
-        shrink_factor=_POLICY_SHRINK_FACTOR,
-        cap_max=_POLICY_CAP_MAX,
-        cap_min=_POLICY_CAP_MIN,
+    calibrated, _audit = apply_calibration_audited(
+        raw_prob, league=league, context_hints=context_hints, market=market
     )
-    return result["calibrated"]
+    return calibrated
 
 
 def apply_calibration_audited(
@@ -290,10 +278,16 @@ def apply_calibration_audited(
     context_slice = _derive_context_slice(context_hints, league) if context_hints else None
 
     if league is not None:
-        profile = _get_active_profile(league, context_slice=context_slice, market=market)
+        profile, fallback_level = _get_applicable_profile(
+            league, context_slice=context_slice, market=market
+        )
         if profile is not None:
+            maturity = profile.effective_maturity().value
             result = calibrate_probability(raw, method=profile.method, **profile.params)
             calibrated = result["calibrated"]
+            # Low-trust (provisional/probation) profiles may only make a small,
+            # bounded correction; none/retired collapse back to raw.
+            calibrated, maturity_damped = _damp_for_maturity(raw, calibrated, maturity)
             resolved_slice = getattr(profile, "context_slice", None)
             path = (
                 "base_profile_fallback"
@@ -308,18 +302,38 @@ def apply_calibration_audited(
                 "method_resolved": profile.method,
                 "raw_prob": raw,
                 "calibrated_prob": calibrated,
+                "maturity": maturity,
+                "profile_status": profile.status.value,
+                "sample_size": profile.sample_size,
+                "ece": profile.ece,
+                "brier": profile.brier,
+                "fallback_level": fallback_level,
+                "maturity_damped": maturity_damped,
             }
+
+    # No applicable profile -> static policy. None for all profile-provenance
+    # keys so the audit dict shape is identical to the profile path.
+    static_provenance = {
+        "profile_id": None,
+        "resolved_slice": None,
+        "maturity": None,
+        "profile_status": None,
+        "sample_size": None,
+        "ece": None,
+        "brier": None,
+        "fallback_level": None,
+        "maturity_damped": False,
+    }
 
     # Static fallback: if within threshold, return raw unchanged
     if not should_apply_calibration(raw, strict_cap=False):
         return raw, {
             "path": "static_identity",
-            "profile_id": None,
             "context_slice": context_slice,
-            "resolved_slice": None,
             "method_resolved": None,
             "raw_prob": raw,
             "calibrated_prob": raw,
+            **static_provenance,
         }
 
     result = calibrate_probability(
@@ -332,12 +346,11 @@ def apply_calibration_audited(
     calibrated = result["calibrated"]
     return calibrated, {
         "path": "static_calibrated",
-        "profile_id": None,
         "context_slice": context_slice,
-        "resolved_slice": None,
         "method_resolved": _POLICY_METHOD,
         "raw_prob": raw,
         "calibrated_prob": calibrated,
+        **static_provenance,
     }
 
 
@@ -374,3 +387,67 @@ def _get_active_profile(league: str, context_slice: str | None = None, market: s
         return registry.get_production(league, context_slice=context_slice, market=market)
     except Exception:
         return None
+
+
+def _get_applicable_profile(league: str, context_slice: str | None = None, market: str = "game"):
+    """Highest-trust applicable profile + fallback level (hierarchical walk).
+
+    Returns ``(profile, level)`` where level is one of league|sport_family|global,
+    or ``(None, None)`` when no profile applies (caller uses the static policy).
+
+    Implemented as a walk over :func:`_get_active_profile` (one call per bucket)
+    so the production registry-override seam is honored at every level and the
+    same lookup is patchable in tests. Mirrors
+    ``CalibrationRegistry.get_applicable`` (the registry-native equivalent).
+    """
+    try:
+        profile = _get_active_profile(league, context_slice=context_slice, market=market)
+        if profile is not None:
+            return profile, "league"
+
+        from omega.core.calibration.registry import GLOBAL_BUCKET
+        from omega.core.calibration.sport_family import sport_family_for_league
+
+        family = sport_family_for_league(league)
+        if family and family != "unknown":
+            profile = _get_active_profile(
+                family.upper(), context_slice=context_slice, market=market
+            )
+            if profile is not None:
+                return profile, "sport_family"
+
+        profile = _get_active_profile(GLOBAL_BUCKET, context_slice=context_slice, market=market)
+        if profile is not None:
+            return profile, "global"
+    except Exception:
+        return None, None
+    return None, None
+
+
+# Maturity-based correction damping: a low-trust profile may only move the
+# probability by a small bounded amount, so a thin fit makes an honest small
+# correction instead of a confident large one. None of these constants touch a
+# full ``production`` (or legacy) profile.
+_MATURITY_MAX_SHIFT: dict[str, float] = {
+    "provisional": 0.03,
+    "probation": 0.05,
+}
+
+
+def _damp_for_maturity(raw: float, calibrated: float, maturity: str) -> tuple[float, bool]:
+    """Cap the absolute probability shift for provisional/probation profiles.
+
+    Returns ``(possibly_damped_value, was_damped)``. NONE/RETIRED maturities are
+    not trusted to apply, so they collapse to the raw value (no correction);
+    PRODUCTION applies the full correction unchanged.
+    """
+    if maturity in ("none", "retired"):
+        return raw, raw != calibrated
+    cap = _MATURITY_MAX_SHIFT.get(maturity)
+    if cap is None:
+        return calibrated, False  # production: full correction
+    shift = calibrated - raw
+    if abs(shift) <= cap:
+        return calibrated, False
+    sign = 1.0 if shift >= 0 else -1.0
+    return raw + sign * cap, True

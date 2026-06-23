@@ -20,6 +20,7 @@ from omega.trace.session_report.models import (
     LedgerView,
     TraceReportCard,
 )
+from omega.trace.quality import summarize_zero_evidence
 from omega.trace.session_sidecar import load_sidecar_safe
 from omega.trace.store import TraceStore
 
@@ -61,6 +62,36 @@ def _first_dict(*values: Any) -> dict[str, Any]:
     return {}
 
 
+def _primary_calibration_audit(trace: dict[str, Any]) -> dict[str, Any]:
+    """The calibration audit for a trace's recommended side/edge (or {})."""
+    result = _first_dict(trace.get("result"))
+    side = result.get("recommendation")
+    if side == "over":
+        return _first_dict(result.get("over_calibration_audit"))
+    if side == "under":
+        return _first_dict(result.get("under_calibration_audit"))
+    edges = result.get("edges")
+    if isinstance(edges, list) and edges and isinstance(edges[0], dict):
+        return _first_dict(edges[0].get("calibration_audit"))
+    return {}
+
+
+def _evidence_applied_factor(trace: dict[str, Any]) -> tuple[float, bool]:
+    """Product of applied evidence factors and whether any were applied."""
+    apps = trace.get("evidence_application")
+    factor = 1.0
+    applied_any = False
+    if isinstance(apps, list):
+        for a in apps:
+            if isinstance(a, dict) and a.get("applied"):
+                applied_any = True
+                try:
+                    factor *= float(a.get("factor", 1.0))
+                except (TypeError, ValueError):
+                    pass
+    return factor, applied_any
+
+
 def _extract_engine_view(trace: dict[str, Any]) -> EngineView:
     result = _first_dict(trace.get("result"))
     best = _first_dict(result.get("best_bet"))
@@ -69,6 +100,14 @@ def _extract_engine_view(trace: dict[str, Any]) -> EngineView:
     rec = recs[0] if isinstance(recs, list) and recs and isinstance(recs[0], dict) else {}
     edge = _first_dict(best, recommendation, rec, result)
     tq = _first_dict(trace.get("trace_quality"))
+    audit = _primary_calibration_audit(trace)
+    factor, applied_any = _evidence_applied_factor(trace)
+    # Prefer the recommended edge's own cap reason; fall back to the result/edge.
+    cap_reason = (
+        edge.get("confidence_cap_reason")
+        or result.get("confidence_cap_reason")
+        or _primary_edge_cap_reason(result)
+    )
     return EngineView(
         model_probability=_format_number(
             result.get("model_prob")
@@ -82,7 +121,36 @@ def _extract_engine_view(trace: dict[str, Any]) -> EngineView:
         units=_format_number(edge.get("recommended_units") or edge.get("units")),
         tier=_cell(edge.get("confidence_tier")),
         calibration_status=_cell(tq.get("calibration_status") or tq.get("status")),
+        confidence_cap_reason=_cell(cap_reason),
+        aggregate_quality=_cell(tq.get("aggregate_quality")),
+        quality_band=_cell(tq.get("quality_band")),
+        evidence_mode=_cell(trace.get("evidence_rollout_mode") or trace.get("evidence_mode")),
+        evidence_status=_cell(tq.get("evidence_status")),
+        evidence_signal_count=_cell(
+            len(trace["evidence_application"])
+            if isinstance(trace.get("evidence_application"), list)
+            else None
+        ),
+        evidence_applied_factor=(f"{factor:.4f}" if applied_any else "1.0000 (not applied)"),
+        calibration_path=_cell(audit.get("path") or tq.get("calibration_path")),
+        profile_id=_cell(audit.get("profile_id")),
+        profile_status=_cell(audit.get("profile_status")),
+        profile_maturity=_cell(audit.get("profile_maturity")),
+        profile_sample_size=_cell(audit.get("sample_size")),
+        profile_ece=_format_number(audit.get("ece")),
+        profile_brier=_format_number(audit.get("brier")),
+        static_identity_used=_cell(audit.get("path") == "static_identity"),
     )
+
+
+def _primary_edge_cap_reason(result: dict[str, Any]) -> Any:
+    """First non-null confidence_cap_reason among a game's edges."""
+    edges = result.get("edges")
+    if isinstance(edges, list):
+        for e in edges:
+            if isinstance(e, dict) and e.get("confidence_cap_reason"):
+                return e.get("confidence_cap_reason")
+    return None
 
 
 def _decision_fields(
@@ -450,6 +518,7 @@ def extract_intake_report(
         )
 
     unmatched = sorted(tid for tid in ledger_by_trace if tid not in trace_ids)
+    zero_evidence = summarize_zero_evidence(traces)
     return IntakeReportData(
         generated_at=datetime.now(UTC).isoformat(),
         source_db_path=store.db_path,
@@ -469,4 +538,8 @@ def extract_intake_report(
         audit_rows=audit_rows,
         unmatched_ledger_rows=unmatched,
         ignored_context_entries=ignored_context_entries,
+        zero_evidence_count=zero_evidence.count,
+        zero_evidence_blocked=zero_evidence.blocked,
+        zero_evidence_trace_ids=zero_evidence.trace_ids,
+        zero_evidence_diagnostic=zero_evidence.diagnostic or None,
     )

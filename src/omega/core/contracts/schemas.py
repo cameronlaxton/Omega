@@ -408,6 +408,11 @@ class EdgeDetail(BaseModel):
     ev_pct: float = Field(description="Expected value percentage")
     market_odds: float = Field(description="American odds used for this side")
     confidence_tier: str = Field(description="A (high), B (medium), C (low), or Pass")
+    confidence_cap_reason: str | None = Field(
+        default=None,
+        description="Why confidence was capped below A (e.g. 'no_production_profile_calibration', "
+        "'trace_quality_cap', 'static_identity', 'insufficient_iterations'); None when uncapped.",
+    )
     recommended_units: float = Field(default=0.0, description="Kelly-sized stake in units")
     spread_coverage_prob: float | None = Field(
         default=None,
@@ -453,6 +458,36 @@ class CalibrationAudit(BaseModel):
             "'static_identity': no profile, within threshold, returned raw unchanged"
         )
     )
+    # Profile maturity + quality provenance (None on static paths). Surfaced so
+    # the confidence layer and reports can be honest about how trustworthy the
+    # applied calibration was.
+    profile_status: str | None = Field(
+        default=None, description="Lifecycle status of the applied profile (e.g. 'production')."
+    )
+    profile_maturity: str | None = Field(
+        default=None,
+        description="Trust level: none|provisional|probation|production|retired. "
+        "provisional/probation apply capped corrections and cap confidence.",
+    )
+    sample_size: int | None = Field(
+        default=None, description="Training sample size of the applied profile."
+    )
+    ece: float | None = Field(
+        default=None, description="Expected Calibration Error of the applied profile, if recorded."
+    )
+    brier: float | None = Field(
+        default=None, description="Brier score of the applied profile, if recorded."
+    )
+    fallback_level: str | None = Field(
+        default=None,
+        description="Hierarchical level the profile came from: league|sport_family|global. "
+        "None on static paths.",
+    )
+
+    @property
+    def static_identity_used(self) -> bool:
+        """True when no calibration moved the probability (raw returned unchanged)."""
+        return self.path == "static_identity"
 
 
 class AnalysisMetadata(BaseModel):
@@ -528,6 +563,10 @@ class PlayerPropResponse(BaseModel):
     edge_under: float | None = Field(default=None, description="Edge on Under in pct points")
     recommendation: str | None = Field(default=None, description="'over', 'under', or 'pass'")
     confidence_tier: str | None = None
+    confidence_cap_reason: str | None = Field(
+        default=None,
+        description="Why confidence was capped below A; None when uncapped.",
+    )
     kelly_fraction: float | None = Field(
         default=None,
         description="Scaled Kelly fraction for the recommended prop side; null for pass or unsourced odds",

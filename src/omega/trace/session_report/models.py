@@ -38,6 +38,23 @@ class EngineView(BaseModel):
     units: str | None = None
     tier: str | None = None
     calibration_status: str | None = None
+    # Honesty fields (Issue 7) — every recommendation states how trustworthy it
+    # is. All persisted by the engine; surfaced here without recomputation.
+    confidence_cap_reason: str | None = None
+    aggregate_quality: str | None = None
+    quality_band: str | None = None
+    evidence_mode: str | None = None
+    evidence_status: str | None = None
+    evidence_signal_count: str | None = None
+    evidence_applied_factor: str | None = None
+    calibration_path: str | None = None
+    profile_id: str | None = None
+    profile_status: str | None = None
+    profile_maturity: str | None = None
+    profile_sample_size: str | None = None
+    profile_ece: str | None = None
+    profile_brier: str | None = None
+    static_identity_used: str | None = None
 
 
 class LedgerView(BaseModel):
@@ -137,3 +154,10 @@ class IntakeReportData(BaseModel):
     audit_rows: list[AuditRow] = Field(default_factory=list)
     unmatched_ledger_rows: list[str] = Field(default_factory=list)
     ignored_context_entries: list[IgnoredContextEntry] = Field(default_factory=list)
+    # Zero-evidence-empty-context blocker (Issue 4): "no evidence" is not
+    # harmless. When too many traces in a session reason blind, the run summary
+    # is failed and a diagnostic is surfaced.
+    zero_evidence_count: int = 0
+    zero_evidence_blocked: bool = False
+    zero_evidence_trace_ids: list[str] = Field(default_factory=list)
+    zero_evidence_diagnostic: str | None = None
