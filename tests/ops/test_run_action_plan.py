@@ -225,3 +225,25 @@ def test_render_report_action_can_be_fatal():
     )[0]
 
     assert action.non_fatal is False
+
+
+def test_full_clv_loop_recipe_validates():
+    """Issue #28 WS5: the continuous CLV loop composes from existing actions."""
+    plan = {
+        "session_id": "clv-loop",
+        "actions": [
+            {"type": "fetch_outcomes", "args": {"leagues": ["nba"]}},
+            {"type": "fetch_closing_lines", "args": {"league": "nba"}},
+            {"type": "score_evidence_signals", "args": {"league": "NBA", "window_days": 30}},
+            {"type": "fit_adjustment_policy", "args": {"league": "NBA"}},
+            {"type": "report_calibration", "args": {"league": "NBA"}},
+        ],
+    }
+    order = [atype for atype, _ in run_action_plan._validate_all(plan)]
+    assert order == [
+        "fetch_outcomes",
+        "fetch_closing_lines",
+        "score_evidence_signals",
+        "fit_adjustment_policy",
+        "report_calibration",
+    ]

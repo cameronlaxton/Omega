@@ -145,3 +145,46 @@ class TestSignalProposals:
             assert store.set_proposal_lifecycle("missing", "active") is False
         finally:
             store.close()
+
+
+class TestLlmReasoningColumn:
+    """Issue #28 WS5: the agent narrative is queryable in the llm_reasoning column."""
+
+    def _trace(self, **extra) -> dict:
+        base = {
+            "trace_id": "t-reason",
+            "run_id": "t-reason",
+            "timestamp": "2026-06-24T00:00:00Z",
+            "prompt": "NBA game",
+        }
+        base.update(extra)
+        return base
+
+    def _read(self, store: TraceStore) -> object:
+        return store.conn.execute(
+            "SELECT llm_reasoning FROM traces WHERE trace_id = 't-reason'"
+        ).fetchone()[0]
+
+    def test_reasoning_narrative_surfaced_to_column(self):
+        store = TraceStore(db_path=_tmp_db())
+        try:
+            store.persist(self._trace(reasoning_narrative="Zone D forces midrange; fade the over."))
+            assert self._read(store) == "Zone D forces midrange; fade the over."
+        finally:
+            store.close()
+
+    def test_explicit_llm_reasoning_preferred(self):
+        store = TraceStore(db_path=_tmp_db())
+        try:
+            store.persist(self._trace(llm_reasoning="explicit", reasoning_narrative="fallback"))
+            assert self._read(store) == "explicit"
+        finally:
+            store.close()
+
+    def test_absent_is_null(self):
+        store = TraceStore(db_path=_tmp_db())
+        try:
+            store.persist(self._trace())
+            assert self._read(store) is None
+        finally:
+            store.close()

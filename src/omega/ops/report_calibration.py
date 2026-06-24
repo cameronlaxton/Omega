@@ -595,6 +595,86 @@ def _evidence_lifecycle_lines() -> list[str]:
     return lines
 
 
+def _production_reliability_map() -> dict[str, float]:
+    """signal_type -> reliability_weight from the production AdjustmentPolicy.
+
+    Best-effort: returns {} if the policy registry is unavailable or empty. Used to
+    surface what the engine actually trusts in the §6B scorecard.
+    """
+    try:
+        from omega.core.calibration.adjustment_policy import AdjustmentPolicyRegistry
+
+        prod = AdjustmentPolicyRegistry().get_production_policy()
+    except Exception:  # noqa: BLE001
+        return {}
+    if prod is None:
+        return {}
+    out: dict[str, float] = {}
+    for signal_type, coeffs in (prod.coefficients or {}).items():
+        rw = coeffs.get("reliability_weight")
+        if rw is not None:
+            try:
+                out[signal_type] = float(rw)
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def _evidence_scorecard_lines() -> list[str]:
+    """Unified evidence+math scorecard tail (issue #28 WS5).
+
+    Surfaces the fit's recommended (operator-gated) lifecycle transitions and any
+    production market-aware deference profiles, so the single report shows the whole
+    loop: what is trusted, what should transition, and where the math defers to the
+    market. Best-effort — each block renders only when its data exists.
+    """
+    lines: list[str] = []
+
+    recs: dict[str, str] = {}
+    try:
+        from omega.core.calibration.adjustment_policy import AdjustmentPolicyRegistry
+        from omega.core.calibration.profiles import ProfileStatus
+
+        cands = AdjustmentPolicyRegistry().list_policies(status=ProfileStatus.CANDIDATE.value)
+        latest = max(cands, key=lambda p: p.version, default=None)
+        recs = dict(latest.lifecycle_recommendations) if latest else {}
+    except Exception:  # noqa: BLE001
+        recs = {}
+    if recs:
+        lines.append("")
+        lines.append("**Recommended lifecycle transitions (latest fit — operator-gated):**")
+        for signal_type, target in sorted(recs.items()):
+            lines.append(f"- `{signal_type}` -> **{target}**")
+        lines.append(
+            "> Apply with `omega-promote-adjustment-policy "
+            "--apply-lifecycle-recommendations` (fail-closed; nothing transitions "
+            "automatically)."
+        )
+
+    market_lines: list[str] = []
+    try:
+        from omega.core.calibration.registry import CalibrationRegistry
+
+        for p in CalibrationRegistry().list_profiles(status="production"):
+            if getattr(p, "method", None) == "market_aware":
+                weight = float((p.params or {}).get("market_weight", 0.0))
+                market_lines.append(
+                    f"- {p.league} / {getattr(p, 'market', 'game')}: "
+                    f"market_weight={weight:.2f} (`{p.profile_id}`)"
+                )
+    except Exception:  # noqa: BLE001
+        market_lines = []
+    if market_lines:
+        lines.append("")
+        lines.append(
+            "**Market-aware deference (WS4) — model shrinks toward the close where it "
+            "has no measured edge:**"
+        )
+        lines.extend(sorted(market_lines))
+
+    return lines
+
+
 def _section_pending_candidates(
     registry: CalibrationRegistry, league: str | None
 ) -> list[dict[str, Any]]:
@@ -1034,21 +1114,24 @@ def _render(
             "after outcomes attach._"
         )
     else:
+        rel_map = _production_reliability_map()
         lines.append(
             "| signal_type | source | window | n | dir_acc | cal_gap | "
-            "clv_n | clv_align | clv_cents | verdict |"
+            "clv_n | clv_align | clv_cents | reliability | verdict |"
         )
-        lines.append("|---|---|---|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
         for r in signal_perf:
             verdict = _signal_verdict(r)
             clv_aligned = r.get("clv_aligned")
             clv_cents = r.get("clv_cents_when_followed")
+            rel = rel_map.get(r["signal_type"])
             lines.append(
                 f"| {r['signal_type']} | {r['source']} | {r['obs_window']} | "
                 f"{r['sample_size']} | {r['direction_accuracy']:.2f} | "
                 f"{r['calibration_gap']:+.2f} | {int(r.get('clv_sample') or 0)} | "
                 f"{'n/a' if clv_aligned is None else f'{float(clv_aligned):.2f}'} | "
-                f"{'n/a' if clv_cents is None else f'{float(clv_cents):+.2f}'} | {verdict} |"
+                f"{'n/a' if clv_cents is None else f'{float(clv_cents):+.2f}'} | "
+                f"{'—' if rel is None else f'{rel:.2f}'} | {verdict} |"
             )
         lines.append("")
         lines.append(
@@ -1057,8 +1140,10 @@ def _render(
             "closing-line value captured. Trust `clv_aligned`, discount "
             "`clv_misaligned` (it merely restates the line). Where `clv_n` is thin "
             "the verdict falls back to realized direction (`predictive`/`noise`/"
-            "`insufficient_n`), which the closing line already contains."
+            "`insufficient_n`), which the closing line already contains. "
+            "`reliability` is what the production policy actually trusts."
         )
+        lines.extend(_evidence_scorecard_lines())
     lines.append("")
 
     lines.append("## 7. Suggested actions")

@@ -393,3 +393,86 @@ class TestClvSignalVerdict:
         row = {"clv_aligned": None, "clv_sample": 0, "sample_size": 5,
                "direction_accuracy": 0.6, "calibration_gap": 0.0}
         assert report_calibration._signal_verdict(row) == "insufficient_n"
+
+
+class TestUnifiedScorecard:
+    """Issue #28 WS5: §6B reliability column + recommendations/market-aware tail."""
+
+    def test_reliability_map_reads_production_policy(self, monkeypatch):
+        from omega.core.calibration import adjustment_policy as ap
+
+        class _Pol:
+            coefficients = {
+                "recent_form": {"reliability_weight": 0.0, "cap": 0.1},
+                "usage_spike": {"cap": 0.2},  # no reliability_weight -> excluded
+            }
+
+        class _Reg:
+            def __init__(self, *a, **k):
+                pass
+
+            def get_production_policy(self):
+                return _Pol()
+
+        monkeypatch.setattr(ap, "AdjustmentPolicyRegistry", _Reg)
+        assert report_calibration._production_reliability_map() == {"recent_form": 0.0}
+
+    def test_scorecard_lines_render_recommendations_and_market(self, monkeypatch):
+        from omega.core.calibration import adjustment_policy as ap
+        from omega.core.calibration import registry as reg_mod
+
+        class _Cand:
+            version = 3
+            lifecycle_recommendations = {"recent_form": "deprecated", "stale_line": "rejected"}
+
+        class _APReg:
+            def __init__(self, *a, **k):
+                pass
+
+            def list_policies(self, status=None):
+                return [_Cand()]
+
+        class _Prof:
+            league = "NBA"
+            market = "game"
+            method = "market_aware"
+            profile_id = "market_nba_v1"
+            params = {"market_weight": 0.8}
+
+        class _CReg:
+            def __init__(self, *a, **k):
+                pass
+
+            def list_profiles(self, status=None):
+                return [_Prof()]
+
+        monkeypatch.setattr(ap, "AdjustmentPolicyRegistry", _APReg)
+        monkeypatch.setattr(reg_mod, "CalibrationRegistry", _CReg)
+
+        text = "\n".join(report_calibration._evidence_scorecard_lines())
+        assert "`recent_form` -> **deprecated**" in text
+        assert "`stale_line` -> **rejected**" in text
+        assert "Market-aware deference" in text
+        assert "market_weight=0.80" in text
+
+    def test_scorecard_lines_empty_without_data(self, monkeypatch):
+        from omega.core.calibration import adjustment_policy as ap
+        from omega.core.calibration import registry as reg_mod
+
+        class _APReg:
+            def __init__(self, *a, **k):
+                pass
+
+            def list_policies(self, status=None):
+                return []
+
+        class _CReg:
+            def __init__(self, *a, **k):
+                pass
+
+            def list_profiles(self, status=None):
+                return []
+
+        monkeypatch.setattr(ap, "AdjustmentPolicyRegistry", _APReg)
+        monkeypatch.setattr(reg_mod, "CalibrationRegistry", _CReg)
+        assert report_calibration._evidence_scorecard_lines() == []

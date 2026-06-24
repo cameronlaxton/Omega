@@ -944,13 +944,20 @@ class TraceStore:
         param_ref = extract_parameter_profile_ref(trace)
         param_ref_json = json.dumps(param_ref, default=str) if param_ref else None
 
+        # Free-text agent narrative (V21): surface the canonical reasoning_narrative
+        # (a.k.a. the agent's matchup narrative) into a queryable column so the exact
+        # logical theory is queryable alongside the mathematical outputs (issue #28).
+        # Accept an explicit ``llm_reasoning`` key first, else the canonical field.
+        llm_reasoning = trace.get("llm_reasoning") or trace.get("reasoning_narrative")
+
         cur = self.conn.execute(
             """INSERT OR IGNORE INTO traces
                (trace_id, run_id, timestamp, prompt, league, matchup,
                 execution_mode, simulation_seed, aggregate_quality,
                 predictions, recommendations, odds_snapshot, downgrades,
-                full_trace, schema_version, session_id, parameter_profile_ref)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                full_trace, schema_version, session_id, parameter_profile_ref,
+                llm_reasoning)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 trace_id,
                 run_id,
@@ -975,6 +982,7 @@ class TraceStore:
                 CURRENT_VERSION,
                 session_id,
                 param_ref_json,
+                llm_reasoning,
             ),
         )
         # Explode evidence into queryable rows only on a genuine first insert.
