@@ -65,7 +65,11 @@ from omega.core.simulation.parameter_profile import (  # noqa: E402
     make_parameter_profile_id,
 )
 from omega.historical.contracts import stable_hash  # noqa: E402
-from omega.strategy.artifacts import FrozenArtifact, trace_to_artifact  # noqa: E402
+from omega.strategy.artifacts import (  # noqa: E402
+    FrozenArtifact,
+    compute_artifact_id,
+    trace_to_artifact,
+)
 from omega.strategy.backtest.variant_sweep import (  # noqa: E402
     _artifact_records,
     _simulate_pairs,
@@ -112,6 +116,15 @@ _KNOB_IDENTITY: dict[str, float] = {
 
 _VALID_KNOBS = frozenset(_KNOB_DEFAULT_GRID)
 _MIN_SAMPLES_FOR_CV = 60  # raw_oos needs enough per fold; mirrors cv-diagnostic floor
+
+
+def _grid_for_knob(knob: str, grid: tuple[float, ...] | None = None) -> tuple[float, ...]:
+    """Validate a structural knob and ensure its identity baseline is evaluated."""
+    if knob not in _VALID_KNOBS:
+        raise ValueError(f"knob must be one of {sorted(_VALID_KNOBS)}; got {knob!r}")
+    values = grid or _KNOB_DEFAULT_GRID[knob]
+    identity = _KNOB_IDENTITY[knob]
+    return values if identity in values else tuple(sorted({*values, identity}))
 
 
 def build_candidates(
@@ -220,8 +233,7 @@ def tune_backend_structure(
     ``metrics`` filled exactly as the promotion gate reads them — ready for
     ``register_parameter_profile``. No registration happens here (the CLI decides).
     """
-    if knob not in _VALID_KNOBS:
-        raise ValueError(f"knob must be one of {sorted(_VALID_KNOBS)}; got {knob!r}")
+    grid = _grid_for_knob(knob, grid)
     backend = resolve_game_backend(backend_name)
     if backend is None:
         raise ValueError(f"backend {backend_name!r} is not registered; cannot tune")
@@ -268,16 +280,16 @@ def tune_backend_structure(
     winner = next(c for c in candidates if c.profile_id == report.winner_profile_id)
     winner_score = next(s for s in report.scores if s.profile_id == report.winner_profile_id)
 
-    # Raw CV-ECE over the full eval universe with the winner's frozen params — the
-    # robust metric the ECE_FLOOR prefers. Re-simulating via the sweep's own
-    # primitive keeps the probabilities identical to what was selected.
+    # Raw CV-ECE over the sealed holdout only. The validation window selected the
+    # knob, so including it here would bias the promotion metric. Re-simulating via
+    # the sweep's own primitive keeps the probabilities identical to the selection.
     engine = OmegaSimulationEngine()
-    all_records = _artifact_records(artifacts, validation_start)
+    holdout_records = _artifact_records(artifacts, holdout_start)
     pairs = _simulate_pairs(
         engine,
         backend,
         winner.params,
-        all_records,
+        holdout_records,
         n_iterations=n_iterations,
         seed=seed,
         exact=True,
@@ -321,7 +333,14 @@ def _artifacts_from_traces(graded: list[dict]) -> list[FrozenArtifact]:
         art = trace_to_artifact(t, outcome=outcome)
         decision_date = str(t.get("decision_time") or "")[:10]
         if decision_date:
-            art = art.model_copy(update={"date": decision_date})
+            art = art.model_copy(
+                update={
+                    "date": decision_date,
+                    "artifact_id": compute_artifact_id(
+                        art.home_team, art.away_team, art.league, decision_date
+                    ),
+                }
+            )
         if not art.home_team or not art.away_team or art.date == "":
             continue
         if not (art.outcome and art.outcome.get("home_score") is not None):
@@ -402,6 +421,11 @@ def emit_structure_candidate_after_fit(
     calibration-scored structural fit are reconciled in one command. Returns a
     process exit code.
     """
+    try:
+        grid = _grid_for_knob(knob)
+    except ValueError as exc:
+        logger.error("%s", exc)
+        return 1
     bucket = (bucket or resolve_calibration_bucket(league)).upper()
     artifacts = load_graded_artifacts(
         league=league,
@@ -415,10 +439,6 @@ def emit_structure_candidate_after_fit(
             "No graded artifacts for league=%s; cannot emit a structure candidate.", league
         )
         return 1
-    grid = _KNOB_DEFAULT_GRID[knob]
-    identity = _KNOB_IDENTITY[knob]
-    if identity not in grid:
-        grid = tuple(sorted({*grid, identity}))
     report, winner = tune_backend_structure(
         artifacts,
         backend_name=backend_name,
@@ -435,14 +455,7 @@ def emit_structure_candidate_after_fit(
     if winner is None:
         return 1
     if register:
-        store = TraceStore(db_path=db)
-        try:
-            incumbent = get_production_parameter_profile(store, backend_name, bucket)
-            if incumbent is not None:
-                winner = winner.model_copy(update={"incumbent_id": incumbent.profile_id})
-            register_parameter_profile(store, winner)
-        finally:
-            store.close()
+        winner = _register_candidate(db, winner, backend_name, bucket)
         logger.info(
             "Registered CANDIDATE %s (gate with omega-promote-parameter-profile).",
             winner.profile_id,
@@ -450,6 +463,36 @@ def emit_structure_candidate_after_fit(
     else:
         print("\n[dry-run] not registered. Add --register-structure to persist the CANDIDATE.")
     return 0
+
+
+def _register_candidate(
+    db: str | None,
+    winner: BackendParameterProfile,
+    backend_name: str,
+    bucket: str,
+) -> BackendParameterProfile:
+    """Persist a candidate with the next monotonic version for its backend bucket."""
+    store = TraceStore(db_path=db)
+    try:
+        next_version = store.conn.execute(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM parameter_profiles "
+            "WHERE backend_name = ? AND competition_bucket = ?",
+            (backend_name, bucket),
+        ).fetchone()[0]
+        incumbent = get_production_parameter_profile(store, backend_name, bucket)
+        winner = winner.model_copy(
+            update={
+                "version": next_version,
+                "profile_id": make_parameter_profile_id(
+                    backend_name, bucket, next_version, winner.params
+                ),
+                "incumbent_id": incumbent.profile_id if incumbent is not None else None,
+            }
+        )
+        register_parameter_profile(store, winner)
+        return winner
+    finally:
+        store.close()
 
 
 def _print_report(report, winner) -> None:
@@ -462,7 +505,7 @@ def _print_report(report, winner) -> None:
     print("-" * 80)
     for s in sorted(report.scores, key=lambda s: (s.selection_value is None, s.selection_value)):
         sel = f"{s.selection_value:.4f}" if s.selection_value is not None else "   n/a"
-        print(f"{s.profile_id:<52}{sel:>12}{s.n_validation:>7}{str(s.eligible):>9}")
+        print(f"{s.profile_id:<52}{sel:>12}{s.n_validation:>7}{s.eligible!s:>9}")
     print("-" * 80)
     if report.winner_profile_id is None:
         print(f"NO WINNER: {report.selection_note}")
@@ -535,10 +578,6 @@ def main(argv: list[str] | None = None) -> int:
             sorted(_VALID_KNOBS),
         )
         return 1
-    if knob not in _VALID_KNOBS:
-        logger.error("Unknown --knob %r; choose from %s.", knob, sorted(_VALID_KNOBS))
-        return 1
-
     if args.grid:
         try:
             grid = tuple(float(x) for x in args.grid.split(","))
@@ -546,10 +585,12 @@ def main(argv: list[str] | None = None) -> int:
             logger.error("--grid must be comma-separated numbers, e.g. 0.8,0.9,1.0")
             return 1
     else:
-        grid = _KNOB_DEFAULT_GRID[knob]
-    identity = _KNOB_IDENTITY[knob]
-    if identity not in grid:
-        grid = tuple(sorted({*grid, identity}))  # always score the production baseline
+        grid = None
+    try:
+        grid = _grid_for_knob(knob, grid)
+    except ValueError as exc:
+        logger.error("%s", exc)
+        return 1
 
     try:
         base_params = json.loads(args.base_params)
@@ -598,14 +639,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\n[dry-run] not registered. Re-run with --register to persist the CANDIDATE.")
         return 0
 
-    store = TraceStore(db_path=args.db)
-    try:
-        incumbent = get_production_parameter_profile(store, args.backend, bucket)
-        if incumbent is not None:
-            winner = winner.model_copy(update={"incumbent_id": incumbent.profile_id})
-        register_parameter_profile(store, winner)
-    finally:
-        store.close()
+    winner = _register_candidate(args.db, winner, args.backend, bucket)
     logger.info(
         "Registered CANDIDATE %s. Gate it with: omega-promote-parameter-profile "
         "--profile-id %s --auto --confirm-backtest-parity --parity-report <f> "

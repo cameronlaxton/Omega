@@ -316,6 +316,9 @@ def main() -> int:
         store = TraceStore(db_path=args.db) if args.db else TraceStore()
         try:
             run_fit(store, observations, season=args.season, as_of_date=as_of, n0=args.n0)
+        except Exception as exc:  # noqa: BLE001 - surface persistence failures cleanly
+            logger.error("%s", exc)
+            return 1
         finally:
             store.close()
 
@@ -344,7 +347,7 @@ def main() -> int:
             validation_start=args.structure_validation_start,
             holdout_start=args.structure_holdout_start,
             priors_as_of=as_of,
-            register=args.register_structure,
+            register=args.register_structure and not args.dry_run,
             db=args.db,
         )
     return 0

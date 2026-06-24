@@ -124,6 +124,8 @@ class NflSimulationBackend:
         # k -> tighter scores (sharper margin/total/ML); <1 widens. Default 1.0 ->
         # bit-identical. The NFL-game-bucket raw-ECE lever the structural sweep tunes.
         nb_k_scale = float(prior.get("nb_k_scale", 1.0))
+        if not np.isfinite(nb_k_scale) or nb_k_scale <= 0:
+            raise ValueError("nb_k_scale must be a finite positive number")
         if nb_k_scale != 1.0:
             k *= nb_k_scale
 

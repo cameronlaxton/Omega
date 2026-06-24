@@ -129,29 +129,29 @@ traces), the diagnostic-picked target.
 
 1. **Triage** — classify the bucket's RAW calibration so structure is tuned only
    where the residual is real:
-   ```
+    ```bash
    omega-cv-calibration-diagnostic --league FIFA_INTL --plane game \
      --historical-only --historical-db var/historical/replay_fifa_intl.db
-   ```
+    ```
    Result: raw ECE **0.073**, `mean_pred 0.395` vs `base_rate 0.463` →
    `MISCALIBRATED`, and the mean gap shows a **bias** (home wins under-predicted)
    because the replay used `home_advantage=0.0`. So `home_advantage` is the lever.
    The draw plane is already `CALIBRATED` (0.039) — leave it alone.
 2. **Tune** the knob to minimize raw out-of-sample ECE (dry-run first; add
    `--register` to persist the CANDIDATE):
-   ```
+    ```bash
    omega-fit-backend-structure --backend soccer_bivariate_poisson_dc \
      --league FIFA_INTL --knob home_advantage --base-params '{"rho": -0.012705}' \
      --priors-as-of 2026-06-10 --historical-only \
      --historical-db var/historical/replay_fifa_intl.db \
      --validation-start 2018-01-01 --holdout-start 2024-06-01
-   ```
+    ```
    Winner `home_advantage=0.3`: validation raw ECE **0.018**, sealed-holdout raw
    ECE **0.032**, raw **CV-ECE 0.041 — CLEARS the 0.05 floor** (down from the
    baseline 0.070). The grid also shows over-correction (0.45 → 0.022, 0.6 →
    0.048), confirming 0.3 is a genuine optimum, not a monotonic artifact.
 3. **Gate** (fail-closed; there is no `--force`):
-   ```
+   ```bash
    omega-promote-parameter-profile --profile-id <winner>          # dry-run: show gates
    omega-promote-parameter-profile --profile-id <winner> --auto \
      --confirm-backtest-parity --parity-report parity.json \

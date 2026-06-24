@@ -340,7 +340,7 @@ def main() -> int:
             validation_start=args.structure_validation_start,
             holdout_start=args.structure_holdout_start,
             priors_as_of=as_of,
-            register=args.register_structure,
+            register=args.register_structure and not args.dry_run,
             db=args.db,
         )
     return 0

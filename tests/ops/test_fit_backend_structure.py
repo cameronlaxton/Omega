@@ -15,8 +15,13 @@ from omega.core.simulation.backends import (
     register_game_backend,
     resolve_game_backend,
 )
-from omega.ops.fit_backend_structure import build_candidates, tune_backend_structure
+from omega.ops.fit_backend_structure import (
+    _register_candidate,
+    build_candidates,
+    tune_backend_structure,
+)
 from omega.strategy.artifacts import FrozenArtifact, compute_artifact_id
+from omega.trace.store import TraceStore
 
 _TUNE_BACKEND = "structtune_test"
 _FLAT_BACKEND = "structtune_flat_test"
@@ -153,6 +158,25 @@ def test_loop_selects_known_optimal_knob_and_fills_cv_ece():
     assert winner.sample_size == winner.metrics["n_eval"] > 0
 
 
+def test_cv_ece_uses_only_the_sealed_holdout(monkeypatch):
+    import omega.ops.fit_backend_structure as fit_structure
+
+    observed = {}
+
+    def capture(predictions, outcomes, **_kwargs):
+        observed["n"] = len(predictions)
+        return {
+            "cv_calibration_error": 0.0,
+            "cv_ece_ci_low": 0.0,
+            "cv_ece_ci_high": 0.0,
+            "cv_n_folds": 5,
+        }
+
+    monkeypatch.setattr(fit_structure, "_raw_cv_ece", capture)
+    tune_backend_structure(_artifacts(), backend_name=_TUNE_BACKEND, **_KW)
+    assert observed["n"] == 300
+
+
 def test_winner_passes_promotion_ece_floor():
     _report, winner = tune_backend_structure(_artifacts(), backend_name=_TUNE_BACKEND, **_KW)
     pass_artifact = {"state": "PASS"}
@@ -203,6 +227,8 @@ def test_artifacts_from_traces_uses_decision_time_and_filters():
     arts = _artifacts_from_traces(graded)
     assert len(arts) == 2
     assert arts[0].date == "2023-05-10"  # decision_time, NOT the 2026 run timestamp
+    assert arts[0].artifact_id == compute_artifact_id("Home FC", "Away FC", "", "2023-05-10")
+    assert arts[0].artifact_id != arts[1].artifact_id
     assert arts[0].home_team == "Home FC" and arts[0].away_team == "Away FC"
     assert arts[0].outcome["home_score"] == 2
     # No decision_time -> falls back to the trace timestamp date.
@@ -224,3 +250,23 @@ def test_build_candidates_one_per_grid_point_with_required_priors():
     assert all(c.params["rho"] == -0.12 for c in cands)  # required prior threaded through
     assert {c.params["lambda_gap_scale"] for c in cands} == {0.7, 1.0}
     assert len({c.profile_id for c in cands}) == 2  # ids are content-addressed, unique
+
+
+def test_register_candidate_allocates_a_new_bucket_version(tmp_path):
+    db = str(tmp_path / "traces.db")
+    candidate = build_candidates(
+        backend_name="soccer_bivariate_poisson_dc",
+        backend_component_version="soccer_bvp_dc_v1",
+        competition_bucket="FIFA_INTL",
+        knob="lambda_gap_scale",
+        grid=(1.0,),
+        base_params={"rho": -0.12},
+        dataset_hash="abc123",
+    )[0]
+    first = _register_candidate(db, candidate, candidate.backend_name, candidate.competition_bucket)
+    second = _register_candidate(
+        db, candidate, candidate.backend_name, candidate.competition_bucket
+    )
+    assert (first.version, second.version) == (1, 2)
+    assert first.profile_id != second.profile_id
+    TraceStore(db_path=db).close()

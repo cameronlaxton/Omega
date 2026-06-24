@@ -214,3 +214,10 @@ def test_nfl_nb_k_scale_scales_recorded_dispersion():
     sharp = _nfl({"nb_k_scale": 2.0})
     # The recorded team-score k (provenance) is the scaled value used for sampling.
     assert sharp["team_score_nb_k"] == base["team_score_nb_k"] * 2.0
+
+
+def test_nfl_nb_k_scale_must_be_finite_and_positive():
+    import pytest
+
+    with pytest.raises(ValueError, match="nb_k_scale must be a finite positive number"):
+        _nfl({"nb_k_scale": 0.0})
