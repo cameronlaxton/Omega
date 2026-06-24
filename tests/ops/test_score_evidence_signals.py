@@ -173,3 +173,40 @@ def test_load_market_moves_and_clv_alignment_end_to_end():
     assert scored[0].clv_aligned is True  # home signal agreed with the home move
     assert scored[0].clv_cents > 0
     store.close()
+
+
+def test_market_moves_use_canonical_descriptor_and_line_only_movement():
+    """Props retain CLV coverage when labels are human text and prices stay flat."""
+    from omega.trace.ledger_bet import BetProvenance, LedgerBet
+
+    store, _ = _tmp_store()
+    _seed_graded(store, "t-prop-line", [])
+    store.record_ledger_bet(
+        LedgerBet(
+            ledger_id="L-prop-line",
+            trace_id="t-prop-line",
+            league="NBA",
+            market="player_prop:pts",
+            selection="Jayson Tatum Over 24.5 pts",
+            selection_descriptor="jayson_tatum_over_24.5_pts",
+            line=24.5,
+            odds=-110.0,
+            provenance=BetProvenance.ENGINE_AUTO,
+            decision_timestamp="2026-05-20T12:00:00Z",
+        )
+    )
+    # Same -110 price but the total rises: the earlier over 24.5 is favorable.
+    store.attach_closing_line(
+        "t-prop-line",
+        "player_prop:pts",
+        "jayson_tatum_over_24.5_pts",
+        closing_odds=-110.0,
+        closing_line=25.5,
+        closing_timestamp="2026-05-20T18:00:00Z",
+        source="test",
+    )
+
+    moves = score_evidence_signals.load_market_moves(store, "NBA", None)
+    assert moves["t-prop-line"]["prop"].favored_direction == "over"
+    assert moves["t-prop-line"]["prop"].clv_cents == 1.0
+    store.close()

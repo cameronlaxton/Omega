@@ -585,6 +585,12 @@ def _apply_correlation_damping(
 
     buckets: dict[tuple[str, str], list[int]] = {}
     for i, (signal, rec) in enumerate(pairs):
+        # Probation/deprecated/rejected signals are recorded but must never
+        # participate in a live family: otherwise a probation primary can be
+        # re-enabled by the damping rewrite below, bypassing the lifecycle gate
+        # enforced in _evaluate_signal.
+        if not is_applicable_lifecycle(effective_lifecycle(signal.signal_type, policy.signal_lifecycle)):
+            continue
         key = _damping_bucket(signal, rec, plane)
         if key is not None:
             buckets.setdefault(key, []).append(i)

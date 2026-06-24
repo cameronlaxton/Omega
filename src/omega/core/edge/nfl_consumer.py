@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from omega.core.betting.odds import implied_probability
 from omega.core.contracts.market_quotes import quote_matches_selection
 from omega.core.contracts.schemas import EdgeDetail, GameAnalysisRequest
 from omega.core.edge.consumers import (
@@ -86,6 +87,7 @@ class AmericanFootballEdgeConsumer:
                 context_hints=gc,
                 plane="game",
                 market="teaser",
+                market_prob=implied_probability(price),
             )
             edges.append(
                 build_edge_fn(

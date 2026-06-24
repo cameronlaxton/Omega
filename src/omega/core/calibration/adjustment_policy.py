@@ -429,6 +429,39 @@ class AdjustmentPolicyRegistry:
                 return
         raise ValueError(f"Adjustment policy not found: {policy_id}")
 
+    def bind_signal_lifecycle_and_coefficients(
+        self,
+        policy_id: str,
+        signal_lifecycle: dict[str, str],
+        coefficients: dict[str, dict[str, Any]],
+    ) -> None:
+        """Atomically bind operator-approved lifecycle overrides and handlers.
+
+        A graduated LLM proposal needs both an ``active`` lifecycle and its
+        persisted feature-combo coefficient.  Persisting them in one registry
+        write prevents an active but handlerless signal after an interrupted
+        promotion.
+        """
+        from omega.core.contracts.evidence import LIFECYCLE_VALUES  # noqa: PLC0415
+
+        invalid = sorted({v for v in signal_lifecycle.values() if v not in LIFECYCLE_VALUES})
+        if invalid:
+            raise ValueError(f"invalid lifecycle value(s): {invalid}")
+        data = self._load()
+        for policy in data["policies"]:
+            if policy["policy_id"] == policy_id:
+                policy["signal_lifecycle"] = dict(signal_lifecycle)
+                policy["coefficients"] = dict(coefficients)
+                self._save(data)
+                logger.info(
+                    "Bound signal lifecycle and coefficients on %s (%d override(s), %d handler(s))",
+                    policy_id,
+                    len(signal_lifecycle),
+                    len(coefficients),
+                )
+                return
+        raise ValueError(f"Adjustment policy not found: {policy_id}")
+
     def list_policies(self, status: str | None = None) -> list[AdjustmentPolicy]:
         """List policies, optionally filtered by status."""
         data = self._load()

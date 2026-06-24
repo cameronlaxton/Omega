@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import logging
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -59,6 +60,22 @@ logger = logging.getLogger("score_evidence_signals")
 
 # Map a taken side to its opposite, for resolving which way the line moved.
 _OPPOSITE_SIDE = {"over": "under", "under": "over", "home": "away", "away": "home"}
+
+
+def _side_from_descriptor(descriptor: object, selection: object = None) -> str | None:
+    """Recover a canonical wager side without depending on display labels.
+
+    Player-prop descriptors embed the side after the player name (for example,
+    ``jayson_tatum_over_24.5_pts``), while game descriptors begin with it.  The
+    human ``selection`` remains a legacy fallback only for rows written before
+    descriptors were consistently populated.
+    """
+    for value in (descriptor, selection):
+        tokens = [token for token in re.split(r"[^a-z]+", str(value or "").lower()) if token]
+        for side in ("over", "under", "home", "away"):
+            if side in tokens:
+                return side
+    return None
 
 
 def _plane_for_side(side: str) -> str | None:
@@ -92,7 +109,8 @@ def load_market_moves(
         clauses.append("t.league = ?")
         params.append(league)
     rows = conn.execute(
-        f"""SELECT b.trace_id, b.selection, b.line AS line_taken, b.odds AS odds_taken,
+        f"""SELECT b.trace_id, b.selection, b.selection_descriptor,
+                   b.line AS line_taken, b.odds AS odds_taken,
                    c.closing_line, c.closing_odds
             FROM bet_ledger b
             JOIN closing_lines c ON b.trace_id = c.trace_id
@@ -106,7 +124,7 @@ def load_market_moves(
 
     moves: dict[str, dict[str, MarketMove]] = {}
     for row in rows:
-        side = str(row["selection"]).split()[0].lower() if row["selection"] else None
+        side = _side_from_descriptor(row["selection_descriptor"], row["selection"])
         if not side:
             continue
         plane = _plane_for_side(side)
@@ -123,14 +141,17 @@ def load_market_moves(
         except Exception as exc:  # noqa: BLE001
             logger.warning("CLV computation failed for trace %s: %s", row["trace_id"], exc)
             continue
-        if r.clv_cents == 0.0:
+        movement = r.clv_cents if r.clv_cents != 0.0 else r.line_value
+        if movement is None or movement == 0.0:
             continue  # no move — alignment undefined
-        favored = side if r.beat_close else _OPPOSITE_SIDE.get(side)
+        # Positive CLV cents and positive signed line value both mean the taken
+        # side beat the close; a negative result favors its opposite.
+        favored = side if movement > 0.0 else _OPPOSITE_SIDE.get(side)
         if favored is None:
             continue
         trace_moves = moves.setdefault(str(row["trace_id"]), {})
         trace_moves.setdefault(
-            plane, MarketMove(favored_direction=favored, clv_cents=abs(r.clv_cents))
+            plane, MarketMove(favored_direction=favored, clv_cents=abs(movement))
         )
     return moves
 

@@ -440,3 +440,28 @@ class TestApplyLifecycleRecommendations:
         assert rc == 0
         prod = AdjustmentPolicyRegistry(path=path).get_production_policy()
         assert prod.signal_lifecycle == {}  # not bound without the explicit flag
+
+    def test_active_proposal_binds_feature_combo_from_trace_store(self):
+        path = _tmp_policy_registry()
+        db = _tmp_path(".db")
+        store = TraceStore(db_path=db)
+        store.upsert_signal_proposal(
+            name="usage_when_star_out",
+            feature_combo={"op": "and", "items": [{"feature": "usage_rate", "gt": 0.3}]},
+            plane="player",
+        )
+        store.close()
+        cid = self._register_candidate(path, {"usage_when_star_out": "active"})
+
+        rc = promote_mod.main(
+            [
+                "--candidate-id", cid, "--policy-path", path, "--db", db, "--auto",
+                "--min-samples", "1", "--confirm-backtest",
+                "--apply-lifecycle-recommendations",
+            ]
+        )
+
+        assert rc == 0
+        prod = AdjustmentPolicyRegistry(path=path).get_production_policy()
+        assert prod.signal_lifecycle["usage_when_star_out"] == "active"
+        assert prod.coefficients["usage_when_star_out"]["feature_combo"]["op"] == "and"

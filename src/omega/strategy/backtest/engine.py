@@ -349,8 +349,18 @@ class BacktestEngine:
         away_prob = sim_result["away_win_prob"] / 100.0
 
         # Calibrate via shared policy (must match production path)
-        cal_home = apply_calibration(home_prob, league=league, context_hints=game_ctx or None)
-        cal_away = apply_calibration(away_prob, league=league, context_hints=game_ctx or None)
+        cal_home = apply_calibration(
+            home_prob,
+            league=league,
+            context_hints=game_ctx or None,
+            market_prob=implied_probability(ml_home) if ml_home is not None else None,
+        )
+        cal_away = apply_calibration(
+            away_prob,
+            league=league,
+            context_hints=game_ctx or None,
+            market_prob=implied_probability(ml_away) if ml_away is not None else None,
+        )
 
         # Home ML
         if ml_home is not None:
@@ -388,7 +398,11 @@ class BacktestEngine:
         draw_prob = (sim_result.get("draw_prob") or 0.0) / 100.0
         if ml_draw is not None and draw_prob > 0:
             cal_draw = apply_calibration(
-                draw_prob, league=league, context_hints=game_ctx or None, market="draw"
+                draw_prob,
+                league=league,
+                context_hints=game_ctx or None,
+                market="draw",
+                market_prob=implied_probability(ml_draw),
             )
             bet = self._evaluate_side(
                 side="draw",
@@ -443,7 +457,12 @@ class BacktestEngine:
             prob = sim_prob / 100.0
             if prob <= 0:
                 continue
-            cal = apply_calibration(prob, league=league, context_hints=game_ctx or None)
+            cal = apply_calibration(
+                prob,
+                league=league,
+                context_hints=game_ctx or None,
+                market_prob=implied_probability(price),
+            )
             bet = self._evaluate_side(
                 side=side,
                 team=team_label,
@@ -467,7 +486,12 @@ class BacktestEngine:
             prob = sim_prob / 100.0
             if prob <= 0:
                 continue
-            cal = apply_calibration(prob, league=league, context_hints=game_ctx or None)
+            cal = apply_calibration(
+                prob,
+                league=league,
+                context_hints=game_ctx or None,
+                market_prob=implied_probability(price),
+            )
             bet = self._evaluate_side(
                 side=scoreline,
                 team=f"Correct Score {scoreline}",
@@ -495,7 +519,11 @@ class BacktestEngine:
                 if price is None or sim_prob is None:
                     continue
                 cal = apply_calibration(
-                    sim_prob / 100.0, league=league, context_hints=game_ctx or None, market="cover"
+                    sim_prob / 100.0,
+                    league=league,
+                    context_hints=game_ctx or None,
+                    market="cover",
+                    market_prob=implied_probability(price),
                 )
                 bet = self._evaluate_side(
                     side=side,
@@ -528,6 +556,7 @@ class BacktestEngine:
                     league=league,
                     context_hints=game_ctx or None,
                     market=cal_market,
+                    market_prob=implied_probability(price),
                 )
                 bet = self._evaluate_side(
                     side=side,
