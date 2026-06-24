@@ -131,3 +131,45 @@ def test_qa_failed_graded_trace_is_skipped_by_status():
     assert summary.evidence_present == 0
     assert scored == []
     store.close()
+
+
+def test_load_market_moves_and_clv_alignment_end_to_end():
+    """A logged bet + closing line yields a per-plane move that scores CLV."""
+    from omega.trace.ledger_bet import BetProvenance, LedgerBet
+
+    store, _ = _tmp_store()
+    _seed_graded(store, "t-clv", [dict(_HOME_SIGNAL)])  # home signal, home_win outcome
+    store.record_ledger_bet(
+        LedgerBet(
+            ledger_id="L1",
+            trace_id="t-clv",
+            league="NBA",
+            market="moneyline",
+            selection="Home",
+            selection_descriptor="home",
+            odds=100.0,  # implied 0.50 at decision
+            provenance=BetProvenance.ENGINE_AUTO,
+            decision_timestamp="2026-05-20T12:00:00Z",
+        )
+    )
+    # Close at -200 (implied 0.667): the home side shortened -> line moved to home.
+    store.attach_closing_line(
+        "t-clv",
+        "moneyline",
+        "home",
+        closing_odds=-200.0,
+        closing_line=None,
+        closing_timestamp="2026-05-20T18:00:00Z",
+        source="test",
+    )
+
+    moves = score_evidence_signals.load_market_moves(store, "NBA", None)
+    assert moves["t-clv"]["game"].favored_direction == "home"
+    assert moves["t-clv"]["game"].clv_cents > 0
+
+    graded = store.query_traces(has_outcome=True, limit=1000)
+    scored, _ = score_evidence_signals.collect_scores(store, graded, moves)
+    assert len(scored) == 1
+    assert scored[0].clv_aligned is True  # home signal agreed with the home move
+    assert scored[0].clv_cents > 0
+    store.close()

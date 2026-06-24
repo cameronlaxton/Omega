@@ -453,6 +453,44 @@ class BettingBlock(BaseModel):
     n_bets: int = 0
 
 
+class ModelVsMarketBlock(BaseModel):
+    """Where the model systematically diverges from the close — and is it right to?
+
+    The shared incremental-over-market objective (issue #28 WS4), one block per
+    league/market/context-slice. A divergence is *earned* only if it carries
+    positive CLV. ``mean_signed_divergence`` is mean(model_prob - market_implied);
+    ``clv_when_divergent`` is the mean CLV on divergent decisions (>0 == the model
+    was right to leave the market); ``divergent_beat_close_rate`` is the share of
+    divergent decisions that beat the close.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mean_signed_divergence: float | None = None
+    mean_abs_divergence: float | None = None
+    clv_when_divergent: float | None = None
+    divergent_beat_close_rate: float | None = None
+    n: int = 0
+    n_divergent: int = 0
+
+
+class MarginalValueBlock(BaseModel):
+    """Incremental probability value of a signal: forecast WITH vs WITHOUT it.
+
+    The slow confirmer behind the fast CLV measure (issue #28 WS1). Computed in the
+    replay path, where the per-signal ``final_applied_factor`` makes the
+    counterfactual ("this signal set to 1.0") recoverable. Positive deltas mean the
+    signal IMPROVES the forecast (Brier/log-loss fell when it was applied).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    signal_type: str
+    brier_delta: float | None = None  # brier_without - brier_with (>0 == signal helps)
+    log_loss_delta: float | None = None  # log_loss_without - log_loss_with (>0 == helps)
+    n: int = 0
+
+
 class HealthBlock(BaseModel):
     """Visibility rates for leakage / identity / odds / calibration fallbacks."""
 

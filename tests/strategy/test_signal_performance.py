@@ -10,6 +10,7 @@ from __future__ import annotations
 import tempfile
 
 from omega.strategy.signal_performance import (
+    MarketMove,
     ScoredSignal,
     SignalPerformanceRow,
     accumulate_signal_performance,
@@ -207,3 +208,73 @@ class TestSignalPerformanceStore:
         nba = store.get_signal_performance(league="NBA")
         assert all(r["league"] == "NBA" for r in nba)
         store.close()
+
+
+class TestClvScoring:
+    """CLV-alignment scoring (issue #28 WS1): the market-relative trust driver."""
+
+    def test_aligned_prop_signal(self):
+        trace = {"_prop_outcomes": [{"stat_value": 30.0, "line": 27.5}]}
+        move = MarketMove(favored_direction="over", clv_cents=5.0)
+        scored = score_trace_signals(trace, [_ev_row(direction="over")], prop_move=move)
+        assert len(scored) == 1
+        assert scored[0].clv_aligned is True
+        assert scored[0].clv_cents == 5.0
+        assert scored[0].direction_correct is True
+
+    def test_misaligned_prop_signal_pays_negative_clv(self):
+        trace = {"_prop_outcomes": [{"stat_value": 30.0, "line": 27.5}]}
+        move = MarketMove(favored_direction="over", clv_cents=5.0)
+        scored = score_trace_signals(trace, [_ev_row(direction="under")], prop_move=move)
+        assert scored[0].clv_aligned is False
+        assert scored[0].clv_cents == -5.0
+        assert scored[0].direction_correct is False  # under vs over-realized
+
+    def test_no_move_leaves_clv_none(self):
+        trace = {"_prop_outcomes": [{"stat_value": 30.0, "line": 27.5}]}
+        scored = score_trace_signals(trace, [_ev_row(direction="over")])
+        assert scored[0].clv_aligned is None
+        assert scored[0].clv_cents is None
+        assert scored[0].direction_correct is True
+
+    def test_push_with_move_still_scored_on_clv(self):
+        # Push: realized direction is None, but a CLV move resolved at close.
+        trace = {"_prop_outcomes": [{"stat_value": 27.5, "line": 27.5}]}
+        move = MarketMove(favored_direction="over", clv_cents=4.0)
+        scored = score_trace_signals(trace, [_ev_row(direction="over")], prop_move=move)
+        assert len(scored) == 1
+        assert scored[0].direction_correct is None
+        assert scored[0].clv_aligned is True
+
+    def test_no_outcome_and_no_move_is_skipped(self):
+        scored = score_trace_signals({}, [_ev_row(direction="over")])
+        assert scored == []
+
+    def test_unmoved_line_is_undefined(self):
+        trace = {"_prop_outcomes": [{"stat_value": 30.0, "line": 27.5}]}
+        move = MarketMove(favored_direction=None, clv_cents=0.0)
+        scored = score_trace_signals(trace, [_ev_row(direction="over")], prop_move=move)
+        assert scored[0].clv_aligned is None  # no move -> undefined
+        assert scored[0].direction_correct is True
+
+    def test_accumulate_splits_direction_and_clv_denominators(self):
+        scored = [
+            ScoredSignal("recent_form", "src", "last_5", "NBA", 0.7, True,
+                         clv_aligned=True, clv_cents=5.0),
+            ScoredSignal("recent_form", "src", "last_5", "NBA", 0.6, False,
+                         clv_aligned=False, clv_cents=-3.0),
+            # CLV-only observation (a push): excluded from the direction block.
+            ScoredSignal("recent_form", "src", "last_5", "NBA", 0.5, None,
+                         clv_aligned=True, clv_cents=2.0),
+        ]
+        rows = accumulate_signal_performance(scored)
+        assert len(rows) == 1
+        r = rows[0]
+        # Direction block: only the two with a realized direction.
+        assert r.sample_size == 2
+        assert r.direction_correct == 1
+        assert r.direction_accuracy == 0.5
+        # CLV block: all three carried a closing-line move.
+        assert r.clv_sample == 3
+        assert r.clv_aligned == 2 / 3
+        assert r.clv_cents_when_followed == (5.0 - 3.0 + 2.0) / 3

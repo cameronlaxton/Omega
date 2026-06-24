@@ -19,6 +19,7 @@ from omega.core.simulation.parameter_profile import (
     ParameterProfileStatus,
     make_parameter_profile_id,
 )
+from omega.trace.schema import CURRENT_VERSION
 from omega.trace.parameter_profiles import (
     extract_parameter_profile_ref,
     get_parameter_profile,
@@ -79,7 +80,7 @@ def test_fresh_db_has_v19_table_and_version():
             ).fetchall()
         }
         assert "parameter_profiles" in tables
-        assert store.schema_version() == 20
+        assert store.schema_version() == CURRENT_VERSION
     finally:
         store.close()
 

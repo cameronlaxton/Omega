@@ -95,3 +95,53 @@ def test_health_metrics_rates():
     assert h.default_context_rate == 0.5
     assert h.stale_context_rate == 0.5
     assert h.fallback_profile_rate == 0.25
+
+
+class TestMarginalAndModelVsMarket:
+    """Issue #28 WS1/WS4 scorecard foundation."""
+
+    def test_marginal_value_rewards_a_helpful_signal(self):
+        from omega.historical.metrics import marginal_value
+
+        outcomes = [1, 1, 0, 0]
+        # WITH the signal the forecast is sharper toward the truth than WITHOUT.
+        preds_with = [0.8, 0.7, 0.2, 0.3]
+        preds_without = [0.55, 0.55, 0.45, 0.45]
+        blk = marginal_value("recent_form_residual", preds_with, preds_without, outcomes)
+        assert blk.signal_type == "recent_form_residual"
+        assert blk.brier_delta > 0  # signal improves (lowers) Brier
+        assert blk.n == 4
+
+    def test_marginal_value_penalizes_a_harmful_signal(self):
+        from omega.historical.metrics import marginal_value
+
+        outcomes = [1, 1, 0, 0]
+        preds_with = [0.4, 0.45, 0.6, 0.55]  # pushed the wrong way
+        preds_without = [0.55, 0.55, 0.45, 0.45]
+        blk = marginal_value("noise_signal", preds_with, preds_without, outcomes)
+        assert blk.brier_delta < 0  # signal hurts
+
+    def test_marginal_value_empty(self):
+        from omega.historical.metrics import marginal_value
+
+        blk = marginal_value("x", [], [], [])
+        assert blk.n == 0 and blk.brier_delta is None
+
+    def test_model_vs_market_rewards_vindicated_divergence(self):
+        from omega.historical.metrics import model_vs_market
+
+        # Three decisions diverge from market; CLV positive on those.
+        model = [0.60, 0.40, 0.55, 0.50]
+        market = [0.50, 0.50, 0.50, 0.50]
+        clv = [3.0, 2.0, 1.0, None]
+        blk = model_vs_market(model, market, clv, divergence_threshold=0.02)
+        assert blk.n == 4
+        assert blk.n_divergent == 3  # the 0.50==0.50 one is not divergent
+        assert blk.clv_when_divergent == 2.0  # mean of 3,2,1
+        assert blk.divergent_beat_close_rate == 1.0
+
+    def test_model_vs_market_empty(self):
+        from omega.historical.metrics import model_vs_market
+
+        blk = model_vs_market([], [], [])
+        assert blk.n == 0

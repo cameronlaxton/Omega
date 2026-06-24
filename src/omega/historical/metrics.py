@@ -18,7 +18,9 @@ from omega.core.calibration.profiles import CalibrationProfile
 from omega.historical.contracts import (
     BettingBlock,
     HealthBlock,
+    MarginalValueBlock,
     MetricBlock,
+    ModelVsMarketBlock,
     ReplayCandidateSelection,
     ReplayEventRecord,
 )
@@ -59,6 +61,67 @@ def probability_metrics(
         raw_log_loss=raw["log_loss"],
         calibrated_log_loss=cal["log_loss"],
         n=len(raw_preds),
+    )
+
+
+def marginal_value(
+    signal_type: str,
+    preds_with: Sequence[float],
+    preds_without: Sequence[float],
+    outcomes: Sequence[int],
+) -> MarginalValueBlock:
+    """Incremental Brier/log-loss value of a signal (forecast WITH vs WITHOUT it).
+
+    The slow confirmer behind WS1's fast CLV measure (issue #28). ``preds_without``
+    is the counterfactual forecast with this signal's ``final_applied_factor`` set
+    to 1.0 (reconstructed in the replay path). Positive deltas mean the signal
+    improves the forecast. Reuses the single ``CalibrationFitter.evaluate`` path.
+    """
+    if not preds_with:
+        return MarginalValueBlock(signal_type=signal_type, n=0)
+    fitter = CalibrationFitter()
+    with_m = fitter.evaluate(_NONE_PROFILE, list(preds_with), list(outcomes))
+    without_m = fitter.evaluate(_NONE_PROFILE, list(preds_without), list(outcomes))
+    return MarginalValueBlock(
+        signal_type=signal_type,
+        brier_delta=round(without_m["brier_score"] - with_m["brier_score"], 6),
+        log_loss_delta=round(without_m["log_loss"] - with_m["log_loss"], 6),
+        n=len(preds_with),
+    )
+
+
+def model_vs_market(
+    model_probs: Sequence[float],
+    market_probs: Sequence[float],
+    clv_cents: Sequence[float | None],
+    *,
+    divergence_threshold: float = 0.02,
+) -> ModelVsMarketBlock:
+    """Where the model diverges from the market and whether CLV vindicates it.
+
+    The shared incremental-over-market objective (issue #28 WS4). A decision is
+    "divergent" when ``|model_prob - market_prob| >= divergence_threshold``; on
+    those decisions we ask whether the model was *right* to diverge (positive CLV).
+    ``clv_cents`` entries may be None (no closing line) and are skipped from the CLV
+    aggregates only.
+    """
+    n = len(model_probs)
+    if n == 0:
+        return ModelVsMarketBlock()
+    signed = [float(m) - float(k) for m, k in zip(model_probs, market_probs, strict=True)]
+    divergent_idx = [i for i, d in enumerate(signed) if abs(d) >= divergence_threshold]
+    div_clv = [
+        float(clv_cents[i]) for i in divergent_idx if i < len(clv_cents) and clv_cents[i] is not None
+    ]
+    return ModelVsMarketBlock(
+        mean_signed_divergence=round(sum(signed) / n, 6),
+        mean_abs_divergence=round(sum(abs(d) for d in signed) / n, 6),
+        clv_when_divergent=(round(sum(div_clv) / len(div_clv), 4) if div_clv else None),
+        divergent_beat_close_rate=(
+            round(sum(1 for c in div_clv if c > 0) / len(div_clv), 4) if div_clv else None
+        ),
+        n=n,
+        n_divergent=len(divergent_idx),
     )
 
 

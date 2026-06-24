@@ -106,27 +106,100 @@ class TestReliabilityWeightDamping:
 
 
 class TestReliabilityRule:
+    """The reliability weight SHAPE (issue #22) is now ``_clamp_weight``."""
+
     def test_coin_flip_maps_to_zero(self):
-        assert fit_mod._reliability_weight(0.50) == 0.0
+        assert fit_mod._clamp_weight(0.50) == 0.0
 
     def test_below_random_clamps_to_zero(self):
-        assert fit_mod._reliability_weight(0.30) == 0.0
+        assert fit_mod._clamp_weight(0.30) == 0.0
 
     def test_perfect_maps_to_one(self):
-        assert fit_mod._reliability_weight(1.0) == 1.0
+        assert fit_mod._clamp_weight(1.0) == 1.0
 
     def test_midpoint(self):
-        assert abs(fit_mod._reliability_weight(0.75) - 0.5) < 1e-9
+        assert abs(fit_mod._clamp_weight(0.75) - 0.5) < 1e-9
 
     def test_aggregate_collapses_by_signal_type(self):
         rows = [
             {"signal_type": "recent_form", "sample_size": 20, "direction_correct": 14},
             {"signal_type": "recent_form", "sample_size": 10, "direction_correct": 4},
         ]
-        agg = fit_mod._aggregate_by_signal_type(rows)
-        n, acc = agg["recent_form"]
-        assert n == 30
-        assert abs(acc - 18 / 30) < 1e-9
+        agg = fit_mod._aggregate_by_signal_type(rows)["recent_form"]
+        assert agg.dir_n == 30
+        assert abs(agg.direction_accuracy - 18 / 30) < 1e-9
+        assert agg.clv_n == 0  # no CLV in these rows
+
+
+class TestClvPrimaryReliabilityWeight:
+    """Issue #28: CLV-primary blend with graceful direction fallback."""
+
+    def test_no_clv_degrades_to_direction(self):
+        agg = fit_mod._SignalAgg(dir_n=40, dir_correct=30)  # acc 0.75
+        w = fit_mod._reliability_weight(agg, graduated=False, min_samples=30)
+        assert abs(w - 0.5) < 1e-9  # clamp(2*(0.75-0.5))
+
+    def test_thin_everything_returns_none(self):
+        agg = fit_mod._SignalAgg(dir_n=5, dir_correct=4)  # below min_samples, no CLV
+        assert fit_mod._reliability_weight(agg, graduated=False, min_samples=30) is None
+
+    def test_graduated_is_clv_primary(self):
+        # clv_aligned 0.70; thin direction -> pure CLV weight clamp(2*(0.7-0.5))=0.4
+        agg = fit_mod._SignalAgg(dir_n=5, dir_correct=3, clv_n=4000, clv_aligned_weighted=0.70 * 4000)
+        w = fit_mod._reliability_weight(agg, graduated=True, min_samples=30)
+        assert abs(w - 0.4) < 1e-9
+
+    def test_graduated_blends_direction_at_large_n(self):
+        # clv_aligned 0.70 -> 0.4; dir acc 0.60 -> 0.2; blend 0.75*0.4 + 0.25*0.2 = 0.35
+        agg = fit_mod._SignalAgg(
+            dir_n=40, dir_correct=24, clv_n=4000, clv_aligned_weighted=0.70 * 4000
+        )
+        w = fit_mod._reliability_weight(agg, graduated=True, min_samples=30)
+        assert abs(w - 0.35) < 1e-9
+
+    def test_ungraduated_with_clv_is_capped(self):
+        # Aligned but not graduated -> fail-closed cap at the unproven ceiling.
+        agg = fit_mod._SignalAgg(dir_n=50, dir_correct=30, clv_n=50, clv_aligned_weighted=0.70 * 50)
+        w = fit_mod._reliability_weight(agg, graduated=False, min_samples=30)
+        assert abs(w - fit_mod._UNPROVEN_CEILING) < 1e-9
+
+    def test_ungraduated_misaligned_damps_to_zero(self):
+        # The recent_form case: lots of data, CLV not aligned -> 0.
+        agg = fit_mod._SignalAgg(dir_n=80, dir_correct=40, clv_n=200, clv_aligned_weighted=0.42 * 200)
+        w = fit_mod._reliability_weight(agg, graduated=False, min_samples=30)
+        assert w == 0.0
+
+
+class TestProbationPipeline:
+    """End-to-end statistical bar: aggregate -> probation stats -> graduation."""
+
+    def test_strong_clv_graduates_dead_signal_does_not(self):
+        n_min = fit_mod.min_samples_for_power()  # ~3863
+        rows = [
+            {
+                "signal_type": "recent_form_residual",
+                "sample_size": 100,
+                "direction_correct": 55,
+                "clv_sample": n_min + 200,  # clears N_min
+                "clv_aligned": 0.65,
+                "clv_cents_when_followed": 3.0,
+                "clv_cents_std": 10.0,
+            },
+            {
+                "signal_type": "recent_form",  # the dead public-stat signal
+                "sample_size": 100,
+                "direction_correct": 42,
+                "clv_sample": 200,  # below N_min and misaligned
+                "clv_aligned": 0.42,
+                "clv_cents_when_followed": -1.0,
+                "clv_cents_std": 8.0,
+            },
+        ]
+        aggs = fit_mod._aggregate_by_signal_type(rows)
+        stats = fit_mod._probation_stats(aggs, n_min)
+        grad = fit_mod.graduation_mask(stats)
+        assert grad.get("recent_form_residual") is True
+        assert grad.get("recent_form", False) is False
 
 
 def _seed_signal_performance(db_path: str) -> None:

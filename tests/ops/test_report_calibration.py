@@ -368,3 +368,28 @@ def test_report_main_is_overall_even_when_league_arg_is_passed(tmp_path, monkeyp
     assert "| Traces (all) | 2 |" in text
     assert "| NBA | game | base | `iso_nba_game` |" in text
     assert "| MLB | game | `iso_mlb_game_candidate` |" in text
+
+
+class TestClvSignalVerdict:
+    """Issue #28: the §6B verdict is CLV-primary with a direction fallback."""
+
+    def test_clv_aligned_when_coverage_sufficient(self):
+        row = {"clv_aligned": 0.62, "clv_sample": 100, "sample_size": 100,
+               "direction_accuracy": 0.42, "calibration_gap": 0.0}
+        assert report_calibration._signal_verdict(row) == "clv_aligned"
+
+    def test_clv_misaligned_restates_the_line(self):
+        # recent_form: strong direction but CLV says it's already in the line.
+        row = {"clv_aligned": 0.46, "clv_sample": 100, "sample_size": 100,
+               "direction_accuracy": 0.70, "calibration_gap": 0.0}
+        assert report_calibration._signal_verdict(row) == "clv_misaligned"
+
+    def test_falls_back_to_direction_when_clv_thin(self):
+        row = {"clv_aligned": None, "clv_sample": 0, "sample_size": 50,
+               "direction_accuracy": 0.58, "calibration_gap": 0.0}
+        assert report_calibration._signal_verdict(row) == "predictive"
+
+    def test_insufficient_when_no_clv_and_thin_direction(self):
+        row = {"clv_aligned": None, "clv_sample": 0, "sample_size": 5,
+               "direction_accuracy": 0.6, "calibration_gap": 0.0}
+        assert report_calibration._signal_verdict(row) == "insufficient_n"
