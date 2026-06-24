@@ -43,6 +43,15 @@ class NegBinomPropBackend:
         if not np.isfinite(k) or k <= 0:
             raise ValueError("prior_payload.nb_dispersion_k must be a finite positive number")
 
+        # Structural sharpness knob (Phase 8 backend parameter profile): scale the
+        # NB dispersion k. var = mean + mean^2/k, so nb_k_scale>1 raises k -> tighter
+        # distribution (sharper over/under); <1 widens. Default 1.0 -> bit-identical.
+        # This is the prop-plane raw-ECE lever omega-fit-backend-structure tunes; it
+        # rides prior_payload so the variant sweep reaches it without a seam change.
+        nb_k_scale = float(prior.get("nb_k_scale", 1.0))
+        if nb_k_scale != 1.0:
+            k *= nb_k_scale
+
         if request.dispersion is not None and request.dispersion.variance_multiplier != 1.0:
             k /= request.dispersion.variance_multiplier
             request.dispersion.applied_to.append("nb_dispersion_k")

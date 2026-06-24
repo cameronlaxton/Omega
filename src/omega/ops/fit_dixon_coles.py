@@ -230,6 +230,37 @@ def main() -> int:
     parser.add_argument("--cache-root", default=None, help="Override ETL cache root")
     parser.add_argument("--db", default=None, help="SQLite path (default: var/omega_traces.db)")
     parser.add_argument("--dry-run", action="store_true", help="Fit and report; write nothing")
+    parser.add_argument(
+        "--emit-structure-candidate",
+        action="store_true",
+        help=(
+            "After fitting rho, sweep a soccer structural knob (default "
+            "lambda_gap_scale) to minimize RAW OOS ECE on graded game traces and "
+            "register a BackendParameterProfile candidate carrying the fitted rho "
+            "(reconciles the NLL rho fit with calibration). Requires the "
+            "--structure-* args below."
+        ),
+    )
+    parser.add_argument(
+        "--structure-league",
+        default=None,
+        help="League whose graded game traces to load, e.g. FIFA_INTL",
+    )
+    parser.add_argument(
+        "--structure-knob",
+        default="lambda_gap_scale",
+        help="Knob to sweep (default lambda_gap_scale)",
+    )
+    parser.add_argument(
+        "--structure-historical-db", default=None, help="Historical replay DB of graded game traces"
+    )
+    parser.add_argument("--structure-validation-start", default=None, help="YYYY-MM-DD")
+    parser.add_argument(
+        "--structure-holdout-start", default=None, help="YYYY-MM-DD; strictly after validation"
+    )
+    parser.add_argument(
+        "--register-structure", action="store_true", help="Persist the structure candidate"
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -262,25 +293,56 @@ def main() -> int:
             fit.n_matches,
             fit.fit_loss,
         )
-        return 0
+    else:
+        from omega.trace.store import TraceStore
 
-    from omega.trace.store import TraceStore
+        store = TraceStore(db_path=args.db) if args.db else TraceStore()
+        try:
+            fit = run_fit(
+                store,
+                args.profile,
+                pairs,
+                as_of_date=as_of,
+                promote=args.promote,
+                min_matches=args.min_matches,
+            )
+        except (ValueError, FrozenProductionFitError) as exc:
+            logger.error("%s", exc)
+            return 1
+        finally:
+            store.close()
 
-    store = TraceStore(db_path=args.db) if args.db else TraceStore()
-    try:
-        run_fit(
-            store,
-            args.profile,
-            pairs,
-            as_of_date=as_of,
-            promote=args.promote,
-            min_matches=args.min_matches,
+    if args.emit_structure_candidate:
+        missing = [
+            name
+            for name, val in (
+                ("--structure-league", args.structure_league),
+                ("--structure-historical-db", args.structure_historical_db),
+                ("--structure-validation-start", args.structure_validation_start),
+                ("--structure-holdout-start", args.structure_holdout_start),
+            )
+            if not val
+        ]
+        if missing:
+            logger.error("--emit-structure-candidate requires: %s", ", ".join(missing))
+            return 1
+        # The just-fitted rho becomes the base prior the structure sweep runs on, so
+        # the NLL rho fit and the calibration-scored gap fit are reconciled in one go.
+        from omega.ops.fit_backend_structure import emit_structure_candidate_after_fit
+
+        return emit_structure_candidate_after_fit(
+            backend_name="soccer_bivariate_poisson_dc",
+            league=args.structure_league,
+            knob=args.structure_knob,
+            base_params={"rho": fit.rho},
+            historical_db=args.structure_historical_db,
+            historical_only=True,
+            validation_start=args.structure_validation_start,
+            holdout_start=args.structure_holdout_start,
+            priors_as_of=as_of,
+            register=args.register_structure and not args.dry_run,
+            db=args.db,
         )
-    except (ValueError, FrozenProductionFitError) as exc:
-        logger.error("%s", exc)
-        return 1
-    finally:
-        store.close()
     return 0
 
 

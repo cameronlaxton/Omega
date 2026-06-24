@@ -38,6 +38,7 @@ from omega.core.simulation.archetypes import (
     get_archetype_name,
 )
 from omega.core.simulation.backends import (
+    DispersionPolicy,
     GameSimulationBackend,
     GameSimulationInput,
     PropSimulationInput,
@@ -1018,6 +1019,48 @@ def _archetype_league_defaults(league: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Structural sharpness knobs — mean-preserving dispersion levers shared by the
+# MC sampler and the exact evaluator (so the two paths never drift). Both read
+# from the league-config copy the backend builds from prior_payload; default 1.0
+# is identity. These are the raw-ECE levers omega-fit-backend-structure tunes.
+# ---------------------------------------------------------------------------
+
+
+def _apply_margin_sd_scale(sigma_h: float, sigma_a: float, config: dict) -> tuple[float, float]:
+    """Scale Normal score SDs by ``config['margin_sd_scale']`` (default 1.0).
+
+    Mean-independent temperature knob for the Normal archetypes: ``w>1`` widens the
+    score distributions, softening win/cover/total probabilities; ``w<1`` sharpens.
+    Means are untouched, so only probability extremity moves.
+    """
+    w = float(config.get("margin_sd_scale", 1.0))
+    if w == 1.0:
+        return sigma_h, sigma_a
+    return sigma_h * w, sigma_a * w
+
+
+def _apply_lambda_gap_scale(
+    home_lambda: float, away_lambda: float, config: dict
+) -> tuple[float, float]:
+    """Mean-total-preserving gap compression by ``config['lambda_gap_scale']`` (1.0).
+
+    ``kappa<1`` pulls the two Poisson rates toward their shared mean, softening the
+    moneyline/spread/draw while leaving ``E[total]=home+away`` exactly unchanged —
+    the Poisson analogue of shrinkage. ``kappa>1`` sharpens. The caller re-applies
+    its archetype floor after this (a sub-floor result is clamped, as with
+    ``lambda_scale``).
+    """
+    kappa = float(config.get("lambda_gap_scale", 1.0))
+    if kappa == 1.0:
+        return home_lambda, away_lambda
+    lam_bar = (home_lambda + away_lambda) / 2.0
+    return (
+        lam_bar + kappa * (home_lambda - lam_bar),
+        lam_bar + kappa * (away_lambda - lam_bar),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Archetype-specific simulation models
 # ---------------------------------------------------------------------------
 
@@ -1054,7 +1097,8 @@ def _basketball_score_params(
     hca = config.get("home_advantage", 3.0)
     home_expected += hca / 2.0
     away_expected -= hca / 2.0
-    return home_expected, std, away_expected, std
+    sigma_h, sigma_a = _apply_margin_sd_scale(std, std, config)
+    return home_expected, sigma_h, away_expected, sigma_a
 
 
 def _sim_basketball(
@@ -1094,7 +1138,8 @@ def _american_football_score_params(
     away_expected -= hca / 2.0
 
     std = config.get("std", 10.0)
-    return home_expected, std, away_expected, std
+    sigma_h, sigma_a = _apply_margin_sd_scale(std, std, config)
+    return home_expected, sigma_h, away_expected, sigma_a
 
 
 def _sim_american_football(
@@ -1151,6 +1196,7 @@ def _baseball_score_params(
     home_lambda += hca / 2.0
     away_lambda -= hca / 2.0
 
+    home_lambda, away_lambda = _apply_lambda_gap_scale(home_lambda, away_lambda, config)
     home_lambda = max(0.5, home_lambda)
     away_lambda = max(0.5, away_lambda)
     return home_lambda, away_lambda, None
@@ -1216,6 +1262,7 @@ def _hockey_score_params(
     home_lambda += hca / 2.0
     away_lambda -= hca / 2.0
 
+    home_lambda, away_lambda = _apply_lambda_gap_scale(home_lambda, away_lambda, config)
     home_lambda = max(0.3, home_lambda)
     away_lambda = max(0.3, away_lambda)
     return home_lambda, away_lambda, None
@@ -1387,6 +1434,8 @@ def _soccer_score_params(
     hca = config.get("home_advantage", 0.3)
     home_lambda += hca / 2.0
     away_lambda -= hca / 2.0
+
+    home_lambda, away_lambda = _apply_lambda_gap_scale(home_lambda, away_lambda, config)
 
     # Floor: Poisson(0.5) gives P(0)≈0.607; the old floor of 0.2 produced
     # P(0)≈0.819, generating structurally unrealistic draw probabilities
@@ -1847,6 +1896,21 @@ class FastScoreSimulationBackend:
         archetype = get_archetype(league)
         archetype_name = get_archetype_name(league)
         config = get_league_config(league)
+        # Structural sharpness knobs (Phase 8 backend parameter profile) ride a
+        # config copy so the MC simulators and the exact param fns read the SAME
+        # value and never drift. Both default to 1.0 (identity), so a request with
+        # no governed profile injected via prior_payload is bit-identical to the
+        # pre-knob engine. margin_sd_scale widens Normal score SDs (NBA/NFL-style
+        # archetypes); lambda_gap_scale compresses the Poisson lambda gap at fixed
+        # E[total] (MLB/NHL/soccer fallback). The dedicated soccer DC backend reads
+        # lambda_gap_scale from prior_payload directly (its own run()).
+        _prior = request.prior_payload or {}
+        if "margin_sd_scale" in _prior or "lambda_gap_scale" in _prior:
+            config = {
+                **config,
+                "margin_sd_scale": float(_prior.get("margin_sd_scale", 1.0)),
+                "lambda_gap_scale": float(_prior.get("lambda_gap_scale", 1.0)),
+            }
 
         if archetype is None or archetype_name is None:
             return _skip_result(
@@ -2186,6 +2250,7 @@ class OmegaSimulationEngine:
         backend: GameSimulationBackend | None = None,
         exact: bool = False,
         competition_strength_index: dict | None = None,
+        dispersion: DispersionPolicy | None = None,
     ) -> dict:
         """
         Run a fast game simulation using team stats dispatched by sport archetype.
@@ -2223,6 +2288,7 @@ class OmegaSimulationEngine:
             prior_payload=prior_payload,
             exact=exact,
             competition_strength_index=competition_strength_index,
+            dispersion=dispersion,
         )
         return enforce_game_backend_contract(active.run(request))
 

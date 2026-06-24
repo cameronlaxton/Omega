@@ -119,6 +119,15 @@ class NflSimulationBackend:
         config = get_league_config(league)
         prior = request.prior_payload or {}
         k = _resolve_team_score_nb_k(prior, config)
+        # Structural sharpness knob (Phase 8 backend parameter profile): scale the
+        # team-score dispersion k. NB variance = mu + mu**2/k, so nb_k_scale>1 raises
+        # k -> tighter scores (sharper margin/total/ML); <1 widens. Default 1.0 ->
+        # bit-identical. The NFL-game-bucket raw-ECE lever the structural sweep tunes.
+        nb_k_scale = float(prior.get("nb_k_scale", 1.0))
+        if not np.isfinite(nb_k_scale) or nb_k_scale <= 0:
+            raise ValueError("nb_k_scale must be a finite positive number")
+        if nb_k_scale != 1.0:
+            k *= nb_k_scale
 
         home_mu, _std, away_mu, _ = _american_football_score_params(
             request.home_context or {}, request.away_context or {}, league, config

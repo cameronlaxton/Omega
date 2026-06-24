@@ -239,6 +239,20 @@ class SoccerPoissonBackend:
             home_lambda *= lambda_scale
             away_lambda *= lambda_scale
 
+        # Mean-total-preserving gap compression (calibration sharpness knob).
+        # lambda_gap_scale<1 pulls the two lambdas toward their shared mean, softening
+        # the moneyline/spread/draw extremity WITHOUT moving E[total]=home+away (so
+        # over/under calibration is untouched) — the honest Poisson analogue of
+        # shrinkage, applied in the model so it stays coherent across every derived
+        # market. >1 sharpens; 1.0 -> bit-identical. This is the primary raw-ECE lever
+        # the structural sweep (omega-fit-backend-structure) tunes for Poisson/DC
+        # buckets, where a blunt both-lambda multiplier would wrongly move the total.
+        lambda_gap_scale = float(prior.get("lambda_gap_scale", 1.0))
+        if lambda_gap_scale != 1.0:
+            lambda_bar = (home_lambda + away_lambda) / 2.0
+            home_lambda = lambda_bar + lambda_gap_scale * (home_lambda - lambda_bar)
+            away_lambda = lambda_bar + lambda_gap_scale * (away_lambda - lambda_bar)
+
         # Poisson(0.5) floor: lower floors hallucinate structurally unrealistic
         # 0-0 rates (see _sim_soccer).
         home_lambda = max(0.5, home_lambda)
