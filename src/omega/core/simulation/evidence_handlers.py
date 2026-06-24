@@ -35,6 +35,8 @@ from omega.core.calibration.adjustment_policy import (
 from omega.core.contracts.evidence import (
     EvidenceSignal,
     damping_family_for,
+    effective_lifecycle,
+    is_applicable_lifecycle,
     resolve_archetype,
     signal_applies,
 )
@@ -431,10 +433,20 @@ def _evaluate_signal(
         confidence_adjusted = family_capped
 
     final = confidence_adjusted
-    applied = evidence_mode in APPLYING_MODES and target != "skip" and final != 1.0
+    # Issue #28 WS3 lifecycle gate. Only ``active`` signals may move a live
+    # prediction; probation/deprecated/rejected signals are still evaluated and
+    # recorded (so CLV scoring and audit see them) but never applied, regardless
+    # of evidence_mode. The operator override map lives on the policy.
+    lifecycle = effective_lifecycle(signal.signal_type, policy.signal_lifecycle)
+    applied = (
+        evidence_mode in APPLYING_MODES
+        and target != "skip"
+        and final != 1.0
+        and is_applicable_lifecycle(lifecycle)
+    )
     reason = (
         f"{signal.signal_type}: {target} x{final:.4f} "
-        f"(raw {raw_factor:.4f}, mode={evidence_mode}"
+        f"(raw {raw_factor:.4f}, mode={evidence_mode}, lifecycle={lifecycle}"
         + (f", conf={confidence:.2f}" if policy.enable_confidence_weighting else "")
         + ")"
     )

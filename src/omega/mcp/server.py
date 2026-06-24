@@ -1549,6 +1549,21 @@ def omega_markov_evidence_guide() -> str:
         build_markov_vocabulary_table,  # noqa: PLC0415
     )
 
+    # Operator-approved lifecycle overrides (issue #28 WS3) filter the vocabulary:
+    # deprecated/rejected signals drop out so the agent stops emitting them. Best-
+    # effort — the guide must still render if no production policy exists.
+    overrides: dict[str, str] | None = None
+    try:
+        from omega.core.calibration.adjustment_policy import (  # noqa: PLC0415
+            AdjustmentPolicyRegistry,
+        )
+
+        prod = AdjustmentPolicyRegistry().get_production_policy()
+        if prod is not None and prod.signal_lifecycle:
+            overrides = prod.signal_lifecycle
+    except Exception:  # noqa: BLE001 — never let registry access break the guide
+        overrides = None
+
     header = (
         "=== Omega Markov Evidence Guide ===\n\n"
         "Use simulation_backend='markov_state' when you have game-level structural\n"
@@ -1566,7 +1581,7 @@ def omega_markov_evidence_guide() -> str:
         "They are applied and recorded but do not yet affect live predictions\n"
         "until the champion/challenger promotion gate is cleared."
     )
-    return header + build_markov_vocabulary_table() + footer
+    return header + build_markov_vocabulary_table(overrides) + footer
 
 
 def omega_missing_input_repair(missing_requirements: str = "") -> str:

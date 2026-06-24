@@ -105,13 +105,23 @@ MARKOV_SIGNAL_VOCABULARY: tuple[tuple[str, str, float, str], ...] = (
 )
 
 
-def build_markov_vocabulary_table() -> str:
+def build_markov_vocabulary_table(lifecycle_overrides: dict[str, str] | None = None) -> str:
     """Return a formatted text table of Markov-eligible signal types for prompt injection.
 
     Called by the MCP server's omega_markov_evidence_guide prompt and by
     OMEGA_COWORK.md section generation so the LLM vocabulary is always derived
     from the single source of truth here, never hand-edited in prompts.
+
+    Lifecycle filtering (issue #28 WS3): ``deprecated``/``rejected`` signals drop
+    out entirely so the agent stops emitting them; ``probation`` signals stay but
+    are flagged "scored, not applied". ``lifecycle_overrides`` is the operator-
+    approved ``AdjustmentPolicy.signal_lifecycle`` map (None = declared defaults).
     """
+    from omega.core.contracts.evidence import (  # noqa: PLC0415
+        effective_lifecycle,
+        is_vocabulary_visible,
+    )
+
     lines = [
         "Markov-eligible signal types (simulation_backend='markov_state' only):",
         "",
@@ -119,7 +129,11 @@ def build_markov_vocabulary_table() -> str:
         f"  {'-' * 24} {'-' * 26} {'-' * 6}  {'-' * 45}",
     ]
     for sig, mod, scalar, desc in MARKOV_SIGNAL_VOCABULARY:
-        lines.append(f"  {sig:<24} {mod:<26} {scalar:>6.2f}  {desc}")
+        lifecycle = effective_lifecycle(sig, lifecycle_overrides)
+        if not is_vocabulary_visible(lifecycle):
+            continue  # deprecated / rejected — dropped from the agent vocabulary
+        tag = "" if lifecycle == "active" else "   [probation: scored, NOT applied]"
+        lines.append(f"  {sig:<24} {mod:<26} {scalar:>6.2f}  {desc}{tag}")
     lines += [
         "",
         "Rules:",
@@ -129,6 +143,8 @@ def build_markov_vocabulary_table() -> str:
         "    regardless of how many overlapping signals are stacked.",
         "  - Use direction='home' or direction='away' for rest_advantage, b2b_fatigue,",
         "    def_matchup_weak/strong, and usage_role_change to target the correct team.",
+        "  - [probation] signals: keep emitting them (CLV needs the data) but the engine",
+        "    will NOT apply them to predictions until an operator graduates them.",
     ]
     return "\n".join(lines)
 

@@ -48,6 +48,7 @@ from omega.core.calibration.adjustment_policy import (  # noqa: E402
     AdjustmentPolicyRegistry,
 )
 from omega.core.calibration.profiles import ProfileStatus  # noqa: E402
+from omega.core.contracts.evidence import effective_lifecycle  # noqa: E402
 from omega.strategy.clv_significance import (  # noqa: E402
     DEFAULT_FDR_Q,
     DEFAULT_POWER,
@@ -72,6 +73,10 @@ _MIN_CLV_SAMPLE = 20
 _UNPROVEN_CEILING = 0.25
 # CLV share when blending a graduated signal's weight with realized direction.
 _GRAD_CLV_WEIGHT = 0.75
+# CLV-sample floor before recommending an active signal be deprecated. Smaller
+# than the graduation N_min: retiring a misaligned signal needs less evidence
+# than admitting a new one, but still enough to be confident it carries no edge.
+_DEPRECATE_MIN_CLV_SAMPLE = 100
 
 
 def _clamp_weight(x: float) -> float:
@@ -172,6 +177,43 @@ def _reliability_weight(
     return round(min(clv_w, _UNPROVEN_CEILING), 4)
 
 
+def _lifecycle_recommendation(
+    agg: _SignalAgg,
+    *,
+    current: str,
+    graduated: bool,
+    n_min: int,
+    deprecate_floor: int,
+) -> str | None:
+    """Advisory lifecycle transition for one signal (issue #28 WS3), or None.
+
+    CLV-anchored and fail-closed (the fit never binds it):
+      * probation -> active   when it clears the bar (bootstrap + N_min + FDR);
+      * probation -> rejected when the sample budget (N_min) is spent unclear;
+      * active    -> deprecated when CLV is misaligned over enough sample (a dead
+        signal that merely restates the line), with a thin-CLV direction fallback.
+    ``deprecated``/``rejected`` are terminal here — reviving them is a manual op.
+    """
+    clv_aligned = agg.clv_aligned
+    if current == "probation":
+        if graduated:
+            return "active"
+        if agg.clv_n >= n_min:  # budget spent without clearing the bar
+            return "rejected"
+        return None
+    if current == "active":
+        if clv_aligned is not None and agg.clv_n >= deprecate_floor and clv_aligned <= 0.50:
+            return "deprecated"
+        # CLV-thin fallback: clearly sub-coin-flip realized direction over a big sample.
+        if (
+            agg.clv_n < _MIN_CLV_SAMPLE
+            and agg.dir_n >= deprecate_floor
+            and agg.direction_accuracy <= 0.48
+        ):
+            return "deprecated"
+    return None
+
+
 def _next_version(registry: AdjustmentPolicyRegistry) -> int:
     existing = registry.list_policies()
     return max((p.version for p in existing), default=0) + 1
@@ -211,6 +253,15 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         default=DEFAULT_FDR_Q,
         help=f"Benjamini-Hochberg target false-discovery rate (default: {DEFAULT_FDR_Q})",
+    )
+    parser.add_argument(
+        "--deprecate-min-samples",
+        type=int,
+        default=_DEPRECATE_MIN_CLV_SAMPLE,
+        help=(
+            "Min CLV (or direction) sample before recommending an active signal be "
+            f"deprecated (default: {_DEPRECATE_MIN_CLV_SAMPLE})"
+        ),
     )
     parser.add_argument("--db", type=str, default=None, help="SQLite path")
     parser.add_argument(
@@ -292,6 +343,30 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("No signal type met the sample bar; nothing to fit.")
         return 1
 
+    # Advisory lifecycle recommendations (fail-closed: they NEVER bind here — an
+    # operator applies them via omega-promote-adjustment-policy). Resolved against
+    # the incumbent's operator-approved overrides, which the candidate carries
+    # forward so prior decisions persist.
+    base_overrides = dict(base.signal_lifecycle)
+    recommendations: dict[str, str] = {}
+    for signal_type, agg in sorted(aggregates.items()):
+        current = effective_lifecycle(signal_type, base_overrides)
+        rec = _lifecycle_recommendation(
+            agg,
+            current=current,
+            graduated=graduated.get(signal_type, False),
+            n_min=n_min,
+            deprecate_floor=args.deprecate_min_samples,
+        )
+        if rec is not None and rec != current:
+            recommendations[signal_type] = rec
+            logger.info(
+                "  lifecycle %-22s %s -> %s (recommended; operator-gated)",
+                signal_type,
+                current,
+                rec,
+            )
+
     version = _next_version(registry)
     policy_id = f"adj_v{version}_{dataset_hash[:12] or 'nodata'}"
     mean_weight = sum(w for _, _, w, _ in fitted) / len(fitted)
@@ -310,12 +385,16 @@ def main(argv: list[str] | None = None) -> int:
             "signals_graduated": float(n_graduated),
             "mean_reliability_weight": round(mean_weight, 4),
             "n_min": float(n_min),
+            "lifecycle_recommendations": float(len(recommendations)),
         },
+        signal_lifecycle=base_overrides,
+        lifecycle_recommendations=recommendations,
         notes=(
             f"Fitted from signal_performance (dataset {dataset_hash[:12]}); "
             f"{len(fitted)} signal types adjusted, {n_graduated} graduated the CLV bar "
-            f"(N_min={n_min}, FDR q={args.fdr_q}). reliability_weight is CLV-primary "
-            f"(direction-accuracy fallback where closing-line coverage is thin)."
+            f"(N_min={n_min}, FDR q={args.fdr_q}); {len(recommendations)} lifecycle "
+            f"transition(s) recommended (operator-gated). reliability_weight is "
+            f"CLV-primary (direction-accuracy fallback where closing coverage is thin)."
         ),
         incumbent_id=base.policy_id,
     )

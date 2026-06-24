@@ -123,6 +123,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="After promotion, flip the policy to mode='live' (applies adjustments).",
     )
+    parser.add_argument(
+        "--apply-lifecycle-recommendations",
+        action="store_true",
+        help=(
+            "Bind the candidate's advisory lifecycle_recommendations into its "
+            "signal_lifecycle override map before promoting (issue #28 WS3). "
+            "Without this flag, recommendations stay advisory and the prior "
+            "overrides carry forward unchanged."
+        ),
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -166,6 +176,22 @@ def main(argv: list[str] | None = None) -> int:
     all_pass = all(passed for _, passed, _ in gates)
 
     def _do_promote() -> None:
+        if args.apply_lifecycle_recommendations:
+            recs = candidate.lifecycle_recommendations
+            if recs:
+                merged = {**candidate.signal_lifecycle, **recs}
+                registry.set_signal_lifecycle(candidate.policy_id, merged)
+                logger.warning(
+                    "Applied %d lifecycle recommendation(s) to %s: %s",
+                    len(recs),
+                    candidate.policy_id,
+                    recs,
+                )
+            else:
+                logger.info(
+                    "No lifecycle recommendations on candidate %s; nothing to apply.",
+                    candidate.policy_id,
+                )
         registry.promote(candidate.policy_id)
         logger.info("Promoted %s to PRODUCTION.", candidate.policy_id)
         if args.go_live:

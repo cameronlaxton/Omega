@@ -314,3 +314,129 @@ class TestFitAndPromoteLifecycle:
         policy_path = _tmp_policy_registry()
         rc = fit_mod.main(["--db", db, "--policy-path", policy_path])
         assert rc == 1
+
+
+class TestLifecycleRecommendation:
+    """Issue #28 WS3: the fit's advisory transition logic (fail-closed)."""
+
+    def _agg(self, **kw):
+        return fit_mod._SignalAgg(**kw)
+
+    def test_probation_graduates_to_active(self):
+        agg = self._agg(clv_n=5000, clv_aligned_weighted=0.65 * 5000)
+        rec = fit_mod._lifecycle_recommendation(
+            agg, current="probation", graduated=True, n_min=3863, deprecate_floor=100
+        )
+        assert rec == "active"
+
+    def test_probation_rejected_when_budget_spent(self):
+        agg = self._agg(clv_n=4000, clv_aligned_weighted=0.50 * 4000)
+        rec = fit_mod._lifecycle_recommendation(
+            agg, current="probation", graduated=False, n_min=3863, deprecate_floor=100
+        )
+        assert rec == "rejected"
+
+    def test_probation_none_while_gathering(self):
+        agg = self._agg(clv_n=50, clv_aligned_weighted=0.55 * 50)
+        rec = fit_mod._lifecycle_recommendation(
+            agg, current="probation", graduated=False, n_min=3863, deprecate_floor=100
+        )
+        assert rec is None
+
+    def test_active_deprecated_when_clv_misaligned(self):
+        agg = self._agg(clv_n=200, clv_aligned_weighted=0.45 * 200)
+        rec = fit_mod._lifecycle_recommendation(
+            agg, current="active", graduated=False, n_min=3863, deprecate_floor=100
+        )
+        assert rec == "deprecated"
+
+    def test_active_kept_when_clv_aligned(self):
+        agg = self._agg(clv_n=200, clv_aligned_weighted=0.60 * 200)
+        rec = fit_mod._lifecycle_recommendation(
+            agg, current="active", graduated=False, n_min=3863, deprecate_floor=100
+        )
+        assert rec is None
+
+    def test_active_deprecated_direction_fallback(self):
+        # Thin CLV; clearly sub-coin-flip realized direction over a big sample.
+        agg = self._agg(dir_n=300, dir_correct=120, clv_n=0)  # acc 0.40
+        rec = fit_mod._lifecycle_recommendation(
+            agg, current="active", graduated=False, n_min=3863, deprecate_floor=100
+        )
+        assert rec == "deprecated"
+
+    def test_terminal_states_yield_no_recommendation(self):
+        agg = self._agg(clv_n=5000, clv_aligned_weighted=0.65 * 5000)
+        assert (
+            fit_mod._lifecycle_recommendation(
+                agg, current="deprecated", graduated=True, n_min=3863, deprecate_floor=100
+            )
+            is None
+        )
+
+
+class TestSetSignalLifecycle:
+    def test_set_and_read_back(self):
+        path = _tmp_policy_registry()
+        reg = AdjustmentPolicyRegistry(path=path)
+        base = reg.get_production_policy()
+        reg.set_signal_lifecycle(base.policy_id, {"recent_form": "deprecated"})
+        assert reg.get_policy(base.policy_id).signal_lifecycle["recent_form"] == "deprecated"
+
+    def test_invalid_lifecycle_value_rejected(self):
+        import pytest
+
+        path = _tmp_policy_registry()
+        reg = AdjustmentPolicyRegistry(path=path)
+        base = reg.get_production_policy()
+        with pytest.raises(ValueError):
+            reg.set_signal_lifecycle(base.policy_id, {"recent_form": "bogus"})
+
+
+class TestApplyLifecycleRecommendations:
+    def _register_candidate(self, path: str, recs: dict[str, str]) -> str:
+        reg = AdjustmentPolicyRegistry(path=path)
+        base = reg.get_production_policy()
+        cand = AdjustmentPolicy(
+            policy_id="adj_test_lifecycle",
+            version=base.version + 1,
+            status=ProfileStatus.CANDIDATE,
+            mode="shadow",
+            coefficients=dict(base.coefficients),
+            sample_size=10,
+            lifecycle_recommendations=recs,
+            incumbent_id=base.policy_id,
+        )
+        reg.register(cand)
+        return cand.policy_id
+
+    def test_flag_binds_recommendations_into_overrides(self):
+        path = _tmp_policy_registry()
+        cid = self._register_candidate(
+            path, {"recent_form": "deprecated", "usage_spike": "probation"}
+        )
+        rc = promote_mod.main(
+            [
+                "--candidate-id", cid, "--policy-path", path, "--auto",
+                "--min-samples", "1", "--confirm-backtest",
+                "--apply-lifecycle-recommendations",
+            ]
+        )
+        assert rc == 0
+        prod = AdjustmentPolicyRegistry(path=path).get_production_policy()
+        assert prod.policy_id == cid
+        assert prod.signal_lifecycle["recent_form"] == "deprecated"
+        assert prod.signal_lifecycle["usage_spike"] == "probation"
+
+    def test_without_flag_recommendations_stay_advisory(self):
+        path = _tmp_policy_registry()
+        cid = self._register_candidate(path, {"recent_form": "deprecated"})
+        rc = promote_mod.main(
+            [
+                "--candidate-id", cid, "--policy-path", path, "--auto",
+                "--min-samples", "1", "--confirm-backtest",
+            ]
+        )
+        assert rc == 0
+        prod = AdjustmentPolicyRegistry(path=path).get_production_policy()
+        assert prod.signal_lifecycle == {}  # not bound without the explicit flag

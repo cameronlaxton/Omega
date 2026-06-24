@@ -496,7 +496,9 @@ Express qualitative reasoning as typed `evidence` signals on the `analyze()` req
 
 The deterministic engine applies known signal types itself. Handler-based evidence is controlled by the versioned `AdjustmentPolicy` (currently `mode=shadow`, which records but does not apply handler factors). Markov game evidence uses backend transition modifiers. Every signal is persisted to the `evidence_signals` table and scored retrospectively by `src/omega/ops/score_evidence_signals.py`. Set `confidence` honestly; it is measured against realized outcomes.
 
-At session start, read the "Evidence signal performance" section (Â§6B) of the calibration report and weight your evidence accordingly: trust signal types/sources marked `predictive`, discount `noise`, treat `insufficient_n` as unproven.
+At session start, read the "Evidence signal performance" section (Â§6B) of the calibration report and weight your evidence accordingly. **CLV is the trust driver** (issue #28): trust signals marked `clv_aligned`, discount `clv_misaligned` (they merely restate the closing line); where CLV coverage is thin the verdict falls back to realized direction (`predictive`/`noise`/`insufficient_n`).
+
+**Signal lifecycle (issue #28 WS3):** signals carry a lifecycle — `active` (emitted, scored, applied), `probation` (emit to gather CLV, but the engine will NOT apply them and they are never "trusted"), `deprecated`/`rejected` (a dead signal whose CLV showed no edge — **stop emitting it**). The calibration report's "Agent Directive" lists the current deprecated/probation signals; the Markov vocabulary guide drops deprecated ones automatically. Lifecycle transitions are recommended by the fit and committed by an operator (`omega-promote-adjustment-policy --apply-lifecycle-recommendations`) — they never flip automatically.
 
 #### Markov backend â€” approved signal vocabulary
 

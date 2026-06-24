@@ -550,6 +550,51 @@ def _signal_guidance(signal_perf: list[dict[str, Any]]) -> dict[str, list[dict[s
     return buckets
 
 
+def _evidence_lifecycle_lines() -> list[str]:
+    """Markdown telling the agent which signals are deprecated / on probation.
+
+    Effective lifecycle = the production AdjustmentPolicy's operator-approved
+    ``signal_lifecycle`` override, else each SignalSpec's declared default (issue
+    #28 WS3). Best-effort: returns ``[]`` if the registries are unavailable or
+    every signal is active.
+    """
+    try:
+        from omega.core.calibration.adjustment_policy import AdjustmentPolicyRegistry
+        from omega.core.contracts.evidence import SIGNAL_REGISTRY, effective_lifecycle
+    except Exception:  # noqa: BLE001
+        return []
+    try:
+        prod = AdjustmentPolicyRegistry().get_production_policy()
+    except Exception:  # noqa: BLE001
+        prod = None
+    overrides = dict(prod.signal_lifecycle) if (prod and prod.signal_lifecycle) else {}
+
+    deprecated: set[str] = set()
+    probation: set[str] = set()
+    known = set(SIGNAL_REGISTRY) | set(overrides)
+    for st in known:
+        lifecycle = effective_lifecycle(st, overrides)
+        if lifecycle in ("deprecated", "rejected"):
+            deprecated.add(st)
+        elif lifecycle == "probation":
+            probation.add(st)
+
+    if not deprecated and not probation:
+        return []
+    lines = ["", "**Signal lifecycle (issue #28 WS3):**"]
+    if deprecated:
+        lines.append(
+            "- **Do NOT emit** (deprecated/rejected — CLV showed no edge beyond the "
+            f"line): {', '.join(sorted(deprecated))}"
+        )
+    if probation:
+        lines.append(
+            "- **Probation** (keep emitting to gather CLV, but the engine will NOT "
+            f"apply them and they are not 'trusted'): {', '.join(sorted(probation))}"
+        )
+    return lines
+
+
 def _section_pending_candidates(
     registry: CalibrationRegistry, league: str | None
 ) -> list[dict[str, Any]]:
@@ -781,6 +826,7 @@ def _render(
                     f"- {row['league']} `{row['signal_type']}` from `{row['source']}` "
                     f"({row['obs_window']}): n={row['sample_size']}"
                 )
+    lines.extend(_evidence_lifecycle_lines())
     lines.append("")
 
     lines.append("## 1. Coverage")
