@@ -195,13 +195,13 @@ def test_market_moves_use_canonical_descriptor_and_line_only_movement():
             decision_timestamp="2026-05-20T12:00:00Z",
         )
     )
-    # Same -110 price but the total rises: the earlier over 24.5 is favorable.
+    # Same -110 price but the total drops: the earlier over 24.5 is favorable.
     store.attach_closing_line(
         "t-prop-line",
         "player_prop:pts",
         "jayson_tatum_over_24.5_pts",
         closing_odds=-110.0,
-        closing_line=25.5,
+        closing_line=23.5,
         closing_timestamp="2026-05-20T18:00:00Z",
         source="test",
     )
