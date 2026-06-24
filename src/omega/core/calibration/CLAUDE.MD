@@ -77,6 +77,14 @@ Supported methods may include:
 - cap
 - combined
 - isotonic
+- market_aware — blends the model probability toward the closing-line implied
+  probability: `(1 - w)·model + w·market`. The deference `w` is fitted by
+  `CalibrationFitter.fit_market_aware` (grid search; a positive weight is adopted
+  only on strict held-out Brier improvement over the pure-model baseline) and
+  scaled at application time by `liquidity_deference_factor(league, market)` — a
+  coarse proxy (market type + per-league liquidity tier) since real limit sizes
+  are not captured. Requires `market_prob` at apply time; absent it, the method is
+  identity (fail-safe). `params = {"market_weight": w}`. (issue #28 WS4)
 
 Do not introduce more methods unless there is clear evidence they improve held-out calibration.
 
