@@ -87,8 +87,9 @@ class EvidenceSignal(BaseModel):
     plane: SignalPlane = Field(
         description="'player' adjusts player_context means; 'game' adjusts team context."
     )
-    value: bool | int | float | str | list[float] = Field(
-        description="Raw signal payload (scalar, bool, categorical label, or series of floats)."
+    value: bool | int | float | str | list[float] | dict[str, bool | int | float | str] = Field(
+        description="Raw signal payload (scalar, bool, categorical label, series of floats, or — "
+        "for a feature-combo proposal — a {feature: value} map over the whitelist)."
     )
     source: str = Field(
         description="Provenance, used as a retrospective-scoring key "

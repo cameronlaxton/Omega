@@ -57,6 +57,7 @@ TOOL_NAMES = (
     "omega_record_flat_bet",
     "omega_get_portfolio_summary",
     "omega_get_game_context",
+    "omega_propose_signal",
 )
 
 RESOURCE_URIS = (
@@ -1473,6 +1474,47 @@ def omega_get_game_context(
         return _error("omega_get_game_context", "game_context_failed", str(exc))
 
 
+def omega_propose_signal(
+    name: str,
+    feature_combo: dict[str, Any],
+    thesis: str = "",
+    plane: str = "both",
+    direction_rule: str | None = None,
+    source: str = "llm",
+    db_path: str | None = None,
+) -> dict[str, Any]:
+    """Propose a new evidence-signal hypothesis (issue #28 WS3).
+
+    A proposal is a typed hypothesis over a WHITELISTED feature vocabulary — never
+    code. It is stored in ``lifecycle='probation'``: scored by CLV like an active
+    signal but NEVER applied to a prediction, and graduates to ``active`` only
+    through the operator-gated CLV + marginal bar. ``feature_combo`` is a dict
+    spec — a ``predicate`` (boolean AND/OR/NOT over threshold comparisons -> a
+    factor) or a ``linear`` (bias + sum of weight*feature); see
+    ``feature_combo_eval.FEATURE_WHITELIST`` for the allowed feature names.
+    Returns the stored proposal, or a validation error for a bad spec / off-
+    whitelist feature / name collision with a built-in signal_type.
+    """
+    from omega.core.simulation.feature_combo_eval import FeatureComboError
+    from omega.ops.propose_signal import propose_signal as _propose
+
+    try:
+        result = _propose(
+            name=name,
+            feature_combo=feature_combo or {},
+            thesis=thesis,
+            plane=plane,
+            direction_rule=direction_rule,
+            source=source,
+            db_path=db_path,
+        )
+    except (ValueError, FeatureComboError) as exc:
+        return _error("omega_propose_signal", "invalid_proposal", str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_propose_signal", "proposal_failed", str(exc))
+    return _ok("omega_propose_signal", **result)
+
+
 def build_server():
     """Build the optional FastMCP server.
 
@@ -1507,6 +1549,7 @@ def build_server():
         omega_record_flat_bet,
         omega_get_portfolio_summary,
         omega_get_game_context,
+        omega_propose_signal,
     ):
         mcp.tool()(tool)
 

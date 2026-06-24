@@ -49,6 +49,7 @@ from omega.core.simulation.evidence_aggregation import (
     resolve_confidence,
 )
 from omega.core.simulation.evidence_aggregation import cap_factor as _cap_factor
+from omega.core.simulation.feature_combo_eval import FeatureComboError, evaluate_feature_combo
 
 # Environment override for the rollout gate. When unset, the policy's own
 # ``mode`` field governs. Accepts any graduated mode — disabled | observe |
@@ -310,6 +311,26 @@ def _h_audit_only(signal: EvidenceSignal, coeffs: dict[str, Any], baseline: floa
     return "skip", 1.0
 
 
+def _h_feature_combo(signal: EvidenceSignal, coeffs: dict[str, Any], baseline: float):
+    """Generic handler for LLM-proposed feature-combo signals (issue #28 WS3).
+
+    Not in HANDLER_REGISTRY — used as a fallback by ``_evaluate_signal`` when a
+    signal_type has no built-in handler but its policy coefficients carry a
+    ``feature_combo`` spec (injected only when an operator graduates a proposal).
+    The agent supplies feature values in ``signal.value`` (a dict). A missing or
+    malformed spec / non-dict value is a safe no-op (1.0); the per-signal cap
+    bounds the applied deviation as for every other handler.
+    """
+    spec = coeffs.get("feature_combo")
+    if not isinstance(spec, dict):
+        return "mean", 1.0
+    features = signal.value if isinstance(signal.value, dict) else {}
+    try:
+        return "mean", float(evaluate_feature_combo(spec, features))
+    except FeatureComboError:
+        return "mean", 1.0
+
+
 HANDLER_REGISTRY: dict[str, Handler] = {
     # player-form
     "recent_form": _h_series_blend,
@@ -411,6 +432,14 @@ def _evaluate_signal(
     handler = HANDLER_REGISTRY.get(signal.signal_type)
     coeffs = policy.coeffs_for(signal.signal_type)
 
+    # Generic fallback for graduated LLM proposals: a signal_type with no built-in
+    # handler but a feature_combo spec in its coefficients is evaluated by the
+    # whitelisted combo evaluator. Proposals carry no policy coefficients until an
+    # operator graduates them, so this never fires during probation.
+    is_feature_combo_proposal = handler is None and coeffs.get("feature_combo") is not None
+    if is_feature_combo_proposal:
+        handler = _h_feature_combo
+
     if handler is None or not coeffs:
         return _skip_record(
             signal,
@@ -418,7 +447,10 @@ def _evaluate_signal(
             policy_version,
             evidence_mode,
         )
-    if not signal_applies(signal.signal_type, archetype):
+    # Sport-applicability gates REGISTRY signals; a graduated proposal is not in the
+    # registry — it is vetted by the operator at graduation and scoped by the
+    # agent's emission + its plane, so the registry-based gate does not apply.
+    if not is_feature_combo_proposal and not signal_applies(signal.signal_type, archetype):
         return _skip_record(
             signal,
             f"signal does not apply to sport archetype {archetype!r}",
