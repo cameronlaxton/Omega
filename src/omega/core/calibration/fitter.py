@@ -478,6 +478,71 @@ class CalibrationFitter:
             metrics={},
         )
 
+    def fit_market_aware(
+        self,
+        model_probs: list[float],
+        market_probs: list[float],
+        outcomes: list[int],
+        league: str,
+        market: str = "game",
+    ) -> CalibrationProfile:
+        """Fit a market-aware deference weight by minimizing held-out Brier (issue #28 WS4).
+
+        Grid-searches the market weight ``w`` in [0, 1] for the convex blend
+        ``(1 - w)·model + w·market``. ``w = 0`` is the pure-model baseline; a
+        positive weight is adopted ONLY if it strictly improves validation Brier,
+        so deferring to the close must earn its place (no free shrink toward the
+        market). Inputs are aligned by index: the model probability, the
+        market-implied (no-vig closing) probability, and the binary outcome. The
+        per-league/market liquidity scaling is applied later at *application* time
+        (``liquidity_deference_factor``), not baked into the fitted weight.
+        """
+        n = len(model_probs)
+        if n < _MIN_SAMPLES:
+            raise ValueError(f"Need at least {_MIN_SAMPLES} samples for fitting, got {n}")
+        if not (len(market_probs) == len(outcomes) == n):
+            raise ValueError("model_probs, market_probs, and outcomes must be the same length")
+
+        clip = 1e-4
+        split_idx = int(0.7 * n)
+        tr = (model_probs[:split_idx], market_probs[:split_idx], outcomes[:split_idx])
+        va = (model_probs[split_idx:], market_probs[split_idx:], outcomes[split_idx:])
+
+        def _brier(w: float, triple: tuple[list[float], list[float], list[int]]) -> float:
+            ms, ks, os_ = triple
+            if not ms:
+                return 0.0
+            tot = 0.0
+            for p, mk, o in zip(ms, ks, os_):
+                cal = float(np.clip((1.0 - w) * p + w * mk, clip, 1.0 - clip))
+                tot += (cal - o) ** 2
+            return tot / len(ms)
+
+        best_w, best_brier = 0.0, float("inf")
+        for w in np.linspace(0.0, 1.0, 11):
+            b = _brier(float(w), tr)
+            if b < best_brier:
+                best_brier, best_w = b, float(w)
+
+        # A positive weight must strictly beat the pure-model baseline on validation.
+        if best_w > 0.0 and va[0] and _brier(best_w, va) >= _brier(0.0, va):
+            logger.info("market_aware w=%.2f did not improve validation Brier; falling back to 0.", best_w)
+            best_w = 0.0
+
+        market_tag = "" if market == "game" else f"{market}_"
+        return CalibrationProfile(
+            profile_id=f"market_{league.lower()}_{market_tag}v1",
+            version=1,
+            method="market_aware",
+            league=league.upper(),
+            market=market,
+            params={"market_weight": best_w},
+            training_window=_infer_window(model_probs),
+            sample_size=n,
+            dataset_hash=_compute_hash(model_probs, outcomes),
+            metrics={},
+        )
+
     # ------------------------------------------------------------------
     # Evaluation
     # ------------------------------------------------------------------
