@@ -284,6 +284,45 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             default_window="series",
             description="Games-ahead lead in the current playoff series for the directional team.",
         ),
+        # --- Market-relative / microstructure (issue #28 WS2) ---
+        # Facts the simulation does NOT ingest, anchored on the market rather than
+        # public box-score stats. All enter as ``probation``: emitted + scored so
+        # CLV can validate them, but never applied until an operator graduates them.
+        _spec(
+            "recent_form_residual",
+            "player_form",
+            "player",
+            requires_stat_key=True,
+            default_window="last_5",
+            damping_family="player_recency",
+            lifecycle="probation",
+            description="Recent performance vs the LINE-implied projection (not the season "
+            "baseline) — recent_form done right. Value: signed residual fraction "
+            "(+0.10 ~= 10% above the line's implied level).",
+        ),
+        _spec(
+            "stale_line",
+            "situational",
+            "game",
+            default_window="matchup",
+            damping_family="market_inefficiency",
+            lifecycle="probation",
+            description="The line has NOT moved despite a material context change the agent "
+            "flagged. Toxic by design: valid only when paired with a drop in market "
+            "liquidity; suppressed when liquidity stays high (sharp money is confident). "
+            "Value: signed magnitude of the adjustment the line appears to ignore.",
+        ),
+        _spec(
+            "sharp_line_move",
+            "situational",
+            "game",
+            default_window="matchup",
+            damping_family="market_move",
+            lifecycle="probation",
+            description="The line moved against public-side expectation (steam). Audit-first; "
+            "graduates only if it predicts CLV. Value: signed steam magnitude toward "
+            "the directional side.",
+        ),
         _spec(
             "season_record",
             "team_form",

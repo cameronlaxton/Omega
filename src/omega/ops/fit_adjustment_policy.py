@@ -77,6 +77,15 @@ _GRAD_CLV_WEIGHT = 0.75
 # than the graduation N_min: retiring a misaligned signal needs less evidence
 # than admitting a new one, but still enough to be confident it carries no edge.
 _DEPRECATE_MIN_CLV_SAMPLE = 100
+# Toxic signals (issue #28 WS2): their N_min graduation floor is DOUBLED. A
+# stale (unmoved) line usually means the sharp market already proved the news
+# irrelevant, so a stale_line "edge" needs a brutal burden of proof.
+_TOXIC_SIGNALS: frozenset[str] = frozenset({"stale_line"})
+
+
+def _signal_n_min(signal_type: str, n_min: int) -> int:
+    """Per-signal graduation floor — doubled for toxic signals (issue #28 WS2)."""
+    return n_min * 2 if signal_type in _TOXIC_SIGNALS else n_min
 
 
 def _clamp_weight(x: float) -> float:
@@ -134,15 +143,16 @@ def _probation_stats(aggs: dict[str, _SignalAgg], n_min: int) -> dict[str, Proba
     for st, a in aggs.items():
         if a.clv_n <= 0:
             continue
+        signal_n_min = _signal_n_min(st, n_min)
         pn, pmean, pstd = pooled_mean_std(a.clv_rows)
         lb = normal_lower_bound(pmean, pstd, pn)
         stats[st] = ProbationStats(
             n=pn,
-            n_min=n_min,
+            n_min=signal_n_min,
             clv_mean=pmean,
             boot_lower_bound=lb,
             pvalue=clv_pvalue_from_stats(pmean, pstd, pn),
-            meets_n_min=(pn >= n_min),
+            meets_n_min=(pn >= signal_n_min),
             boot_positive=(lb > 0.0),
         )
     return stats
@@ -355,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
             agg,
             current=current,
             graduated=graduated.get(signal_type, False),
-            n_min=n_min,
+            n_min=_signal_n_min(signal_type, n_min),
             deprecate_floor=args.deprecate_min_samples,
         )
         if rec is not None and rec != current:

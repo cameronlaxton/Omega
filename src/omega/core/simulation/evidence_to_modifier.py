@@ -205,8 +205,35 @@ def compute_transition_modifier_adjustment(
     applications: list[dict[str, Any]] = []
     key_contribs: dict[str, list[tuple[int, float]]] = {}
 
+    from omega.core.contracts.evidence import (  # noqa: PLC0415
+        effective_lifecycle,
+        is_applicable_lifecycle,
+    )
+
+    overrides = getattr(policy, "signal_lifecycle", None)
+
     for idx, sig in enumerate(signals):
         signal_type = str(getattr(sig, "signal_type", ""))
+        # Issue #28 WS3 lifecycle gate, mirroring the handler path: a non-active
+        # signal is recorded but never applied to the transition matrix.
+        if not is_applicable_lifecycle(effective_lifecycle(signal_type, overrides)):
+            confidence, confidence_defaulted = resolve_confidence(getattr(sig, "confidence", None))
+            applications.append(
+                {
+                    "signal_type": signal_type,
+                    "target": "skip",
+                    "applied": False,
+                    "factor": 1.0,
+                    "effective_scalar": 1.0,
+                    "confidence": confidence,
+                    "confidence_defaulted": confidence_defaulted,
+                    "reason": f"lifecycle={effective_lifecycle(signal_type, overrides)}: "
+                    "not applied to Markov transition",
+                    "policy_version": "markov_state_v1",
+                    "evidence_mode": "markov_transition",
+                }
+            )
+            continue
         entry = _SIGNAL_TO_MODIFIER.get(signal_type)
         if entry is None:
             # Carry the no-op enrichment markers so a trace whose signals are all

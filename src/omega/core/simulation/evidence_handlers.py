@@ -57,6 +57,22 @@ from omega.core.simulation.evidence_aggregation import cap_factor as _cap_factor
 _ENV_MODE_VAR = "OMEGA_EVIDENCE_MODE"
 
 
+def _is_low_liquidity_league(league: str) -> bool:
+    """Coarse market-liquidity proxy (issue #28 WS2): is this a low-liquidity league?
+
+    Real per-market limit sizes are not captured anywhere, so the toxic-stale-line
+    gate uses the per-league ``liquidity_profile`` tier from the league config as a
+    coarse proxy. Best-effort: an unknown league or missing config reads as
+    high-liquidity (the conservative default — it suppresses the toxic signal).
+    """
+    try:
+        from omega.core.config.leagues import get_league_config  # noqa: PLC0415
+
+        return str(get_league_config(league).get("liquidity_profile", "")).lower() == "low"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Records
 # ---------------------------------------------------------------------------
@@ -329,6 +345,12 @@ HANDLER_REGISTRY: dict[str, Handler] = {
     # team-form / matchup (game-plane momentum)
     "win_streak": _h_per_unit,
     "series_lead": _h_per_unit,
+    # market-relative / microstructure (issue #28 WS2). Signed-magnitude values,
+    # so they reuse the per-unit shape. All enter as probation, so the lifecycle
+    # gate keeps them recorded-but-unapplied until an operator graduates them.
+    "recent_form_residual": _h_per_unit,
+    "stale_line": _h_per_unit,
+    "sharp_line_move": _h_per_unit,
     # Audit-only: registered in SIGNAL_REGISTRY and policy but always return "skip"
     # so the engine records them for retrospective scoring without applying them.
     "season_record": _h_audit_only,
@@ -702,6 +724,20 @@ def compute_game_adjustment(
             )
             continue
         rec = _evaluate_record_for_signal(signal, policy, archetype, 0.0, evidence_mode, league)
+        # stale_line toxicity gate (issue #28 WS2): a stale line is only an
+        # opportunity in a low-liquidity market; when liquidity is high the sharp
+        # market has already priced the news, so suppress it. (Bites only once
+        # stale_line is graduated to active — probation already keeps it unapplied.)
+        if (
+            signal.signal_type == "stale_line"
+            and rec.applied
+            and not _is_low_liquidity_league(league)
+        ):
+            rec = dataclasses.replace(
+                rec,
+                applied=False,
+                reason=rec.reason + " | stale_line suppressed: market liquidity not low",
+            )
         if rec.target == "std" and rec.applied:
             # No team-context std to scale; honestly mark it unapplied.
             rec = dataclasses.replace(
