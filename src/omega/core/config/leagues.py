@@ -808,6 +808,20 @@ def get_league_config(league: str) -> dict[str, Any]:
     return _LEAGUE_CONFIGS.get(league.upper(), {**_DEFAULT_CONFIG, "league": league})
 
 
+def is_low_liquidity_league(league: str) -> bool:
+    """Coarse market-liquidity tier from league config (issue #28 WS2/WS4).
+
+    The single source of truth for the liquidity proxy used by the stale_line
+    toxicity gate and market-aware deference. Real per-market limit sizes are not
+    captured, so the per-league ``liquidity_profile`` tier stands in. Unknown
+    leagues read as NOT low-liquidity (the conservative default).
+    """
+    try:
+        return str(get_league_config(league).get("liquidity_profile", "")).lower() == "low"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def get_all_leagues() -> list[str]:
     """Return all configured league codes."""
     return list(_LEAGUE_CONFIGS.keys())

@@ -35,6 +35,8 @@ from omega.core.calibration.adjustment_policy import (
 from omega.core.contracts.evidence import (
     EvidenceSignal,
     damping_family_for,
+    effective_lifecycle,
+    is_applicable_lifecycle,
     resolve_archetype,
     signal_applies,
 )
@@ -47,12 +49,24 @@ from omega.core.simulation.evidence_aggregation import (
     resolve_confidence,
 )
 from omega.core.simulation.evidence_aggregation import cap_factor as _cap_factor
+from omega.core.simulation.feature_combo_eval import FeatureComboError, evaluate_feature_combo
 
 # Environment override for the rollout gate. When unset, the policy's own
 # ``mode`` field governs. Accepts any graduated mode — disabled | observe |
 # score_only | bounded_live | live — or legacy "shadow"/"live"
 # (case-insensitive); an unrecognized value is ignored.
 _ENV_MODE_VAR = "OMEGA_EVIDENCE_MODE"
+
+
+def _is_low_liquidity_league(league: str) -> bool:
+    """Coarse market-liquidity proxy for the stale_line gate (issue #28 WS2).
+
+    Thin wrapper over the shared ``leagues.is_low_liquidity_league`` (the single
+    source of truth, also used by market-aware calibration deference).
+    """
+    from omega.core.config.leagues import is_low_liquidity_league  # noqa: PLC0415
+
+    return is_low_liquidity_league(league)
 
 
 # ---------------------------------------------------------------------------
@@ -292,6 +306,26 @@ def _h_audit_only(signal: EvidenceSignal, coeffs: dict[str, Any], baseline: floa
     return "skip", 1.0
 
 
+def _h_feature_combo(signal: EvidenceSignal, coeffs: dict[str, Any], baseline: float):
+    """Generic handler for LLM-proposed feature-combo signals (issue #28 WS3).
+
+    Not in HANDLER_REGISTRY — used as a fallback by ``_evaluate_signal`` when a
+    signal_type has no built-in handler but its policy coefficients carry a
+    ``feature_combo`` spec (injected only when an operator graduates a proposal).
+    The agent supplies feature values in ``signal.value`` (a dict). A missing or
+    malformed spec / non-dict value is a safe no-op (1.0); the per-signal cap
+    bounds the applied deviation as for every other handler.
+    """
+    spec = coeffs.get("feature_combo")
+    if not isinstance(spec, dict):
+        return "mean", 1.0
+    features = signal.value if isinstance(signal.value, dict) else {}
+    try:
+        return "mean", float(evaluate_feature_combo(spec, features))
+    except FeatureComboError:
+        return "mean", 1.0
+
+
 HANDLER_REGISTRY: dict[str, Handler] = {
     # player-form
     "recent_form": _h_series_blend,
@@ -327,6 +361,12 @@ HANDLER_REGISTRY: dict[str, Handler] = {
     # team-form / matchup (game-plane momentum)
     "win_streak": _h_per_unit,
     "series_lead": _h_per_unit,
+    # market-relative / microstructure (issue #28 WS2). Signed-magnitude values,
+    # so they reuse the per-unit shape. All enter as probation, so the lifecycle
+    # gate keeps them recorded-but-unapplied until an operator graduates them.
+    "recent_form_residual": _h_per_unit,
+    "stale_line": _h_per_unit,
+    "sharp_line_move": _h_per_unit,
     # Audit-only: registered in SIGNAL_REGISTRY and policy but always return "skip"
     # so the engine records them for retrospective scoring without applying them.
     "season_record": _h_audit_only,
@@ -387,6 +427,14 @@ def _evaluate_signal(
     handler = HANDLER_REGISTRY.get(signal.signal_type)
     coeffs = policy.coeffs_for(signal.signal_type)
 
+    # Generic fallback for graduated LLM proposals: a signal_type with no built-in
+    # handler but a feature_combo spec in its coefficients is evaluated by the
+    # whitelisted combo evaluator. Proposals carry no policy coefficients until an
+    # operator graduates them, so this never fires during probation.
+    is_feature_combo_proposal = handler is None and coeffs.get("feature_combo") is not None
+    if is_feature_combo_proposal:
+        handler = _h_feature_combo
+
     if handler is None or not coeffs:
         return _skip_record(
             signal,
@@ -394,7 +442,10 @@ def _evaluate_signal(
             policy_version,
             evidence_mode,
         )
-    if not signal_applies(signal.signal_type, archetype):
+    # Sport-applicability gates REGISTRY signals; a graduated proposal is not in the
+    # registry — it is vetted by the operator at graduation and scoped by the
+    # agent's emission + its plane, so the registry-based gate does not apply.
+    if not is_feature_combo_proposal and not signal_applies(signal.signal_type, archetype):
         return _skip_record(
             signal,
             f"signal does not apply to sport archetype {archetype!r}",
@@ -431,10 +482,20 @@ def _evaluate_signal(
         confidence_adjusted = family_capped
 
     final = confidence_adjusted
-    applied = evidence_mode in APPLYING_MODES and target != "skip" and final != 1.0
+    # Issue #28 WS3 lifecycle gate. Only ``active`` signals may move a live
+    # prediction; probation/deprecated/rejected signals are still evaluated and
+    # recorded (so CLV scoring and audit see them) but never applied, regardless
+    # of evidence_mode. The operator override map lives on the policy.
+    lifecycle = effective_lifecycle(signal.signal_type, policy.signal_lifecycle)
+    applied = (
+        evidence_mode in APPLYING_MODES
+        and target != "skip"
+        and final != 1.0
+        and is_applicable_lifecycle(lifecycle)
+    )
     reason = (
         f"{signal.signal_type}: {target} x{final:.4f} "
-        f"(raw {raw_factor:.4f}, mode={evidence_mode}"
+        f"(raw {raw_factor:.4f}, mode={evidence_mode}, lifecycle={lifecycle}"
         + (f", conf={confidence:.2f}" if policy.enable_confidence_weighting else "")
         + ")"
     )
@@ -524,6 +585,12 @@ def _apply_correlation_damping(
 
     buckets: dict[tuple[str, str], list[int]] = {}
     for i, (signal, rec) in enumerate(pairs):
+        # Probation/deprecated/rejected signals are recorded but must never
+        # participate in a live family: otherwise a probation primary can be
+        # re-enabled by the damping rewrite below, bypassing the lifecycle gate
+        # enforced in _evaluate_signal.
+        if not is_applicable_lifecycle(effective_lifecycle(signal.signal_type, policy.signal_lifecycle)):
+            continue
         key = _damping_bucket(signal, rec, plane)
         if key is not None:
             buckets.setdefault(key, []).append(i)
@@ -690,6 +757,20 @@ def compute_game_adjustment(
             )
             continue
         rec = _evaluate_record_for_signal(signal, policy, archetype, 0.0, evidence_mode, league)
+        # stale_line toxicity gate (issue #28 WS2): a stale line is only an
+        # opportunity in a low-liquidity market; when liquidity is high the sharp
+        # market has already priced the news, so suppress it. (Bites only once
+        # stale_line is graduated to active — probation already keeps it unapplied.)
+        if (
+            signal.signal_type == "stale_line"
+            and rec.applied
+            and not _is_low_liquidity_league(league)
+        ):
+            rec = dataclasses.replace(
+                rec,
+                applied=False,
+                reason=rec.reason + " | stale_line suppressed: market liquidity not low",
+            )
         if rec.target == "std" and rec.applied:
             # No team-context std to scale; honestly mark it unapplied.
             rec = dataclasses.replace(

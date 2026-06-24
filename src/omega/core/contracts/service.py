@@ -28,6 +28,7 @@ from omega.core.calibration.adjustment_policy import (
 )
 from omega.core.calibration.market import calibration_market_for_plane
 from omega.core.calibration.probability import apply_calibration, apply_calibration_audited
+from omega.core.config.leagues import get_league_config
 from omega.core.contracts.confidence import (
     assign_confidence,
     cap_tier,
@@ -35,8 +36,6 @@ from omega.core.contracts.confidence import (
     most_restrictive_constraint,
     tier_rank,
 )
-from omega.trace.quality import aggregate_quality
-from omega.core.config.leagues import get_league_config
 from omega.core.contracts.market_quotes import market_quote
 from omega.core.contracts.schemas import (
     AnalysisMetadata,
@@ -80,6 +79,7 @@ from omega.core.simulation.validation import validate_sim_context
 from omega.trace.eligibility import (
     calibration_exclusion_reasons as compute_calibration_exclusion_reasons,
 )
+from omega.trace.quality import aggregate_quality
 
 UTC = timezone.utc
 
@@ -598,9 +598,12 @@ def _calibrate(
     raw_prob: float,
     league: str | None = None,
     context_hints: dict[str, Any] | None = None,
+    market_prob: float | None = None,
 ) -> float:
     """Apply calibration. Delegates to apply_calibration() -- the single source of truth."""
-    return apply_calibration(raw_prob, league=league, context_hints=context_hints)
+    return apply_calibration(
+        raw_prob, league=league, context_hints=context_hints, market_prob=market_prob
+    )
 
 
 def _calibrate_audited(
@@ -609,12 +612,17 @@ def _calibrate_audited(
     context_hints: dict[str, Any] | None = None,
     plane: str = "game",
     market: str = "home",
+    market_prob: float | None = None,
 ) -> tuple[float, CalibrationAudit]:
     """Like _calibrate() but also returns a CalibrationAudit recording the path taken."""
     # Derive the calibration profile market from the plane in one shared policy.
     cal_market = calibration_market_for_plane(plane, market=market)
     calibrated, d = apply_calibration_audited(
-        raw_prob, league=league, context_hints=context_hints, market=cal_market
+        raw_prob,
+        league=league,
+        context_hints=context_hints,
+        market=cal_market,
+        market_prob=market_prob,
     )
     audit = CalibrationAudit(
         raw_prob=d["raw_prob"],
@@ -1374,7 +1382,12 @@ def analyze_game(
         gc = request.game_context
         if home_odds is not None:
             cal_home, home_audit = _calibrate_audited(
-                home_prob, league=request.league, context_hints=gc, plane="game", market="home"
+                home_prob,
+                league=request.league,
+                context_hints=gc,
+                plane="game",
+                market="home",
+                market_prob=implied_probability(home_odds),
             )
             home_edge = _build_edge(
                 "home",
@@ -1391,7 +1404,12 @@ def analyze_game(
 
         if away_odds is not None:
             cal_away, away_audit = _calibrate_audited(
-                away_prob, league=request.league, context_hints=gc, plane="game", market="away"
+                away_prob,
+                league=request.league,
+                context_hints=gc,
+                plane="game",
+                market="away",
+                market_prob=implied_probability(away_odds),
             )
             edges.append(
                 _build_edge(
@@ -1419,6 +1437,7 @@ def analyze_game(
                     context_hints=gc,
                     plane="game",
                     market="cover",
+                    market_prob=implied_probability(home_spread_odds),
                 )
                 home_edge = _build_edge(
                     "home",
@@ -1441,6 +1460,7 @@ def analyze_game(
                     context_hints=gc,
                     plane="game",
                     market="cover",
+                    market_prob=implied_probability(away_spread_odds),
                 )
                 away_edge = _build_edge(
                     "away",
@@ -1471,6 +1491,7 @@ def analyze_game(
                     context_hints=gc,
                     plane="game",
                     market="over",
+                    market_prob=implied_probability(over_odds),
                 )
                 edges.append(
                     _build_edge(
@@ -1494,6 +1515,7 @@ def analyze_game(
                     context_hints=gc,
                     plane="game",
                     market="under",
+                    market_prob=implied_probability(under_odds),
                 )
                 edges.append(
                     _build_edge(
@@ -1513,7 +1535,12 @@ def analyze_game(
         # 3-way moneyline (hockey regulation, soccer)
         if request.odds.moneyline_draw is not None and draw_prob_raw > 0:
             cal_draw, draw_audit = _calibrate_audited(
-                draw_prob_raw, league=request.league, context_hints=gc, plane="game", market="draw"
+                draw_prob_raw,
+                league=request.league,
+                context_hints=gc,
+                plane="game",
+                market="draw",
+                market_prob=implied_probability(request.odds.moneyline_draw),
             )
             edges.append(
                 _build_edge(
@@ -1570,7 +1597,12 @@ def analyze_game(
             if prob <= 0:
                 continue
             cal_prob, audit = _calibrate_audited(
-                prob, league=request.league, context_hints=gc, plane="game", market=market_name
+                prob,
+                league=request.league,
+                context_hints=gc,
+                plane="game",
+                market=market_name,
+                market_prob=implied_probability(price),
             )
             edges.append(
                 _build_edge(
@@ -1621,6 +1653,7 @@ def analyze_game(
                     context_hints=gc,
                     plane="game",
                     market="correct_score",
+                    market_prob=implied_probability(price),
                 )
                 edges.append(
                     _build_edge(
@@ -2085,7 +2118,12 @@ def analyze_player_prop(
     if request.odds_over is not None:
         market_over = implied_probability(request.odds_over)
         cal_over, over_audit = _calibrate_audited(
-            over_prob, league=request.league, context_hints=_ctx_hints, plane="prop", market="over"
+            over_prob,
+            league=request.league,
+            context_hints=_ctx_hints,
+            plane="prop",
+            market="over",
+            market_prob=market_over,
         )
         edge_over = round(edge_percentage(cal_over, market_over), 2)
     else:
@@ -2099,6 +2137,7 @@ def analyze_player_prop(
             context_hints=_ctx_hints,
             plane="prop",
             market="under",
+            market_prob=market_under,
         )
         edge_under = round(edge_percentage(cal_under, market_under), 2)
     else:

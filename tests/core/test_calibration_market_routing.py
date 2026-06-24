@@ -15,10 +15,11 @@ from omega.core.contracts import service
 
 @pytest.fixture
 def captured_market(monkeypatch):
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
-    def fake_apply(raw, league=None, context_hints=None, market="game"):
+    def fake_apply(raw, league=None, context_hints=None, market="game", market_prob=None):
         captured["market"] = market
+        captured["market_prob"] = market_prob
         return raw, {
             "raw_prob": raw,
             "calibrated_prob": raw,
@@ -50,3 +51,11 @@ def test_game_plane_routes_to_game_market(captured_market):
 def test_draw_routes_to_draw_market(captured_market):
     service._calibrate_audited(0.3, league="EPL", plane="game", market="draw")
     assert captured_market["market"] == "draw"
+
+
+def test_market_probability_threads_to_shared_calibration(captured_market):
+    service._calibrate_audited(
+        0.6, league="NBA", plane="prop", market="over", market_prob=0.52
+    )
+    assert captured_market["market"] == "prop"
+    assert captured_market["market_prob"] == 0.52

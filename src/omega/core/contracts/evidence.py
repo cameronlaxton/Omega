@@ -22,6 +22,7 @@ sport-tagged taxonomy registry. It must stay import-light.
 from __future__ import annotations
 
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -40,6 +41,24 @@ SignalWindow = Literal[
 ]
 SignalDirection = Literal["over", "under", "home", "away", "neutral"]
 ValueKind = Literal["scalar", "bool", "series", "categorical"]
+
+# Signal lifecycle (issue #28 WS3). The agent-facing vocabulary is generated from
+# this, and only ``active`` signals may move a live prediction:
+#   active     -> emitted, scored, and applied (under the policy's mode/caps).
+#   probation  -> emitted + scored so CLV can validate it, but NEVER applied and
+#                 never surfaced as "trusted". The entry point for new signals
+#                 and graduated proposals before they clear the statistical bar.
+#   deprecated -> dropped from the emit vocabulary and never applied (a dead
+#                 signal whose CLV proved it carries no edge, e.g. recent_form).
+#   rejected   -> a proposal that failed within its sample budget; same effect as
+#                 deprecated, kept distinct for audit.
+SignalLifecycle = Literal["active", "probation", "deprecated", "rejected"]
+LIFECYCLE_VALUES: frozenset[str] = frozenset(
+    {"active", "probation", "deprecated", "rejected"}
+)
+# Lifecycles whose signals the agent should still EMIT (active + probation). The
+# others drop out of the generated vocabulary.
+_VOCABULARY_VISIBLE_LIFECYCLES: frozenset[str] = frozenset({"active", "probation"})
 
 # Archetype name used by SignalSpec.applies_to_sports to mean "every sport".
 UNIVERSAL = "*"
@@ -68,8 +87,9 @@ class EvidenceSignal(BaseModel):
     plane: SignalPlane = Field(
         description="'player' adjusts player_context means; 'game' adjusts team context."
     )
-    value: bool | int | float | str | list[float] = Field(
-        description="Raw signal payload (scalar, bool, categorical label, or series of floats)."
+    value: bool | int | float | str | list[float] | dict[str, bool | int | float | str] = Field(
+        description="Raw signal payload (scalar, bool, categorical label, series of floats, or — "
+        "for a feature-combo proposal — a {feature: value} map over the whitelist)."
     )
     source: str = Field(
         description="Provenance, used as a retrospective-scoring key "
@@ -162,6 +182,10 @@ class SignalSpec:
     # declaring it here is inert until that flag is wired.
     damping_family: str | None = None
     description: str = ""
+    # Issue #28 WS3. The declared (code-default) lifecycle; an operator can
+    # override it at runtime via AdjustmentPolicy.signal_lifecycle. Defaults to
+    # ``active`` so every pre-existing signal behaves exactly as before.
+    lifecycle: SignalLifecycle = "active"
 
 
 def _spec(*args, **kwargs) -> tuple[str, SignalSpec]:
@@ -260,6 +284,45 @@ SIGNAL_REGISTRY: dict[str, SignalSpec] = dict(
             "game",
             default_window="series",
             description="Games-ahead lead in the current playoff series for the directional team.",
+        ),
+        # --- Market-relative / microstructure (issue #28 WS2) ---
+        # Facts the simulation does NOT ingest, anchored on the market rather than
+        # public box-score stats. All enter as ``probation``: emitted + scored so
+        # CLV can validate them, but never applied until an operator graduates them.
+        _spec(
+            "recent_form_residual",
+            "player_form",
+            "player",
+            requires_stat_key=True,
+            default_window="last_5",
+            damping_family="player_recency",
+            lifecycle="probation",
+            description="Recent performance vs the LINE-implied projection (not the season "
+            "baseline) — recent_form done right. Value: signed residual fraction "
+            "(+0.10 ~= 10% above the line's implied level).",
+        ),
+        _spec(
+            "stale_line",
+            "situational",
+            "game",
+            default_window="matchup",
+            damping_family="market_inefficiency",
+            lifecycle="probation",
+            description="The line has NOT moved despite a material context change the agent "
+            "flagged. Toxic by design: valid only when paired with a drop in market "
+            "liquidity; suppressed when liquidity stays high (sharp money is confident). "
+            "Value: signed magnitude of the adjustment the line appears to ignore.",
+        ),
+        _spec(
+            "sharp_line_move",
+            "situational",
+            "game",
+            default_window="matchup",
+            damping_family="market_move",
+            lifecycle="probation",
+            description="The line moved against public-side expectation (steam). Audit-first; "
+            "graduates only if it predicts CLV. Value: signed steam magnitude toward "
+            "the directional side.",
         ),
         _spec(
             "season_record",
@@ -509,3 +572,50 @@ def damping_family_for(signal_type: str) -> str | None:
     """
     spec = SIGNAL_REGISTRY.get(signal_type)
     return spec.damping_family if spec is not None else None
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle (issue #28 WS3)
+# ---------------------------------------------------------------------------
+
+
+def declared_lifecycle(signal_type: str) -> str:
+    """The signal's lifecycle as declared in the registry (default ``active``).
+
+    Unknown signal types resolve to ``active`` — they have no handler, so the
+    application gate still skips them; the value only matters once a proposal is
+    promoted into the registry or carried as an operator override.
+    """
+    spec = SIGNAL_REGISTRY.get(signal_type)
+    return spec.lifecycle if spec is not None else "active"
+
+
+def effective_lifecycle(
+    signal_type: str, overrides: Mapping[str, str] | None = None
+) -> str:
+    """Resolve the runtime lifecycle: operator override first, else the declared one.
+
+    ``overrides`` is the operator-approved ``AdjustmentPolicy.signal_lifecycle``
+    map (promoted fail-closed through the existing gate). An override value that
+    is not a recognised lifecycle is ignored (falls back to the declared one) so a
+    malformed policy can never silently un-gate a signal.
+    """
+    if overrides:
+        candidate = overrides.get(signal_type)
+        if candidate in LIFECYCLE_VALUES:
+            return candidate
+    return declared_lifecycle(signal_type)
+
+
+def is_vocabulary_visible(lifecycle: str) -> bool:
+    """Whether a signal at this lifecycle should appear in the agent's emit vocab.
+
+    ``active`` and ``probation`` are emitted (probation gathers CLV data);
+    ``deprecated`` and ``rejected`` drop out so they stop consuming tokens/traces.
+    """
+    return lifecycle in _VOCABULARY_VISIBLE_LIFECYCLES
+
+
+def is_applicable_lifecycle(lifecycle: str) -> bool:
+    """Whether a signal at this lifecycle may move a live prediction (active only)."""
+    return lifecycle == "active"

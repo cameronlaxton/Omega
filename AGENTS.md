@@ -16,6 +16,13 @@ that points here and carries no independent rules.
 - [`OMEGA_DATA_SOURCES.md`](OMEGA_DATA_SOURCES.md) — data sourcing, fallbacks, freshness rules.
 - [`docs/historical_calibration_backfill.md`](docs/historical_calibration_backfill.md) — historical
   replay → calibration backfill runbook (ingest → replay → fit → parity → promote).
+- [`src/omega/core/calibration/CLAUDE.md`](src/omega/core/calibration/CLAUDE.md) — calibration method
+  catalog and promotion rules. Supported methods: `none`, `shrinkage`, `cap`, `combined`, `isotonic`,
+  and **`market_aware`** (issue #28 WS4) — blends the model toward the closing-line implied probability
+  scaled by a coarse liquidity-deference factor; requires a `market_prob` at apply time and is fail-safe
+  identity without one. New methods require evidence of held-out improvement (see that file's Method rules).
+- [`docs/issue28_clv_loop.md`](docs/issue28_clv_loop.md) — the continuous, operator-gated CLV evidence
+  loop (score by closing-line value → fit reliability + lifecycle recommendations → review → graduate).
 
 ### Output mode ⊥ engine execution (summary — full rule in output_modes.md)
 

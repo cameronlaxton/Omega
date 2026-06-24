@@ -56,11 +56,13 @@ from omega.trace.schema import (
     SCHEMA_V17,
     SCHEMA_V18,
     SCHEMA_V19,
+    SCHEMA_V21,
     apply_v4_migration,
     apply_v7_migration,
     apply_v8_migration,
     apply_v15_migration,
     apply_v20_migration,
+    apply_v21_migration,
 )
 
 if TYPE_CHECKING:
@@ -780,6 +782,18 @@ class TraceStore:
             "Phase 8: traces.parameter_profile_ref column (trace-level parameter provenance)",
         )
 
+        # V21: CLV-anchored evidence learning (issue #28). signal_performance CLV
+        # columns + signal_proposals table + traces.llm_reasoning. The table is a
+        # CREATE TABLE IF NOT EXISTS; the column adds go through the probe-first
+        # helper. Retargets the evidence loop from raw direction accuracy (which the
+        # closing line already contains) to incremental closing-line value.
+        self.conn.executescript(SCHEMA_V21)
+        apply_v21_migration(self.conn)
+        self._record_version(
+            21,
+            "Issue 28: signal_performance CLV columns + signal_proposals + traces.llm_reasoning",
+        )
+
     def _existing_schema_version(self) -> int:
         """Highest applied schema version, or 0 if the DB is brand new."""
         try:
@@ -930,13 +944,20 @@ class TraceStore:
         param_ref = extract_parameter_profile_ref(trace)
         param_ref_json = json.dumps(param_ref, default=str) if param_ref else None
 
+        # Free-text agent narrative (V21): surface the canonical reasoning_narrative
+        # (a.k.a. the agent's matchup narrative) into a queryable column so the exact
+        # logical theory is queryable alongside the mathematical outputs (issue #28).
+        # Accept an explicit ``llm_reasoning`` key first, else the canonical field.
+        llm_reasoning = trace.get("llm_reasoning") or trace.get("reasoning_narrative")
+
         cur = self.conn.execute(
             """INSERT OR IGNORE INTO traces
                (trace_id, run_id, timestamp, prompt, league, matchup,
                 execution_mode, simulation_seed, aggregate_quality,
                 predictions, recommendations, odds_snapshot, downgrades,
-                full_trace, schema_version, session_id, parameter_profile_ref)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                full_trace, schema_version, session_id, parameter_profile_ref,
+                llm_reasoning)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 trace_id,
                 run_id,
@@ -961,6 +982,7 @@ class TraceStore:
                 CURRENT_VERSION,
                 session_id,
                 param_ref_json,
+                llm_reasoning,
             ),
         )
         # Explode evidence into queryable rows only on a genuine first insert.
@@ -1279,6 +1301,10 @@ class TraceStore:
         if self._repo is not None:
             return self._repo.upsert_signal_performance(rows, dataset_hash)
         scored_at = datetime.now(UTC).isoformat()
+
+        def _opt_float(value: Any) -> float | None:
+            return None if value is None else float(value)
+
         payload = [
             (
                 r.signal_type,
@@ -1292,6 +1318,11 @@ class TraceStore:
                 float(r.realized_hit_rate),
                 float(r.calibration_gap),
                 float(r.brier),
+                # V21 CLV columns — nullable; older row shapes default to None/0.
+                _opt_float(getattr(r, "clv_aligned", None)),
+                _opt_float(getattr(r, "clv_cents_when_followed", None)),
+                int(getattr(r, "clv_sample", 0) or 0),
+                _opt_float(getattr(r, "clv_cents_std", None)),
                 dataset_hash,
                 scored_at,
             )
@@ -1302,9 +1333,11 @@ class TraceStore:
                 """INSERT OR REPLACE INTO signal_performance
                    (signal_type, source, obs_window, league, sample_size,
                     direction_correct, direction_accuracy, mean_confidence,
-                    realized_hit_rate, calibration_gap, brier, dataset_hash,
-                    scored_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    realized_hit_rate, calibration_gap, brier,
+                    clv_aligned, clv_cents_when_followed, clv_sample,
+                    clv_cents_std,
+                    dataset_hash, scored_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 payload,
             )
             self.conn.commit()
@@ -1338,8 +1371,10 @@ class TraceStore:
         rows = self.conn.execute(
             f"""SELECT signal_type, source, obs_window, league, sample_size,
                        direction_correct, direction_accuracy, mean_confidence,
-                       realized_hit_rate, calibration_gap, brier, dataset_hash,
-                       scored_at
+                       realized_hit_rate, calibration_gap, brier,
+                       clv_aligned, clv_cents_when_followed, clv_sample,
+                       clv_cents_std,
+                       dataset_hash, scored_at
                 FROM signal_performance
                 WHERE {" AND ".join(clauses)}
                 ORDER BY sample_size DESC, signal_type
@@ -1347,6 +1382,100 @@ class TraceStore:
             params,
         ).fetchall()
         return [dict(row) for row in rows]
+
+    # ------------------------------------------------------------------
+    # Signal proposals (issue #28 — LLM-proposed hypotheses; probation-gated)
+    # ------------------------------------------------------------------
+
+    def upsert_signal_proposal(
+        self,
+        *,
+        name: str,
+        feature_combo: dict[str, Any] | None = None,
+        thesis: str = "",
+        plane: str = "both",
+        direction_rule: str | None = None,
+        source: str = "llm",
+        lifecycle: str = "probation",
+    ) -> None:
+        """Insert or update an LLM-proposed signal definition.
+
+        Idempotent on ``name``: re-proposing updates the definition fields and
+        ``updated_at`` while preserving ``created_at`` and any scored metrics. New
+        proposals enter ``lifecycle='probation'``; graduation to ``active`` is an
+        operator-gated transition (see :meth:`set_proposal_lifecycle`).
+        """
+        if self._repo is not None:
+            raise NotImplementedError(
+                "signal_proposals is only implemented on the SQLite TraceStore"
+            )
+        combo_json = json.dumps(feature_combo or {}, sort_keys=True)
+        now = datetime.now(UTC).isoformat()
+        self.conn.execute(
+            """INSERT INTO signal_proposals
+                   (name, thesis, plane, direction_rule, feature_combo, lifecycle,
+                    source, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET
+                    thesis=excluded.thesis,
+                    plane=excluded.plane,
+                    direction_rule=excluded.direction_rule,
+                    feature_combo=excluded.feature_combo,
+                    source=excluded.source,
+                    updated_at=excluded.updated_at""",
+            (name, thesis, plane, direction_rule, combo_json, lifecycle, source, now, now),
+        )
+        self.conn.commit()
+
+    def get_signal_proposals(
+        self, lifecycle: str | None = None, limit: int = 500
+    ) -> list[dict[str, Any]]:
+        """Return signal proposals, optionally filtered by lifecycle (newest first).
+
+        ``feature_combo`` is decoded back to a dict.
+        """
+        if self._repo is not None:
+            raise NotImplementedError(
+                "signal_proposals is only implemented on the SQLite TraceStore"
+            )
+        clause = "WHERE lifecycle = ? " if lifecycle else ""
+        args: tuple[Any, ...] = (lifecycle, limit) if lifecycle else (limit,)
+        rows = self.conn.execute(
+            f"""SELECT name, thesis, plane, direction_rule, feature_combo, lifecycle,
+                       source, sample_size, clv_aligned, clv_cents_when_followed,
+                       boot_lower_bound, pvalue, graduates, dataset_hash,
+                       created_at, updated_at
+                FROM signal_proposals
+                {clause}
+                ORDER BY created_at DESC, name
+                LIMIT ?""",
+            args,
+        ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            d = dict(row)
+            try:
+                d["feature_combo"] = json.loads(d["feature_combo"]) if d["feature_combo"] else {}
+            except (json.JSONDecodeError, TypeError):
+                d["feature_combo"] = {}
+            out.append(d)
+        return out
+
+    def set_proposal_lifecycle(self, name: str, lifecycle: str) -> bool:
+        """Transition a proposal's lifecycle (operator-gated graduation/rejection).
+
+        Returns True if a row was updated, False if no proposal by that name exists.
+        """
+        if self._repo is not None:
+            raise NotImplementedError(
+                "signal_proposals is only implemented on the SQLite TraceStore"
+            )
+        cur = self.conn.execute(
+            "UPDATE signal_proposals SET lifecycle = ?, updated_at = ? WHERE name = ?",
+            (lifecycle, datetime.now(UTC).isoformat(), name),
+        )
+        self.conn.commit()
+        return cur.rowcount > 0
 
     # ------------------------------------------------------------------
     # Outcome attachment

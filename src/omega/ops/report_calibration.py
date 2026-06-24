@@ -456,13 +456,35 @@ def _section_signal_performance(store: TraceStore, league: str | None) -> list[d
     return store.get_signal_performance(league=league, limit=200)
 
 
-def _signal_verdict(sample_size: int, accuracy: float, calibration_gap: float) -> str:
-    """Classify one signal-performance row for the agent.
+# Minimum CLV observations before the verdict is driven by CLV alignment rather
+# than realized direction (issue #28). A soft readout threshold — NOT the much
+# stricter power-derived N_min that gates graduation in the fit.
+_MIN_CLV_SAMPLE_FOR_VERDICT = 20
 
-    A directional signal is a coin flip at 0.50; >=0.55 accuracy on >=30 samples
-    is treated as genuinely predictive. Below that it is noise. Thin samples are
-    unproven. A large positive calibration gap flags overconfidence.
+
+def _signal_verdict(row: dict[str, Any]) -> str:
+    """Classify one signal-performance row for the agent (CLV-primary).
+
+    CLV alignment is the market-relative trust driver: a signal that agrees with
+    how the line moved to close carries information the close did not already
+    contain. When closing-line coverage is sufficient the verdict is CLV-driven;
+    where it is thin we fall back to realized direction accuracy (audit only — the
+    closing line already contains public direction). The hard graduation bar
+    (bootstrap + N_min + FDR) lives in the fit; this is the compact readout.
     """
+    clv_aligned = row.get("clv_aligned")
+    clv_sample = int(row.get("clv_sample") or 0)
+    if clv_aligned is not None and clv_sample >= _MIN_CLV_SAMPLE_FOR_VERDICT:
+        rate = float(clv_aligned)
+        if rate >= 0.55:
+            return "clv_aligned"
+        if rate <= 0.50:
+            return "clv_misaligned"
+        return "clv_marginal"
+    # Graceful degradation: realized direction when CLV coverage is thin.
+    sample_size = int(row.get("sample_size") or 0)
+    accuracy = float(row.get("direction_accuracy") or 0.0)
+    calibration_gap = float(row.get("calibration_gap") or 0.0)
     if sample_size < 30:
         return "insufficient_n"
     verdict = "predictive" if accuracy >= 0.55 else "noise"
@@ -491,6 +513,8 @@ def _signal_guidance(signal_perf: list[dict[str, Any]]) -> dict[str, list[dict[s
         accuracy = min(0.65, max(0.35, float(row.get("direction_accuracy") or 0.0)))
         calibration_gap = min(0.15, max(-0.15, float(row.get("calibration_gap") or 0.0)))
         brier = min(0.15, max(-0.15, float(row.get("brier") or 0.0)))
+        clv_aligned_raw = row.get("clv_aligned")
+        clv_sample = int(row.get("clv_sample") or 0)
         normalized = {
             "signal_type": signal_type,
             "source": row.get("source") or "unknown",
@@ -500,8 +524,18 @@ def _signal_guidance(signal_perf: list[dict[str, Any]]) -> dict[str, list[dict[s
             "direction_accuracy": accuracy,
             "calibration_gap": calibration_gap,
             "brier": brier,
+            "clv_sample": clv_sample,
+            "clv_aligned": None if clv_aligned_raw is None else float(clv_aligned_raw),
+            "clv_cents_when_followed": row.get("clv_cents_when_followed"),
         }
-        if sample_size < 30:
+        # CLV-primary bucketing (issue #28): the market-relative trust driver when
+        # coverage is sufficient; otherwise fall back to realized direction.
+        if clv_aligned_raw is not None and clv_sample >= _MIN_CLV_SAMPLE_FOR_VERDICT:
+            if float(clv_aligned_raw) >= 0.55:
+                buckets["trusted"].append(normalized)
+            else:
+                buckets["warnings"].append(normalized)
+        elif sample_size < 30:
             buckets["insufficient"].append(normalized)
         elif accuracy >= 0.55 and calibration_gap <= 0.10:
             buckets["trusted"].append(normalized)
@@ -514,6 +548,131 @@ def _signal_guidance(signal_perf: list[dict[str, Any]]) -> dict[str, list[dict[s
     )
     buckets["insufficient"].sort(key=lambda r: (-r["sample_size"], r["signal_type"]))
     return buckets
+
+
+def _evidence_lifecycle_lines() -> list[str]:
+    """Markdown telling the agent which signals are deprecated / on probation.
+
+    Effective lifecycle = the production AdjustmentPolicy's operator-approved
+    ``signal_lifecycle`` override, else each SignalSpec's declared default (issue
+    #28 WS3). Best-effort: returns ``[]`` if the registries are unavailable or
+    every signal is active.
+    """
+    try:
+        from omega.core.calibration.adjustment_policy import AdjustmentPolicyRegistry
+        from omega.core.contracts.evidence import SIGNAL_REGISTRY, effective_lifecycle
+    except Exception:  # noqa: BLE001
+        return []
+    try:
+        prod = AdjustmentPolicyRegistry().get_production_policy()
+    except Exception:  # noqa: BLE001
+        prod = None
+    overrides = dict(prod.signal_lifecycle) if (prod and prod.signal_lifecycle) else {}
+
+    deprecated: set[str] = set()
+    probation: set[str] = set()
+    known = set(SIGNAL_REGISTRY) | set(overrides)
+    for st in known:
+        lifecycle = effective_lifecycle(st, overrides)
+        if lifecycle in ("deprecated", "rejected"):
+            deprecated.add(st)
+        elif lifecycle == "probation":
+            probation.add(st)
+
+    if not deprecated and not probation:
+        return []
+    lines = ["", "**Signal lifecycle (issue #28 WS3):**"]
+    if deprecated:
+        lines.append(
+            "- **Do NOT emit** (deprecated/rejected — CLV showed no edge beyond the "
+            f"line): {', '.join(sorted(deprecated))}"
+        )
+    if probation:
+        lines.append(
+            "- **Probation** (keep emitting to gather CLV, but the engine will NOT "
+            f"apply them and they are not 'trusted'): {', '.join(sorted(probation))}"
+        )
+    return lines
+
+
+def _production_reliability_map() -> dict[str, float]:
+    """signal_type -> reliability_weight from the production AdjustmentPolicy.
+
+    Best-effort: returns {} if the policy registry is unavailable or empty. Used to
+    surface what the engine actually trusts in the §6B scorecard.
+    """
+    try:
+        from omega.core.calibration.adjustment_policy import AdjustmentPolicyRegistry
+
+        prod = AdjustmentPolicyRegistry().get_production_policy()
+    except Exception:  # noqa: BLE001
+        return {}
+    if prod is None:
+        return {}
+    out: dict[str, float] = {}
+    for signal_type, coeffs in (prod.coefficients or {}).items():
+        rw = coeffs.get("reliability_weight")
+        if rw is not None:
+            try:
+                out[signal_type] = float(rw)
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def _evidence_scorecard_lines() -> list[str]:
+    """Unified evidence+math scorecard tail (issue #28 WS5).
+
+    Surfaces the fit's recommended (operator-gated) lifecycle transitions and any
+    production market-aware deference profiles, so the single report shows the whole
+    loop: what is trusted, what should transition, and where the math defers to the
+    market. Best-effort — each block renders only when its data exists.
+    """
+    lines: list[str] = []
+
+    recs: dict[str, str] = {}
+    try:
+        from omega.core.calibration.adjustment_policy import AdjustmentPolicyRegistry
+        from omega.core.calibration.profiles import ProfileStatus
+
+        cands = AdjustmentPolicyRegistry().list_policies(status=ProfileStatus.CANDIDATE.value)
+        latest = max(cands, key=lambda p: p.version, default=None)
+        recs = dict(latest.lifecycle_recommendations) if latest else {}
+    except Exception:  # noqa: BLE001
+        recs = {}
+    if recs:
+        lines.append("")
+        lines.append("**Recommended lifecycle transitions (latest fit — operator-gated):**")
+        for signal_type, target in sorted(recs.items()):
+            lines.append(f"- `{signal_type}` -> **{target}**")
+        lines.append(
+            "> Apply with `omega-promote-adjustment-policy "
+            "--apply-lifecycle-recommendations` (fail-closed; nothing transitions "
+            "automatically)."
+        )
+
+    market_lines: list[str] = []
+    try:
+        from omega.core.calibration.registry import CalibrationRegistry
+
+        for p in CalibrationRegistry().list_profiles(status="production"):
+            if getattr(p, "method", None) == "market_aware":
+                weight = float((p.params or {}).get("market_weight", 0.0))
+                market_lines.append(
+                    f"- {p.league} / {getattr(p, 'market', 'game')}: "
+                    f"market_weight={weight:.2f} (`{p.profile_id}`)"
+                )
+    except Exception:  # noqa: BLE001
+        market_lines = []
+    if market_lines:
+        lines.append("")
+        lines.append(
+            "**Market-aware deference (WS4) — model shrinks toward the close where it "
+            "has no measured edge:**"
+        )
+        lines.extend(sorted(market_lines))
+
+    return lines
 
 
 def _section_pending_candidates(
@@ -747,6 +906,7 @@ def _render(
                     f"- {row['league']} `{row['signal_type']}` from `{row['source']}` "
                     f"({row['obs_window']}): n={row['sample_size']}"
                 )
+    lines.extend(_evidence_lifecycle_lines())
     lines.append("")
 
     lines.append("## 1. Coverage")
@@ -954,26 +1114,36 @@ def _render(
             "after outcomes attach._"
         )
     else:
+        rel_map = _production_reliability_map()
         lines.append(
-            "| signal_type | source | window | n | dir_acc | mean_conf | cal_gap | brier | verdict |"
+            "| signal_type | source | window | n | dir_acc | cal_gap | "
+            "clv_n | clv_align | clv_cents | reliability | verdict |"
         )
-        lines.append("|---|---|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
         for r in signal_perf:
-            verdict = _signal_verdict(
-                r["sample_size"], r["direction_accuracy"], r["calibration_gap"]
-            )
+            verdict = _signal_verdict(r)
+            clv_aligned = r.get("clv_aligned")
+            clv_cents = r.get("clv_cents_when_followed")
+            rel = rel_map.get(r["signal_type"])
             lines.append(
                 f"| {r['signal_type']} | {r['source']} | {r['obs_window']} | "
                 f"{r['sample_size']} | {r['direction_accuracy']:.2f} | "
-                f"{r['mean_confidence']:.2f} | {r['calibration_gap']:+.2f} | "
-                f"{r['brier']:.3f} | {verdict} |"
+                f"{r['calibration_gap']:+.2f} | {int(r.get('clv_sample') or 0)} | "
+                f"{'n/a' if clv_aligned is None else f'{float(clv_aligned):.2f}'} | "
+                f"{'n/a' if clv_cents is None else f'{float(clv_cents):+.2f}'} | "
+                f"{'—' if rel is None else f'{rel:.2f}'} | {verdict} |"
             )
         lines.append("")
         lines.append(
-            "> Weight evidence by empirical accuracy: trust `predictive` signal "
-            "types/sources, discount `noise`, treat `insufficient_n` as unproven. "
-            "A positive `cal_gap` means the agent was overconfident in that signal."
+            "> **CLV is the trust driver** (issue #28): `clv_align` is the rate the "
+            "signal agreed with how the line moved to close; `clv_cents` is the mean "
+            "closing-line value captured. Trust `clv_aligned`, discount "
+            "`clv_misaligned` (it merely restates the line). Where `clv_n` is thin "
+            "the verdict falls back to realized direction (`predictive`/`noise`/"
+            "`insufficient_n`), which the closing line already contains. "
+            "`reliability` is what the production policy actually trusts."
         )
+        lines.extend(_evidence_scorecard_lines())
     lines.append("")
 
     lines.append("## 7. Suggested actions")

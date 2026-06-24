@@ -124,7 +124,7 @@ from __future__ import annotations
 
 import logging
 
-CURRENT_VERSION = 20
+CURRENT_VERSION = 21
 
 # ---------------------------------------------------------------------------
 # Version lineage (applied in order by TraceStore._ensure_schema)
@@ -160,6 +160,8 @@ CURRENT_VERSION = 20
 #   V18 SCHEMA_V18           priors_nfl_dispersion (NFL NB dispersion k w/ shrinkage provenance)
 #   V19 SCHEMA_V19           parameter_profiles (governed backend structural-parameter profiles)
 #   V20 apply_v20_migration  traces.parameter_profile_ref column (trace-level param provenance)
+#   V21 SCHEMA_V21 +          signal_performance CLV columns + signal_proposals table +
+#       apply_v21_migration   traces.llm_reasoning column (issue #28 CLV-anchored evidence loop)
 #
 # There is intentionally no SCHEMA_V4/V7/V8 constant — those steps are the
 # apply_v{n}_migration helpers above. Bump CURRENT_VERSION and add both the
@@ -856,4 +858,75 @@ def apply_v20_migration(conn) -> None:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(traces)").fetchall()}
     if "parameter_profile_ref" not in cols:
         conn.execute(V20_ADD_COLUMN_SQL)
+    conn.commit()
+
+
+# V21: CLV-anchored evidence learning (issue #28). Three forward-additive changes:
+#   * signal_performance gains CLV columns so the fit can learn from closing-line
+#     value (sample-efficient, market-relative) instead of raw direction accuracy:
+#       - clv_aligned: rate the signal's direction agreed with how the line moved
+#         decision->close (mean of per-trace beat-close alignment; NULL if no CLV).
+#       - clv_cents_when_followed: mean CLV (implied-prob cents) on traces where the
+#         signal fired (NULL if no closing-line coverage).
+#       - clv_sample: number of fired traces that had a closing line to score against.
+#   * signal_proposals: LLM-proposed typed hypotheses over a whitelisted feature
+#     vocabulary. They land in lifecycle='probation', are scored exactly like active
+#     signals, and graduate only through the operator-gated CLV bar. "LLM proposes,
+#     data disposes, operator commits." feature_combo holds the JSON spec.
+#   * traces.llm_reasoning: the agent's free-text matchup narrative, surfaced as a
+#     queryable column alongside the mathematical outputs (also rides full_trace).
+# The signal_proposals table is a plain CREATE TABLE IF NOT EXISTS; the column adds
+# go through the probe-first helper (SQLite has no ALTER ADD COLUMN IF NOT EXISTS).
+SCHEMA_V21 = """
+CREATE TABLE IF NOT EXISTS signal_proposals (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    name                     TEXT NOT NULL,
+    thesis                   TEXT NOT NULL DEFAULT '',
+    plane                    TEXT NOT NULL DEFAULT 'both',
+    direction_rule           TEXT,
+    feature_combo            TEXT NOT NULL DEFAULT '{}',
+    lifecycle                TEXT NOT NULL DEFAULT 'probation',
+    source                   TEXT NOT NULL DEFAULT 'llm',
+    sample_size              INTEGER NOT NULL DEFAULT 0,
+    clv_aligned              REAL,
+    clv_cents_when_followed  REAL,
+    boot_lower_bound         REAL,
+    pvalue                   REAL,
+    graduates                INTEGER NOT NULL DEFAULT 0,
+    dataset_hash             TEXT,
+    created_at               TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at               TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_signal_proposals_lifecycle
+    ON signal_proposals(lifecycle);
+"""
+
+# (column_name, sqlite_decl) pairs added by apply_v21_migration. All nullable so a
+# pre-V21 row parses unchanged and a thin-CLV-coverage run can leave them NULL.
+_V21_SIGNAL_PERF_COLUMNS = (
+    ("clv_aligned", "REAL"),
+    ("clv_cents_when_followed", "REAL"),
+    ("clv_sample", "INTEGER"),
+    ("clv_cents_std", "REAL"),
+)
+
+
+def apply_v21_migration(conn) -> None:
+    """Idempotently apply V21 ALTERs: signal_performance CLV cols + traces.llm_reasoning.
+
+    Probes PRAGMA table_info first (SQLite has no ADD COLUMN IF NOT EXISTS) so
+    re-running on a V21 DB is a no-op. The signal_proposals table itself is created
+    by the idempotent SCHEMA_V21 executescript, not here.
+    """
+    perf_cols = {
+        row[1] for row in conn.execute("PRAGMA table_info(signal_performance)").fetchall()
+    }
+    for name, decl in _V21_SIGNAL_PERF_COLUMNS:
+        if name not in perf_cols:
+            conn.execute(f"ALTER TABLE signal_performance ADD COLUMN {name} {decl}")
+    trace_cols = {row[1] for row in conn.execute("PRAGMA table_info(traces)").fetchall()}
+    if "llm_reasoning" not in trace_cols:
+        conn.execute("ALTER TABLE traces ADD COLUMN llm_reasoning TEXT")
     conn.commit()

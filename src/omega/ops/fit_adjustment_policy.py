@@ -41,36 +41,187 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from dataclasses import dataclass, field  # noqa: E402
+
 from omega.core.calibration.adjustment_policy import (  # noqa: E402
     AdjustmentPolicy,
     AdjustmentPolicyRegistry,
 )
 from omega.core.calibration.profiles import ProfileStatus  # noqa: E402
+from omega.core.contracts.evidence import effective_lifecycle  # noqa: E402
+from omega.strategy.clv_significance import (  # noqa: E402
+    DEFAULT_FDR_Q,
+    DEFAULT_POWER,
+    DEFAULT_POWER_EDGE,
+    ProbationStats,
+    clv_pvalue_from_stats,
+    graduation_mask,
+    min_samples_for_power,
+    normal_lower_bound,
+    pooled_mean_std,
+)
 from omega.trace.store import TraceStore  # noqa: E402
 
 logger = logging.getLogger("fit_adjustment_policy")
 
 _DEFAULT_MIN_SAMPLES = 30
+# Minimum CLV observations before CLV is used at all (else degrade to direction).
+# Distinct from the much stricter power-derived N_min, which is the graduation floor.
+_MIN_CLV_SAMPLE = 20
+# Cap on reliability_weight for a signal with measured CLV that has NOT cleared the
+# statistical bar (fail-closed: trust only proven edge). Misaligned -> 0.
+_UNPROVEN_CEILING = 0.25
+# CLV share when blending a graduated signal's weight with realized direction.
+_GRAD_CLV_WEIGHT = 0.75
+# CLV-sample floor before recommending an active signal be deprecated. Smaller
+# than the graduation N_min: retiring a misaligned signal needs less evidence
+# than admitting a new one, but still enough to be confident it carries no edge.
+_DEPRECATE_MIN_CLV_SAMPLE = 100
+# Toxic signals (issue #28 WS2): their N_min graduation floor is DOUBLED. A
+# stale (unmoved) line usually means the sharp market already proved the news
+# irrelevant, so a stale_line "edge" needs a brutal burden of proof.
+_TOXIC_SIGNALS: frozenset[str] = frozenset({"stale_line"})
 
 
-def _reliability_weight(accuracy: float) -> float:
-    """Map directional accuracy to a reliability weight in [0, 1]."""
-    return max(0.0, min(1.0, 2.0 * (accuracy - 0.5)))
+def _signal_n_min(signal_type: str, n_min: int) -> int:
+    """Per-signal graduation floor — doubled for toxic signals (issue #28 WS2)."""
+    return n_min * 2 if signal_type in _TOXIC_SIGNALS else n_min
 
 
-def _aggregate_by_signal_type(
-    perf_rows: list[dict],
-) -> dict[str, tuple[int, float]]:
-    """Collapse signal_performance rows to (total_n, weighted_accuracy) per type."""
-    totals: dict[str, list[int]] = {}
+def _clamp_weight(x: float) -> float:
+    """The legacy reliability shape: coin flip (0.5) -> 0, perfect (1.0) -> 1."""
+    return max(0.0, min(1.0, 2.0 * (x - 0.5)))
+
+
+@dataclass
+class _SignalAgg:
+    """Per-signal_type rollup across its (source, window, league) rows."""
+
+    dir_n: int = 0
+    dir_correct: int = 0
+    clv_n: int = 0
+    clv_aligned_weighted: float = 0.0  # Σ clv_aligned_i * clv_sample_i
+    clv_rows: list[tuple[int, float, float]] = field(default_factory=list)  # (n, mean, std)
+
+    @property
+    def direction_accuracy(self) -> float:
+        return (self.dir_correct / self.dir_n) if self.dir_n else 0.0
+
+    @property
+    def clv_aligned(self) -> float | None:
+        return (self.clv_aligned_weighted / self.clv_n) if self.clv_n else None
+
+
+def _aggregate_by_signal_type(perf_rows: list[dict]) -> dict[str, _SignalAgg]:
+    """Roll signal_performance rows up to one aggregate per signal_type.
+
+    Direction counts sum; CLV is pooled via sufficient stats so the fit can apply
+    the statistical bar at the signal_type level (the policy coefficient key).
+    """
+    aggs: dict[str, _SignalAgg] = {}
     for r in perf_rows:
-        st = r["signal_type"]
-        n = int(r["sample_size"])
-        correct = int(r["direction_correct"])
-        bucket = totals.setdefault(st, [0, 0])
-        bucket[0] += n
-        bucket[1] += correct
-    return {st: (n, (correct / n) if n else 0.0) for st, (n, correct) in totals.items()}
+        a = aggs.setdefault(r["signal_type"], _SignalAgg())
+        a.dir_n += int(r.get("sample_size") or 0)
+        a.dir_correct += int(r.get("direction_correct") or 0)
+        clv_n = int(r.get("clv_sample") or 0)
+        if clv_n > 0 and r.get("clv_aligned") is not None:
+            a.clv_n += clv_n
+            a.clv_aligned_weighted += float(r["clv_aligned"]) * clv_n
+            a.clv_rows.append(
+                (
+                    clv_n,
+                    float(r.get("clv_cents_when_followed") or 0.0),
+                    float(r.get("clv_cents_std") or 0.0),
+                )
+            )
+    return aggs
+
+
+def _probation_stats(aggs: dict[str, _SignalAgg], n_min: int) -> dict[str, ProbationStats]:
+    """Build the per-signal_type statistical-bar inputs from pooled CLV stats."""
+    stats: dict[str, ProbationStats] = {}
+    for st, a in aggs.items():
+        if a.clv_n <= 0:
+            continue
+        signal_n_min = _signal_n_min(st, n_min)
+        pn, pmean, pstd = pooled_mean_std(a.clv_rows)
+        lb = normal_lower_bound(pmean, pstd, pn)
+        stats[st] = ProbationStats(
+            n=pn,
+            n_min=signal_n_min,
+            clv_mean=pmean,
+            boot_lower_bound=lb,
+            pvalue=clv_pvalue_from_stats(pmean, pstd, pn),
+            meets_n_min=(pn >= signal_n_min),
+            boot_positive=(lb > 0.0),
+        )
+    return stats
+
+
+def _reliability_weight(
+    agg: _SignalAgg, *, graduated: bool, min_samples: int
+) -> float | None:
+    """CLV-primary reliability weight in [0, 1], or None to leave base trust intact.
+
+    - No / thin CLV coverage -> graceful degradation to direction accuracy (legacy),
+      only if there is enough direction sample; else None (keep base trust).
+    - Graduated (cleared the bootstrap + N_min + FDR bar) -> CLV-primary weight,
+      confirmed by realized direction once the direction sample is large.
+    - Measured CLV but bar NOT cleared -> fail-closed: capped low; a line-restating
+      signal (clv_aligned <= 0.5) damps to 0.
+    """
+    clv_aligned = agg.clv_aligned
+    has_clv = clv_aligned is not None and agg.clv_n >= _MIN_CLV_SAMPLE
+    if not has_clv:
+        if agg.dir_n >= min_samples:
+            return round(_clamp_weight(agg.direction_accuracy), 4)
+        return None
+    clv_w = _clamp_weight(clv_aligned)
+    if graduated:
+        if agg.dir_n >= min_samples:
+            blended = _GRAD_CLV_WEIGHT * clv_w + (1.0 - _GRAD_CLV_WEIGHT) * _clamp_weight(
+                agg.direction_accuracy
+            )
+            return round(blended, 4)
+        return round(clv_w, 4)
+    return round(min(clv_w, _UNPROVEN_CEILING), 4)
+
+
+def _lifecycle_recommendation(
+    agg: _SignalAgg,
+    *,
+    current: str,
+    graduated: bool,
+    n_min: int,
+    deprecate_floor: int,
+) -> str | None:
+    """Advisory lifecycle transition for one signal (issue #28 WS3), or None.
+
+    CLV-anchored and fail-closed (the fit never binds it):
+      * probation -> active   when it clears the bar (bootstrap + N_min + FDR);
+      * probation -> rejected when the sample budget (N_min) is spent unclear;
+      * active    -> deprecated when CLV is misaligned over enough sample (a dead
+        signal that merely restates the line), with a thin-CLV direction fallback.
+    ``deprecated``/``rejected`` are terminal here — reviving them is a manual op.
+    """
+    clv_aligned = agg.clv_aligned
+    if current == "probation":
+        if graduated:
+            return "active"
+        if agg.clv_n >= n_min:  # budget spent without clearing the bar
+            return "rejected"
+        return None
+    if current == "active":
+        if clv_aligned is not None and agg.clv_n >= deprecate_floor and clv_aligned <= 0.50:
+            return "deprecated"
+        # CLV-thin fallback: clearly sub-coin-flip realized direction over a big sample.
+        if (
+            agg.clv_n < _MIN_CLV_SAMPLE
+            and agg.dir_n >= deprecate_floor
+            and agg.direction_accuracy <= 0.48
+        ):
+            return "deprecated"
+    return None
 
 
 def _next_version(registry: AdjustmentPolicyRegistry) -> int:
@@ -94,6 +245,33 @@ def main(argv: list[str] | None = None) -> int:
         choices=["shadow", "live"],
         default="shadow",
         help="Rollout mode baked into the candidate (default: shadow)",
+    )
+    parser.add_argument(
+        "--power-edge",
+        type=float,
+        default=DEFAULT_POWER_EDGE,
+        help=f"CLV edge the N_min power analysis must detect (default: {DEFAULT_POWER_EDGE})",
+    )
+    parser.add_argument(
+        "--power",
+        type=float,
+        default=DEFAULT_POWER,
+        help=f"Statistical power for the N_min floor (default: {DEFAULT_POWER})",
+    )
+    parser.add_argument(
+        "--fdr-q",
+        type=float,
+        default=DEFAULT_FDR_Q,
+        help=f"Benjamini-Hochberg target false-discovery rate (default: {DEFAULT_FDR_Q})",
+    )
+    parser.add_argument(
+        "--deprecate-min-samples",
+        type=int,
+        default=_DEPRECATE_MIN_CLV_SAMPLE,
+        help=(
+            "Min CLV (or direction) sample before recommending an active signal be "
+            f"deprecated (default: {_DEPRECATE_MIN_CLV_SAMPLE})"
+        ),
     )
     parser.add_argument("--db", type=str, default=None, help="SQLite path")
     parser.add_argument(
@@ -121,6 +299,21 @@ def main(argv: list[str] | None = None) -> int:
     dataset_hash = str(perf_rows[0].get("dataset_hash") or "")
     aggregates = _aggregate_by_signal_type(perf_rows)
 
+    # The statistical bar (issue #28): bootstrap/normal lower bound + N_min + FDR.
+    n_min = min_samples_for_power(edge=args.power_edge, power=args.power)
+    stats_by_type = _probation_stats(aggregates, n_min)
+    graduated = graduation_mask(stats_by_type, q=args.fdr_q)
+    logger.info(
+        "Statistical bar: N_min=%d (edge=%.3f, power=%.2f), FDR q=%.2f; "
+        "%d signal types carry CLV, %d graduate.",
+        n_min,
+        args.power_edge,
+        args.power,
+        args.fdr_q,
+        len(stats_by_type),
+        sum(1 for v in graduated.values() if v),
+    )
+
     registry = AdjustmentPolicyRegistry(path=args.policy_path)
     base = registry.get_production_policy()
     if base is None:
@@ -129,35 +322,65 @@ def main(argv: list[str] | None = None) -> int:
 
     # Deep-copy the base coefficients, then set reliability_weight per signal type.
     new_coeffs = {st: dict(params) for st, params in base.coefficients.items()}
-    fitted: list[tuple[str, int, float, float]] = []
-    for signal_type, (total_n, accuracy) in sorted(aggregates.items()):
-        if total_n < args.min_samples:
+    fitted: list[tuple[str, _SignalAgg, float, bool]] = []
+    for signal_type, agg in sorted(aggregates.items()):
+        is_grad = graduated.get(signal_type, False)
+        weight = _reliability_weight(agg, graduated=is_grad, min_samples=args.min_samples)
+        if weight is None:
             logger.info(
-                "  skip %-22s n=%-3d (< %d) â€” keeps full trust",
+                "  skip %-22s dir_n=%-3d clv_n=%-3d — insufficient sample, keeps full trust",
                 signal_type,
-                total_n,
-                args.min_samples,
+                agg.dir_n,
+                agg.clv_n,
             )
             continue
-        weight = _reliability_weight(accuracy)
         params = new_coeffs.setdefault(signal_type, {"cap": 0.10})
-        params["reliability_weight"] = round(weight, 4)
-        fitted.append((signal_type, total_n, accuracy, weight))
+        params["reliability_weight"] = weight
+        fitted.append((signal_type, agg, weight, is_grad))
         logger.info(
-            "  fit  %-22s n=%-3d acc=%.3f -> reliability_weight=%.3f",
+            "  fit  %-22s dir_n=%-3d acc=%.3f | clv_n=%-3d clv_align=%s grad=%s "
+            "-> reliability_weight=%.3f",
             signal_type,
-            total_n,
-            accuracy,
+            agg.dir_n,
+            agg.direction_accuracy,
+            agg.clv_n,
+            "n/a" if agg.clv_aligned is None else f"{agg.clv_aligned:.3f}",
+            "Y" if is_grad else "n",
             weight,
         )
 
     if not fitted:
-        logger.error("No signal type met --min-samples=%d; nothing to fit.", args.min_samples)
+        logger.error("No signal type met the sample bar; nothing to fit.")
         return 1
+
+    # Advisory lifecycle recommendations (fail-closed: they NEVER bind here — an
+    # operator applies them via omega-promote-adjustment-policy). Resolved against
+    # the incumbent's operator-approved overrides, which the candidate carries
+    # forward so prior decisions persist.
+    base_overrides = dict(base.signal_lifecycle)
+    recommendations: dict[str, str] = {}
+    for signal_type, agg in sorted(aggregates.items()):
+        current = effective_lifecycle(signal_type, base_overrides)
+        rec = _lifecycle_recommendation(
+            agg,
+            current=current,
+            graduated=graduated.get(signal_type, False),
+            n_min=_signal_n_min(signal_type, n_min),
+            deprecate_floor=args.deprecate_min_samples,
+        )
+        if rec is not None and rec != current:
+            recommendations[signal_type] = rec
+            logger.info(
+                "  lifecycle %-22s %s -> %s (recommended; operator-gated)",
+                signal_type,
+                current,
+                rec,
+            )
 
     version = _next_version(registry)
     policy_id = f"adj_v{version}_{dataset_hash[:12] or 'nodata'}"
-    mean_weight = sum(w for _, _, _, w in fitted) / len(fitted)
+    mean_weight = sum(w for _, _, w, _ in fitted) / len(fitted)
+    n_graduated = sum(1 for _, _, _, g in fitted if g)
     candidate = AdjustmentPolicy(
         policy_id=policy_id,
         version=version,
@@ -165,16 +388,23 @@ def main(argv: list[str] | None = None) -> int:
         mode=args.mode,
         coefficients=new_coeffs,
         training_window=datetime.now(UTC).date().isoformat(),
-        sample_size=sum(n for _, n, _, _ in fitted),
+        sample_size=sum(a.dir_n for _, a, _, _ in fitted),
         dataset_hash=dataset_hash,
         metrics={
             "signals_fitted": float(len(fitted)),
+            "signals_graduated": float(n_graduated),
             "mean_reliability_weight": round(mean_weight, 4),
+            "n_min": float(n_min),
+            "lifecycle_recommendations": float(len(recommendations)),
         },
+        signal_lifecycle=base_overrides,
+        lifecycle_recommendations=recommendations,
         notes=(
             f"Fitted from signal_performance (dataset {dataset_hash[:12]}); "
-            f"{len(fitted)} signal types adjusted, "
-            f"reliability_weight derived from directional accuracy."
+            f"{len(fitted)} signal types adjusted, {n_graduated} graduated the CLV bar "
+            f"(N_min={n_min}, FDR q={args.fdr_q}); {len(recommendations)} lifecycle "
+            f"transition(s) recommended (operator-gated). reliability_weight is "
+            f"CLV-primary (direction-accuracy fallback where closing coverage is thin)."
         ),
         incumbent_id=base.policy_id,
     )

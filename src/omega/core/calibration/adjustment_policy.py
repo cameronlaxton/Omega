@@ -211,6 +211,16 @@ class AdjustmentPolicy(BaseModel):
     metrics: dict[str, float] = Field(default_factory=dict)
     notes: str = ""
 
+    # Signal lifecycle (issue #28 WS3). ``signal_lifecycle`` is the operator-
+    # approved override map (signal_type -> active|probation|deprecated|rejected)
+    # promoted fail-closed as part of this policy; it overrides each SignalSpec's
+    # declared default at runtime (vocabulary filtering + application gating).
+    # ``lifecycle_recommendations`` is advisory output from the fit (same shape) —
+    # it NEVER binds until an operator copies it into ``signal_lifecycle`` via
+    # ``omega-promote-adjustment-policy --apply-lifecycle-recommendations``.
+    signal_lifecycle: dict[str, str] = Field(default_factory=dict)
+    lifecycle_recommendations: dict[str, str] = Field(default_factory=dict)
+
     # Lifecycle
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     promoted_at: str | None = None
@@ -389,6 +399,66 @@ class AdjustmentPolicyRegistry:
                 p["mode"] = normalized
                 self._save(data)
                 logger.info("Set adjustment policy %s mode=%s", policy_id, normalized)
+                return
+        raise ValueError(f"Adjustment policy not found: {policy_id}")
+
+    def set_signal_lifecycle(self, policy_id: str, signal_lifecycle: dict[str, str]) -> None:
+        """Replace a policy's operator-approved signal-lifecycle override map.
+
+        The binding step behind ``omega-promote-adjustment-policy
+        --apply-lifecycle-recommendations``: it copies the fit's advisory
+        recommendations into the override map that the runtime actually consults
+        (vocabulary filtering + application gating). Validates every value is a
+        recognised lifecycle so a malformed map can never reach the engine.
+        """
+        from omega.core.contracts.evidence import LIFECYCLE_VALUES  # noqa: PLC0415
+
+        invalid = sorted({v for v in signal_lifecycle.values() if v not in LIFECYCLE_VALUES})
+        if invalid:
+            raise ValueError(f"invalid lifecycle value(s): {invalid}")
+        data = self._load()
+        for p in data["policies"]:
+            if p["policy_id"] == policy_id:
+                p["signal_lifecycle"] = dict(signal_lifecycle)
+                self._save(data)
+                logger.info(
+                    "Set signal_lifecycle on %s (%d override(s))",
+                    policy_id,
+                    len(signal_lifecycle),
+                )
+                return
+        raise ValueError(f"Adjustment policy not found: {policy_id}")
+
+    def bind_signal_lifecycle_and_coefficients(
+        self,
+        policy_id: str,
+        signal_lifecycle: dict[str, str],
+        coefficients: dict[str, dict[str, Any]],
+    ) -> None:
+        """Atomically bind operator-approved lifecycle overrides and handlers.
+
+        A graduated LLM proposal needs both an ``active`` lifecycle and its
+        persisted feature-combo coefficient.  Persisting them in one registry
+        write prevents an active but handlerless signal after an interrupted
+        promotion.
+        """
+        from omega.core.contracts.evidence import LIFECYCLE_VALUES  # noqa: PLC0415
+
+        invalid = sorted({v for v in signal_lifecycle.values() if v not in LIFECYCLE_VALUES})
+        if invalid:
+            raise ValueError(f"invalid lifecycle value(s): {invalid}")
+        data = self._load()
+        for policy in data["policies"]:
+            if policy["policy_id"] == policy_id:
+                policy["signal_lifecycle"] = dict(signal_lifecycle)
+                policy["coefficients"] = dict(coefficients)
+                self._save(data)
+                logger.info(
+                    "Bound signal lifecycle and coefficients on %s (%d override(s), %d handler(s))",
+                    policy_id,
+                    len(signal_lifecycle),
+                    len(coefficients),
+                )
                 return
         raise ValueError(f"Adjustment policy not found: {policy_id}")
 

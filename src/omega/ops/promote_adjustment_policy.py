@@ -47,6 +47,7 @@ from omega.core.calibration.adjustment_policy import (  # noqa: E402
     AdjustmentPolicyRegistry,
 )
 from omega.core.calibration.profiles import ProfileStatus  # noqa: E402
+from omega.trace.store import TraceStore  # noqa: E402
 
 logger = logging.getLogger("promote_adjustment_policy")
 
@@ -114,6 +115,9 @@ def main(argv: list[str] | None = None) -> int:
         "--policy-path", type=str, default=None, help="adjustment_policies.json path"
     )
     parser.add_argument(
+        "--db", type=str, default=None, help="TraceStore DB path for proposed signal specs"
+    )
+    parser.add_argument(
         "--confirm-backtest",
         action="store_true",
         help="Mark BACKTEST_IMPROVES as passed; operator has reviewed a backtest.",
@@ -122,6 +126,16 @@ def main(argv: list[str] | None = None) -> int:
         "--go-live",
         action="store_true",
         help="After promotion, flip the policy to mode='live' (applies adjustments).",
+    )
+    parser.add_argument(
+        "--apply-lifecycle-recommendations",
+        action="store_true",
+        help=(
+            "Bind the candidate's advisory lifecycle_recommendations into its "
+            "signal_lifecycle override map before promoting (issue #28 WS3). "
+            "Without this flag, recommendations stay advisory and the prior "
+            "overrides carry forward unchanged."
+        ),
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -166,6 +180,50 @@ def main(argv: list[str] | None = None) -> int:
     all_pass = all(passed for _, passed, _ in gates)
 
     def _do_promote() -> None:
+        if args.apply_lifecycle_recommendations:
+            recs = candidate.lifecycle_recommendations
+            if recs:
+                merged = {**candidate.signal_lifecycle, **recs}
+                coefficients = dict(candidate.coefficients)
+                active_proposals = {name for name, lifecycle in recs.items() if lifecycle == "active"}
+                if active_proposals:
+                    store = TraceStore(db_path=args.db, read_only=True)
+                    try:
+                        proposals = {p["name"]: p for p in store.get_signal_proposals()}
+                    finally:
+                        store.close()
+                    missing = sorted(active_proposals - proposals.keys())
+                    if missing:
+                        raise ValueError(
+                            "Cannot activate proposal(s) without persisted feature specs: "
+                            + ", ".join(missing)
+                        )
+                    for name in active_proposals:
+                        feature_combo = proposals[name].get("feature_combo")
+                        if not isinstance(feature_combo, dict) or not feature_combo:
+                            raise ValueError(
+                                f"Cannot activate proposal {name!r} without a non-empty feature_combo"
+                            )
+                        coefficients[name] = {"feature_combo": feature_combo, "cap": 0.15}
+                    logger.warning(
+                        "Bound %d graduated proposal feature spec(s) into %s.",
+                        len(active_proposals),
+                        candidate.policy_id,
+                    )
+                registry.bind_signal_lifecycle_and_coefficients(
+                    candidate.policy_id, merged, coefficients
+                )
+                logger.warning(
+                    "Applied %d lifecycle recommendation(s) to %s: %s",
+                    len(recs),
+                    candidate.policy_id,
+                    recs,
+                )
+            else:
+                logger.info(
+                    "No lifecycle recommendations on candidate %s; nothing to apply.",
+                    candidate.policy_id,
+                )
         registry.promote(candidate.policy_id)
         logger.info("Promoted %s to PRODUCTION.", candidate.policy_id)
         if args.go_live:

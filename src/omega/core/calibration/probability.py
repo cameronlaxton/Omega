@@ -138,6 +138,40 @@ def isotonic_calibration(raw_prob: float, calibration_map: dict[float, float]) -
     return raw_prob
 
 
+def market_aware_calibration(raw_prob: float, market_prob: float, market_weight: float) -> float:
+    """Blend the model probability toward the market-implied (closing-line) probability.
+
+    ``market_weight`` is the deference given to the market: 0 keeps the model
+    untouched, 1 fully defers to the close. The result is a convex blend
+    ``(1 - w)·model + w·market`` — shrink toward the market where the model has no
+    earned edge, keep divergence where it has (issue #28 WS4). Inputs are clipped
+    to [0, 1].
+    """
+    w = max(0.0, min(1.0, market_weight))
+    p = max(0.0, min(1.0, raw_prob))
+    m = max(0.0, min(1.0, market_prob))
+    return (1.0 - w) * p + w * m
+
+
+def liquidity_deference_factor(league: str | None, market: str) -> float:
+    """Coarse market-liquidity scaling for market deference (issue #28 WS4).
+
+    The closing line is "truth" only in a deep market: a heavily-traded game line
+    earns full deference (~1.0); a thin prop or a low-liquidity league earns less,
+    so the model is not pulled toward an easily-moved weak line. Real limit sizes
+    are not captured, so this uses market type + the per-league liquidity tier
+    (the shared ``leagues.is_low_liquidity_league``). Returns a factor in [0, 1]
+    that scales the profile's fitted ``market_weight`` at application time.
+    """
+    factor = 1.0 if market == "game" else 0.5  # props are thinner than game lines
+    if league:
+        from omega.core.config.leagues import is_low_liquidity_league  # noqa: PLC0415
+
+        if is_low_liquidity_league(league):
+            factor *= 0.5
+    return factor
+
+
 def calibrate_probability(
     raw_prob: float,
     method: str = "shrinkage",
@@ -145,6 +179,8 @@ def calibrate_probability(
     cap_max: float = 0.85,
     cap_min: float = 0.15,
     calibration_map: dict[float, float] | None = None,
+    market_prob: float | None = None,
+    market_weight: float = 0.5,
 ) -> dict[str, Any]:
     """
     Main calibration function that applies specified calibration method.
@@ -178,6 +214,15 @@ def calibrate_probability(
     elif method == "combined":
         shrunk = shrinkage_calibration(raw_prob, shrink_factor)
         calibrated = cap_calibration(shrunk, cap_max, cap_min)
+    elif method == "market_aware":
+        # Defer toward the closing-line implied probability. With no market price
+        # available this is identity (fail-safe) — the method never invents a
+        # market to shrink toward.
+        if market_prob is None:
+            calibrated = raw_prob
+            method = "market_aware_no_market"
+        else:
+            calibrated = market_aware_calibration(raw_prob, market_prob, market_weight)
     else:
         calibrated = raw_prob
         method = "none"
@@ -222,8 +267,14 @@ def apply_calibration(
     league: str | None = None,
     context_hints: dict[str, Any] | None = None,
     market: str = "game",
+    market_prob: float | None = None,
 ) -> float:
     """Apply the canonical calibration policy. Used by both service and backtest.
+
+    ``market_prob`` (the closing-line / market-implied probability) is consumed
+    only by a ``market_aware`` production profile; it defaults to None so every
+    existing caller is unaffected and a market_aware profile degrades to identity
+    when no market price is supplied (fail-safe).
 
     When a league is provided, attempts to use a learned production profile.
     When context_hints is also provided, a context_slice is derived from the
@@ -252,7 +303,7 @@ def apply_calibration(
     damping apply identically here.
     """
     calibrated, _audit = apply_calibration_audited(
-        raw_prob, league=league, context_hints=context_hints, market=market
+        raw_prob, league=league, context_hints=context_hints, market=market, market_prob=market_prob
     )
     return calibrated
 
@@ -262,6 +313,7 @@ def apply_calibration_audited(
     league: str | None = None,
     context_hints: dict[str, Any] | None = None,
     market: str = "game",
+    market_prob: float | None = None,
 ) -> tuple[float, dict[str, Any]]:
     """Like apply_calibration() but also returns an audit dict.
 
@@ -283,7 +335,18 @@ def apply_calibration_audited(
         )
         if profile is not None:
             maturity = profile.effective_maturity().value
-            result = calibrate_probability(raw, method=profile.method, **profile.params)
+            if profile.method == "market_aware":
+                # Deference is the fitted weight scaled by the coarse liquidity tier
+                # of this league/market, so the same profile defers more in deep
+                # markets and less in thin ones (issue #28 WS4).
+                w_eff = float(profile.params.get("market_weight", 0.5)) * liquidity_deference_factor(
+                    league, market
+                )
+                result = calibrate_probability(
+                    raw, method="market_aware", market_prob=market_prob, market_weight=w_eff
+                )
+            else:
+                result = calibrate_probability(raw, method=profile.method, **profile.params)
             calibrated = result["calibrated"]
             # Low-trust (provisional/probation) profiles may only make a small,
             # bounded correction; none/retired collapse back to raw.

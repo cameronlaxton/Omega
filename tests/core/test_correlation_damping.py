@@ -125,6 +125,17 @@ class TestDampingEnabled:
         assert adj.records[0].family_role == "singleton"
         assert adj.records[0].family_size == 1
 
+    def test_probation_signal_cannot_be_reenabled_by_family_damping(self):
+        policy = _policy(damping=True).model_copy(
+            update={"signal_lifecycle": {"series_avg": "probation"}}
+        )
+        adj = _player_adj(policy, [_RECENT(), _SERIES()])
+        by_type = {r.signal_type: r for r in adj.records}
+        assert adj.mean_factor == pytest.approx(1.07)
+        assert by_type["recent_form"].applied is True
+        assert by_type["series_avg"].applied is False
+        assert by_type["series_avg"].family_role == "singleton"
+
 
 class TestCapsBind:
     def test_family_cap_binds(self):
