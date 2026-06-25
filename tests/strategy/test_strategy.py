@@ -364,7 +364,9 @@ class TestBacktestEngine:
 
         seen_contexts = []
 
-        def fake_apply_calibration(raw_prob, league=None, context_hints=None):
+        def fake_apply_calibration(
+            raw_prob, league=None, context_hints=None, market=None, market_prob=None
+        ):
             seen_contexts.append(context_hints)
             return raw_prob
 

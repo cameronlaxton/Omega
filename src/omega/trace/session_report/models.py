@@ -57,6 +57,23 @@ class EngineView(BaseModel):
     static_identity_used: str | None = None
 
 
+class AnalystNarrative(BaseModel):
+    """LLM-authored analyst prose surfaced from the persisted trace (no protected values).
+
+    Sourced from the trace's ``reasoning_presentation`` block without recomputation. These are
+    qualitative sections only — ``verdict`` is a narrative call ("lean home; pass if the line
+    crosses X"), never a confidence tier, units, edge, or any engine-owned number.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    thesis: str | None = None
+    market_read: str | None = None
+    why: str | None = None
+    risks: str | None = None
+    verdict: str | None = None
+
+
 class LedgerView(BaseModel):
     status: str
     provenance: str | None = None
@@ -83,6 +100,10 @@ class TraceReportCard(BaseModel):
     context: list[ContextBullet] = Field(default_factory=list)
     reasoning_narrative: str | None = Field(
         default=None, description="Detailed qualitative narrative reasoning for the prediction"
+    )
+    analyst: AnalystNarrative = Field(
+        default_factory=AnalystNarrative,
+        description="Analyst-note prose (thesis/market read/why/risks/verdict) from reasoning_presentation",
     )
     trace_quality_status: str
     sidecar_status: str

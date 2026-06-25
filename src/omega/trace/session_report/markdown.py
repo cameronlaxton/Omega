@@ -109,6 +109,26 @@ def _honesty_lines(card: TraceReportCard) -> list[str]:
     ]
 
 
+def _analyst_lines(card: TraceReportCard) -> list[str]:
+    """Analyst-note narrative block (prose only — rendered in both output modes).
+
+    Thesis falls back to the legacy ``reasoning_narrative`` so traces filed before
+    ``reasoning_presentation`` existed still read as analyst notes. These are qualitative
+    sections; no protected edge/EV/units numbers appear here.
+    """
+    a = card.analyst
+    thesis = a.thesis or card.reasoning_narrative
+    return [
+        "**Analyst Notes**",
+        f"- Thesis: {_clean(thesis)}",
+        f"- Market read: {_clean(a.market_read)}",
+        f"- Why Omega likes it: {_clean(a.why)}",
+        f"- Risks: {_clean(a.risks)}",
+        f"- Verdict: {_clean(a.verdict)}",
+        "",
+    ]
+
+
 def _render_card(card: TraceReportCard) -> list[str]:
     ledger = card.ledger_view
     lines = [
@@ -125,9 +145,7 @@ def _render_card(card: TraceReportCard) -> list[str]:
         f"- {_engine_line(card)}",
         "",
         *_honesty_lines(card),
-        "**Reasoning Narrative**",
-        f"- {_clean(card.reasoning_narrative)}",
-        "",
+        *_analyst_lines(card),
         *_context_section("Support", card.context, "support"),
         "",
         *_context_section("Concern", card.context, "concern"),

@@ -223,3 +223,41 @@ def test_intake_report_renders_missing_context_when_evidence_absent(store):
     rendered = render_intake_markdown(extract_intake_report(store, session_id="sess-report"))
 
     assert "[missing] not captured: no evidence rows were available" in rendered
+
+
+def test_card_renders_analyst_sections_from_reasoning_presentation(store):
+    trace = _trace()
+    trace["reasoning_presentation"] = {
+        "thesis": "Comets' interior edge travels.",
+        "market_read": "Line opened -2.5, now -1.5; sharp money on Comets.",
+        "why": "Rest advantage plus rebounding mismatch.",
+        "risks": "Star questionable; line could move past -3.",
+        "verdict": "Lean Comets ML; pass if it crosses -150.",
+    }
+    store.persist(trace)
+
+    rendered = render_intake_markdown(extract_intake_report(store, session_id="sess-report"))
+
+    assert "**Analyst Notes**" in rendered
+    assert "Thesis: Comets' interior edge travels." in rendered
+    assert "Market read: Line opened -2.5" in rendered
+    assert "Why Omega likes it: Rest advantage" in rendered
+    assert "Risks: Star questionable" in rendered
+    assert "Verdict: Lean Comets ML" in rendered
+    # Honesty block is always-on in both modes — analyst prose supplements it, never replaces it.
+    assert "**Honesty**" in rendered
+
+
+def test_card_analyst_thesis_falls_back_to_reasoning_narrative(store):
+    trace = _trace()
+    trace["reasoning_narrative"] = "Legacy single-string reasoning for the pick."
+    trace.pop("reasoning_presentation", None)  # pre-existing trace shape
+    store.persist(trace)
+
+    rendered = render_intake_markdown(extract_intake_report(store, session_id="sess-report"))
+
+    assert "**Analyst Notes**" in rendered
+    assert "Thesis: Legacy single-string reasoning for the pick." in rendered
+    # Absent analyst fields degrade gracefully rather than breaking the card.
+    assert "Market read: not captured" in rendered
+    assert "Verdict: not captured" in rendered

@@ -9,6 +9,9 @@ that points here and carries no independent rules.
 - **[`prompts/reference/output_modes.md`](prompts/reference/output_modes.md)** — output-mode
   semantics (`RESEARCH_CANDIDATE` vs `ACTIONABLE`), downgrade discipline, and the engine-execution
   rule. **Single source of truth; do not restate it elsewhere.**
+- [`prompts/reference/presentation_contract.md`](prompts/reference/presentation_contract.md) —
+  narrative-first user-facing response shape for both `ACTIONABLE` and `RESEARCH_CANDIDATE` modes.
+  Owns the *shape* of the reply; authorization stays in `output_modes.md`.
 - [`prompts/reference/engine_output_validation.md`](prompts/reference/engine_output_validation.md) —
   post-`analyze()` nullability / null-data-audit procedure.
 - [`prompts/reference/markov_evidence_vocab.md`](prompts/reference/markov_evidence_vocab.md) —

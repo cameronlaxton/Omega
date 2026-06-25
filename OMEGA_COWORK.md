@@ -368,6 +368,8 @@ To find the current output mode, check the `output_modes` map in the frontmatter
 
 The DB trace persists with its `sandbox-` trace_id for calibration â€” see [`output_modes.md`](prompts/reference/output_modes.md). Do not skip trace export just because the user-facing output was downgraded.
 
+**Narrative-first rendering.** Whatever the mode, the user-facing reply follows the canonical **[`prompts/reference/presentation_contract.md`](prompts/reference/presentation_contract.md)** — a narrative-first slate report (slate snapshot, ranked recommendations/watchlist, per-matchup narrative, honesty block per item) in both `ACTIONABLE` and `RESEARCH_CANDIDATE` modes. `presentation_contract.md` owns the response *shape*; `output_modes.md` stays the source of truth for which values may appear.
+
 ## 4. Current Odds Resolution
 
 Use `omega_resolve_odds` or:

@@ -66,6 +66,9 @@ class PersistableTrace(BaseModel):
     reasoning_narrative: str | None = None
     reasoning_inputs: dict[str, Any] | None = None
     reasoning_downgrade_rationale: str | None = None
+    # Analyst-note prose (thesis/market_read/why/risks/verdict) — qualitative only, no
+    # protected values. Rides the full_trace JSON blob; surfaced into the saved session card.
+    reasoning_presentation: dict[str, Any] | None = None
 
     @classmethod
     def from_analyze_output(cls, analyze_out: dict[str, Any]) -> PersistableTrace:
@@ -116,6 +119,7 @@ class PersistableTrace(BaseModel):
             reasoning_narrative=analyze_out.get("reasoning_narrative"),
             reasoning_inputs=analyze_out.get("reasoning_inputs"),
             reasoning_downgrade_rationale=analyze_out.get("reasoning_downgrade_rationale"),
+            reasoning_presentation=analyze_out.get("reasoning_presentation"),
         )
 
     def calibration_eligibility(self) -> dict[str, bool]:
