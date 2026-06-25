@@ -53,6 +53,7 @@ TOOL_NAMES = (
     "omega_settle_bets",
     "omega_calibration_fit_preview",
     "omega_evidence_retrieve",
+    "omega_list_events",
     "omega_resolve_odds",
     "omega_record_flat_bet",
     "omega_get_portfolio_summary",
@@ -1257,6 +1258,32 @@ def omega_resolve_odds(
         return _error("omega_resolve_odds", "odds_resolution_failed", str(exc))
 
 
+def omega_list_events(
+    league: str,
+    commence_time_from: str | None = None,
+    commence_time_to: str | None = None,
+) -> dict[str, Any]:
+    """List today's events for a league from the Odds API.
+
+    Returns event IDs, home/away team names, and commence times suitable
+    for use as inputs to omega_resolve_odds or omega_run_batch. For tennis
+    tours (ATP, WTA, GRAND_SLAM) provider sport keys are resolved dynamically
+    per active tournament.
+    Does not compute probabilities, edge, EV, Kelly, units, tiers, or trace IDs.
+    """
+    try:
+        from omega.integrations.odds_resolver import list_events
+
+        result = list_events(
+            league=league,
+            commence_time_from=commence_time_from,
+            commence_time_to=commence_time_to,
+        )
+        return _ok("omega_list_events", result=result)
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_list_events", "event_listing_failed", str(exc))
+
+
 def omega_record_flat_bet(
     trace_id: str,
     market: str,
@@ -1545,6 +1572,7 @@ def build_server():
         omega_settle_bets,
         omega_calibration_fit_preview,
         omega_evidence_retrieve,
+        omega_list_events,
         omega_resolve_odds,
         omega_record_flat_bet,
         omega_get_portfolio_summary,
