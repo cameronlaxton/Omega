@@ -11,6 +11,7 @@ from typing import Any
 from omega.paths import session_inbox_dir
 from omega.trace.session_report.context_bundle import ReportContextBundle, ReportContextEntry
 from omega.trace.session_report.models import (
+    AnalystNarrative,
     AuditRow,
     ContextBullet,
     CoverageRow,
@@ -42,6 +43,23 @@ def _cell(value: Any) -> str | None:
     if value is None or value == "":
         return None
     return str(value)
+
+
+def _extract_analyst_narrative(trace: dict[str, Any]) -> AnalystNarrative:
+    """LLM-authored analyst prose (no protected values), surfaced without recomputation.
+
+    Mirrors the ``reasoning_narrative`` seam — pulled straight from the persisted trace's
+    ``reasoning_presentation`` block. ``thesis`` falls back to ``reasoning_narrative`` so
+    traces filed before ``reasoning_presentation`` existed still render an analyst card.
+    """
+    rp = _first_dict(trace.get("reasoning_presentation"))
+    return AnalystNarrative(
+        thesis=_cell(rp.get("thesis") or trace.get("reasoning_narrative")),
+        market_read=_cell(rp.get("market_read")),
+        why=_cell(rp.get("why")),
+        risks=_cell(rp.get("risks")),
+        verdict=_cell(rp.get("verdict")),
+    )
 
 
 def _format_number(value: Any, suffix: str = "") -> str | None:
@@ -509,6 +527,7 @@ def extract_intake_report(
                     bundle_entries=bundle_entries,
                 ),
                 reasoning_narrative=_cell(trace.get("reasoning_narrative")),
+                analyst=_extract_analyst_narrative(trace),
                 trace_quality_status=_trace_quality_status(trace),
                 sidecar_status=_sidecar_status(session_id, sidecar),
                 evidence_status=str(tq.get("evidence_status") or "unknown"),

@@ -296,6 +296,31 @@ downgraded to research-only. Do not emit Bet Cards for research-only traces.
 
 ---
 
+## Step 8b - User-Facing Narrative Render
+
+Before closing the session, produce a narrative-first slate report following
+[`prompts/reference/presentation_contract.md`](../reference/presentation_contract.md).
+
+Required:
+- Slate snapshot table (date window, games analyzed, market families scanned, output mode per
+  market, already-started/completed games excluded).
+- Ranked recommendation/watchlist table.
+- Per-matchup narrative blocks (match context, market read, Omega read, risks, verdict).
+- An honesty block for every recommendation/watchlist item.
+- Explicit pass rationale for major markets scanned but not recommended.
+
+ACTIONABLE markets:
+- Include formal Bet Cards only when authorized by `output_modes.<market>`.
+- Protected values must come directly from the engine trace.
+
+RESEARCH_CANDIDATE markets:
+- Use research-only language (research lean / watchlist / pass).
+- Defer to [`output_modes.md`](../reference/output_modes.md) for the forbidden-value list; do not
+  show forbidden superlatives, letter-grade confidence labels, edge%, EV%, Kelly, fair/no-vig
+  price, model probability, recommended units, or trace_id.
+
+---
+
 ## Step 9 - Export, Confirm, Close
 
 After each successful `analyze()` call, write `var/inbox/traces/<trace_id>.json`.

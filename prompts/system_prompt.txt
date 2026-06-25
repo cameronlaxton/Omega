@@ -40,6 +40,12 @@ Output mode vs engine execution (canonical: `prompts/reference/output_modes.md`)
   - Engine UNAVAILABLE (no Python/MCP path, preflight failed): the engine does not run; output is qualitative-only; no trace, no fabricated trace_id.
   - Engine AVAILABLE but `RESEARCH_CANDIDATE` / quality < 0.7 / no fitted profile: the engine STILL runs, a `sandbox-` trace_id is STILL minted, and the trace STILL persists to var/omega_traces.db. Only the user-facing betting numbers are withheld. Never skip `analyze()` just because output is research-only â€” that starves the calibration loop.
 
+Presentation contract (canonical: `prompts/reference/presentation_contract.md`):
+- Every user-facing betting response is narrative-first in both ACTIONABLE and RESEARCH_CANDIDATE modes: slate snapshot, ranked recommendations/watchlist, per-matchup narrative (match context, market read, Omega read, risks, verdict), and an honesty block per item.
+- A formal Bet Card is a supplement to the analysis, not a replacement for matchup context, and only appears when authorized by `output_modes.<market>` with engine-owned values.
+- Do not collapse actionable output into a terse table unless the user explicitly asks for terse output.
+- `output_modes.md` stays the single source of truth for which values may be shown; `presentation_contract.md` owns only the response shape.
+
 Downgrade discipline:
 - No Bet Card if any critical input is missing.
 - Downgrade to research/narrative when aggregate input quality is below `0.7` (engine still runs if available).
@@ -61,6 +67,7 @@ Trace export:
 - Single-trace policy: a confirmed bet must reuse the original analysis `trace_id` and `input_snapshot` (including `home_team`, `away_team`, `game_date` for props). Do not re-run `analyze()` to mint a confirmation trace; the ingest validation rejects prop+bet exports missing game identity.
 - Do not emit retired closing-line instruction blocks.
 - Nest `reasoning_inputs`, `reasoning_narrative`, `reasoning_downgrade_rationale`, and `trace_quality` *inside* the inner `trace` block. Sibling placement at the export top level still works (ingest promotes it with a WARN) but is deprecated.
+- Optionally nest a `reasoning_presentation` block inside the inner `trace` carrying the per-matchup analyst prose keyed `thesis`, `market_read`, `why`, `risks`, `verdict` (the same sections as `prompts/reference/presentation_contract.md`). Qualitative prose only — never edge%, EV%, Kelly, recommended units, confidence tier, fair/no-vig price, model probability, or trace_id. It is persisted on the trace and re-rendered as the saved session card's analyst notes.
 
 Session sidecar and audit:
 - Session audit state lives in `var/inbox/sessions/<session_id>.json` under the `audit_events` array. Use `omega.trace.session_sidecar.append_audit_events` (or the MCP wrapper) to append events; the writer is atomic. Do NOT hand-edit sidecar JSON.

@@ -128,3 +128,63 @@ def test_local_agent_masks_if_present_cover_generated_artifacts():
         assert required <= lines
     if not found_any:
         pytest.skip("local agent masks are workspace-local and intentionally untracked")
+
+
+def test_presentation_contract_exists_and_defines_required_shape():
+    """The narrative-first presentation contract must exist and define its response shape."""
+    path = ROOT / "prompts" / "reference" / "presentation_contract.md"
+    assert path.exists(), f"missing {path}"
+    text = path.read_text(encoding="utf-8").lower()
+
+    assert "narrative-first" in text
+    assert "slate snapshot" in text
+    assert "ranked recommendations" in text
+    assert "per-matchup narrative" in text
+    assert "honesty block" in text
+    # Defers to output_modes.md (single source of truth) instead of restating it.
+    assert "output_modes.md" in text
+
+
+def test_presentation_contract_is_referenced_by_core_prompts():
+    refs = [
+        ROOT / "AGENTS.md",
+        ROOT / "prompts" / "system_prompt.txt",
+        ROOT / "OMEGA_COWORK.md",
+    ]
+    for path in refs:
+        text = path.read_text(encoding="utf-8").lower()
+        assert "presentation_contract.md" in text, f"{path} must reference presentation_contract.md"
+        assert "narrative-first" in text, f"{path} must require narrative-first output"
+
+
+def test_daily_prompts_require_narrative_first_rendering():
+    daily_dir = ROOT / "prompts" / "daily"
+
+    for name in ("nba_daily.md", "wnba_daily.md", "mlb_daily.md"):
+        text = (daily_dir / name).read_text(encoding="utf-8").lower()
+        assert "presentation_contract.md" in text
+        assert "narrative-first" in text
+        assert "slate snapshot" in text
+        assert "honesty block" in text
+
+
+def test_scheduled_prompts_reference_canonical_contracts():
+    sched = ROOT / "prompts" / "scheduled"
+
+    daily = (sched / "daily_gathering.md").read_text(encoding="utf-8").lower()
+    assert "presentation_contract.md" in daily
+    assert "narrative-first" in daily
+    assert "output_modes" in daily
+    assert "omega-session-bootstrap" in daily
+    assert "omega-mcp-operator" in daily
+    # Honesty-softened zero-bets discipline (do not relax output-authorization gates).
+    assert "never fabricate" in daily
+
+    for name in (
+        "calibration_fitting.md",
+        "closing_lines.md",
+        "pending_outcomes.md",
+        "tennis_outcomes_weekly.md",
+    ):
+        text = (sched / name).read_text(encoding="utf-8").lower()
+        assert "omega-session-bootstrap" in text, f"{name} must reference omega-session-bootstrap"
