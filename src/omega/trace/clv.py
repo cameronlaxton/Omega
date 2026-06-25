@@ -88,15 +88,17 @@ def compute_clv(
 
     line_value: float | None = None
     if line_taken is not None and closing_line is not None and side:
-        # Positive line_value = the line moved in your favor.  Totals are
-        # directional (an Over benefits from a higher closing total), whereas
-        # an Under and either signed spread side benefit from taking the larger
-        # number than the close.
+        # Positive line_value = the line moved in the taken side's favor.
+        # Totals have opposite line orientations: an Over benefits when the
+        # closing total is lower, while an Under benefits when it is higher.
+        # Signed spread sides retain their existing orientation.
         delta = closing_line - line_taken  # raw movement
         s = side.lower()
         if s == "over":
+            line_value = -delta
+        elif s == "under":
             line_value = delta
-        elif s in ("under", "home", "away"):
+        elif s in ("home", "away"):
             line_value = -delta
         else:
             line_value = None
