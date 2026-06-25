@@ -199,4 +199,4 @@ If `OMEGA_TRACE_DB` is unset, omit `--db`.
 - `omega/trace/session_sidecar.py` — `append_audit_events`, `append_null_data_audit`, `ProtectedValueError`
 - `omega/trace/persistable.py` — `PersistableTrace.from_analyze_output()`
 - `omega-ingest-traces` — ingest validation and failure routing
-- `OMEGA_COWORK.md §6` — trace export contract, evidence signal spec
+- `OMEGA_RUNTIME.md §6` — trace export contract, evidence signal spec

@@ -1,10 +1,9 @@
-# OMEGA - Cowork / Local VM Instructions
+# OMEGA — Local VM / MCP Runtime Instructions
 
-**Version:** Phase 6h
 **Repo:** `C:\repos\Omega`
 **DB:** `var/omega_traces.db` (SQLite V14 - `traces`, `outcomes`, `prop_outcomes`, `bet_ledger`, `closing_lines`, `early_market_snapshots`, `market_snapshots`, `simulation_distributions`, `evidence_signals`, `signal_performance`, `trace_qa_verdicts`; `bet_records` was consolidated into `bet_ledger` at V14)
 
-This is the runtime instruction set for an Omega agent running with local repo access. For product doctrine, canonical source-of-truth rules, and artifact authority, please refer to [PROJECT_STATE.md](PROJECT_STATE.md). The local VM model is the standard model. Use the local MCP server first; use direct repo imports only when MCP is unavailable in the current client.
+This is the runtime instruction set for an Omega agent running with local repo access. For product doctrine, output standards, and artifact authority, see [AGENTS.md](AGENTS.md). The local MCP runtime is the standard model. Use the local MCP server first; use direct repo imports only when MCP is unavailable in the current client.
 
 ## 1. Ownership Boundary
 

@@ -1,7 +1,7 @@
 # Output Modes & Engine Execution — Canonical Reference
 
 **This file is the single canonical operational source for output-mode semantics.**
-Every other document (`AGENTS.md`, `OMEGA_COWORK.md`, `prompts/system_prompt.txt`, the daily
+Every other document (`AGENTS.md`, `OMEGA_RUNTIME.md`, `prompts/system_prompt.txt`, the daily
 prompts) must **link to this file** rather than restate the rules below. If those docs disagree
 with this file, this file wins.
 

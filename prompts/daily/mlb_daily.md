@@ -10,7 +10,7 @@ totals, team totals, first-five markets where supported, and player props. Do
 not run a separate props prompt. Game bets and props must share the
 same pitcher, lineup, park, weather, bullpen, odds, sidecar, and audit context.
 
-Follow [OMEGA_COWORK.md](../../OMEGA_COWORK.md) and
+Follow [OMEGA_RUNTIME.md](../../OMEGA_RUNTIME.md) and
 [prompts/system_prompt.txt](../system_prompt.txt) throughout.
 
 ---

@@ -1,12 +1,12 @@
 # League Daily Analysis Prompt
 
-**Status:** Reference template for manual / ad-hoc Cowork sessions. Not wired to any scheduler — scheduling is deferred to a later phase.
+**Status:** Reference template for manual / ad-hoc local runtime sessions. Not wired to any scheduler — scheduling is deferred to a later phase.
 
 **Substitute:** `{league}` (e.g. `NBA`, `MLB`), `{slate_date}` (ISO `YYYY-MM-DD`; default = today in the workspace's local date).
 
 ---
 
-Execute from the active Omega workspace directory. Follow [`OMEGA_COWORK.md`](../OMEGA_COWORK.md) and the runtime contract in [`prompts/system_prompt.txt`](system_prompt.txt).
+Execute from the active Omega workspace directory. Follow [`OMEGA_RUNTIME.md`](../OMEGA_RUNTIME.md) and the runtime contract in [`prompts/system_prompt.txt`](system_prompt.txt).
 
 Run the Omega {league} daily analysis session for {slate_date}.
 
