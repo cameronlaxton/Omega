@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from omega.paths import session_inbox_dir
+from omega.trace.quality import summarize_zero_evidence
 from omega.trace.session_report.context_bundle import ReportContextBundle, ReportContextEntry
 from omega.trace.session_report.models import (
     AnalystNarrative,
@@ -21,7 +22,6 @@ from omega.trace.session_report.models import (
     LedgerView,
     TraceReportCard,
 )
-from omega.trace.quality import summarize_zero_evidence
 from omega.trace.session_sidecar import load_sidecar_safe
 from omega.trace.store import TraceStore
 
@@ -518,6 +518,7 @@ def extract_intake_report(
                 selection=decision["selection"],
                 book=decision["book"],
                 stake_status=decision["stake_status"],
+                output_mode=_cell(tq.get("output_mode") or trace.get("output_mode")),
                 engine_view=_extract_engine_view(trace),
                 ledger_view=_ledger_view(trace, ledgers, closing),
                 context=_context_for_trace(

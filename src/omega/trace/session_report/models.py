@@ -95,6 +95,10 @@ class TraceReportCard(BaseModel):
     selection: str | None = None
     book: str | None = None
     stake_status: str | None = None
+    output_mode: str | None = Field(
+        default=None,
+        description="Per-trace output authorization mode used for report redaction",
+    )
     engine_view: EngineView = Field(default_factory=EngineView)
     ledger_view: LedgerView
     context: list[ContextBullet] = Field(default_factory=list)

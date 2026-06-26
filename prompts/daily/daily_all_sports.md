@@ -258,32 +258,46 @@ calibration data accumulates.
 
 ---
 
-## Step 6 — Post-Analysis Narrative
+## Step 6 — User-Facing Narrative Render
 
-After all traces are filed, produce a brief sweep summary (not a full Bet Card
-report):
+After all traces are filed, produce a narrative-first sweep report following
+[`prompts/reference/presentation_contract.md`](../reference/presentation_contract.md). This is a
+full slate/sweep report, not a terse engine-card summary.
 
 ```markdown
 ## Daily Sweep — <YYYY-MM-DD>
 
-Games discovered: <N> across <sport list>
-Traces generated: <N>
-  - ACTIONABLE: <N>   (formatted as Bet Cards below if any)
-  - RESEARCH_CANDIDATE: <N>
-Leagues skipped (no activity today): <list>
-Context tier:
-  - sourced: <N> traces
-  - inferred: <N> traces
+### Slate Snapshot
+<date window, sports/leagues discovered, games analyzed, market families scanned, output mode per
+market, already-started/completed games excluded, leagues skipped>
 
-### Actionable candidates (if any)
-<Bet Card format per output_modes.md — only for ACTIONABLE markets>
+### Ranked Recommendations / Watchlist
+<ranked table with recommendation/watchlist/pass status, price discipline, one-line thesis>
 
-### Research watchlist (top 3–5 most interesting, if any)
-<Brief research lean per presentation_contract.md>
+### Per-Matchup Narrative
+<match context, market read, Omega read, risks, verdict for each recommendation/watchlist item>
+
+### Honesty Blocks
+<trace quality, evidence status/count, calibration path/profile maturity, static fallback flag,
+confidence cap reason for every recommendation/watchlist item>
+
+### Formal Bet Cards
+<Bet Card format per output_modes.md — only for ACTIONABLE or RESEARCH_PLUS markets where authorized>
 ```
 
-If no markets are ACTIONABLE, note that and skip the Bet Card section. Do not
-fabricate edge, EV, Kelly, units, confidence tiers, or trace IDs in prose.
+ACTIONABLE / RESEARCH_PLUS markets:
+- Include formal Bet Cards only when authorized by `output_modes.<market>`.
+- Protected values must come directly from the engine trace.
+
+RESEARCH_CANDIDATE markets:
+- Use research-only language (research lean / watchlist / pass).
+- Defer to [`output_modes.md`](../reference/output_modes.md) for the forbidden-value list; do not
+  show forbidden superlatives, letter-grade confidence labels, edge%, EV%, Kelly, fair/no-vig
+  price, model probability, recommended units, or trace_id.
+
+If no markets are authorized for Bet Cards, note that and skip the Bet Card section. Do not
+fabricate edge, EV, Kelly, units, confidence tiers, fair prices, model probabilities, or trace IDs
+in prose.
 
 ---
 

@@ -279,6 +279,13 @@ class BatchAnalysisEntry(BaseModel):
     reasoning_narrative: str | None = Field(
         default=None, description="2–4 sentence summary of reasoning"
     )
+    reasoning_presentation: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional analyst-note prose keyed thesis/market_read/why/risks/verdict. "
+            "Qualitative only; no protected engine values."
+        ),
+    )
     reasoning_sources: list[str] = Field(
         default_factory=list, description="Sources consulted, e.g. espn.com"
     )

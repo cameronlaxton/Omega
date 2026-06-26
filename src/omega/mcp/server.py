@@ -643,9 +643,10 @@ def omega_run_batch(
             )
             continue
 
+        trace = dict(trace)
         trace_id = trace["trace_id"]
 
-        # --- Build export block (OMEGA_COWORK.md §6d format) ---
+        # --- Build export block in the current nested trace-export shape. ---
         market_context: dict[str, Any] = {}
         if entry.kind == "prop":
             market_context = {
@@ -658,21 +659,25 @@ def omega_run_batch(
         elif game_odds:
             market_context = {"odds": game_odds}
 
+        reasoning_inputs = {
+            "sources": entry.reasoning_sources,
+            "fields_gathered": list(request_dict.keys()),
+            "missing_fields": [],
+            "market_context": market_context,
+        }
+        trace["reasoning_inputs"] = reasoning_inputs
+        trace["reasoning_downgrade_rationale"] = None
+        trace["reasoning_narrative"] = entry.reasoning_narrative or f"Batch analysis: {identifier}"
+        trace["trace_quality"] = trace.get("trace_quality") or {}
+        if entry.reasoning_presentation is not None:
+            trace["reasoning_presentation"] = entry.reasoning_presentation
+
         export_block = {
             # Top-level session_id so the prediction->session link survives outside
             # the DB and the export-export validator's strict session_id check passes.
             "session_id": session_id,
             "trace": trace,
             "bet_record": None,
-            "reasoning_inputs": {
-                "sources": entry.reasoning_sources,
-                "fields_gathered": list(request_dict.keys()),
-                "missing_fields": [],
-                "market_context": market_context,
-            },
-            "reasoning_downgrade_rationale": None,
-            "reasoning_narrative": entry.reasoning_narrative or f"Batch analysis: {identifier}",
-            "trace_quality": trace.get("trace_quality") or {},
         }
 
         # --- Write to inbox (atomic: a crash mid-write must not leave a truncated

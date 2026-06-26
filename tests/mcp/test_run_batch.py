@@ -85,6 +85,13 @@ def test_gate_failure_blocks_entire_batch(tmp_path: Path) -> None:
 
 def test_happy_path_prop_writes_export_block(tmp_path: Path) -> None:
     trace = _make_trace("sandbox-prop-001")
+    presentation = {
+        "thesis": "Contact form supports the over.",
+        "market_read": "BetMGM line is still playable.",
+        "why": "Recent role and matchup both point up.",
+        "risks": "Weather can suppress contact.",
+        "verdict": "Research lean if the line holds.",
+    }
     with (
         patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
         patch("omega.integrations.odds_resolver.resolve_odds", side_effect=_mock_resolve_odds_ok),
@@ -92,7 +99,12 @@ def test_happy_path_prop_writes_export_block(tmp_path: Path) -> None:
         patch("omega.paths.repo_root", return_value=tmp_path),
     ):
         result = omega_run_batch(
-            entries=[_prop_entry()],
+            entries=[
+                _prop_entry(
+                    reasoning_narrative="Julio's contact profile fits this matchup.",
+                    reasoning_presentation=presentation,
+                )
+            ],
             bankroll=1000.0,
             session_id="sess-test",
         )
@@ -109,8 +121,11 @@ def test_happy_path_prop_writes_export_block(tmp_path: Path) -> None:
 
     block = json.loads(export_path.read_text())
     assert block["trace"]["trace_id"] == "sandbox-prop-001"
-    assert "reasoning_inputs" in block
-    assert "reasoning_narrative" in block
+    assert "reasoning_inputs" not in block
+    assert "reasoning_narrative" not in block
+    assert block["trace"]["reasoning_inputs"]["market_context"]["prop_type"] == "hits"
+    assert block["trace"]["reasoning_narrative"] == "Julio's contact profile fits this matchup."
+    assert block["trace"]["reasoning_presentation"] == presentation
     # A4: export block carries a top-level session_id so the prediction->session
     # link survives outside the DB and passes the strict export validator.
     assert block["session_id"] == "sess-test"
