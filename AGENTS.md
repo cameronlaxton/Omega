@@ -16,7 +16,7 @@ that points here and carries no independent rules.
   post-`analyze()` nullability / null-data-audit procedure.
 - [`prompts/reference/markov_evidence_vocab.md`](prompts/reference/markov_evidence_vocab.md) —
   approved Markov `signal_type` vocabulary and the ±15% cap.
-- [`OMEGA_DATA_SOURCES.md`](OMEGA_DATA_SOURCES.md) — data sourcing, fallbacks, freshness rules.
+- [`docs/data_sources.md`](docs/data_sources.md) — data sourcing, fallbacks, freshness rules.
 - [`docs/historical_calibration_backfill.md`](docs/historical_calibration_backfill.md) — historical
   replay → calibration backfill runbook (ingest → replay → fit → parity → promote).
 - [`src/omega/core/calibration/CLAUDE.md`](src/omega/core/calibration/CLAUDE.md) — calibration method
@@ -71,18 +71,60 @@ The master runtime instruction for any LLM acting as the Omega agent (any LLM fr
 
 **Deployment-specific instructions:** Use **one** instruction set based on deployment:
 - **Any LLM agent / API (no local access)** → [`prompts/system_prompt.txt`](prompts/system_prompt.txt)
-- **Cowork Project (local repo access)** → [`OMEGA_COWORK.md`](OMEGA_COWORK.md)
+- **Local runtime / MCP (repo access)** → [`OMEGA_RUNTIME.md`](OMEGA_RUNTIME.md)
 
-Do NOT combine both files into a single Project; they assume different execution contexts (sandbox vs. local VM, manual vs. automated pipelines).
+Do NOT combine both files; they assume different execution contexts (no local access vs. local VM + MCP).
 
-## Phase 6 objective
+## Output language
 
-Phase 6 delivers:
-1. trace persistence
-2. historical replay
-3. calibration learning
+Omega must never use hype language for betting outputs.
 
-Implement these incrementally, with minimal drift from the current architecture.
+**Banned terminology:**
+- "best bet" / "Best Bet"
+- "lock"
+- "smash"
+- "Tier A" / "Tier B"
+- "engine-confirmed"
+- "actionable bet" / "Actionable Bet"
+
+**Preferred terminology:**
+- "highest-confidence opportunity"
+- "qualified play"
+- "tracked lean"
+- "model-supported lean"
+- "confidence band"
+- "calibration status"
+- "risk flags"
+- "edge / EV / confidence metrics"
+
+## Valid session requirements
+
+A valid session requires:
+- Genuine data gathering
+- Structured context
+- Evidence present or explicit downgrade rationale
+- Context/evidence affecting reasoning or bet selection
+- Trace emitted for every model-backed recommendation
+- Outcome-ready identity fields
+- Sidecar/audit process trail
+- Continuous-improvement value (calibration-eligible output)
+
+## Calibration eligibility
+
+Keep calibration strict. Free-text reasoning alone must not make a trace calibration-eligible. LLM reasoning counts as useful context only when translated into:
+- structured `game_context`
+- structured `player_context`
+- typed `EvidenceSignal`
+- explicit downgrade rationale
+- trace-quality metadata
+
+Do not loosen `context_source="provided"` to mean "the LLM thought about it." It should mean the model received structured, decision-time context.
+
+## Actionability gates
+
+- **Hard fail / block formal output when:** required context is missing, evidence is empty with no downgrade rationale, odds are stale and unreplaced, engine status is skipped/error but output presents a play, identity fields are missing, or no trace is emitted for a model-backed recommendation.
+- **Warning-only when:** optional CLV metadata is missing, no bet record exists because no bet was taken, reasoning narrative is missing but structured trace/evidence is present, evidence sample size is thin, identity is metadata-recovered but marked.
+- Warnings become hard failures only when the issue is repairable, the schema/contract is stable, and failing prevents bad picks, calibration, or audit data.
 
 ## Source-of-truth evaluation model
 
@@ -278,6 +320,6 @@ For each substantial task, return:
 - Rollback plan
 - Ordered implementation steps
 
-## Cowork runtime contract
+## Local runtime contract
 
-See [OMEGA_COWORK.md](OMEGA_COWORK.md) for the Cowork Project custom instructions — engine invocation, hard-wall enforcement, session lifecycle, paid Odds API closing-line capture, trace export, and action-plan automation.
+See [OMEGA_RUNTIME.md](OMEGA_RUNTIME.md) for the local VM / MCP runtime instructions — engine invocation, hard-wall enforcement, session lifecycle, paid Odds API closing-line capture, trace export, and action-plan automation.

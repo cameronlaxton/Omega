@@ -1,11 +1,11 @@
 ---
 name: omega-session-bootstrap
-description: Run the mandatory Omega session startup sequence — interpreter check, dependency install, preflight gate, SQLite workaround, session ID and sidecar creation, calibration health check. Use at the start of every Omega Cowork session before any analysis or engine invocation.
+description: Run the mandatory Omega session startup sequence — interpreter check, dependency install, preflight gate, SQLite workaround, session ID and sidecar creation, calibration health check. Use at the start of every Omega local runtime session before any analysis or engine invocation.
 ---
 
 # Omega Session Bootstrap
 
-Run this sequence at the start of every Cowork session. Do not invoke
+Run this sequence at the start of every local runtime session. Do not invoke
 `analyze()`, MCP tools, or any trace-writing script until the formal output
 gate passes.
 
@@ -190,11 +190,11 @@ omega-fetch-closing-lines --dry-run   # if bets placed
 ```
 
 If `OMEGA_TRACE_DB` is unset, omit `--db`. If using a redirected/local DB copy,
-sync back through `tools/windows/sync_to_mount.ps1` per `OMEGA_COWORK.md`.
+sync back through `tools/windows/sync_to_mount.ps1` per `OMEGA_RUNTIME.md`.
 
 ---
 
 ## References
 
-- `OMEGA_COWORK.md` — authoritative runtime instructions
+- `OMEGA_RUNTIME.md` — authoritative runtime instructions
 - `omega-trace-qa` skill — trace completeness checklist

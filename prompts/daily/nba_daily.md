@@ -11,7 +11,7 @@ injury map, rest map, odds provenance, sidecar, and session audit.
 Do not run a separate props prompt — player props are NBA markets within this
 league session.
 
-Follow [OMEGA_COWORK.md](../../OMEGA_COWORK.md) and
+Follow [OMEGA_RUNTIME.md](../../OMEGA_RUNTIME.md) and
 [prompts/system_prompt.txt](../system_prompt.txt) throughout.
 
 ---

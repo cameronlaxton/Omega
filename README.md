@@ -4,7 +4,7 @@ Omega is a reasoning-led sports analytics system: an LLM/operator layer gathers 
 
 The canonical runtime is now local VM / MCP-first. Stateless sandbox bridging has been retired.
 
-Please see [PROJECT_STATE.md](PROJECT_STATE.md) for the canonical product doctrine, phase guidelines, and artifact authority rules.
+Please see [AGENTS.md](AGENTS.md) for the canonical product doctrine, phase guidelines, and artifact authority rules.
 
 ## How Omega Runs
 
@@ -41,9 +41,15 @@ Omega requires Python 3.10+.
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
-pip install -e .
+pip install -e .[dev]
 python -m pytest tests/ -v
 ```
+
+The `[dev]` extra is the full test/dev surface: it pulls the lint/type/test
+tooling plus the console, MCP, and integration-adapter (pandas/pyarrow) deps the
+suite imports, so `pytest -q` collects and runs cleanly. A bare `pip install -e .`
+installs only the deterministic engine (numpy + pydantic) and is not enough to
+run the test suite.
 
 Install optional MCP dependencies when running an MCP client:
 
@@ -51,6 +57,14 @@ Install optional MCP dependencies when running an MCP client:
 pip install -e .[mcp]
 omega-preflight
 python -m omega.mcp.server
+```
+
+For runtime-only use of the external-data adapters (e.g. `omega-fit-nfl-dispersion`,
+WeHoop/nflverse loaders) without the full dev toolchain, install the integration
+extra alone:
+
+```bash
+pip install -e .[integrations]
 ```
 
 ## Local Odds Resolution
@@ -73,9 +87,9 @@ The resolver prepares market inputs and provenance only. It does not compute pro
 
 - [AGENTS.md](AGENTS.md): **cross-agent entrypoint â€” start here.** (`CLAUDE.md` is a shim to it.)
 - [prompts/reference/output_modes.md](prompts/reference/output_modes.md): canonical output-mode + engine-execution rules.
-- [OMEGA_COWORK.md](OMEGA_COWORK.md): local VM / Cowork runtime instruction.
+- [OMEGA_RUNTIME.md](OMEGA_RUNTIME.md): local VM / MCP runtime instruction.
 - [docs/LLM_MCP_INTERFACE.md](docs/LLM_MCP_INTERFACE.md): MCP tool contract and replay boundary.
-- [OMEGA_DATA_SOURCES.md](OMEGA_DATA_SOURCES.md): data sourcing and freshness rules.
+- [docs/data_sources.md](docs/data_sources.md): data sourcing and freshness rules.
 
 Retired to `archive/historical/` (non-authoritative): `OMEGA_HANDBOOK.md`, `OMEGA_RUN_RECIPE.md`.
 

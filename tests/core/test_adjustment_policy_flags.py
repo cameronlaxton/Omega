@@ -110,11 +110,12 @@ def test_seed_policy_factor_is_unchanged_by_scaffolding():
         policy=policy,
         evidence_mode="live",
     )
-    # usage_spike value 0.20, scale 1.0, reliability default 1.0 -> raw 1.20,
-    # within the 0.22 cap. Confidence weighting is NOT applied (flag off), so the
-    # 0.7 confidence does not shrink the factor.
-    assert adj.records[0].factor == pytest.approx(1.20)
-    assert adj.mean_factor == pytest.approx(1.20)
+    # usage_spike value 0.20, scale 1.0 -> raw 1.20 (within the 0.22 cap). It is
+    # unscored, so the 0.25 unfitted prior damps it: 1 + 0.25*(1.20-1) = 1.05.
+    # Confidence weighting is NOT applied (flag off), so the 0.7 confidence does
+    # not further shrink the factor — the scaffolding leaves it at the prior value.
+    assert adj.records[0].factor == pytest.approx(1.05)
+    assert adj.mean_factor == pytest.approx(1.05)
 
 
 # ---------------------------------------------------------------------------

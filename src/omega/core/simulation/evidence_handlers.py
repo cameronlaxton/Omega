@@ -457,9 +457,13 @@ def _evaluate_signal(
     # reliability_weight is the single seam that closes the Phase C -> Phase B
     # loop: omega-fit-adjustment-policy sets it per signal_type from
     # measured empirical accuracy, damping the handler's deviation toward the
-    # 1.0 no-op for signals that scored as noise. Absent => 1.0 (full trust),
-    # so the hand-seeded v1 policy behaves exactly as the raw handler.
-    reliability = max(0.0, min(1.0, float(coeffs.get("reliability_weight", 1.0))))
+    # 1.0 no-op for signals that scored as noise. Absent => the policy's
+    # unfitted_reliability_prior (graduated-apply): an unscored signal moves a
+    # live prediction only a sliver until the fit measures its real reliability.
+    reliability = max(
+        0.0,
+        min(1.0, float(coeffs.get("reliability_weight", policy.unfitted_reliability_prior))),
+    )
     reliability_adjusted = reliability_adjusted_factor(raw_factor, reliability)  # step 2
     # step 3 — per-signal cap. bounded_live tightens the coeff cap to the policy's
     # single_cap_ceiling so one signal can never exceed the hard bound.

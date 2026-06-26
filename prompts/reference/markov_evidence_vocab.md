@@ -1,7 +1,8 @@
 # Markov Backend — Approved Evidence Signal Vocabulary (Canonical Reference)
 
-**Canonical source for the Markov `signal_type` vocabulary and the ±15% cap.** `OMEGA_COWORK.md`,
-`prompts/system_prompt.txt`, and the league daily prompts link here instead of restating the table.
+**This file is the canonical definition of the Markov `signal_type` vocabulary and the ±15% cap.**
+`OMEGA_RUNTIME.md`, `prompts/system_prompt.txt`, and the league daily prompts link here instead of
+restating the table.
 
 When calling `omega_analyze_game` with `simulation_backend="markov_state"`, **only these 8
 `signal_type` values affect the possession-level transition matrix.** All other signal types are

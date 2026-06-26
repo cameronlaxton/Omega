@@ -18,12 +18,12 @@ def test_system_prompt_mentions_mcp_and_core_service():
 
 
 def test_cowork_prompt_uses_mcp_before_direct_repo_import_when_available():
-    text = (ROOT / "OMEGA_COWORK.md").read_text(encoding="utf-8").lower()
+    text = (ROOT / "OMEGA_RUNTIME.md").read_text(encoding="utf-8").lower()
 
     assert "local mcp server first" in text or "use the local mcp server first" in text
     assert "not a second betting engine" in text
     assert "omega.core.contracts.service.analyze" in text
-    assert "phase 6h" in text
+    assert "deterministic python engine owns" in text
 
 
 def test_llm_mcp_interface_documents_replay_as_audit_only():
@@ -90,7 +90,7 @@ def test_daily_prompts_are_league_first_not_props_siloed():
     props_text = props_path.read_text(encoding="utf-8").lower()
     assert "deprecated_redirect" in props_text
     assert "runtime_allowed: false" in props_text
-    assert "use the league prompt instead" in props_text
+    assert "use the league prompt" in props_text
     assert "nba_daily.md" in props_text
     assert "wnba_daily.md" in props_text
     assert "mlb_daily.md" in props_text
@@ -149,7 +149,7 @@ def test_presentation_contract_is_referenced_by_core_prompts():
     refs = [
         ROOT / "AGENTS.md",
         ROOT / "prompts" / "system_prompt.txt",
-        ROOT / "OMEGA_COWORK.md",
+        ROOT / "OMEGA_RUNTIME.md",
     ]
     for path in refs:
         text = path.read_text(encoding="utf-8").lower()

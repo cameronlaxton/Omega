@@ -72,4 +72,8 @@ over the whitelisted feature vocabulary into `signal_proposals` as `probation`.
 Proposals are scored exactly like active signals; every proposal is another
 hypothesis in the FDR correction, so an expanded proposal space only tightens the
 graduation bar. Graduation injects the proposal's `feature_combo` into the policy
-coefficients and flips its lifecycle — operator-gated, like everything else.
+coefficients and flips its lifecycle — operator-gated, like everything else. The
+injected coefficient also carries a fitted `reliability_weight` derived from the
+proposal's scored `clv_aligned` (full trust when no CLV is yet on record), so a
+graduated proposal moves predictions at its measured magnitude rather than the
+policy's conservative `unfitted_reliability_prior` sliver.

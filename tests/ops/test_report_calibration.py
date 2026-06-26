@@ -186,7 +186,9 @@ def test_resolve_output_modes_decouples_game_and_prop():
 
 
 def test_resolve_output_modes_quality_floor_holds_weak_prop():
-    # The real NBA prop profile (n=48, ECE 0.2876) must NOT unlock props.
+    # The real NBA prop profile (n=48, ECE 0.2876) must NOT unlock full ACTIONABLE
+    # output. It is a real profile, so it lands in research+ (numbers shown under a
+    # capped stake, with the failing floor in the reasons), never actionable.
     prod_by_market = {
         "game": None,
         "prop": _prod_profile("prop", 48, 0.287589, "iso_nba_prop_v1_7c8018680da72efe"),
@@ -195,7 +197,8 @@ def test_resolve_output_modes_quality_floor_holds_weak_prop():
 
     modes, reasons = report_calibration._resolve_output_modes(prod_by_market, coverage)
 
-    assert modes["prop"] is OutputMode.RESEARCH_CANDIDATE
+    assert modes["prop"] is OutputMode.RESEARCH_PLUS
+    assert modes["prop"] is not OutputMode.ACTIONABLE
     assert any("sample_size" in r for r in reasons["prop"])
     assert any("ECE" in r for r in reasons["prop"])
 

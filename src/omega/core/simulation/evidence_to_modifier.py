@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from omega.core.simulation.evidence_aggregation import (
     FamilyMember,
     damp_family,
+    reliability_adjusted_factor,
     resolve_confidence,
 )
 
@@ -195,8 +196,14 @@ def compute_transition_modifier_adjustment(
       modifier key with the sign-preserving family damper instead of a raw
       product (the modifier key is the natural correlation group here).
 
-    With no policy, or both flags off, ``modifiers`` is bit-identical to the
-    legacy output. Directional signals (home/away) resolve to the correct side.
+    Graduated-apply (default posture): when a ``policy`` is supplied, each
+    signal's scalar is additionally damped toward the 1.0 no-op by its per-signal
+    reliability — its fitted ``reliability_weight`` if the fit has measured one,
+    else the policy's ``unfitted_reliability_prior``. Fit-proved noise (weight 0)
+    collapses to a no-op; an unscored signal moves the matrix only a sliver. With
+    **no** policy (the legacy ``signals_to_transition_modifiers`` wrapper) the
+    reliability is 1.0, so that output stays bit-identical to the legacy mapping.
+    Directional signals (home/away) resolve to the correct side.
     """
     enable_confidence = bool(getattr(policy, "enable_confidence_weighting", False))
     enable_damping = bool(getattr(policy, "enable_correlation_damping", False))
@@ -267,17 +274,29 @@ def compute_transition_modifier_adjustment(
         confidence, confidence_defaulted = resolve_confidence(getattr(sig, "confidence", None))
         if enable_confidence:
             effective_scalar = 1.0 + confidence * (raw_scalar - 1.0)
+        # Graduated-apply: damp each signal's scalar toward the 1.0 no-op by its
+        # reliability (fitted weight, else the policy's unfitted prior), mirroring
+        # the plane handler path. No policy => reliability 1.0 (legacy parity).
+        reliability = _signal_reliability(policy, signal_type)
+        effective_scalar = reliability_adjusted_factor(effective_scalar, reliability)
+        # A factor that reliability-damps to exactly 1.0 (e.g. reliability_weight
+        # 0.0) is a mathematical no-op: mirror the plane handler and record it as
+        # not applied, so the audit trail and aggregation metadata never claim a
+        # signal moved the transition matrix when it did not.
+        applied = effective_scalar != 1.0
 
-        key_contribs.setdefault(effective_key, []).append((idx, effective_scalar))
+        if applied:
+            key_contribs.setdefault(effective_key, []).append((idx, effective_scalar))
         applications.append(
             {
                 "signal_type": signal_type,
                 "target": "markov_transition",
                 "modifier_key": effective_key,
-                "applied": True,
+                "applied": applied,
                 "raw_scalar": raw_scalar,
                 "effective_scalar": effective_scalar,
                 "factor": effective_scalar,  # real factor, replacing the legacy None
+                "reliability_weight": reliability,
                 "direction": direction,
                 "confidence": confidence,
                 "confidence_defaulted": confidence_defaulted,
@@ -295,6 +314,25 @@ def compute_transition_modifier_adjustment(
         applications=applications,
         aggregation_records=aggregation_records,
     )
+
+
+def _signal_reliability(policy: AdjustmentPolicy | None, signal_type: str) -> float:
+    """Per-signal trust for the Markov path, in [0, 1].
+
+    Mirrors the plane handler: a signal's fitted ``reliability_weight`` if
+    ``omega-fit-adjustment-policy`` has measured one, else the policy's
+    ``unfitted_reliability_prior``. No policy => 1.0 (legacy parity for the
+    ``signals_to_transition_modifiers`` wrapper).
+    """
+    if policy is None:
+        return 1.0
+    weight = policy.coeffs_for(signal_type).get("reliability_weight")
+    if weight is None:
+        weight = policy.unfitted_reliability_prior
+    try:
+        return max(0.0, min(1.0, float(weight)))
+    except (TypeError, ValueError):
+        return max(0.0, min(1.0, float(policy.unfitted_reliability_prior)))
 
 
 def _aggregate_modifier_keys(

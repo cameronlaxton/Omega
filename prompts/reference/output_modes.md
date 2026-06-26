@@ -1,7 +1,7 @@
 # Output Modes & Engine Execution — Canonical Reference
 
 **This file is the single canonical operational source for output-mode semantics.**
-Every other document (`AGENTS.md`, `OMEGA_COWORK.md`, `prompts/system_prompt.txt`, the daily
+Every other document (`AGENTS.md`, `OMEGA_RUNTIME.md`, `prompts/system_prompt.txt`, the daily
 prompts) must **link to this file** rather than restate the rules below. If those docs disagree
 with this file, this file wins.
 
@@ -47,17 +47,24 @@ classified by `omega.ops.output_modes.classify_market_output_mode(...)` from tha
 production calibration profile — there is no prop→game fallback for *authorization*, even though
 the runtime calibration path does fall back when applying a profile.
 
-A market is `RESEARCH_CANDIDATE` if **any** of:
+Authorization has **three tiers**, driven by the market's own production profile and its
+operator-assigned `maturity` (`none | provisional | probation | production`). *Trust is a dial, not
+a switch* — only the genuinely-uncalibrated case hides the engine numbers:
 
-- no fitted production profile **for that market** (static fallback active), or
-- 0 calibration-eligible traces **for that market** in window, or
-- the session sidecar is invalid/corrupt, or
-- the market's production profile fails the **calibration-quality floor**: `sample_size ≥ 100`
-  **and** `calibration_error (ECE) ≤ 0.05`, read from the profile's recorded fit metrics. A
-  force-promoted or under-sampled profile therefore does **not** unlock formal output.
+- **`RESEARCH_CANDIDATE`** (numbers hidden) — the genuinely-uncalibrated case. Any of: no fitted
+  production profile **for that market** (static fallback active); profile `maturity` is `none`/
+  `retired` (not trusted to apply); 0 calibration-eligible traces **for that market** in window; or
+  an invalid/corrupt session sidecar.
+- **`ACTIONABLE`** (full) — a `production`-maturity profile that **also** clears the
+  **calibration-quality floor**: `sample_size ≥ 100` **and** `calibration_error (ECE) ≤ 0.05`, read
+  from the profile's recorded fit metrics.
+- **`RESEARCH_PLUS`** (numbers shown, stake hard-capped, confidence ≤ `B`) — everything in between: a
+  real but immature (`provisional`/`probation`) profile, or a `production` profile that has not
+  cleared the floor (force-promoted / under-sampled). The engine numbers are **surfaced under
+  guardrails** instead of withheld. Stake ceiling by maturity: `provisional` ≤ 0.5u, `probation`
+  ≤ 1u, else ≤ 0.5u (`cap_stake_for_research_plus`).
 
-Otherwise that market is `ACTIONABLE`. Bet records (logged wagers) are **never** a factor — a Bet
-Card is emitted before any wager exists.
+Bet records (logged wagers) are **never** a factor — a Bet Card is emitted before any wager exists.
 
 A trustworthy prop market can be `ACTIONABLE` while the game market is `RESEARCH_CANDIDATE`, and
 vice versa. **Apply suppression per market**: a game Bet Card and a prop Bet Card are authorized
@@ -70,20 +77,22 @@ separately, off their own market's mode.
 
 ```yaml
 output_modes:
-  game: 'research_candidate'
+  game: 'research_plus'
   prop: 'actionable'
 output_mode_reasons:
   game:
-    - 'No fitted calibration profile for this market - static fallback active.'
+    - "Profile maturity 'provisional' below production - numbers shown, stake capped, confidence <= B."
   prop: []
 output_mode: 'research_candidate'   # backward-compat scalar — see below
 ```
 
 **Read `output_modes.<market>` from the frontmatter** as the authoritative machine-readable flag
-for that market. The scalar `output_mode` is a conservative aggregate (`actionable` only when
-*every* market is `actionable`) kept for un-updated consumers — never use it to authorize one
-market when the map says that market is `actionable`. The prose "Agent Directive — Output Mode"
-block in the report body restates the per-market modes in human form.
+for that market; it may be `actionable`, `research_plus`, or `research_candidate`. The scalar
+`output_mode` is a conservative aggregate (`actionable` only when *every* market is `actionable`;
+any `research_plus`/`research_candidate` market makes it non-actionable) kept for un-updated
+consumers that only understand the binary — never use it to authorize one market when the map says
+that market is `actionable`. The prose "Agent Directive — Output Mode" block in the report body
+restates the per-market modes in human form.
 
 ---
 
@@ -96,15 +105,26 @@ Structured evidence no longer flows through a binary shadow/live switch. The act
 |---|---|---|---|---|
 | `disabled` | no | no | no | no |
 | `observe` | yes | yes | no | no |
-| `score_only` *(default)* | yes | yes | yes | no |
-| `bounded_live` | yes | yes | yes | **yes, under hard caps** |
+| `score_only` | yes | yes | yes | no |
+| `bounded_live` *(default)* | yes | yes | yes | **yes, under hard caps** |
 | `live` | yes | yes | yes | yes (policy caps) |
 
-- Legacy `shadow` normalizes to `score_only` on load.
-- `bounded_live` enforces hard per-signal / family / plane caps and **cannot lift a recommendation
-  to `A`** unless the policy's evidence metrics have passed promotion gates.
-- The seed policy ships at `score_only` (records, never moves predictions) until an operator flips
-  it with an explicit, audited `set_mode`.
+The shipped seed policy ships at **`bounded_live`** (graduated-apply default): every active +
+sport-applicable signal moves the prediction under hard per-signal / family / plane caps, but its
+magnitude is scaled per-signal by `reliability_weight`:
+
+- A signal the fit has **measured** applies at its fitted weight (proved-noise → weight ≈ 0 → a
+  literal no-op even though the mode applies).
+- A signal with **no** fitted weight applies only the policy's `unfitted_reliability_prior` — the
+  seed sets this to **0.25** (a sliver, not face value) until `omega-fit-adjustment-policy` measures
+  it. The four hand-validated directional signals (`b2b_fatigue`, `rest_advantage`,
+  `def_matchup_weak`, `def_matchup_strong`) carry `reliability_weight = 1.0`, applying their capped
+  prior in full now.
+- `bounded_live` **cannot lift a recommendation to `A`** unless the policy's evidence metrics have
+  passed promotion gates — so an unfitted policy applies evidence yet still caps confidence at `B`.
+- Legacy `shadow` normalizes to `score_only` on load. Set `OMEGA_EVIDENCE_MODE=score_only` to
+  reproduce the legacy record-but-never-apply baseline (e.g. for an A/B comparison).
+- An operator escalates to `live` (the policy's own caps) with an explicit, audited `set_mode`.
 
 ## Calibration profile maturity
 
@@ -165,6 +185,36 @@ user-facing output is restricted as below, independently of the other market's m
 - the `trace_id`.
 
 **Forbidden language:** "best bet", "Tier A", "Tier B", "engine-confirmed", "actionable bet".
+
+---
+
+## `RESEARCH_PLUS` — permitted vs forbidden
+
+`RESEARCH_PLUS` exists for a **real but immature** profile (`provisional`/`probation`, or a
+`production` profile below the quality floor). Unlike `RESEARCH_CANDIDATE`, the engine numbers are
+**shown** — the profile is real, just thin — under guardrails.
+
+**Permitted** (in addition to everything `RESEARCH_CANDIDATE` permits):
+
+- the engine's protected numbers — edge%, EV%, Kelly fraction, model/calibrated probability,
+  fair / no-vig price, recommended units, **and** the confidence tier (capped at `B`) and the
+  `trace_id`. These are engine-minted, so the LLM ⊥ engine boundary still holds — the LLM narrates
+  them, it never generates them.
+- a formal Bet Card, **provided** the stake obeys the maturity cap (`provisional` ≤ 0.5u,
+  `probation` ≤ 1u, else ≤ 0.5u — `cap_stake_for_research_plus`) and the honesty block carries the
+  maturity + confidence-cap reason.
+
+**Forbidden:**
+
+- overclaiming hype: "best bet", "engine-confirmed", "actionable bet"
+  (`contains_blocked_phrase_research_plus`). Tier labels themselves are permitted (confidence is
+  shown, capped at `B`).
+- `A`-tier confidence (the `profile_maturity_not_production` cap holds it at ≤ `B`).
+- stake above the maturity ceiling.
+
+Render `RESEARCH_PLUS` inside a loud band (`format_research_plus_block`) so the thin calibration is
+unmistakable: *"engine numbers shown for transparency but stake is hard-capped and confidence is
+held at ≤ B."*
 
 ---
 

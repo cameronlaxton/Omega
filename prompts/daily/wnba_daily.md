@@ -10,7 +10,7 @@ team totals where supported, and player props. WNBA game totals are currently
 quarantined by the engine and must not be presented as formal Bet Cards.
 Do not run a separate props prompt.
 
-Follow [OMEGA_COWORK.md](../../OMEGA_COWORK.md) and
+Follow [OMEGA_RUNTIME.md](../../OMEGA_RUNTIME.md) and
 [prompts/system_prompt.txt](../system_prompt.txt) throughout.
 
 ---

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -187,6 +188,39 @@ def _reliability_weight(
     return round(min(clv_w, _UNPROVEN_CEILING), 4)
 
 
+def reliability_weight_from_clv_alignment(
+    clv_aligned: float | None, *, graduated: bool
+) -> float | None:
+    """Reliability weight in [0, 1] from a stored pooled ``clv_aligned`` rate.
+
+    The CLV-primary branch of :func:`_reliability_weight` for callers that have the
+    pooled alignment rate and the graduation verdict but NOT the per-window
+    direction counts the full fit aggregates (the ``signal_proposals`` store keeps
+    the former, not the latter, so the graduated direction blend is unavailable):
+
+    - ``clv_aligned is None`` (no scored CLV on record) -> ``None``; the caller
+      decides the prior (an operator-activated proposal trusts it in full).
+    - graduated -> ``_clamp_weight(clv_aligned)`` (the measured magnitude).
+    - not graduated -> capped at the unproven ceiling (fail-closed).
+
+    Used by ``omega-promote-adjustment-policy`` to stamp a graduated LLM proposal's
+    coefficient with a fitted weight so it applies at its proven magnitude rather
+    than the policy's conservative ``unfitted_reliability_prior`` sliver.
+    """
+    if clv_aligned is None:
+        return None
+    try:
+        clv_value = float(clv_aligned)
+    except (TypeError, ValueError):
+        return None
+    # Fail closed on a corrupted stored rate: a non-finite value must never be
+    # clamped into a trusted weight (nan would otherwise pass through to 1.0).
+    if not math.isfinite(clv_value):
+        return None
+    clv_w = _clamp_weight(clv_value)
+    return round(clv_w if graduated else min(clv_w, _UNPROVEN_CEILING), 4)
+
+
 def _lifecycle_recommendation(
     agg: _SignalAgg,
     *,
@@ -242,9 +276,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=["shadow", "live"],
-        default="shadow",
-        help="Rollout mode baked into the candidate (default: shadow)",
+        choices=["shadow", "score_only", "bounded_live", "live"],
+        default="bounded_live",
+        help="Rollout mode baked into the candidate (default: bounded_live, the "
+        "graduated-apply posture; legacy 'shadow' normalizes to 'score_only')",
     )
     parser.add_argument(
         "--power-edge",
@@ -387,6 +422,10 @@ def main(argv: list[str] | None = None) -> int:
         status=ProfileStatus.CANDIDATE,
         mode=args.mode,
         coefficients=new_coeffs,
+        # Carry the base policy's conservative unfitted prior forward so a fitted
+        # candidate still damps signals it could not score, instead of resetting
+        # them to the field default (full trust).
+        unfitted_reliability_prior=base.unfitted_reliability_prior,
         training_window=datetime.now(UTC).date().isoformat(),
         sample_size=sum(a.dir_n for _, a, _, _ in fitted),
         dataset_hash=dataset_hash,

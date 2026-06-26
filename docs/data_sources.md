@@ -1,4 +1,4 @@
-# OMEGA_DATA_SOURCES
+# Omega Data Sources
 
 How Omega sources live and historical data. The full no-local self-heal loop is specified in [prompts/system_prompt.txt](prompts/system_prompt.txt) Section 6; this document is the per-slot reference card.
 
