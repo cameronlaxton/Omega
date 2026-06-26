@@ -848,6 +848,15 @@ def _render(
                 "(Bet Cards, edge%, EV%, Kelly, confidence tiers) is authorized. "
                 f"Active calibration profile: `{_pid}`."
             )
+        elif _mode is OutputMode.RESEARCH_PLUS:
+            lines.append(
+                f"- **{_label} - `RESEARCH_PLUS`**: a real but provisional / "
+                "below-floor profile. Engine numbers (edge%, EV%, Kelly) MAY be "
+                "shown for transparency, but stake is hard-capped and confidence "
+                "is held at <= B. Do not present as settled/authorized formal output."
+            )
+            for _r in output_mode_reasons.get(_market, []):
+                lines.append(f"    - {_r}")
         else:
             lines.append(
                 f"- **{_label} - `RESEARCH_CANDIDATE`**: formal output (Bet Cards, "

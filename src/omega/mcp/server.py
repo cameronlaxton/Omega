@@ -1624,14 +1624,17 @@ def omega_markov_evidence_guide() -> str:
     # deprecated/rejected signals drop out so the agent stops emitting them. Best-
     # effort — the guide must still render if no production policy exists.
     overrides: dict[str, str] | None = None
+    prod_mode: str | None = None
     try:
         from omega.core.calibration.adjustment_policy import (  # noqa: PLC0415
             AdjustmentPolicyRegistry,
         )
 
         prod = AdjustmentPolicyRegistry().get_production_policy()
-        if prod is not None and prod.signal_lifecycle:
-            overrides = prod.signal_lifecycle
+        if prod is not None:
+            prod_mode = prod.mode
+            if prod.signal_lifecycle:
+                overrides = prod.signal_lifecycle
     except Exception:  # noqa: BLE001 — never let registry access break the guide
         overrides = None
 
@@ -1640,6 +1643,22 @@ def omega_markov_evidence_guide() -> str:
         "Use simulation_backend='markov_state' when you have game-level structural\n"
         "evidence (pace, rest, matchup) that should shift the possession-level model.\n\n"
     )
+    if prod_mode in ("bounded_live", "live"):
+        mode_note = (
+            f"Evidence-application note: the production adjustment policy mode is\n"
+            f"'{prod_mode}', so these modifiers DO affect live predictions. Each is\n"
+            "applied under hard per-signal/family/plane caps and scaled by the\n"
+            "signal's reliability weight (an unproven signal moves the prediction\n"
+            "only a sliver). Evidence still cannot lift confidence to A until the\n"
+            "policy's evidence metrics pass the promotion gate."
+        )
+    else:
+        mode_note = (
+            f"Evidence-application note: the production adjustment policy mode is\n"
+            f"'{prod_mode or 'score_only'}', so these modifiers are computed and\n"
+            "recorded for audit/learning but do NOT affect live predictions until an\n"
+            "operator advances the mode (e.g. to 'bounded_live')."
+        )
     footer = (
         "\n\nWorkflow:\n"
         "  1. Assess which of the 8 types above apply to this matchup.\n"
@@ -1647,10 +1666,7 @@ def omega_markov_evidence_guide() -> str:
         "  3. Set confidence honestly (scored retrospectively against outcomes).\n"
         "  4. Call omega_analyze_game with simulation_backend='markov_state'.\n"
         "  5. The engine applies modifiers automatically -- do NOT pre-adjust\n"
-        "     home_context or away_context ratings by hand.\n\n"
-        "Shadow-mode note: evidence modifiers are currently in shadow mode.\n"
-        "They are applied and recorded but do not yet affect live predictions\n"
-        "until the champion/challenger promotion gate is cleared."
+        "     home_context or away_context ratings by hand.\n\n" + mode_note
     )
     return header + build_markov_vocabulary_table(overrides) + footer
 

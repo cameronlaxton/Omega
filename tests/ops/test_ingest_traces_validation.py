@@ -97,7 +97,7 @@ class TestBug4Validation:
         inbox, db = workspace
         path = _write(inbox, "no_id.json", _make_prop_export(with_identity=False))
         store = TraceStore(db_path=str(db))
-        with pytest.raises(ValueError, match="OMEGA_COWORK.md"):
+        with pytest.raises(ValueError, match="missing identity"):
             ingest_traces.ingest_file(path, store)
         store.close()
 

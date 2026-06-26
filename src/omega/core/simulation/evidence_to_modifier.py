@@ -279,14 +279,20 @@ def compute_transition_modifier_adjustment(
         # the plane handler path. No policy => reliability 1.0 (legacy parity).
         reliability = _signal_reliability(policy, signal_type)
         effective_scalar = reliability_adjusted_factor(effective_scalar, reliability)
+        # A factor that reliability-damps to exactly 1.0 (e.g. reliability_weight
+        # 0.0) is a mathematical no-op: mirror the plane handler and record it as
+        # not applied, so the audit trail and aggregation metadata never claim a
+        # signal moved the transition matrix when it did not.
+        applied = effective_scalar != 1.0
 
-        key_contribs.setdefault(effective_key, []).append((idx, effective_scalar))
+        if applied:
+            key_contribs.setdefault(effective_key, []).append((idx, effective_scalar))
         applications.append(
             {
                 "signal_type": signal_type,
                 "target": "markov_transition",
                 "modifier_key": effective_key,
-                "applied": True,
+                "applied": applied,
                 "raw_scalar": raw_scalar,
                 "effective_scalar": effective_scalar,
                 "factor": effective_scalar,  # real factor, replacing the legacy None

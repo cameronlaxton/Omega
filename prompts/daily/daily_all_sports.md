@@ -19,7 +19,7 @@ checks fail the budget, stop and file the failure report.
 
 **MCP schema load — do this before calling any `omega_*` tool:**
 
-```
+```text
 ToolSearch("select:mcp__plugin_omega-llm-interface_omega__omega_list_events,mcp__plugin_omega-llm-interface_omega__omega_resolve_odds,mcp__plugin_omega-llm-interface_omega__omega_run_batch")
 ```
 
@@ -263,7 +263,7 @@ calibration data accumulates.
 After all traces are filed, produce a brief sweep summary (not a full Bet Card
 report):
 
-```
+```markdown
 ## Daily Sweep — <YYYY-MM-DD>
 
 Games discovered: <N> across <sport list>
@@ -293,7 +293,9 @@ For each trace, write `var/inbox/traces/<trace_id>.json` with:
 - `reasoning_inputs.sources` — cite each source (ESPN, Odds API, pgatour.com, etc.)
 - `reasoning_inputs.fields_gathered` — list fields that were sourced vs. inferred
 - `reasoning_downgrade_rationale` — if baseline context was used, state it explicitly
-- `trace_quality.aggregate_quality` — 0.45 for inferred-baseline, 0.65+ for sourced
+- Do **not** set `trace_quality.aggregate_quality` — the engine computes it from
+  what you actually provided (the sources / fields_gathered / downgrade rationale
+  above). A hand-set score contaminates the calibration loop (see Step 5).
 
 Close the session:
 ```python

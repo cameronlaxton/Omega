@@ -10,15 +10,15 @@ from __future__ import annotations
 from enum import Enum
 
 # Phrases that must not appear in Research Candidate output (numbers fully hidden).
+# Stored lowercase; the matchers casefold the text first so a blocked phrase
+# cannot slip through with different casing (e.g. "BEST BET", "Engine-Confirmed").
 _BLOCKED_FORMAL_PHRASES: frozenset[str] = frozenset(
     {
         "best bet",
-        "Best Bet",
-        "Tier A",
-        "Tier B",
+        "tier a",
+        "tier b",
         "engine-confirmed",
         "actionable bet",
-        "Actionable Bet",
     }
 )
 
@@ -29,10 +29,8 @@ _BLOCKED_FORMAL_PHRASES: frozenset[str] = frozenset(
 _BLOCKED_RESEARCH_PLUS_PHRASES: frozenset[str] = frozenset(
     {
         "best bet",
-        "Best Bet",
         "engine-confirmed",
         "actionable bet",
-        "Actionable Bet",
     }
 )
 
@@ -200,8 +198,10 @@ def contains_blocked_phrase(text: str) -> list[str]:
     """Return any blocked formal phrases found in text.
 
     Used to audit output blocks before they are emitted in Research Candidate mode.
+    Matching is case-insensitive.
     """
-    found = [phrase for phrase in _BLOCKED_FORMAL_PHRASES if phrase in text]
+    normalized = text.casefold()
+    found = [phrase for phrase in _BLOCKED_FORMAL_PHRASES if phrase in normalized]
     return sorted(found)
 
 
@@ -210,8 +210,10 @@ def contains_blocked_phrase_research_plus(text: str) -> list[str]:
 
     Research+ permits the engine numbers and the (<= B) confidence tier, so tier
     labels are allowed here; only the overclaiming hype phrases are blocked.
+    Matching is case-insensitive.
     """
-    found = [phrase for phrase in _BLOCKED_RESEARCH_PLUS_PHRASES if phrase in text]
+    normalized = text.casefold()
+    found = [phrase for phrase in _BLOCKED_RESEARCH_PLUS_PHRASES if phrase in normalized]
     return sorted(found)
 
 

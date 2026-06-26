@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -208,7 +209,15 @@ def reliability_weight_from_clv_alignment(
     """
     if clv_aligned is None:
         return None
-    clv_w = _clamp_weight(float(clv_aligned))
+    try:
+        clv_value = float(clv_aligned)
+    except (TypeError, ValueError):
+        return None
+    # Fail closed on a corrupted stored rate: a non-finite value must never be
+    # clamped into a trusted weight (nan would otherwise pass through to 1.0).
+    if not math.isfinite(clv_value):
+        return None
+    clv_w = _clamp_weight(clv_value)
     return round(clv_w if graduated else min(clv_w, _UNPROVEN_CEILING), 4)
 
 

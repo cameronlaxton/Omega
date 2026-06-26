@@ -171,6 +171,11 @@ class TestResearchPlusBlockedPhrases:
     def test_clean_text_passes(self):
         assert contains_blocked_phrase_research_plus("edge +3.2%, EV +5.1%") == []
 
+    def test_matching_is_case_insensitive(self):
+        # Casing must not let an overclaiming phrase slip past the guardrail.
+        assert "best bet" in contains_blocked_phrase_research_plus("Our BEST BET tonight")
+        assert "engine-confirmed" in contains_blocked_phrase_research_plus("ENGINE-CONFIRMED edge")
+
 
 class TestFormatResearchPlusBlock:
     def test_header_and_disclaimer_present(self):
@@ -207,6 +212,10 @@ class TestContainsBlockedPhrase:
     def test_research_candidate_header_is_clean(self):
         found = contains_blocked_phrase(RESEARCH_CANDIDATE_HEADER)
         assert found == []
+
+    def test_matching_is_case_insensitive(self):
+        assert "best bet" in contains_blocked_phrase("This is our BEST BET tonight.")
+        assert "tier a" in contains_blocked_phrase("Graded Tier A play")
 
 
 class TestFormatResearchCandidateBlock:

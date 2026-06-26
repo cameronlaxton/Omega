@@ -169,7 +169,7 @@ def validate_export_block(
                     "error",
                     "prop_bet_identity",
                     f"prop trace carries a bet_record but is missing identity {miss} "
-                    "(OMEGA_COWORK.md sec.6 single-trace policy)",
+                    "(OMEGA_RUNTIME.md sec.6 single-trace policy)",
                 )
             )
 

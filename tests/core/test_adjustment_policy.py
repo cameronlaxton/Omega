@@ -12,6 +12,7 @@ import tempfile
 import pytest
 
 from omega.core.calibration.adjustment_policy import (
+    SEED_UNFITTED_RELIABILITY_PRIOR,
     AdjustmentPolicy,
     AdjustmentPolicyRegistry,
 )
@@ -56,9 +57,11 @@ class TestSeedPolicy:
 
     def test_seed_unfitted_prior_is_a_sliver(self):
         # Unscored signals move a live prediction only by this fraction of their
-        # handler factor until omega-fit-adjustment-policy measures them.
+        # handler factor until omega-fit-adjustment-policy measures them. Pin the
+        # exact shipped seed value so drift to another fraction fails loudly.
         policy = AdjustmentPolicyRegistry().get_production_policy()
-        assert 0.0 < policy.unfitted_reliability_prior < 1.0
+        assert policy.unfitted_reliability_prior == SEED_UNFITTED_RELIABILITY_PRIOR
+        assert 0.0 < SEED_UNFITTED_RELIABILITY_PRIOR < 1.0
 
     def test_seed_curated_signals_carry_full_reliability(self):
         # The hand-validated directional signals apply their capped prior in full
