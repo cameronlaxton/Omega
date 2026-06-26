@@ -747,6 +747,7 @@ def _resolve_output_modes(
             calibration_error=metrics.get("calibration_error"),
             trace_count=coverage_by_market.get(market, 0),
             sidecar_valid=sidecar_valid,
+            maturity=prof.effective_maturity().value if prof else None,
         )
         modes[market] = mode
         reasons[market] = why

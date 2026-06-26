@@ -17,6 +17,20 @@ traces.
 Apply the `omega-failure-budget` skill before proceeding. If preflight or DB
 checks fail the budget, stop and file the failure report.
 
+**MCP schema load — do this before calling any `omega_*` tool:**
+
+```
+ToolSearch("select:mcp__plugin_omega-llm-interface_omega__omega_list_events,mcp__plugin_omega-llm-interface_omega__omega_resolve_odds,mcp__plugin_omega-llm-interface_omega__omega_run_batch")
+```
+
+Omega MCP tools are deferred at session start. Calling them without loading
+their schemas first returns `InputValidationError`. If `ToolSearch` returns
+nothing, the server hasn't booted — wait 30 seconds and retry once. If still
+unavailable after one retry, the Python fallback in AGENTS.md §"Batch analysis
+rule" is authorized; follow every constraint there (formal gate, deterministic
+seeds, at least one `EvidenceSignal` per trace or explicit rationale, **no
+hardcoded `aggregate_quality`**).
+
 ---
 
 ## Step 0 — Bootstrap and Calibration Snapshot
@@ -203,6 +217,13 @@ One solid signal per game is fine; zero is acceptable with a rationale.
 ---
 
 ## Step 5 — Batch Analysis
+
+> **No Python scripts.** AGENTS.md §"Batch analysis rule" prohibits writing a
+> script when MCP is available. Use `omega_run_batch` directly via the loaded
+> MCP schema. Never post-process trace files after the fact and never hardcode
+> `trace_quality.aggregate_quality` — the engine computes it from what you
+> actually provided. Traces with a manually set quality score contaminate the
+> calibration loop.
 
 Collect all game entries and run in one batch:
 

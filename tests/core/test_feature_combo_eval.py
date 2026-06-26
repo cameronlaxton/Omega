@@ -153,6 +153,34 @@ class TestGenericHandlerApplication:
         )
 
     def test_graduated_proposal_applies(self):
+        # omega-promote-adjustment-policy binds a graduated proposal's coefficient
+        # WITH a reliability_weight (it cleared the CLV bar): full trust (1.0) when
+        # no scored CLV is on record, so it applies at its full magnitude — not the
+        # unproven-prior sliver the handler would otherwise fall back to.
+        pol = _POLICY.model_copy(
+            update={
+                "coefficients": {
+                    **_POLICY.coefficients,
+                    "usage_when_star_out": {
+                        "feature_combo": _PRED,
+                        "cap": 0.10,
+                        "reliability_weight": 1.0,
+                    },
+                },
+                "signal_lifecycle": {"usage_when_star_out": "active"},
+            }
+        ).bounded_live_effective()
+        adj = self._adjust(pol)
+        assert adj.records[0].applied is True
+        # raw 1.06 at full weight (deviation 0.06 < the 0.10 bounded_live cap) -> 1.06.
+        assert adj.mean_factor == pytest.approx(1.06)
+
+    def test_unweighted_feature_combo_falls_back_to_prior(self):
+        # A feature_combo coefficient with NO reliability_weight (e.g. a hand-bound
+        # coeff, or the pre-fix promotion path) inherits the seed's conservative
+        # unfitted prior (0.25): raw 1.06 -> 1 + 0.25*(0.06) = 1.015, a sliver. The
+        # promote path now binds a weight so a genuinely graduated proposal applies
+        # at full/measured magnitude instead (see test_graduated_proposal_applies).
         pol = _POLICY.model_copy(
             update={
                 "coefficients": {
@@ -164,7 +192,7 @@ class TestGenericHandlerApplication:
         ).bounded_live_effective()
         adj = self._adjust(pol)
         assert adj.records[0].applied is True
-        assert adj.mean_factor == pytest.approx(1.06)
+        assert adj.mean_factor == pytest.approx(1.015)
 
     def test_probation_proposal_not_applied(self):
         # No coefficients for the proposal (the probation state) -> skip record.

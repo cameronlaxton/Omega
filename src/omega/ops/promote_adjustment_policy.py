@@ -47,6 +47,9 @@ from omega.core.calibration.adjustment_policy import (  # noqa: E402
     AdjustmentPolicyRegistry,
 )
 from omega.core.calibration.profiles import ProfileStatus  # noqa: E402
+from omega.ops.fit_adjustment_policy import (  # noqa: E402
+    reliability_weight_from_clv_alignment,
+)
 from omega.trace.store import TraceStore  # noqa: E402
 
 logger = logging.getLogger("promote_adjustment_policy")
@@ -199,12 +202,30 @@ def main(argv: list[str] | None = None) -> int:
                             + ", ".join(missing)
                         )
                     for name in active_proposals:
-                        feature_combo = proposals[name].get("feature_combo")
+                        proposal = proposals[name]
+                        feature_combo = proposal.get("feature_combo")
                         if not isinstance(feature_combo, dict) or not feature_combo:
                             raise ValueError(
                                 f"Cannot activate proposal {name!r} without a non-empty feature_combo"
                             )
-                        coefficients[name] = {"feature_combo": feature_combo, "cap": 0.15}
+                        # A graduated proposal cleared the CLV statistical bar, so it
+                        # must move predictions at its measured magnitude — NOT the
+                        # unproven sliver the evidence handler applies when a coefficient
+                        # omits reliability_weight (it falls back to the policy's
+                        # unfitted_reliability_prior). Derive the weight from the
+                        # proposal's scored clv_aligned, mirroring the fit; absent scored
+                        # CLV on the row, trust it in full (1.0) since the operator's
+                        # activation is itself the graduation verdict.
+                        reliability_weight = reliability_weight_from_clv_alignment(
+                            proposal.get("clv_aligned"), graduated=True
+                        )
+                        if reliability_weight is None:
+                            reliability_weight = 1.0
+                        coefficients[name] = {
+                            "feature_combo": feature_combo,
+                            "cap": 0.15,
+                            "reliability_weight": reliability_weight,
+                        }
                     logger.warning(
                         "Bound %d graduated proposal feature spec(s) into %s.",
                         len(active_proposals),

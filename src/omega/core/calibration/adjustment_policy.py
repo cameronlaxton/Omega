@@ -98,6 +98,14 @@ MIN_EVIDENCE_SAMPLES_FOR_GATE = 100
 # accuracy >= 0.55 across the fitted signal types.
 MIN_EVIDENCE_RELIABILITY_FOR_GATE = 0.10
 
+# Recommended conservative trust for a policy fitted on NO data: a signal with no
+# measured reliability_weight should move a live prediction only a sliver. The
+# shipped (unfitted) seed sets this value in its DATA. The model field default,
+# by contrast, is 1.0 so an ad-hoc or hand-constructed policy keeps full trust for
+# an absent weight (legacy-preserving) unless it deliberately opts into a lower
+# prior. omega-fit-adjustment-policy carries the base prior forward into candidates.
+SEED_UNFITTED_RELIABILITY_PRIOR = 0.25
+
 
 def normalize_evidence_mode(value: str | None, *, default: str = "score_only") -> str:
     """Map a raw mode string (incl. legacy ``shadow``) to a valid graduated mode.
@@ -146,6 +154,22 @@ class AdjustmentPolicy(BaseModel):
         if isinstance(v, str):
             return LEGACY_MODE_MAP.get(v.strip().lower(), v)
         return v
+
+    # Per-signal trust applied to a signal that has no fitted reliability_weight
+    # (graduated-apply prior). The evidence handlers use this as the default
+    # reliability when the coefficient omits reliability_weight, so an unscored
+    # signal moves a live prediction only a sliver until the fit measures it.
+    # Defaults to DEFAULT_UNFITTED_RELIABILITY_PRIOR; only consulted in applying
+    # modes (bounded_live/live).
+    unfitted_reliability_prior: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Default reliability_weight for signals with no fitted weight. "
+        "1.0 = full trust (legacy, the default for ad-hoc policies); the shipped "
+        f"unfitted seed lowers it to {SEED_UNFITTED_RELIABILITY_PRIOR} so unproven "
+        "signals move predictions only a sliver until the fit measures them.",
+    )
 
     # Coefficients consumed by evidence_handlers.py
     coefficients: dict[str, dict[str, Any]] = Field(

@@ -90,15 +90,30 @@ def test_seed_production_policy_has_all_guardrail_flags_off(seed_policy):
 
 
 class TestReplayParityFlagsOff:
-    def test_markov_modifiers_match_legacy_under_seed_policy(self, seed_policy):
+    def test_markov_modifiers_match_legacy_under_full_trust_policy(self, seed_policy):
+        # The Issue-22 scaffolding flags remain no-ops: a full-trust policy (the
+        # unfitted-prior damping removed) reproduces the legacy modifiers
+        # bit-identically. The shipped seed additionally damps UNSCORED signals via
+        # its conservative unfitted_reliability_prior — verified separately below.
+        full_trust = seed_policy.model_copy(update={"unfitted_reliability_prior": 1.0})
         sigs = [
             _game_sig("rest_advantage", direction="home"),
             _game_sig("pace_down"),
             _game_sig("def_matchup_weak", direction="away"),
         ]
         legacy = signals_to_transition_modifiers(sigs, home_team="Lakers")
-        seed = compute_transition_modifier_adjustment(sigs, "Lakers", policy=seed_policy).modifiers
+        seed = compute_transition_modifier_adjustment(sigs, "Lakers", policy=full_trust).modifiers
         assert seed == legacy
+
+    def test_seed_prior_damps_unscored_markov_signal(self, seed_policy):
+        # pace_down is unscored in the seed, so the graduated-apply prior damps its
+        # modifier toward the 1.0 no-op; curated signals (reliability_weight=1.0)
+        # still match legacy. This is the intended live change, not a flag effect.
+        sigs = [_game_sig("pace_down")]
+        legacy = signals_to_transition_modifiers(sigs, home_team="Lakers")
+        seed = compute_transition_modifier_adjustment(sigs, "Lakers", policy=seed_policy).modifiers
+        assert seed["pace_scalar"] != pytest.approx(legacy["pace_scalar"])
+        assert abs(seed["pace_scalar"] - 1.0) < abs(legacy["pace_scalar"] - 1.0)
 
     def test_handler_factor_ignores_confidence_under_seed_policy(self, seed_policy):
         adj = compute_player_adjustment(
@@ -109,9 +124,11 @@ class TestReplayParityFlagsOff:
             policy=seed_policy,
             evidence_mode="live",
         )
-        # raw 1.20 within cap; confidence weighting NOT applied (flag off).
-        assert adj.records[0].factor == pytest.approx(1.20)
-        assert adj.mean_factor == pytest.approx(1.20)
+        # usage_spike raw 1.20; unscored -> the seed's 0.25 prior damps it to 1.05.
+        # Confidence weighting is still NOT applied (flag off), so the 0.7
+        # confidence does not further move the factor.
+        assert adj.records[0].factor == pytest.approx(1.05)
+        assert adj.mean_factor == pytest.approx(1.05)
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import warnings
 from pathlib import Path
+
+import pytest
 
 import omega.ops.fit_adjustment_policy as fit_mod
 import omega.ops.promote_adjustment_policy as promote_mod
@@ -56,6 +59,36 @@ def _usage_signal() -> EvidenceSignal:
         confidence=0.7,
         window="matchup",
     )
+
+
+# A whitelisted feature-combo proposal spec (predicate grammar) + a matching signal,
+# used to prove a graduated proposal applies at full weight end-to-end after promotion.
+_PRED = {
+    "kind": "predicate",
+    "when": {
+        "op": "AND",
+        "terms": [
+            {"feature": "usage", "op": ">", "value": 0.30},
+            {"feature": "teammate_injured", "op": "==", "value": True},
+        ],
+    },
+    "true_factor": 1.06,
+}
+
+
+def _proposal_signal() -> EvidenceSignal:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # unknown signal_type warns by design
+        return EvidenceSignal(
+            signal_type="usage_when_star_out",
+            category="player_form",
+            plane="player",
+            value={"usage": 0.35, "teammate_injured": True},
+            source="llm",
+            confidence=0.8,
+            window="matchup",
+            direction="over",
+        )
 
 
 class TestReliabilityWeightDamping:
@@ -384,8 +417,6 @@ class TestSetSignalLifecycle:
         assert reg.get_policy(base.policy_id).signal_lifecycle["recent_form"] == "deprecated"
 
     def test_invalid_lifecycle_value_rejected(self):
-        import pytest
-
         path = _tmp_policy_registry()
         reg = AdjustmentPolicyRegistry(path=path)
         base = reg.get_production_policy()
@@ -464,4 +495,90 @@ class TestApplyLifecycleRecommendations:
         assert rc == 0
         prod = AdjustmentPolicyRegistry(path=path).get_production_policy()
         assert prod.signal_lifecycle["usage_when_star_out"] == "active"
-        assert prod.coefficients["usage_when_star_out"]["feature_combo"]["op"] == "and"
+        coeff = prod.coefficients["usage_when_star_out"]
+        assert coeff["feature_combo"]["op"] == "and"
+        # It cleared the bar but carries no scored clv_aligned on the proposal row,
+        # so it is trusted in full (1.0) rather than the unfitted-prior sliver (0.25).
+        assert coeff["reliability_weight"] == 1.0
+
+    def test_active_proposal_binds_measured_reliability_weight(self):
+        # A scored proposal (clv_aligned on record) binds its MEASURED weight,
+        # mirroring the fit: _clamp_weight(0.70) = 2*(0.70-0.5) = 0.40.
+        path = _tmp_policy_registry()
+        db = _tmp_path(".db")
+        store = TraceStore(db_path=db)
+        store.upsert_signal_proposal(
+            name="usage_when_star_out",
+            feature_combo={"op": "and", "items": [{"feature": "usage_rate", "gt": 0.3}]},
+            plane="player",
+        )
+        store.conn.execute(
+            "UPDATE signal_proposals SET clv_aligned = 0.70, graduates = 1 WHERE name = ?",
+            ("usage_when_star_out",),
+        )
+        store.conn.commit()
+        store.close()
+        cid = self._register_candidate(path, {"usage_when_star_out": "active"})
+
+        rc = promote_mod.main(
+            [
+                "--candidate-id", cid, "--policy-path", path, "--db", db, "--auto",
+                "--min-samples", "1", "--confirm-backtest",
+                "--apply-lifecycle-recommendations",
+            ]
+        )
+
+        assert rc == 0
+        prod = AdjustmentPolicyRegistry(path=path).get_production_policy()
+        assert prod.coefficients["usage_when_star_out"]["reliability_weight"] == 0.4
+
+    def test_graduated_proposal_does_not_apply_at_unfitted_sliver(self):
+        # End-to-end: after promotion the graduated proposal moves a live prediction
+        # at full weight, NOT the 0.25 unfitted prior. _PRED's true_factor is 1.06;
+        # the seed prior would yield only 1 + 0.25*0.06 = 1.015 (the sliver).
+        path = _tmp_policy_registry()
+        db = _tmp_path(".db")
+        store = TraceStore(db_path=db)
+        store.upsert_signal_proposal(
+            name="usage_when_star_out", feature_combo=_PRED, plane="player"
+        )
+        store.close()
+        cid = self._register_candidate(path, {"usage_when_star_out": "active"})
+        rc = promote_mod.main(
+            [
+                "--candidate-id", cid, "--policy-path", path, "--db", db, "--auto",
+                "--min-samples", "1", "--confirm-backtest", "--go-live",
+                "--apply-lifecycle-recommendations",
+            ]
+        )
+        assert rc == 0
+        prod = AdjustmentPolicyRegistry(path=path).get_production_policy()
+        adj = compute_player_adjustment(
+            player_context={"pts_mean": 25.0, "pts_std": 6.0},
+            evidence=[_proposal_signal()],
+            league="NBA",
+            prop_type="pts",
+            policy=prod,
+            evidence_mode="bounded_live",
+        )
+        assert adj.records[0].applied is True
+        assert adj.mean_factor == pytest.approx(1.06)
+        assert adj.mean_factor != pytest.approx(1.015)
+
+
+class TestReliabilityWeightFromClvAlignment:
+    """The shared derivation promote uses to stamp a graduated proposal's weight."""
+
+    def test_none_when_no_scored_clv(self):
+        assert fit_mod.reliability_weight_from_clv_alignment(None, graduated=True) is None
+
+    def test_graduated_is_clv_primary_clamp(self):
+        # 2*(0.70-0.5) = 0.40 — the measured magnitude, well above the 0.25 prior.
+        assert fit_mod.reliability_weight_from_clv_alignment(0.70, graduated=True) == 0.4
+
+    def test_ungraduated_capped_at_unproven_ceiling(self):
+        w = fit_mod.reliability_weight_from_clv_alignment(0.95, graduated=False)
+        assert w == fit_mod._UNPROVEN_CEILING
+
+    def test_misaligned_damps_to_zero(self):
+        assert fit_mod.reliability_weight_from_clv_alignment(0.40, graduated=True) == 0.0

@@ -56,7 +56,7 @@ A ranked table (recommendations first, then watchlist), one row per candidate:
 | matchup | teams / player |
 | market | side / total / prop |
 | recommendation | the lean label |
-| output status | `ACTIONABLE` / `RESEARCH-ONLY` / `PASS` / `WATCHLIST` |
+| output status | `ACTIONABLE` / `RESEARCH+` / `RESEARCH-ONLY` / `PASS` / `WATCHLIST` |
 | price discipline | the price/line that must hold for the lean to stand |
 | thesis | one line |
 
@@ -102,6 +102,16 @@ Do **not** restate the forbidden-value list here — defer to `output_modes.md`.
 - A formal Bet Card may follow **only when authorized** by `output_modes.<market>`.
 - The Bet Card must use engine-owned values only (from the persisted trace) — never LLM-authored
   numbers.
+
+**`RESEARCH_PLUS`:**
+
+- Narrative first, then the engine numbers **shown** inside a loud "thin/provisional calibration"
+  band (`format_research_plus_block`) — the profile is real but immature, so the numbers are
+  surfaced under guardrails rather than withheld.
+- A Bet Card may follow, but stake is hard-capped by maturity (`provisional` ≤ 0.5u, `probation`
+  ≤ 1u) and confidence is held at ≤ `B`. The honesty block must carry the maturity + cap reason.
+- Still engine-owned values only. For the exact permitted vs forbidden lists, **defer to
+  [`output_modes.md`](output_modes.md)**.
 
 **`RESEARCH_CANDIDATE`:**
 

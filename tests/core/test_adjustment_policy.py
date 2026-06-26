@@ -48,11 +48,24 @@ class TestSeedPolicy:
         assert policy.version == 1
         assert policy.status is ProfileStatus.PRODUCTION
 
-    def test_seed_is_score_only_mode(self):
-        # Graduated ladder: score_only records (and may feed learning) but never
-        # reaches live predictions. Replaces the legacy binary "shadow".
+    def test_seed_is_bounded_live_mode(self):
+        # Graduated-apply default: the shipped seed applies evidence under hard
+        # caps (scaled by reliability), not the legacy record-only score_only.
         policy = AdjustmentPolicyRegistry().get_production_policy()
-        assert policy.mode == "score_only"
+        assert policy.mode == "bounded_live"
+
+    def test_seed_unfitted_prior_is_a_sliver(self):
+        # Unscored signals move a live prediction only by this fraction of their
+        # handler factor until omega-fit-adjustment-policy measures them.
+        policy = AdjustmentPolicyRegistry().get_production_policy()
+        assert 0.0 < policy.unfitted_reliability_prior < 1.0
+
+    def test_seed_curated_signals_carry_full_reliability(self):
+        # The hand-validated directional signals apply their capped prior in full
+        # (reliability_weight=1.0), not the conservative unfitted prior.
+        policy = AdjustmentPolicyRegistry().get_production_policy()
+        for signal_type in ("b2b_fatigue", "rest_advantage", "def_matchup_weak", "def_matchup_strong"):
+            assert policy.coeffs_for(signal_type).get("reliability_weight") == 1.0
 
     def test_seed_evidence_metrics_do_not_pass_gate(self):
         # Unfitted priors (sample_size=0, metrics={}) must not clear the gate

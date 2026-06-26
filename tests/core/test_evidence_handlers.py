@@ -104,9 +104,11 @@ class TestModeResolution:
         monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "garbage")
         assert resolve_evidence_mode(_POLICY) == _POLICY.mode
 
-    def test_policy_default_is_score_only(self, monkeypatch):
+    def test_policy_default_is_bounded_live(self, monkeypatch):
+        # The production seed now ships at bounded_live (graduated-apply default):
+        # evidence moves predictions under hard caps, scaled by reliability.
         monkeypatch.delenv("OMEGA_EVIDENCE_MODE", raising=False)
-        assert resolve_evidence_mode(_POLICY) == "score_only"
+        assert resolve_evidence_mode(_POLICY) == "bounded_live"
 
 
 class TestComputePlayerAdjustment:
@@ -124,7 +126,7 @@ class TestComputePlayerAdjustment:
         assert adj.records[0].factor > 1.0
         assert adj.records[0].applied is False
 
-    def test_live_applies_capped_factor(self):
+    def test_live_applies_factor_damped_by_unfitted_prior(self):
         adj = compute_player_adjustment(
             player_context={"pts_mean": 25.0},
             evidence=[_player_signal(value=0.2)],
@@ -133,8 +135,9 @@ class TestComputePlayerAdjustment:
             policy=_POLICY,
             evidence_mode="live",
         )
-        # usage_spike value 0.2, scale 1.0 -> raw 1.2, within cap 0.22.
-        assert abs(adj.mean_factor - 1.2) < 1e-9
+        # usage_spike value 0.2 -> raw 1.2; it is unscored, so the 0.25 unfitted
+        # prior damps it even in live mode: 1 + 0.25*(1.2-1) = 1.05 (cap 0.22 idle).
+        assert abs(adj.mean_factor - 1.05) < 1e-9
         assert adj.records[0].applied is True
 
     def test_records_align_with_evidence_list(self):
@@ -197,10 +200,15 @@ class TestComputeGameAdjustment:
 
 
 class TestZeroBehaviorChangeShadow:
-    """Shadow mode must not change predictions vs. supplying no evidence."""
+    """score_only mode must not change predictions vs. supplying no evidence.
+
+    Under the graduated-apply default (bounded_live) evidence DOES move the math;
+    these tests pin OMEGA_EVIDENCE_MODE=score_only to assert the non-applying
+    rung stays a pure no-op (records the counterfactual, never touches the result).
+    """
 
     def test_prop_result_identical_with_and_without_evidence(self, monkeypatch):
-        monkeypatch.delenv("OMEGA_EVIDENCE_MODE", raising=False)
+        monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "score_only")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             plain = analyze(_prop_request(), session_id="s", bankroll=1000.0)
@@ -213,7 +221,7 @@ class TestZeroBehaviorChangeShadow:
         assert plain["result"]["under_prob"] == withev["result"]["under_prob"]
 
     def test_envelope_carries_evidence_application(self, monkeypatch):
-        monkeypatch.delenv("OMEGA_EVIDENCE_MODE", raising=False)
+        monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "score_only")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             out = analyze(
@@ -227,6 +235,48 @@ class TestZeroBehaviorChangeShadow:
         app = out["evidence_application"][0]
         assert app["applied"] is False  # score_only never applies to math
         assert app["factor"] > 1.0  # counterfactual still recorded
+
+
+class TestGraduatedApplyDefault:
+    """The shipped default (bounded_live) applies evidence, scaled by reliability."""
+
+    def _adjust(self, policy, *, mode="bounded_live", value=0.5):
+        pol = policy.bounded_live_effective() if mode == "bounded_live" else policy
+        return compute_player_adjustment(
+            player_context={"pts_mean": 25.0, "pts_std": 6.0},
+            evidence=[_player_signal(value=value)],
+            league="NBA",
+            prop_type="pts",
+            policy=pol,
+            evidence_mode=mode,
+        )
+
+    def test_default_mode_applies_unfitted_signal_as_a_sliver(self, monkeypatch):
+        # No env override -> the production seed's bounded_live default applies.
+        monkeypatch.delenv("OMEGA_EVIDENCE_MODE", raising=False)
+        assert resolve_evidence_mode(_POLICY) == "bounded_live"
+        adj = self._adjust(_POLICY)
+        assert adj.records[0].applied is True
+        assert adj.mean_factor != 1.0  # evidence now moves the math by default
+
+    def test_unfitted_prior_damps_vs_full_trust(self):
+        # Compare in live mode (loose per-signal cap) so the reliability scaling,
+        # not the hard cap, drives the difference. value 0.2 -> raw 1.2.
+        sliver = self._adjust(_POLICY, mode="live", value=0.2)
+        full = self._adjust(
+            _POLICY.model_copy(update={"unfitted_reliability_prior": 1.0}),
+            mode="live",
+            value=0.2,
+        )
+        assert abs(sliver.mean_factor - 1.0) < abs(full.mean_factor - 1.0)
+
+    def test_zero_reliability_self_neutralizes_even_when_applying(self):
+        coeffs = {st: dict(p) for st, p in _POLICY.coefficients.items()}
+        coeffs["usage_spike"]["reliability_weight"] = 0.0
+        pol0 = _POLICY.model_copy(update={"coefficients": coeffs})
+        adj = self._adjust(pol0)
+        assert adj.mean_factor == 1.0  # fit-proved noise is a no-op
+        assert adj.records[0].applied is False
 
 
 class TestLiveModeShiftsPrediction:
@@ -266,7 +316,10 @@ class TestTraceIdentity:
 
 class TestGamePlaneShadow:
     def test_game_shadow_does_not_change_win_prob(self, monkeypatch):
-        monkeypatch.delenv("OMEGA_EVIDENCE_MODE", raising=False)
+        # motivation_edge is not a curated full-trust signal, so under the
+        # bounded_live default it would nudge the prediction by its 0.25 prior.
+        # Pin score_only to assert the non-applying rung is a pure no-op.
+        monkeypatch.setenv("OMEGA_EVIDENCE_MODE", "score_only")
         sig = EvidenceSignal(
             signal_type="motivation_edge",
             category="situational",
