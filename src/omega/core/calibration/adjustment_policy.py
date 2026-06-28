@@ -368,10 +368,20 @@ class AdjustmentPolicyRegistry:
             return {"schema_version": _SCHEMA_VERSION, "policies": []}
         try:
             with open(self._path, encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to read adjustment policy registry at %s: %s", self._path, exc)
             return {"schema_version": _SCHEMA_VERSION, "policies": []}
+        # Single load-time chokepoint for the schema migration: every reader
+        # (get_production_policy / get_policy / list_policies) and every mutator
+        # routes through here, so a persisted policy missing fields is upgraded
+        # uniformly (and lazily re-persisted on the next _save).
+        for policy in data.get("policies", []):
+            if isinstance(policy, dict):
+                _migrate_policy_dict(policy)
+        if int(data.get("schema_version", 1) or 1) < _SCHEMA_VERSION:
+            data["schema_version"] = _SCHEMA_VERSION
+        return data
 
     def _save(self, data: dict[str, Any]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)

@@ -120,9 +120,15 @@ Keep calibration strict. Free-text reasoning alone must not make a trace calibra
 
 Do not loosen `context_source="provided"` to mean "the LLM thought about it." It should mean the model received structured, decision-time context.
 
-## Actionability gates
+## Actionability gates & Roster Verification (RSVG)
 
-- **Hard fail / block formal output when:** required context is missing, evidence is empty with no downgrade rationale, odds are stale and unreplaced, engine status is skipped/error but output presents a play, identity fields are missing, or no trace is emitted for a model-backed recommendation.
+- **Roster & Situational Verification Gate (RSVG):** For every session, a comprehensive pre-analysis web search must be conducted covering lineups, injuries, motivation, and matchup context for the target event.
+- **Key Player Injury & Absence Penalties:**
+  - If **non-key** players are out of the lineup, the standard mathematical team context defaults remain correct.
+  - If **key** players (starting pitchers/slots 1-4 for MLB, starting XI key contributors for soccer, superstars for NBA/WNBA) are missing/resting, the agent must apply a cumulative `usage_role_change` signal per missing key player.
+  - If **more than 2 key players** are out of the lineup for a team, formal output is blocked; the market must be downgraded to `RESEARCH_CANDIDATE` (qualitative lean only).
+- **Persistence:** Roster context, list of absent players, and news summaries must be persisted under `reasoning_presentation` inside the trace.
+- **Hard fail / block formal output when:** required context is missing, evidence is empty with no downgrade rationale, odds are stale and unreplaced, engine status is skipped/error but output presents a play, identity fields are missing, no trace is emitted for a model-backed recommendation, or RSVG key-player thresholds are violated without downgrade.
 - **Warning-only when:** optional CLV metadata is missing, no bet record exists because no bet was taken, reasoning narrative is missing but structured trace/evidence is present, evidence sample size is thin, identity is metadata-recovered but marked.
 - Warnings become hard failures only when the issue is repairable, the schema/contract is stable, and failing prevents bad picks, calibration, or audit data.
 

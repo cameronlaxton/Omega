@@ -284,7 +284,9 @@ class TestFitAndPromoteLifecycle:
         candidates = registry.list_policies(status=ProfileStatus.CANDIDATE.value)
         assert len(candidates) == 1
         cand = candidates[0]
-        assert cand.version == 2
+        # The seed registry now ships adj_v1_seed (v1, archived) + adj_v2_seed
+        # (v2, production), so _next_version yields 3 for the first fitted candidate.
+        assert cand.version == 3
         # noise signal damped to 0, predictive signal to 0.5
         assert cand.coefficients["last_game_outlier"]["reliability_weight"] == 0.0
         assert cand.coefficients["opponent_stat_rank"]["reliability_weight"] == 0.5

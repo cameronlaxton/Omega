@@ -59,14 +59,21 @@ from omega.ui.schemas import (
     CalibrationProfileRow,
     CalibrationStatusView,
     CalibrationSummary,
+    CalibrationChart,
+    CalibrationChartDot,
+    CalibrationChartPoint,
     ClvRow,
     ClvSummary,
     ClvView,
+    CommandCenterView,
     DiagnosticsView,
+    EdgeScannerRow,
+    EdgeScannerView,
     EvidenceCoverageSummary,
     HealthResponse,
     OperatorWarningModel,
     Pagination,
+    PanelState,
     ReviewBucket,
     ReviewItem,
     ReviewQueueView,
@@ -90,6 +97,15 @@ _REVIEW_SAMPLE = 10
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 200
 DEFAULT_MAX_SCAN = 2000
+
+# Edge Scanner: how many recent traces to normalize for the full page vs. the
+# Command Center snapshot. Bounded so the scanner is never an unbounded scan.
+DEFAULT_SCANNER_LIMIT = 50
+SCANNER_SNAPSHOT_LIMIT = 8
+
+# Calibration chart SVG canvas (server-computed geometry; no client math).
+CHART_W = 680
+CHART_H = 220
 
 # Only filenames matching this are accepted as a session_id when resolving a
 # sidecar path — blocks path traversal on the filesystem-backed session reads.
@@ -182,6 +198,194 @@ def _paginate(
 
 
 # ---------------------------------------------------------------------------
+# Edge Scanner helpers (pure; honest column derivation)
+# ---------------------------------------------------------------------------
+
+
+def _market_family(market: Any) -> str:
+    """Coarse market family for market-aware labels. Never raises."""
+    if not market:
+        return "unknown"
+    s = str(market).lower()
+    if "spread" in s or "handicap" in s:
+        return "spread"
+    if "total" in s or "over_under" in s or "o/u" in s or s in {"over", "under"}:
+        return "total"
+    if "prop" in s:
+        return "prop"
+    if "moneyline" in s or "money_line" in s or s in {"ml", "h2h"}:
+        return "moneyline"
+    return "unknown"
+
+
+def _prob_bucket(p: float) -> str:
+    """Coarse confidence letter from a calibrated probability (0-1).
+
+    A clearly-labeled, computed derivation — surfaced only as a fallback when the
+    engine did not stamp a confidence tier (see ``_confidence_grade``)."""
+    if p >= 0.65:
+        return "A"
+    if p >= 0.58:
+        return "B"
+    if p >= 0.53:
+        return "C"
+    return "D"
+
+
+def _model_output_field(rec) -> tuple[Any, str, bool]:
+    """Pick the market-aware model output (field, label, is_pct).
+
+    Spread/Total/Prop use the model line/projection; Moneyline uses the model
+    probability directly (no prob→odds conversion). Returns the existing
+    ExtractedFieldModel so provenance/computed flags are preserved.
+    """
+    fam = _market_family(rec.market.value)
+    prob = rec.calibrated_probability if rec.calibrated_probability.value is not None else rec.raw_probability
+    if fam == "spread":
+        return rec.line, "Model Spread", False
+    if fam == "total":
+        return rec.line, "Model Total", False
+    if fam == "prop":
+        return rec.line, "Model Projection", False
+    if fam == "moneyline":
+        return prob, "Model Probability", True
+    # unknown — prefer a line if present, else the model probability.
+    if rec.line.value is not None:
+        return rec.line, "Model Output", False
+    if prob.value is not None:
+        return prob, "Model Probability", True
+    return rec.line, "Model Output", False
+
+
+def _confidence_grade(rec) -> tuple[str | None, str, bool]:
+    """Confidence via a defined source hierarchy (grade, source, computed).
+
+    1. engine confidence tier (raw_confidence_tier) — authoritative, not computed;
+    2. calibrated-probability bucket — a computed, labeled fallback;
+    3. unavailable.
+    Data-quality / QA is surfaced in its own column, not folded in here.
+    """
+    tier = rec.raw_confidence_tier.value
+    if tier is not None and str(tier).strip():
+        return str(tier).strip().upper(), "model_confidence_tier", False
+    prob = rec.calibrated_probability.value
+    if prob is None:
+        prob = rec.raw_probability.value
+    if prob is not None:
+        try:
+            return _prob_bucket(float(prob)), "calibrated_prob_bucket", True
+        except (TypeError, ValueError):
+            pass
+    return None, "unavailable", False
+
+
+def _edge_display(value: Any) -> tuple[str | None, bool | None]:
+    """Format an engine edge as a percent string (display, no unit assumption).
+
+    ``engine_edge`` may arrive as a fraction (0.04) or already a percent (4.0)
+    depending on the source key. Realistic edges are well under 1.0 as fractions,
+    so |v|<=1 is treated as a fraction (×100) and |v|>1 as already-percent. This
+    avoids rendering a 4% edge as "400%". Returns (display, is_positive)."""
+    v = _as_float(value)
+    if v is None:
+        return None, None
+    pct = v * 100 if abs(v) <= 1 else v
+    return f"{pct:+.2f}%", v > 0
+
+
+def _data_quality(trace: dict[str, Any], evidence_count: int) -> tuple[str, str | None]:
+    """Data-quality verdict (state, detail) from trace_quality + evidence count.
+
+    Handles both textual verdicts (pass/warn/fail) and numeric aggregate_quality.
+    Zero evidence never reads as 'clean'."""
+    tq = trace.get("trace_quality") if isinstance(trace.get("trace_quality"), dict) else {}
+    agg = tq.get("aggregate_quality")
+    state = "unknown"
+    if isinstance(agg, str):
+        a = agg.strip().lower()
+        if a in {"pass", "ok", "clean", "complete"}:
+            state = "clean"
+        elif a == "fail":
+            state = "fail"
+        elif a in {"warn", "partial", "warning"}:
+            state = "warn"
+    elif isinstance(agg, (int, float)):
+        state = "clean" if agg >= 0.8 else "warn" if agg >= 0.5 else "fail"
+
+    detail: str | None = None
+    if evidence_count == 0:
+        if state in {"clean", "unknown"}:
+            state = "warn"
+        detail = "zero evidence"
+    elif state == "fail":
+        detail = "QA fail"
+    elif state == "clean":
+        detail = "clean"
+    return state, detail
+
+
+def _calibration_geometry(
+    points: list[CalibrationChartPoint], view_w: int, view_h: int
+) -> tuple[str, str, list[CalibrationChartDot], float, float]:
+    """Lay out a single-unit two-line series into SVG coords (pure; tested).
+
+    This is presentation geometry only — it scales already-computed values into
+    pixels. It derives no betting quantity. Returns
+    (model_polyline, market_polyline, dots, y_min, y_max).
+    """
+    pad_l, pad_r, pad_t, pad_b = 44, 14, 14, 26
+    plot_w = view_w - pad_l - pad_r
+    plot_h = view_h - pad_t - pad_b
+
+    vals: list[float] = []
+    for p in points:
+        if p.model_value is not None:
+            vals.append(p.model_value)
+        if p.market_value is not None:
+            vals.append(p.market_value)
+    if vals:
+        lo, hi = min(vals), max(vals)
+        if hi - lo < 1e-9:
+            lo -= 0.05
+            hi += 0.05
+        pad = (hi - lo) * 0.12
+        y_min, y_max = lo - pad, hi + pad
+    else:
+        y_min, y_max = 0.0, 1.0
+    span = (y_max - y_min) or 1.0
+    n = len(points)
+
+    def xcoord(i: int) -> float:
+        if n <= 1:
+            return pad_l + plot_w / 2
+        return pad_l + plot_w * i / (n - 1)
+
+    def ycoord(v: float) -> float:
+        return pad_t + plot_h * (1 - (v - y_min) / span)
+
+    model_pts: list[str] = []
+    market_pts: list[str] = []
+    dots: list[CalibrationChartDot] = []
+    for i, p in enumerate(points):
+        x = round(xcoord(i), 1)
+        if p.model_value is not None:
+            my = round(ycoord(p.model_value), 1)
+            model_pts.append(f"{x},{my}")
+            dots.append(
+                CalibrationChartDot(
+                    cx=x,
+                    cy=my,
+                    label=p.label,
+                    model_value=p.model_value,
+                    market_value=p.market_value,
+                )
+            )
+        if p.market_value is not None:
+            market_pts.append(f"{x},{round(ycoord(p.market_value), 1)}")
+    return " ".join(model_pts), " ".join(market_pts), dots, round(y_min, 4), round(y_max, 4)
+
+
+# ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
 
@@ -247,6 +451,161 @@ class ConsoleService:
             trace_count=trace_count,
             schema_version=schema_version,
             sessions_dir=str(self.sessions_dir),
+        )
+
+    # -- command center (V2 landing) -------------------------------------
+
+    def _safe_panel(
+        self,
+        panels: dict[str, PanelState],
+        code: str,
+        title: str,
+        fn,
+        *,
+        source: str | None = None,
+        empty_when=None,
+        empty_msg: str | None = None,
+        degraded_msg: str | None = None,
+    ):
+        """Run one Command Center panel's read in isolation.
+
+        Records a PanelState (data | empty | degraded) and returns the read's
+        value, or ``None`` if it raised. A single panel failing degrades only
+        that panel — the landing page never 500s because one read broke.
+        """
+        try:
+            value = fn()
+        except Exception:  # noqa: BLE001 — failure isolation is the whole point
+            logging.getLogger(__name__).exception("command_center panel %r failed", code)
+            panels[code] = PanelState(
+                code=code,
+                title=title,
+                state="degraded",
+                message=degraded_msg or f"{title} unavailable; source read failed.",
+                source=source,
+            )
+            return None
+        is_empty = bool(empty_when(value)) if empty_when is not None else False
+        panels[code] = PanelState(
+            code=code,
+            title=title,
+            state="empty" if is_empty else "data",
+            message=empty_msg if is_empty else None,
+            source=source,
+        )
+        return value
+
+    def command_center(self) -> CommandCenterView:
+        """Compose the V2 landing 'Command Center' from existing read methods.
+
+        A SUMMARY (the Review Queue page is the workbench). Every panel is read
+        independently with failure isolation; all reads are bounded (``max_scan``)
+        and no new DB access pattern is introduced. Calibration Health and Recent
+        Trace Failures are derived from already-fetched views (diagnostics /
+        review) so they cost no extra read.
+        """
+        panels: dict[str, PanelState] = {}
+
+        # Vitals bar source (never raises; degrades internally).
+        health = self.health()
+
+        scanner = self._safe_panel(
+            panels,
+            "scanner",
+            "Edge Scanner",
+            lambda: self.edge_scanner(limit=SCANNER_SNAPSHOT_LIMIT),
+            source=Source.DB_TRACE_PAYLOAD,
+            empty_when=lambda v: len(v.rows) == 0,
+            empty_msg="No recent DB-backed recommendations found.",
+        )
+        review = self._safe_panel(
+            panels,
+            "review",
+            "Review Queue",
+            self.review_queue,
+            source=Source.RUNTIME,
+            empty_when=lambda v: sum(b.count for b in v.buckets) == 0,
+            empty_msg="Nothing needs review right now.",
+        )
+        diagnostics = self._safe_panel(
+            panels,
+            "diagnostics",
+            "Data Quality Watch",
+            self.diagnostics,
+            source=Source.RUNTIME,
+        )
+        clv = self._safe_panel(
+            panels,
+            "ledger",
+            "Ledger Snapshot",
+            self.clv_report,
+            source=Source.BET_LEDGER,
+            empty_when=lambda v: v.summary.bets_scanned == 0,
+            empty_msg="No bets in the ledger yet.",
+        )
+
+        # Calibration Health — derived from diagnostics (no extra read).
+        if diagnostics is not None:
+            cal = diagnostics.calibration
+            has_cal = cal.registry_available and cal.total_profiles > 0
+            panels["calibration"] = PanelState(
+                code="calibration",
+                title="Calibration Health",
+                state="data" if has_cal else "empty",
+                message=None if has_cal else "No calibration profiles in the registry.",
+                source=Source.CALIBRATION_REGISTRY,
+            )
+        else:
+            panels["calibration"] = PanelState(
+                code="calibration",
+                title="Calibration Health",
+                state="degraded",
+                message="Calibration health unavailable; diagnostics read failed.",
+                source=Source.CALIBRATION_REGISTRY,
+            )
+
+        # Recent Trace Failures — derived from the review qa_fail bucket.
+        if review is not None:
+            qa = next((b for b in review.buckets if b.code == "qa_fail"), None)
+            n_fail = qa.count if qa else 0
+            panels["failures"] = PanelState(
+                code="failures",
+                title="Recent Trace Failures",
+                state="data" if n_fail else "empty",
+                message=None if n_fail else "No QA-failing traces in the scan window.",
+                source=Source.DB_TRACE_PAYLOAD,
+            )
+        else:
+            panels["failures"] = PanelState(
+                code="failures",
+                title="Recent Trace Failures",
+                state="degraded",
+                message="Trace failures unavailable; review read failed.",
+                source=Source.DB_TRACE_PAYLOAD,
+            )
+
+        review_count = sum(b.count for b in review.buckets) if review is not None else 0
+
+        # Calibration summary chart — reuse the already-fetched CLV view so the
+        # landing does not run a second ledger scan (perf contract). Never fatal.
+        calibration_chart = None
+        if clv is not None:
+            try:
+                calibration_chart = self.calibration_chart(clv=clv)
+            except Exception:  # noqa: BLE001 — the chart is a nicety, never fatal
+                logging.getLogger(__name__).exception("command_center calibration chart failed")
+                calibration_chart = None
+
+        return CommandCenterView(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            panels=panels,
+            health=health,
+            review=review,
+            diagnostics=diagnostics,
+            clv=clv,
+            scanner=scanner,
+            calibration_chart=calibration_chart,
+            review_count=review_count,
         )
 
     # -- diagnostics (Milestone B.2) -------------------------------------
@@ -803,6 +1162,168 @@ class ConsoleService:
                 if c.get("market") == market:
                     return c
         return None
+
+    # -- edge scanner (V2) -----------------------------------------------
+
+    def edge_scanner(
+        self, *, limit: int | None = None, league: str | None = None
+    ) -> EdgeScannerView:
+        """Recent DB-backed recommendations with honest columns (read-only).
+
+        NOT a live feed: rows are the most recent traces that produced a
+        recommendation, ranked by engine edge. Bounded by ``limit`` (default
+        ``DEFAULT_SCANNER_LIMIT``). Every column is a real engine value or a
+        clearly labeled/computed derivation — there is no fabricated value score,
+        and ``recorded_price`` is the price recorded on the trace at decision
+        time (Omega has no live multi-book quote).
+        """
+        league = _clean(league)
+        n = max(1, int(limit or DEFAULT_SCANNER_LIMIT))
+        traces = self.store.query_traces(league=league, limit=n)
+        scan_capped = len(traces) >= n
+        tids = [str(t.get("trace_id") or "") for t in traces]
+        ev_counts = self.get_trace_evidence_counts(tids) if tids else {}
+
+        rows: list[EdgeScannerRow] = []
+        for t in traces:
+            tid = str(t.get("trace_id") or "")
+            view = build_trace_recommendation_view(t)
+            rvm = TraceRecommendationViewModel.model_validate(dataclasses.asdict(view))
+            if not rvm.recommendations:
+                continue  # only surface traces that produced a recommendation
+            rec = next((r for r in rvm.recommendations if r.is_primary), rvm.recommendations[0])
+            model_output, label, is_pct = _model_output_field(rec)
+            edge_display, edge_positive = _edge_display(rec.engine_edge.value)
+            grade, csource, ccomputed = _confidence_grade(rec)
+            cov = ev_counts.get(tid)
+            ev_n = cov.total_signals if cov else 0
+            dq, dq_detail = _data_quality(t, ev_n)
+            rows.append(
+                EdgeScannerRow(
+                    trace_id=tid,
+                    timestamp=t.get("timestamp"),
+                    league=t.get("league"),
+                    matchup=t.get("matchup"),
+                    kind=t.get("kind"),
+                    market=rec.market,
+                    selection=rec.selection,
+                    model_output_label=label,
+                    model_output=model_output,
+                    model_output_is_pct=is_pct,
+                    recorded_price=rec.odds,
+                    edge=rec.engine_edge,
+                    edge_display=edge_display,
+                    edge_positive=edge_positive,
+                    confidence=grade,
+                    confidence_source=csource,
+                    confidence_computed=ccomputed,
+                    data_quality=dq,
+                    data_quality_detail=dq_detail,
+                    has_outcome=bool(t.get("_outcome") or t.get("_prop_outcomes")),
+                    field_sources={
+                        "market": Source.DB_TRACE_PAYLOAD,
+                        "selection": Source.DB_TRACE_PAYLOAD,
+                        "model_output": Source.DB_TRACE_PAYLOAD,
+                        "recorded_price": Source.DB_TRACE_PAYLOAD,
+                        "edge": Source.DB_TRACE_PAYLOAD,
+                        "confidence": Source.DB_TRACE_PAYLOAD,
+                        "data_quality": Source.DB_TRACE_PAYLOAD,
+                    },
+                )
+            )
+
+        # Rank by engine edge desc (unit-normalized); rows without an edge sort last.
+        def _edge_sort_key(r: EdgeScannerRow) -> tuple[bool, float]:
+            v = _as_float(r.edge.value)
+            if v is None:
+                return (True, 0.0)
+            return (False, -(v * 100 if abs(v) <= 1 else v))
+
+        rows.sort(key=_edge_sort_key)
+
+        warnings: list[OperatorWarningModel] = []
+        if scan_capped:
+            warnings.append(
+                OperatorWarningModel(
+                    code="scan_capped",
+                    severity="info",
+                    message=f"scanner scan capped at {n}; older traces not included",
+                )
+            )
+        return EdgeScannerView(
+            rows=rows,
+            scan_capped=scan_capped,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            filters={"league": league, "limit": n},
+            warnings=warnings,
+        )
+
+    # -- calibration chart (V2) ------------------------------------------
+
+    def calibration_chart(
+        self, *, league: str | None = None, clv: ClvView | None = None
+    ) -> CalibrationChart:
+        """Single-unit model-vs-market time series (read-only, no recomputation).
+
+        Plots, per day, the average *implied probability* Omega took vs. the
+        market's closing implied probability — both in the SAME unit (probability
+        %). The gap between the lines is closing-line value. Composed from
+        :meth:`clv_report` (pass a precomputed ``clv`` to avoid a second scan).
+        """
+        league = _clean(league)
+        clv = clv if clv is not None else self.clv_report(league=league)
+
+        agg: dict[str, dict[str, list[float]]] = {}
+        for r in clv.rows:
+            d = (r.bet_date or "")[:10]
+            if not d:
+                continue
+            a = agg.setdefault(d, {"m": [], "k": []})
+            if r.taken_implied is not None:
+                a["m"].append(r.taken_implied)
+            if r.closing_implied is not None:
+                a["k"].append(r.closing_implied)
+
+        points: list[CalibrationChartPoint] = []
+        for d in sorted(agg):
+            m, k = agg[d]["m"], agg[d]["k"]
+            points.append(
+                CalibrationChartPoint(
+                    label=d,
+                    model_value=(sum(m) / len(m)) if m else None,
+                    market_value=(sum(k) / len(k)) if k else None,
+                    n=max(len(m), len(k)),
+                )
+            )
+
+        model_pl, market_pl, dots, y_min, y_max = _calibration_geometry(points, CHART_W, CHART_H)
+        warnings: list[OperatorWarningModel] = []
+        if not points:
+            warnings.append(
+                OperatorWarningModel(
+                    code="no_clv_data",
+                    severity="info",
+                    message="no matched closing lines to chart yet (CLV needs a captured close)",
+                )
+            )
+        return CalibrationChart(
+            mode="implied_prob_model_vs_market",
+            unit="implied probability (%)",
+            y_label="Implied probability",
+            model_series_label="Omega (taken)",
+            market_series_label="Market close",
+            points=points,
+            view_w=CHART_W,
+            view_h=CHART_H,
+            model_polyline=model_pl,
+            market_polyline=market_pl,
+            dots=dots,
+            y_min=y_min,
+            y_max=y_max,
+            sample=len(clv.rows),
+            filters={"league": league},
+            warnings=warnings,
+        )
 
     # -- traces ----------------------------------------------------------
 

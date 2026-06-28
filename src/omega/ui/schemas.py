@@ -601,3 +601,167 @@ class ClvView(BaseModel):
     scan_capped: bool = False
     warnings: list[OperatorWarningModel] = Field(default_factory=list)
     schema_version: int = 1
+
+
+# ---------------------------------------------------------------------------
+# Edge Scanner (V2) — recent DB-backed recommendations with HONEST columns.
+#
+# This is NOT a live feed and NOT a fabricated "value score". Every column is a
+# real engine value from the trace payload (or an explicitly computed/labeled
+# derivation). ``recorded_price`` is the price recorded on the trace at decision
+# time — Omega has no live multi-book quote, so we never claim "best price".
+# ---------------------------------------------------------------------------
+
+
+class EdgeScannerRow(BaseModel):
+    """One recent recommendation, surfaced with honest, source-labeled columns."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trace_id: str
+    timestamp: str | None = None
+    league: str | None = None
+    matchup: str | None = None
+    kind: str | None = None
+    market: ExtractedFieldModel
+    selection: ExtractedFieldModel
+    # Market-aware model output (never forced into "line" language):
+    # Spread→Model Spread, Total→Model Total, Moneyline→Model Probability,
+    # Props→Model Projection, Unknown→Model Output. ``model_output_is_pct`` tells
+    # the template to format the value as a probability percentage.
+    model_output_label: str
+    model_output: ExtractedFieldModel
+    model_output_is_pct: bool = False
+    # The price recorded on the trace at decision time (NOT a live/best quote).
+    recorded_price: ExtractedFieldModel
+    edge: ExtractedFieldModel  # engine_edge (real; db_trace_payload)
+    # Server-formatted edge so neither template nor JS assumes a unit. The
+    # source value may be a fraction (0.04) or already a percent (4.0); the
+    # formatter normalizes both to a percent string. None when no edge exists.
+    edge_display: str | None = None
+    edge_positive: bool | None = None
+    # Confidence via the source hierarchy: model tier → calibrated-prob bucket
+    # (computed) → unavailable. ``confidence_source`` names which tier produced it.
+    confidence: str | None = None
+    confidence_source: str = "unavailable"
+    confidence_computed: bool = False
+    # Data quality: clean | warn | fail | unknown (from trace_quality + evidence).
+    data_quality: str = "unknown"
+    data_quality_detail: str | None = None
+    has_outcome: bool = False
+    field_sources: dict[str, str] = Field(default_factory=dict)
+
+
+class EdgeScannerView(BaseModel):
+    """Recent DB-backed recommendations ranked by engine edge (read-only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rows: list[EdgeScannerRow] = Field(default_factory=list)
+    scan_capped: bool = False
+    generated_at: str
+    filters: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1
+
+
+# ---------------------------------------------------------------------------
+# Calibration chart (V2) — a SINGLE-UNIT, server-computed time series.
+#
+# Doctrine: the chart never mixes incompatible units. It declares its Y-axis
+# ``unit`` explicitly, and the SVG geometry (polylines/dots) is computed
+# server-side so the template only drops coordinates in — no math in Jinja/JS,
+# and the frontend never computes a protected betting value.
+# ---------------------------------------------------------------------------
+
+
+class CalibrationChartPoint(BaseModel):
+    """One time bucket: the model and market values share ONE unit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    model_value: float | None = None
+    market_value: float | None = None
+    n: int = 0
+
+
+class CalibrationChartDot(BaseModel):
+    """Pre-laid-out hover anchor (pixel coords) for one model point."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cx: float
+    cy: float
+    label: str
+    model_value: float | None = None
+    market_value: float | None = None
+
+
+class CalibrationChart(BaseModel):
+    """Single-unit model-vs-market time series with server-computed geometry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: str  # e.g. "implied_prob_model_vs_market"
+    unit: str  # explicit Y-axis unit, e.g. "implied probability (%)"
+    y_label: str
+    model_series_label: str
+    market_series_label: str
+    points: list[CalibrationChartPoint] = Field(default_factory=list)
+    # Server-computed SVG geometry (no client math):
+    view_w: int = 680
+    view_h: int = 220
+    model_polyline: str = ""
+    market_polyline: str = ""
+    dots: list[CalibrationChartDot] = Field(default_factory=list)
+    y_min: float = 0.0
+    y_max: float = 1.0
+    sample: int = 0
+    filters: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1
+
+
+# ---------------------------------------------------------------------------
+# Command Center (V2 landing) — a SUMMARY composed from the existing read views.
+#
+# Each panel carries its own PanelState so the landing degrades one panel at a
+# time (failure isolation) instead of 500-ing the whole page. The CommandCenter
+# introduces NO new DB access: it only aggregates HealthResponse / DiagnosticsView
+# / ReviewQueueView / ClvView (and, later, the Edge Scanner + calibration chart).
+# ---------------------------------------------------------------------------
+
+
+class PanelState(BaseModel):
+    """Per-panel render state for the Command Center (failure isolation).
+
+    ``state`` is one of ``data`` | ``empty`` | ``degraded``. ``message`` carries
+    the honest empty/degraded copy; ``source`` is the provenance label so the
+    panel can show where its numbers came from.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    title: str
+    state: str  # "data" | "empty" | "degraded"
+    message: str | None = None
+    source: str | None = None
+
+
+class CommandCenterView(BaseModel):
+    """V2 landing summary: bounded, per-panel-isolated aggregation of reads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    generated_at: str
+    panels: dict[str, PanelState] = Field(default_factory=dict)
+    health: HealthResponse | None = None
+    review: ReviewQueueView | None = None
+    diagnostics: DiagnosticsView | None = None
+    clv: ClvView | None = None
+    scanner: EdgeScannerView | None = None
+    calibration_chart: CalibrationChart | None = None
+    review_count: int = 0
+    schema_version: int = 1

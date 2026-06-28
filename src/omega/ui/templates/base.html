@@ -7,11 +7,16 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body>
+<body class="page-{{ active | default('') }}">
 <div class="bg-glow"></div>
 <header class="topbar">
   <div class="brand">
-    <a href="/" style="text-decoration:none; display:flex; gap:0.6rem; align-items:center;">
+    <a href="/" style="text-decoration:none; display:flex; gap:0.5rem; align-items:center;">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M5 19h4.2v-2.1A7 7 0 1 1 14.8 16.9V19H19" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
       <span class="brand-omega">Omega</span>
       <span class="brand-console">Console</span>
     </a>
@@ -25,8 +30,23 @@
       <span class="navph" title="Planned for Milestone {{ item.milestone }} — not yet available" aria-disabled="true">{{ item.label }} <em>M{{ item.milestone }}</em></span>
     {% endfor %}
   </nav>
-  <span class="status-text">All systems</span>
-  <span class="status-dot"></span>
+  <div class="topbar-actions">
+    <a class="top-icon search-icon" href="/traces" title="Search traces" aria-label="Search traces">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M16 16l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </a>
+    <a class="bell" href="/review" title="Review queue — items needing attention" aria-label="Review queue">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M6.5 17h11M8 17v-6a4 4 0 0 1 8 0v6M10 20h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>{% if review_count %}<span class="bell-count">{{ review_count }}</span>{% endif %}
+    </a>
+    <span class="profile-chip">
+      <span class="avatar-dot">Ω</span>
+      <span class="profile-copy"><strong>Operator</strong><em><span class="status-dot"></span>Online</em></span>
+    </span>
+  </div>
 </header>
 <main class="content">
   {% block content %}{% endblock %}
@@ -112,5 +132,34 @@
   {% endfor %}
   {% if active | length > 1 %}<a class="chip-clear-all" href="{{ clear_href }}">clear all</a>{% endif %}
 </div>
+{% endif %}
+{%- endmacro %}
+{# Single-unit model-vs-market chart. Geometry is server-computed; this macro
+   only drops coordinates into SVG — no math here, no protected value derived.
+   The Y-axis unit is declared explicitly so units are never mixed. #}
+{% macro cal_chart(chart) -%}
+{% if chart and chart.points %}
+<div class="chart-legend">
+  <span class="lg"><span class="sw" style="background:var(--accent)"></span>{{ chart.model_series_label }}</span>
+  <span class="lg"><span class="sw" style="background:var(--magenta)"></span>{{ chart.market_series_label }}</span>
+  <span class="chart-unit">unit: {{ chart.unit }}</span>
+</div>
+<div class="chart">
+  <svg viewBox="0 0 {{ chart.view_w }} {{ chart.view_h }}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="{{ chart.y_label }} over time, unit {{ chart.unit }}">
+    <line class="chart-grid" x1="44" y1="{{ chart.view_h - 26 }}" x2="{{ chart.view_w - 14 }}" y2="{{ chart.view_h - 26 }}"></line>
+    <text class="chart-axis" x="6" y="18">{{ (chart.y_max * 100) | round(1) }}%</text>
+    <text class="chart-axis" x="6" y="{{ chart.view_h - 30 }}">{{ (chart.y_min * 100) | round(1) }}%</text>
+    {% if chart.market_polyline %}<polyline class="chart-line-market" points="{{ chart.market_polyline }}"></polyline>{% endif %}
+    {% if chart.model_polyline %}<polyline class="chart-line-model" points="{{ chart.model_polyline }}"></polyline>{% endif %}
+    {% for d in chart.dots %}
+    <circle class="chart-dot" cx="{{ d.cx }}" cy="{{ d.cy }}" r="3"
+      data-label="{{ d.label }}"
+      data-model="{{ (d.model_value * 100) | round(2) if d.model_value is not none else '' }}"
+      data-market="{{ (d.market_value * 100) | round(2) if d.market_value is not none else '' }}"></circle>
+    {% endfor %}
+  </svg>
+</div>
+{% else %}
+<div class="panel-empty">{% if chart and chart.warnings %}{{ chart.warnings[0].message }}{% else %}No chart data yet.{% endif %}</div>
 {% endif %}
 {%- endmacro %}

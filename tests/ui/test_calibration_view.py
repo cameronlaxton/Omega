@@ -136,7 +136,7 @@ def test_calibration_page_renders_and_escapes(tmp_path):
         ],
     )
     html = client.get("/calibration").text
-    assert "<h1>Calibration Status</h1>" in html
+    assert "<h1>Calibration Cockpit</h1>" in html
     assert "badge-prod" in html  # active badge rendered
     assert "pstatus-production" in html
     # Injected HTML in a profile_id is escaped.

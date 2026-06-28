@@ -15,9 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from omega.ui.schemas import (
     BetDetail,
     BetListResponse,
+    CalibrationChart,
     CalibrationStatusView,
     ClvView,
     DiagnosticsView,
+    EdgeScannerView,
     HealthResponse,
     ReviewQueueView,
     SessionDetail,
@@ -66,6 +68,14 @@ def calibration(
     return service.calibration_status(league=league, status=status)
 
 
+@router.get("/calibration-chart", response_model=CalibrationChart)
+def calibration_chart(
+    service: ConsoleService = Depends(get_service),
+    league: str | None = Query(None),
+) -> CalibrationChart:
+    return service.calibration_chart(league=league)
+
+
 @router.get("/signals", response_model=SignalPerformanceView)
 def signals(
     service: ConsoleService = Depends(get_service),
@@ -85,6 +95,15 @@ def clv(
     league: str | None = Query(None),
 ) -> ClvView:
     return service.clv_report(league=league)
+
+
+@router.get("/scanner", response_model=EdgeScannerView)
+def scanner(
+    service: ConsoleService = Depends(get_service),
+    league: str | None = Query(None),
+    limit: int | None = Query(None, ge=1, le=200),
+) -> EdgeScannerView:
+    return service.edge_scanner(limit=limit, league=league)
 
 
 @router.get("/traces", response_model=TraceListResponse)

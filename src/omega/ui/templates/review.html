@@ -5,24 +5,57 @@
 <h1>Review Queue</h1>
 <p class="lede">Work that needs attention, aggregated from DB and session reads.
 Read-only — the console never grades, settles, or repairs; it only points you at
-items to act on elsewhere.</p>
+items to act on elsewhere. Use ↑/↓ to move between items, Enter to open.</p>
+
+{# Severity filter — server-side bucket filter (honest: it hides buckets, never
+   fabricates counts). #}
+<div class="filter-bar" role="navigation" aria-label="Filter by severity">
+  <a class="action-btn{{ ' ' if not severity else '' }}" href="/review"
+     style="{{ 'box-shadow: var(--glow-cyan);' if not severity else '' }}">All</a>
+  <a class="action-btn" href="/review?severity=info"
+     style="{{ 'box-shadow: var(--glow-cyan);' if severity == 'info' else '' }}">Info</a>
+  <a class="action-btn" href="/review?severity=warn"
+     style="{{ 'box-shadow: var(--glow-cyan);' if severity == 'warn' else '' }}">Warn</a>
+  <a class="action-btn" href="/review?severity=fail"
+     style="{{ 'box-shadow: var(--glow-cyan);' if severity == 'fail' else '' }}">Fail</a>
+</div>
+
+{% if not data.buckets %}
+<div class="panel"><div class="panel-empty">No buckets match this filter.</div></div>
+{% endif %}
 
 {% for b in data.buckets %}
-<section class="block bucket bucket-{{ b.severity }}">
-  <h2>{{ b.title }} {{ src_badge(b.source) }}
-    <span class="bucket-count sev-{{ b.severity }}">{{ b.count }}</span>
-    {% if b.scan_capped %}<span class="warn" title="bounded read scan; older rows may exist beyond the window">scan-capped</span>{% endif %}
-  </h2>
+<section class="panel">
+  <div class="panel-head">
+    <h2>{{ b.title }}</h2>
+    <span class="panel-meta">
+      {{ src_badge(b.source) }}
+      <span class="bucket-count sev-{{ b.severity }}">{{ b.count }}</span>
+      {% if b.scan_capped %}<span class="pill pill-amber" title="bounded read scan; older rows may exist beyond the window">scan-capped</span>{% endif %}
+    </span>
+  </div>
   {# Use subscript access: ``b.items`` would resolve to the dict's items() method. #}
   {% set sample = b['items'] %}
   {% if sample %}
-  <ul class="linklist">
-    {% for it in sample %}
-    <li><a href="{{ it.href }}"><code>{{ it.label or it.id }}</code></a>{% if it.detail %} <span class="muted">— {{ it.detail }}</span>{% endif %}</li>
-    {% endfor %}
-  </ul>
-  {% if b.count > (sample | length) %}<p class="muted">… and {{ b.count - (sample | length) }} more.</p>{% endif %}
-  {% else %}<p class="muted">Nothing here — all clear.</p>{% endif %}
+  <div class="panel-body flush">
+    <div class="review-rail" data-keynav>
+      {% for it in sample %}
+      <div class="rail-card sev-{{ b.severity }}" tabindex="0">
+        <div class="rc-head">
+          <span class="rc-title"><a class="link" href="{{ it.href }}">{{ it.label or it.id }}</a></span>
+          <span class="rc-sub" style="margin-left:auto;">{{ it.kind }}</span>
+        </div>
+        {% if it.detail %}<div class="rc-sub">{{ it.detail }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% if b.count > (sample | length) %}
+    <p class="muted" style="padding:0.5rem 1.1rem 0.8rem;">… and {{ b.count - (sample | length) }} more.</p>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="panel-empty">Nothing here — all clear.</div>
+  {% endif %}
 </section>
 {% endfor %}
 {% endblock %}

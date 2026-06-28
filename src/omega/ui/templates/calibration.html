@@ -1,11 +1,25 @@
 {% extends "base.html" %}
-{% from "base.html" import src_badge, warning_chips, filter_chips %}
-{% block title %}Calibration Status · Omega Console{% endblock %}
+{% from "base.html" import src_badge, warning_chips, filter_chips, cal_chart %}
+{% block title %}Calibration Cockpit · Omega Console{% endblock %}
 {% block content %}
-<h1>Calibration Status</h1>
+<h1>Calibration Cockpit</h1>
 <p class="lede">Versioned calibration profiles from the registry. The
 <span class="badge-prod">active</span> row is the production profile the engine
 resolves for that league / slice / market. Read-only.</p>
+
+{% if chart %}
+<section class="panel" style="margin-bottom:1.25rem;">
+  <div class="panel-head">
+    <h2>Model vs Market — {{ chart.y_label }}</h2>
+    <span class="panel-meta">{{ src_badge('closing_lines') }} · {{ chart.sample }} bet(s)</span>
+  </div>
+  <div class="panel-body">
+    {{ cal_chart(chart) }}
+    <p class="muted small">Per day: average implied probability Omega took vs. the market's closing
+    implied probability — one unit (probability). The gap between the lines is closing-line value.</p>
+  </div>
+</section>
+{% endif %}
 
 <form class="filters" method="get" action="/calibration">
   <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="e.g. NBA" autocomplete="off"></label>

@@ -20,11 +20,17 @@ Analyze calls:
 - Preserve input provenance and cite sources outside the trace as needed.
 
 Structured evidence:
+- **Roster & Situational Verification Gate (RSVG):** Before running any analyze call, perform a targeted `search_web` query for the matchup: `"<Team A> vs <Team B> lineup OR injury OR motivation OR matchup context <Date>"`.
+- **Absent Player Penalties:**
+  - Non-key player absences: use baseline averages without alteration (our defaults are correct).
+  - Key player absences (starting pitchers/slots 1-4 for MLB, starting XI key contributors for soccer, superstars for NBA): emit a `usage_role_change` signal per absent key player (favoring the opponent).
+  - More than 2 key player absences: trigger a mandatory downgrade to `RESEARCH_CANDIDATE` (qualitative lean only).
+- **Persistence:** Roster context, lineup summaries, and situational news must be persisted in the trace under `reasoning_presentation` (carrying `thesis`, `market_read`, `why`, `risks`, and `verdict`) so they are archived in the session intake and audit reports.
 - Express qualitative reasoning (defensive matchup, recent form, situational, game/matchup context) as typed `evidence` signals on the analyze request, not as free text. Each signal carries `signal_type`, `category`, `plane`, `value`, `source`, `confidence`, `window`, and optional `direction`/`stat_key`. See `omega/core/contracts/evidence.py` for the full signal taxonomy.
-- `window` must be one of `last_1`, `last_3`, `last_5`, `last_10`, `season`, `series`, `h2h`, `matchup`. `direction` must be one of `over`, `under`, `home`, `away`, `neutral`. Do not invent values like `away_favored` â€” encode market lean in the agent's narrative or in `value`, not in `direction`. Pydantic will hard-reject anything else and abort the analyze call.
+- `window` must be one of `last_1`, `last_3`, `last_5`, `last_10`, `season`, `series`, `h2h`, `matchup`. `direction` must be one of `over`, `under`, `home`, `away`, `neutral`. Do not invent values like `away_favored` — encode market lean in the agent's narrative or in `value`, not in `direction`. Pydantic will hard-reject anything else and abort the analyze call.
 - The deterministic engine applies known signal types itself; never bake a reasoning adjustment into a hand-tuned mean. Evidence values may come from you; how the engine applies them may not.
 - Set `confidence` honestly: it is scored retrospectively. The engine ignores any signal type it does not recognize.
-- Weight your evidence by the "Evidence signal performance" section (Â§6B) of the latest calibration report: trust signal types/sources marked `predictive`, discount `noise`, treat `insufficient_n` as unproven. A positive `cal_gap` means past confidence on that signal was too high.
+- Weight your evidence by the "Evidence signal performance" section (§6B) of the latest calibration report: trust signal types/sources marked `predictive`, discount `noise`, treat `insufficient_n` as unproven. A positive `cal_gap` means past confidence on that signal was too high.
 
 Markov backend evidence vocabulary:
 - When using simulation_backend="markov_state", only 8 signal_type values adjust the possession-level transition matrix; all other types are audited but have no Markov effect. The canonical list (exact string keys, effects, and the Â±15% cumulative cap) is `prompts/reference/markov_evidence_vocab.md`. Use the exact keys from that file.
