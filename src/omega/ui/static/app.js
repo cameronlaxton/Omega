@@ -82,4 +82,53 @@
       if (tip) tip.style.opacity = "0";
     });
   });
+
+  // Generic display-only tooltip binder for the V2 visuals. Each handler only
+  // reads data-* attributes the server already computed — no derivation here.
+  function bindTooltip(el, htmlFn) {
+    el.addEventListener("mouseenter", function () {
+      var t = ensureTip();
+      t.innerHTML = htmlFn(el);
+      t.style.opacity = "1";
+    });
+    el.addEventListener("mousemove", function (ev) {
+      var t = ensureTip();
+      t.style.left = ev.clientX + 12 + "px";
+      t.style.top = ev.clientY + 12 + "px";
+    });
+    el.addEventListener("mouseleave", function () {
+      if (tip) tip.style.opacity = "0";
+    });
+  }
+
+  // Comparison strip dots (dumbbell / ribbon).
+  document.querySelectorAll(".strip-dot").forEach(function (d) {
+    bindTooltip(d, function (el) {
+      var label = el.getAttribute("data-strip-label") || "";
+      var val = el.getAttribute("data-strip-value") || "";
+      var unit = el.getAttribute("data-strip-unit") || "";
+      return "<strong>" + label + "</strong><br>" + val + (unit ? "<br><span style=\"opacity:.7\">" + unit + "</span>" : "");
+    });
+  });
+
+  // Reliability diagram dots (model bucket vs realized hit rate).
+  document.querySelectorAll(".reliability-dot").forEach(function (d) {
+    bindTooltip(d, function (el) {
+      return "<strong>" + (el.getAttribute("data-rel-label") || "") + "</strong>" +
+        "<br>model " + el.getAttribute("data-rel-model") + "%" +
+        "<br>realized " + el.getAttribute("data-rel-hit") + "%" +
+        "<br>n=" + el.getAttribute("data-rel-n");
+    });
+  });
+
+  // CLV scatter dots (closing-line value vs net result).
+  document.querySelectorAll(".scatter-dot").forEach(function (d) {
+    bindTooltip(d, function (el) {
+      var st = el.getAttribute("data-sc-status");
+      return "<strong>" + (el.getAttribute("data-sc-label") || "") + "</strong>" +
+        "<br>CLV " + el.getAttribute("data-sc-clv") +
+        "<br>net " + el.getAttribute("data-sc-pnl") +
+        (st ? "<br>" + st : "");
+    });
+  });
 })();

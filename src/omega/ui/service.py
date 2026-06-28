@@ -56,16 +56,20 @@ from omega.ui.schemas import (
     BetDetail,
     BetListResponse,
     BetRow,
-    CalibrationProfileRow,
-    CalibrationStatusView,
-    CalibrationSummary,
     CalibrationChart,
     CalibrationChartDot,
     CalibrationChartPoint,
+    CalibrationProfileRow,
+    CalibrationStatusView,
+    CalibrationSummary,
     ClvRow,
+    ClvScatter,
+    ClvScatterPoint,
     ClvSummary,
     ClvView,
     CommandCenterView,
+    ComparisonStrip,
+    ComparisonStripDot,
     DiagnosticsView,
     EdgeScannerRow,
     EdgeScannerView,
@@ -74,6 +78,11 @@ from omega.ui.schemas import (
     OperatorWarningModel,
     Pagination,
     PanelState,
+    QualityCell,
+    QualityHeatmap,
+    QualityRow,
+    ReliabilityBin,
+    ReliabilityDiagram,
     ReviewBucket,
     ReviewItem,
     ReviewQueueView,
@@ -383,6 +392,199 @@ def _calibration_geometry(
         if p.market_value is not None:
             market_pts.append(f"{x},{round(ycoord(p.market_value), 1)}")
     return " ".join(model_pts), " ".join(market_pts), dots, round(y_min, 4), round(y_max, 4)
+
+
+# ---------------------------------------------------------------------------
+# V2 visual geometry (first wave) — pure, server-side, tested.
+#
+# These scale already-computed values into pixels (strips, scatter) or pick a
+# colour tone from a ratio (heatmap). They derive NO betting quantity.
+# ---------------------------------------------------------------------------
+
+# Compact comparison strip (dumbbell / ribbon) canvas.
+STRIP_W = 200
+STRIP_H = 24
+
+
+def _strip_x(value: float, lo: float, hi: float, view_w: int, pad: float = 8.0) -> float:
+    """Map a value on a fixed [lo, hi] axis to a pixel x on the strip (clamped)."""
+    plot_w = view_w - 2 * pad
+    span = (hi - lo) or 1.0
+    frac = (value - lo) / span
+    frac = 0.0 if frac < 0.0 else 1.0 if frac > 1.0 else frac
+    return round(pad + plot_w * frac, 1)
+
+
+def _prob01(value: Any) -> float | None:
+    """Coerce a probability to the [0, 1] scale (a percent like 58.0 -> 0.58).
+
+    Returns None for missing/invalid/negative input. Defensive only: the
+    normalizer already yields 0-1 probabilities, but a percent-scaled source must
+    never clamp to 1.0 on the strip."""
+    f = _as_float(value)
+    if f is None or f < 0.0:
+        return None
+    return f / 100.0 if f > 1.0 else f
+
+
+def _prob_strip(
+    *,
+    mode: str,
+    unit: str,
+    primary: tuple[float | None, str, str, str],  # (value, key, label, tone)
+    secondary: tuple[float | None, str, str, str],
+    gap: float | None,
+    outcome: str | None = None,
+    missing_note: str | None = None,
+) -> ComparisonStrip | None:
+    """Build a fixed-domain [0, 1] probability strip (dumbbell or ribbon).
+
+    Returns ``None`` when both sides are missing. When only one side is present it
+    renders that single dot plus ``missing_note`` — it never invents the other
+    side. ``gap`` is the signed delta (model − market, or closing − taken); a
+    positive gap is the favourable direction in both modes, so it tints the bar.
+    """
+    cy = round(STRIP_H / 2, 1)
+    dots: list[ComparisonStripDot] = []
+    xs: list[float] = []
+    for value, key, label, tone in (primary, secondary):
+        if value is None:
+            continue
+        v = float(value)
+        cx = _strip_x(v, 0.0, 1.0, STRIP_W)
+        xs.append(cx)
+        dots.append(
+            ComparisonStripDot(
+                key=key, label=label, cx=cx, value=round(v, 6), display=f"{v * 100:.1f}%", tone=tone
+            )
+        )
+    if not dots:
+        return None
+    both = len(dots) == 2
+    gap_display: str | None = None
+    gap_positive: bool | None = None
+    seg_tone = "neutral"
+    if both and gap is not None:
+        gap_positive = gap > 0
+        gap_display = f"{gap * 100:+.2f}%"
+        seg_tone = "pos" if gap_positive else "neg"
+    return ComparisonStrip(
+        mode=mode,
+        unit=unit,
+        view_w=STRIP_W,
+        view_h=STRIP_H,
+        cy=cy,
+        seg_x1=(min(xs) if both else None),
+        seg_x2=(max(xs) if both else None),
+        seg_tone=seg_tone,
+        dots=dots,
+        gap_display=gap_display,
+        gap_positive=gap_positive,
+        outcome=outcome,
+        note=(missing_note if not both else None),
+    )
+
+
+def _model_vs_market_strip(rec: Any) -> ComparisonStrip | None:
+    """Per-bet dumbbell from a normalized recommendation: Omega P(selection) vs
+    the market's implied probability. Probability-space so the unit is the same
+    for every market and the gap is exactly the computed edge."""
+    raw = (
+        rec.calibrated_probability.value
+        if rec.calibrated_probability.value is not None
+        else rec.raw_probability.value
+    )
+    model_p = _prob01(raw)
+    market_p = _prob01(rec.implied_probability.value)
+    if model_p is None and market_p is None:
+        return None
+    gap = (model_p - market_p) if (model_p is not None and market_p is not None) else None
+    return _prob_strip(
+        mode="model_vs_market",
+        unit="win probability",
+        primary=(model_p, "model", "Omega", "model"),
+        secondary=(market_p, "market", "Market", "market"),
+        gap=gap,
+        missing_note=("market price only" if model_p is None else "model only"),
+    )
+
+
+def _match_rec_prob(recs: list[Any], bet: dict[str, Any]) -> float | None:
+    """Model probability (calibrated, else raw) for the recommendation that a
+    graded bet realized — for the reliability diagram. Matches by market family
+    then exact selection, falling back to the sole recommendation. Returns None
+    (skip the pair) when no confident match exists — never guesses."""
+    if not recs:
+        return None
+    bet_fam = _market_family(bet.get("market"))
+    candidates = [r for r in recs if _market_family(r.market.value) == bet_fam] or list(recs)
+    chosen = None
+    bet_sel = str(bet.get("selection") or "").strip().lower()
+    if bet_sel:
+        for r in candidates:
+            if str(r.selection.value or "").strip().lower() == bet_sel:
+                chosen = r
+                break
+    if chosen is None and len(candidates) == 1:
+        chosen = candidates[0]
+    if chosen is None and len(recs) == 1:
+        chosen = recs[0]
+    if chosen is None:
+        return None
+    raw = (
+        chosen.calibrated_probability.value
+        if chosen.calibrated_probability.value is not None
+        else chosen.raw_probability.value
+    )
+    return _prob01(raw)
+
+
+def _scatter_geometry(
+    points: list[tuple[float, float]],
+    *,
+    x_lo: float,
+    x_hi: float,
+    y_lo: float,
+    y_hi: float,
+    view_w: int,
+    view_h: int,
+    pad_l: int = 48,
+    pad_r: int = 16,
+    pad_t: int = 16,
+    pad_b: int = 30,
+) -> tuple[list[tuple[float, float]], float | None, float | None]:
+    """Lay out (x, y) values into pixel coords; also return the pixel of x=0 and
+    y=0 (for quadrant guides), or None when 0 is outside the domain. Pure."""
+    plot_w = view_w - pad_l - pad_r
+    plot_h = view_h - pad_t - pad_b
+    xspan = (x_hi - x_lo) or 1.0
+    yspan = (y_hi - y_lo) or 1.0
+
+    def xc(x: float) -> float:
+        f = (x - x_lo) / xspan
+        f = 0.0 if f < 0.0 else 1.0 if f > 1.0 else f
+        return round(pad_l + plot_w * f, 1)
+
+    def yc(y: float) -> float:
+        f = (y - y_lo) / yspan
+        f = 0.0 if f < 0.0 else 1.0 if f > 1.0 else f
+        return round(pad_t + plot_h * (1 - f), 1)
+
+    out = [(xc(px), yc(py)) for px, py in points]
+    x0 = xc(0.0) if x_lo <= 0.0 <= x_hi else None
+    y0 = yc(0.0) if y_lo <= 0.0 <= y_hi else None
+    return out, x0, y0
+
+
+def _quality_tone(ratio: float | None) -> str:
+    """Green/amber/red/muted tone for a coverage ratio (0-1). None -> muted."""
+    if ratio is None:
+        return "muted"
+    if ratio >= 0.8:
+        return "good"
+    if ratio >= 0.5:
+        return "warn"
+    return "bad"
 
 
 # ---------------------------------------------------------------------------
@@ -1113,10 +1315,21 @@ class ConsoleService:
                     clv_points=clv.clv_points,
                     beat_close=clv.beat_close,
                     closing_source=match.get("source"),
+                    net_pnl=_as_float(bet.get("net_pnl")),
+                    strip=_prob_strip(
+                        mode="market_movement",
+                        unit="implied probability (incl. vig)",
+                        primary=(clv.taken_implied, "taken", "Taken", "model"),
+                        secondary=(clv.closing_implied, "closing", "Close", "market"),
+                        gap=clv.clv_points,
+                        outcome=bet.get("status"),
+                        missing_note="no close",
+                    ),
                     field_sources={
                         "taken_odds": Source.BET_LEDGER,
                         "closing_odds": Source.CLOSING_LINES,
                         "clv_points": "computed:closing_minus_taken_implied",
+                        "net_pnl": Source.BET_LEDGER,
                     },
                 )
             )
@@ -1198,6 +1411,7 @@ class ConsoleService:
             cov = ev_counts.get(tid)
             ev_n = cov.total_signals if cov else 0
             dq, dq_detail = _data_quality(t, ev_n)
+            strip = _model_vs_market_strip(rec)
             rows.append(
                 EdgeScannerRow(
                     trace_id=tid,
@@ -1220,6 +1434,7 @@ class ConsoleService:
                     data_quality=dq,
                     data_quality_detail=dq_detail,
                     has_outcome=bool(t.get("_outcome") or t.get("_prop_outcomes")),
+                    strip=strip,
                     field_sources={
                         "market": Source.DB_TRACE_PAYLOAD,
                         "selection": Source.DB_TRACE_PAYLOAD,
@@ -1325,6 +1540,268 @@ class ConsoleService:
             warnings=warnings,
         )
 
+    # -- CLV scatter (V2: process vs luck) -------------------------------
+
+    def clv_scatter(self, *, league: str | None = None, clv: ClvView | None = None) -> ClvScatter:
+        """Per-bet scatter of CLV (x) against net result (y), with quadrant guides.
+
+        Only bets that have BOTH an attached closing line and a graded net result
+        are plotted; the excluded count is reported honestly. Read-only; composed
+        from :meth:`clv_report` (pass a precomputed ``clv`` to avoid a second scan).
+        """
+        league = _clean(league)
+        clv = clv if clv is not None else self.clv_report(league=league)
+        view_w, view_h = 480, 320
+
+        pairs = [r for r in clv.rows if r.clv_points is not None and r.net_pnl is not None]
+        excluded = len(clv.rows) - len(pairs)
+        warnings: list[OperatorWarningModel] = []
+        if not pairs:
+            warnings.append(
+                OperatorWarningModel(
+                    code="no_graded_clv",
+                    severity="info",
+                    message="no bets with both a closing line and a graded result yet",
+                )
+            )
+            return ClvScatter(
+                view_w=view_w,
+                view_h=view_h,
+                n_plotted=0,
+                n_excluded=excluded,
+                filters={"league": league},
+                warnings=warnings,
+            )
+
+        xs = [float(r.clv_points) for r in pairs]
+        ys = [float(r.net_pnl) for r in pairs]
+        x_mag = max(0.01, max(abs(min(xs)), abs(max(xs))))
+        x_lo, x_hi = -x_mag * 1.1, x_mag * 1.1
+        y_min, y_max = min(ys + [0.0]), max(ys + [0.0])
+        if y_max - y_min < 1e-9:
+            y_min, y_max = y_min - 1.0, y_max + 1.0
+        y_pad = (y_max - y_min) * 0.1
+        y_lo, y_hi = y_min - y_pad, y_max + y_pad
+
+        coords, x0, y0 = _scatter_geometry(
+            [(float(r.clv_points), float(r.net_pnl)) for r in pairs],
+            x_lo=x_lo,
+            x_hi=x_hi,
+            y_lo=y_lo,
+            y_hi=y_hi,
+            view_w=view_w,
+            view_h=view_h,
+        )
+        points: list[ClvScatterPoint] = []
+        for r, (cx, cy) in zip(pairs, coords):
+            pnl = float(r.net_pnl)
+            tone = "pos" if pnl > 0 else "neg" if pnl < 0 else "neutral"
+            points.append(
+                ClvScatterPoint(
+                    ledger_id=r.ledger_id,
+                    cx=cx,
+                    cy=cy,
+                    clv_points=round(float(r.clv_points), 6),
+                    net_pnl=round(pnl, 2),
+                    status=r.status,
+                    tone=tone,
+                    label=(r.matchup or r.selection or r.ledger_id),
+                    clv_display=f"{float(r.clv_points) * 100:+.2f}%",
+                    pnl_display=f"{pnl:+.2f}",
+                )
+            )
+        return ClvScatter(
+            view_w=view_w,
+            view_h=view_h,
+            x0=x0,
+            y0=y0,
+            points=points,
+            n_plotted=len(points),
+            n_excluded=excluded,
+            filters={"league": league},
+            warnings=warnings,
+        )
+
+    # -- reliability diagram (V2: over-confidence detector) --------------
+
+    def reliability_diagram(
+        self, *, league: str | None = None, bins: int = 10, min_n: int = 5
+    ) -> ReliabilityDiagram:
+        """Model probability bucket vs realized hit rate, with the y=x diagonal.
+
+        Built from graded (won/lost) bets joined to the model probability of the
+        recommendation that produced them. Buckets with fewer than ``min_n`` pairs
+        are SUPPRESSED (not plotted) so thin buckets never read as calibrated.
+        Read-only; no engine quantity is recomputed.
+        """
+        league = _clean(league)
+        view_w, view_h = 360, 360
+        bins = max(2, int(bins))
+        min_n = max(1, int(min_n))
+
+        bets = self.store.query_ledger(league=league, limit=self.max_scan)
+        graded = [b for b in bets if str(b.get("status") or "").lower() in {"won", "lost"}]
+
+        rec_cache: dict[str, list[Any]] = {}
+        pairs: list[tuple[float, int]] = []
+        for b in graded:
+            tid = b.get("trace_id")
+            if not tid:
+                continue
+            if tid not in rec_cache:
+                tr = self.store.get_trace(tid)
+                rec_cache[tid] = list(build_trace_recommendation_view(tr).recommendations) if tr else []
+            prob = _match_rec_prob(rec_cache[tid], b)
+            if prob is None:
+                continue
+            pairs.append((prob, 1 if str(b.get("status")).lower() == "won" else 0))
+
+        # diagonal endpoints are the plot corners (data (0,0) and (1,1)).
+        diag, _x0, _y0 = _scatter_geometry(
+            [(0.0, 0.0), (1.0, 1.0)], x_lo=0.0, x_hi=1.0, y_lo=0.0, y_hi=1.0, view_w=view_w, view_h=view_h
+        )
+        (diag_x1, diag_y1), (diag_x2, diag_y2) = diag
+
+        width = 1.0 / bins
+        agg: dict[int, list[int]] = {}
+        for p, hit in pairs:
+            idx = min(bins - 1, int(p / width))
+            cell = agg.setdefault(idx, [0, 0])
+            cell[0] += 1
+            cell[1] += hit
+
+        kept = [
+            (idx, n, (idx + 0.5) * width, hits / n)
+            for idx, (n, hits) in sorted(agg.items())
+            if n >= min_n
+        ]
+        coords, _, _ = _scatter_geometry(
+            [(mid, rate) for _, _, mid, rate in kept],
+            x_lo=0.0,
+            x_hi=1.0,
+            y_lo=0.0,
+            y_hi=1.0,
+            view_w=view_w,
+            view_h=view_h,
+        )
+        rel_bins: list[ReliabilityBin] = []
+        for (idx, n, mid, rate), (cx, cy) in zip(kept, coords):
+            lo_pct = round(idx * width * 100)
+            hi_pct = round((idx + 1) * width * 100)
+            rel_bins.append(
+                ReliabilityBin(
+                    label=f"{lo_pct}-{hi_pct}%",
+                    p_mid=round(mid, 4),
+                    hit_rate=round(rate, 4),
+                    n=n,
+                    cx=cx,
+                    cy=cy,
+                )
+            )
+
+        warnings: list[OperatorWarningModel] = []
+        if not rel_bins:
+            warnings.append(
+                OperatorWarningModel(
+                    code="insufficient_graded_outcomes",
+                    severity="info",
+                    message=(
+                        f"not enough graded bets to chart calibration "
+                        f"(need >= {min_n} per probability bucket)"
+                    ),
+                )
+            )
+        return ReliabilityDiagram(
+            view_w=view_w,
+            view_h=view_h,
+            diag_x1=diag_x1,
+            diag_y1=diag_y1,
+            diag_x2=diag_x2,
+            diag_y2=diag_y2,
+            bins=rel_bins,
+            n_pairs=len(pairs),
+            n_plotted=len(rel_bins),
+            min_n=min_n,
+            filters={"league": league},
+            warnings=warnings,
+        )
+
+    # -- data-quality heatmap (V2: coverage by league) -------------------
+
+    def data_quality(self, *, league: str | None = None) -> QualityHeatmap:
+        """Per-league data-coverage heatmap: evidence / closing-line / outcome
+        attachment rates over a bounded scan of recent traces. Counts only — green
+        is real coverage, never an assumed default. Read-only (two batch reads)."""
+        league = _clean(league)
+        traces = self.store.query_traces(league=league, limit=self.max_scan)
+        scan_capped = len(traces) >= self.max_scan
+        tids = [str(t.get("trace_id") or "") for t in traces if t.get("trace_id")]
+        facts = self.store.get_session_trace_facts_batch(tids) if tids else {}
+        closes = self.store.get_closing_lines_batch(tids) if tids else {}
+
+        agg: dict[str, dict[str, int]] = {}
+        for t in traces:
+            tid = str(t.get("trace_id") or "")
+            lg = t.get("league") or "—"
+            a = agg.setdefault(lg, {"traces": 0, "evidence": 0, "closing": 0, "outcome": 0})
+            a["traces"] += 1
+            f = facts.get(tid, {})
+            if int(f.get("evidence_signal_count") or 0) > 0:
+                a["evidence"] += 1
+            if bool(f.get("has_outcome")):
+                a["outcome"] += 1
+            if closes.get(tid):
+                a["closing"] += 1
+
+        rows: list[QualityRow] = []
+        for lg in sorted(agg):
+            a = agg[lg]
+            n = a["traces"]
+            cells: list[QualityCell] = []
+            for key, num in (
+                ("evidence", a["evidence"]),
+                ("closing_line", a["closing"]),
+                ("outcome", a["outcome"]),
+            ):
+                ratio = (num / n) if n else None
+                cells.append(
+                    QualityCell(
+                        key=key,
+                        ratio=ratio,
+                        pct_display=(f"{ratio * 100:.0f}%" if ratio is not None else "—"),
+                        count=num,
+                        total=n,
+                        tone=_quality_tone(ratio),
+                    )
+                )
+            rows.append(QualityRow(league=lg, traces=n, cells=cells))
+
+        warnings: list[OperatorWarningModel] = []
+        if scan_capped:
+            warnings.append(
+                OperatorWarningModel(
+                    code="scan_capped",
+                    severity="info",
+                    message=f"trace scan capped at {self.max_scan}; older traces not included",
+                )
+            )
+        if not rows:
+            warnings.append(
+                OperatorWarningModel(
+                    code="no_traces",
+                    severity="info",
+                    message="no traces found to assess data coverage",
+                )
+            )
+        return QualityHeatmap(
+            columns=["evidence", "closing line", "outcome"],
+            rows=rows,
+            traces_scanned=len(traces),
+            scan_capped=scan_capped,
+            filters={"league": league},
+            warnings=warnings,
+        )
+
     # -- traces ----------------------------------------------------------
 
     def list_traces(
@@ -1416,6 +1893,13 @@ class ConsoleService:
         # JSON-safe Pydantic mirror (dataclass -> asdict -> model_validate).
         view = build_trace_recommendation_view(trace, evidence_signals=evidence)
         recommendation_view = TraceRecommendationViewModel.model_validate(dataclasses.asdict(view))
+        primary_strip = None
+        if recommendation_view.recommendations:
+            prec = next(
+                (r for r in recommendation_view.recommendations if r.is_primary),
+                recommendation_view.recommendations[0],
+            )
+            primary_strip = _model_vs_market_strip(prec)
         return TraceDetail(
             trace_id=trace_id,
             timestamp=trace.get("timestamp"),
@@ -1437,6 +1921,7 @@ class ConsoleService:
             closing_lines=closing_lines,
             qa_verdict=qa_verdict,
             recommendation_view=recommendation_view,
+            primary_strip=primary_strip,
             field_sources={
                 "recommendations": Source.DB_TRACE_PAYLOAD,
                 "predictions": Source.DB_TRACE_PAYLOAD,
@@ -1599,6 +2084,7 @@ class ConsoleService:
         }
         linked_trace_id = row.get("trace_id")
         linked_recs: Any | None = None
+        linked_strip: ComparisonStrip | None = None
         if linked_trace_id:
             linked = self.store.get_trace(linked_trace_id)
             if linked is not None:
@@ -1606,6 +2092,13 @@ class ConsoleService:
                 # the linked trace's DB payload — never assumed to live in
                 # bet_ledger.
                 linked_recs = linked.get("recommendations")
+                view = build_trace_recommendation_view(linked)
+                rvm = TraceRecommendationViewModel.model_validate(dataclasses.asdict(view))
+                if rvm.recommendations:
+                    prec = next(
+                        (r for r in rvm.recommendations if r.is_primary), rvm.recommendations[0]
+                    )
+                    linked_strip = _model_vs_market_strip(prec)
         return BetDetail(
             ledger_id=ledger_id,
             trace_id=linked_trace_id,
@@ -1614,6 +2107,7 @@ class ConsoleService:
             correlation_group=row.get("correlation_group"),
             linked_trace_id=linked_trace_id if linked_recs is not None else None,
             linked_trace_recommendations=linked_recs,
+            linked_strip=linked_strip,
             field_sources={
                 "ledger": Source.BET_LEDGER,
                 "settlement": Source.BET_LEDGER,

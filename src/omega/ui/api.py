@@ -17,10 +17,13 @@ from omega.ui.schemas import (
     BetListResponse,
     CalibrationChart,
     CalibrationStatusView,
+    ClvScatter,
     ClvView,
     DiagnosticsView,
     EdgeScannerView,
     HealthResponse,
+    QualityHeatmap,
+    ReliabilityDiagram,
     ReviewQueueView,
     SessionDetail,
     SessionListResponse,
@@ -95,6 +98,30 @@ def clv(
     league: str | None = Query(None),
 ) -> ClvView:
     return service.clv_report(league=league)
+
+
+@router.get("/clv-scatter", response_model=ClvScatter)
+def clv_scatter(
+    service: ConsoleService = Depends(get_service),
+    league: str | None = Query(None),
+) -> ClvScatter:
+    return service.clv_scatter(league=league)
+
+
+@router.get("/reliability", response_model=ReliabilityDiagram)
+def reliability(
+    service: ConsoleService = Depends(get_service),
+    league: str | None = Query(None),
+) -> ReliabilityDiagram:
+    return service.reliability_diagram(league=league)
+
+
+@router.get("/data-quality", response_model=QualityHeatmap)
+def data_quality(
+    service: ConsoleService = Depends(get_service),
+    league: str | None = Query(None),
+) -> QualityHeatmap:
+    return service.data_quality(league=league)
 
 
 @router.get("/scanner", response_model=EdgeScannerView)

@@ -59,6 +59,7 @@ NAV_ENABLED = (
     {"key": "sessions", "label": "Session Review", "href": "/sessions"},
     {"key": "diagnostics", "label": "Diagnostics", "href": "/diagnostics"},
     {"key": "calibration", "label": "Calibration Status", "href": "/calibration"},
+    {"key": "data_quality", "label": "Data Quality", "href": "/data-quality"},
     {"key": "signals", "label": "Signal Performance", "href": "/signals"},
     {"key": "review", "label": "Review Queue", "href": "/review"},
     {"key": "clv", "label": "Market Movement / CLV", "href": "/clv"},
@@ -406,10 +407,30 @@ def build_console_app(
     ):
         data = service.calibration_status(league=league, status=status)
         chart = service.calibration_chart(league=league)
+        reliability = service.reliability_diagram(league=league)
         return templates.TemplateResponse(
             request,
             "calibration.html",
-            _ctx(request, data=data.model_dump(), chart=chart.model_dump(), active="calibration"),
+            _ctx(
+                request,
+                data=data.model_dump(),
+                chart=chart.model_dump(),
+                reliability=reliability.model_dump(),
+                active="calibration",
+            ),
+        )
+
+    @app.get("/data-quality", response_class=HTMLResponse)
+    def page_data_quality(
+        request: Request,
+        service=Depends(get_service),
+        league: str | None = Query(None),
+    ):
+        data = service.data_quality(league=league)
+        return templates.TemplateResponse(
+            request,
+            "data_quality.html",
+            _ctx(request, data=data.model_dump(), active="data_quality"),
         )
 
     @app.get("/signals", response_class=HTMLResponse)
@@ -448,10 +469,11 @@ def build_console_app(
         league: str | None = Query(None),
     ):
         data = service.clv_report(league=league)
+        scatter = service.clv_scatter(league=league, clv=data)
         return templates.TemplateResponse(
             request,
             "clv.html",
-            _ctx(request, data=data.model_dump(), active="clv"),
+            _ctx(request, data=data.model_dump(), scatter=scatter.model_dump(), active="clv"),
         )
 
     return app

@@ -1,10 +1,16 @@
 {% extends "base.html" %}
 {% from "base.html" import src_badge, pager, filter_chips %}
-{% block title %}Bets · Omega Console{% endblock %}
+{% block title %}Bets - Omega Console{% endblock %}
 {% block content %}
-<h1>Bet Ledger Explorer</h1>
+<section class="ledger-hero">
+  <div>
+    <h1>Bet Ledger</h1>
+    <p>Settlement rows organized by selection and matchup, with raw ledger IDs kept as audit context.</p>
+  </div>
+  <a class="action-btn" href="/clv">CLV View</a>
+</section>
 
-<form class="filters" method="get" action="/bets">
+<form class="filters ledger-filters" method="get" action="/bets">
   <label>Date from <input type="date" name="date_from" value="{{ data.filters.date_from or '' }}"></label>
   <label>Date to <input type="date" name="date_to" value="{{ data.filters.date_to or '' }}"></label>
   <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="e.g. MLB" autocomplete="off"></label>
@@ -25,37 +31,75 @@
 
 {{ filter_chips(request, data.filters, '/bets') }}
 
-<p class="srcnote">All figures below sourced from {{ src_badge('bet_ledger') }}. Edge%, Kelly, and units are
-<em>not</em> assumed to live in <code>bet_ledger</code> — see a bet's detail for linked-trace recommendation values.</p>
+<p class="srcnote">Figures are sourced from {{ src_badge('bet_ledger') }}. Edge, Kelly, and units stay on linked trace payloads, not this ledger table.</p>
 
-<table class="grid">
-  <thead>
-    <tr>
-      <th>ledger_id</th><th>bet_date</th><th>league / sport</th><th>market</th>
-      <th>selection</th><th>book</th><th>odds</th><th>stake</th><th>net PnL</th><th>status</th><th>prov.</th><th>trace</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for row in data.rows %}
-    <tr>
-      <td><a href="/bets/{{ row.ledger_id }}"><code>{{ row.ledger_id }}</code></a></td>
-      <td class="nowrap">{{ row.bet_date or '—' }}</td>
-      <td>{{ row.league or '—' }}{% if row.sport %} <span class="muted">/ {{ row.sport }}</span>{% endif %}</td>
-      <td>{{ row.market or '—' }}</td>
-      <td>{{ row.selection or '—' }}</td>
-      <td>{{ row.bookmaker or '—' }}</td>
-      <td>{{ row.odds if row.odds is not none else '—' }}</td>
-      <td>{{ '%.2f' % row.stake_amount if row.stake_amount is not none else '—' }}</td>
-      <td class="{{ 'pos' if (row.net_pnl or 0) > 0 else ('neg' if (row.net_pnl or 0) < 0 else '') }}">{{ '%.2f' % row.net_pnl if row.net_pnl is not none else '—' }}</td>
-      <td>{{ row.status or '—' }}</td>
-      <td>{{ row.provenance or '—' }}</td>
-      <td>{% if row.trace_id %}<a href="/traces/{{ row.trace_id }}">trace</a>{% else %}—{% endif %}</td>
-    </tr>
-    {% else %}
-    <tr><td colspan="12" class="empty">No bets match these filters.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+{% if data.rows %}
+<section class="panel mock-panel ledger-panel hot">
+  <div class="table-wrap market-table-wrap ledger-table-wrap">
+    <table class="grid scanner market-table ledger-table bet-ledger-table">
+      <thead>
+        <tr>
+          <th>Position</th>
+          <th>Date</th>
+          <th>Market</th>
+          <th>Book</th>
+          <th>Odds</th>
+          <th>Stake</th>
+          <th>PnL</th>
+          <th>Status</th>
+          <th>Source</th>
+          <th>Trace</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in data.rows %}
+        <tr>
+          <td class="entity-cell">
+            <a class="event-link" href="/bets/{{ row.ledger_id }}">{{ row.selection or row.matchup or ('Bet ' ~ (row.ledger_id or '')[:8]) }}</a>
+            <div class="entity-sub">
+              {% if row.matchup %}<span>{{ row.matchup }}</span>{% endif %}
+              <span>{{ row.league or 'unknown' }}{% if row.sport %} / {{ row.sport }}{% endif %}</span>
+              <code class="id-chip" title="{{ row.ledger_id }}">bet {{ (row.ledger_id or '')[:12] }}</code>
+            </div>
+          </td>
+          <td class="nowrap">
+            <span class="live-chip">DB</span>
+            <span>{{ row.bet_date[:16] if row.bet_date else '-' }}</span>
+          </td>
+          <td>
+            <span class="market-pill">{{ row.market or 'unknown' }}</span>
+            {% if row.line is not none %}<span class="model-label">line {{ row.line }}</span>{% endif %}
+          </td>
+          <td>{{ row.bookmaker or '-' }}</td>
+          <td class="mono">{{ row.odds if row.odds is not none else '-' }}</td>
+          <td class="mono">{{ '%.2f' % row.stake_amount if row.stake_amount is not none else '-' }}</td>
+          <td>
+            <span class="pnl-chip {{ 'pos' if (row.net_pnl or 0) > 0 else ('neg' if (row.net_pnl or 0) < 0 else 'flat') }}">
+              {{ '%.2f' % row.net_pnl if row.net_pnl is not none else '-' }}
+            </span>
+          </td>
+          <td>
+            <span class="pill {{ 'pill-green' if row.status == 'won' else 'pill-red' if row.status == 'lost' else 'pill-amber' if row.status == 'pending' else 'pill-gray' }}">{{ row.status or 'unknown' }}</span>
+          </td>
+          <td><span class="model-label source-label">{{ row.provenance or '-' }}</span></td>
+          <td>
+            {% if row.trace_id %}
+              <a class="id-chip link-chip" href="/traces/{{ row.trace_id }}" title="{{ row.trace_id }}">trace {{ row.trace_id[:10] }}</a>
+            {% else %}
+              <span class="muted">-</span>
+            {% endif %}
+          </td>
+          <td><a class="neon-action" href="/bets/{{ row.ledger_id }}">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<div class="panel"><div class="panel-empty">No bets match these filters.</div></div>
+{% endif %}
 
 {{ pager(request, data.pagination) }}
 {% endblock %}
