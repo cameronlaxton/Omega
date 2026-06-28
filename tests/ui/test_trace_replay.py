@@ -15,6 +15,8 @@ def test_trace_detail_renders_decision_replay(client):
         "Odds snapshot",
         "Evidence signals",
         "Model probability",
+        "LLM narrative",
+        "Deterministic engine / simulation",
         "Gates &amp; QA",
         "Final recommendation",
         "Outcome",

@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from omega.ops.console_server import build_console_app
 from omega.trace.store import TraceStore
-from omega.ui.service import ConsoleService
+from omega.ui.service import ConsoleService, _normalize_edge_pct
 from tests.ui.conftest import make_trace
 
 
@@ -45,10 +45,10 @@ def test_scanner_market_aware_labels(seeded):
     finally:
         svc.close()
     by_trace = {r.trace_id: r for r in view.rows}
-    # Moneyline → model probability (percentage); player prop → projection.
+    # Moneyline -> model probability (percentage); player prop -> recorded market line.
     assert by_trace["sandbox-aaa"].model_output_label == "Model Probability"
     assert by_trace["sandbox-aaa"].model_output_is_pct is True
-    assert by_trace["sandbox-bbb"].model_output_label == "Model Projection"
+    assert by_trace["sandbox-bbb"].model_output_label == "Recorded Line"
     assert by_trace["sandbox-bbb"].model_output_is_pct is False
 
 
@@ -64,14 +64,13 @@ def test_scanner_confidence_prefers_engine_tier(seeded):
     assert aaa.confidence_computed is False
 
 
-def test_scanner_confidence_falls_back_to_computed_bucket(tmp_path: Path):
+def test_scanner_confidence_unavailable_without_engine_tier(tmp_path: Path):
     db = str(tmp_path / "s.db")
     sessions = tmp_path / "sessions"
     sessions.mkdir()
     store = TraceStore(db_path=db)
     with store.autolog_suppressed():
-        # No confidence_tier on the rec → confidence must fall back to a labeled,
-        # computed calibrated-probability bucket (predictions give 0.58 → "B").
+        # No confidence_tier on the rec -> the console must not synthesize one.
         store.persist(
             make_trace(
                 "no-tier",
@@ -85,9 +84,9 @@ def test_scanner_confidence_falls_back_to_computed_bucket(tmp_path: Path):
     finally:
         svc.close()
     r = next(x for x in view.rows if x.trace_id == "no-tier")
-    assert r.confidence_source == "calibrated_prob_bucket"
-    assert r.confidence_computed is True
-    assert r.confidence in {"A", "B", "C", "D"}
+    assert r.confidence is None
+    assert r.confidence_source == "unavailable"
+    assert r.confidence_computed is False
 
 
 def test_scanner_edge_display_normalizes_units(tmp_path: Path):
@@ -118,7 +117,11 @@ def test_scanner_ranked_by_edge(seeded):
         view = svc.edge_scanner()
     finally:
         svc.close()
-    edges = [r.edge.value for r in view.rows if r.edge.value is not None]
+    edges = [
+        _normalize_edge_pct(r.edge.value, r.edge.source_path)
+        for r in view.rows
+        if r.edge.value is not None
+    ]
     assert edges == sorted(edges, reverse=True)
 
 

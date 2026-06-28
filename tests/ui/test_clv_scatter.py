@@ -87,6 +87,7 @@ def test_scatter_excludes_bets_without_close(tmp_path: Path):
         svc.close()
     # No closing lines -> clv_report yields no rows -> nothing to plot, honest empty.
     assert sc.n_plotted == 0
+    assert sc.n_excluded == 2
     assert any(w.code == "no_graded_clv" for w in sc.warnings)
 
 

@@ -329,3 +329,16 @@ class TestSchemaMigration:
         assert persisted["unfitted_reliability_prior"] == SEED_UNFITTED_RELIABILITY_PRIOR
         assert persisted["schema_version"] == 2
         assert on_disk["schema_version"] == 2
+
+    def test_malformed_top_level_schema_version_defaults_to_current(self):
+        reg = self._registry_with(self._raw())
+        with open(reg._path, "r+", encoding="utf-8") as f:
+            data = json.load(f)
+            data["schema_version"] = "not-an-int"
+            f.seek(0)
+            json.dump(data, f)
+            f.truncate()
+
+        loaded = reg._load()
+
+        assert loaded["schema_version"] == 2

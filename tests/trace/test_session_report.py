@@ -279,4 +279,5 @@ def test_research_candidate_report_suppresses_protected_card_values(store):
     assert "confidence tier:" not in rendered
     assert "`sandbox-intake1`" not in rendered
     assert "[withheld]" in rendered
+    assert "| research_candidate | [withheld] |" in rendered
     assert "**Honesty**" in rendered

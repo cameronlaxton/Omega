@@ -291,9 +291,9 @@ ACTIONABLE / RESEARCH_PLUS markets:
 
 RESEARCH_CANDIDATE markets:
 - Use research-only language (research lean / watchlist / pass).
-- Defer to [`output_modes.md`](../reference/output_modes.md) for the forbidden-value list; do not
-  show forbidden superlatives, letter-grade confidence labels, edge%, EV%, Kelly, fair/no-vig
-  price, model probability, recommended units, or trace_id.
+- Defer to the `RESEARCH_CANDIDATE` section in
+  [`output_modes.md`](../reference/output_modes.md) for the forbidden-value list and
+  output-authorization rules. Do not restate that list here.
 
 If no markets are authorized for Bet Cards, note that and skip the Bet Card section. Do not
 fabricate edge, EV, Kelly, units, confidence tiers, fair prices, model probabilities, or trace IDs

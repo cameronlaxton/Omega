@@ -379,7 +379,11 @@ class AdjustmentPolicyRegistry:
         for policy in data.get("policies", []):
             if isinstance(policy, dict):
                 _migrate_policy_dict(policy)
-        if int(data.get("schema_version", 1) or 1) < _SCHEMA_VERSION:
+        try:
+            current = int(data.get("schema_version", 1) or 1)
+        except (TypeError, ValueError):
+            current = 1
+        if current < _SCHEMA_VERSION:
             data["schema_version"] = _SCHEMA_VERSION
         return data
 

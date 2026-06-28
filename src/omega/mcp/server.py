@@ -670,9 +670,10 @@ def omega_run_batch(
         trace["reasoning_narrative"] = entry.reasoning_narrative or f"Batch analysis: {identifier}"
         trace["trace_quality"] = trace.get("trace_quality") or {}
         if entry.reasoning_presentation is not None:
-            trace["reasoning_presentation"] = entry.reasoning_presentation
+            trace["reasoning_presentation"] = entry.reasoning_presentation.model_dump(exclude_none=True)
 
         export_block = {
+            "export_schema_version": 2,
             # Top-level session_id so the prediction->session link survives outside
             # the DB and the export-export validator's strict session_id check passes.
             "session_id": session_id,

@@ -227,20 +227,6 @@ def _market_family(market: Any) -> str:
     return "unknown"
 
 
-def _prob_bucket(p: float) -> str:
-    """Coarse confidence letter from a calibrated probability (0-1).
-
-    A clearly-labeled, computed derivation — surfaced only as a fallback when the
-    engine did not stamp a confidence tier (see ``_confidence_grade``)."""
-    if p >= 0.65:
-        return "A"
-    if p >= 0.58:
-        return "B"
-    if p >= 0.53:
-        return "C"
-    return "D"
-
-
 def _model_output_field(rec) -> tuple[Any, str, bool]:
     """Pick the market-aware model output (field, label, is_pct).
 
@@ -251,11 +237,11 @@ def _model_output_field(rec) -> tuple[Any, str, bool]:
     fam = _market_family(rec.market.value)
     prob = rec.calibrated_probability if rec.calibrated_probability.value is not None else rec.raw_probability
     if fam == "spread":
-        return rec.line, "Model Spread", False
+        return rec.line, "Recorded Spread", False
     if fam == "total":
-        return rec.line, "Model Total", False
+        return rec.line, "Recorded Total", False
     if fam == "prop":
-        return rec.line, "Model Projection", False
+        return rec.line, "Recorded Line", False
     if fam == "moneyline":
         return prob, "Model Probability", True
     # unknown — prefer a line if present, else the model probability.
@@ -267,39 +253,32 @@ def _model_output_field(rec) -> tuple[Any, str, bool]:
 
 
 def _confidence_grade(rec) -> tuple[str | None, str, bool]:
-    """Confidence via a defined source hierarchy (grade, source, computed).
-
-    1. engine confidence tier (raw_confidence_tier) — authoritative, not computed;
-    2. calibrated-probability bucket — a computed, labeled fallback;
-    3. unavailable.
-    Data-quality / QA is surfaced in its own column, not folded in here.
-    """
+    """Confidence only when stamped by the engine."""
     tier = rec.raw_confidence_tier.value
     if tier is not None and str(tier).strip():
         return str(tier).strip().upper(), "model_confidence_tier", False
-    prob = rec.calibrated_probability.value
-    if prob is None:
-        prob = rec.raw_probability.value
-    if prob is not None:
-        try:
-            return _prob_bucket(float(prob)), "calibrated_prob_bucket", True
-        except (TypeError, ValueError):
-            pass
     return None, "unavailable", False
 
 
-def _edge_display(value: Any) -> tuple[str | None, bool | None]:
-    """Format an engine edge as a percent string (display, no unit assumption).
-
-    ``engine_edge`` may arrive as a fraction (0.04) or already a percent (4.0)
-    depending on the source key. Realistic edges are well under 1.0 as fractions,
-    so |v|<=1 is treated as a fraction (×100) and |v|>1 as already-percent. This
-    avoids rendering a 4% edge as "400%". Returns (display, is_positive)."""
+def _normalize_edge_pct(value: Any, source_path: str | None = None) -> float | None:
+    """Normalize known engine edge fields to percentage points."""
     v = _as_float(value)
     if v is None:
+        return None
+    source = (source_path or "").lower()
+    if "edge_pct" in source or "ev_pct" in source:
+        return v
+    if source.endswith(".edge") or source == "edge":
+        return v * 100
+    return v * 100 if abs(v) <= 1 else v
+
+
+def _edge_display(value: Any, source_path: str | None = None) -> tuple[str | None, bool | None]:
+    """Format an engine edge as a percent string from its source contract."""
+    pct = _normalize_edge_pct(value, source_path)
+    if pct is None:
         return None, None
-    pct = v * 100 if abs(v) <= 1 else v
-    return f"{pct:+.2f}%", v > 0
+    return f"{pct:+.2f}%", pct > 0
 
 
 def _data_quality(trace: dict[str, Any], evidence_count: int) -> tuple[str, str | None]:
@@ -467,7 +446,10 @@ def _prob_strip(
     if both and gap is not None:
         gap_positive = gap > 0
         gap_display = f"{gap * 100:+.2f}%"
-        seg_tone = "pos" if gap_positive else "neg"
+        if gap > 0:
+            seg_tone = "pos"
+        elif gap < 0:
+            seg_tone = "neg"
     return ComparisonStrip(
         mode=mode,
         unit=unit,
@@ -1406,7 +1388,9 @@ class ConsoleService:
                 continue  # only surface traces that produced a recommendation
             rec = next((r for r in rvm.recommendations if r.is_primary), rvm.recommendations[0])
             model_output, label, is_pct = _model_output_field(rec)
-            edge_display, edge_positive = _edge_display(rec.engine_edge.value)
+            edge_display, edge_positive = _edge_display(
+                rec.engine_edge.value, rec.engine_edge.source_path
+            )
             grade, csource, ccomputed = _confidence_grade(rec)
             cov = ev_counts.get(tid)
             ev_n = cov.total_signals if cov else 0
@@ -1449,10 +1433,10 @@ class ConsoleService:
 
         # Rank by engine edge desc (unit-normalized); rows without an edge sort last.
         def _edge_sort_key(r: EdgeScannerRow) -> tuple[bool, float]:
-            v = _as_float(r.edge.value)
+            v = _normalize_edge_pct(r.edge.value, r.edge.source_path)
             if v is None:
                 return (True, 0.0)
-            return (False, -(v * 100 if abs(v) <= 1 else v))
+            return (False, -v)
 
         rows.sort(key=_edge_sort_key)
 
@@ -1554,7 +1538,7 @@ class ConsoleService:
         view_w, view_h = 480, 320
 
         pairs = [r for r in clv.rows if r.clv_points is not None and r.net_pnl is not None]
-        excluded = len(clv.rows) - len(pairs)
+        excluded = max(0, clv.summary.bets_scanned - len(pairs))
         warnings: list[OperatorWarningModel] = []
         if not pairs:
             warnings.append(

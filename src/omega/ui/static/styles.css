@@ -1480,7 +1480,7 @@ table.scanner td, table.scanner th { white-space: nowrap; }
   a { color: #000; text-decoration: underline; }
   .topbar { position: static; border-bottom: 2px solid #000; background: #fff; }
   .nav, .navph, .ro-badge, .status-dot, .status-text { display: none; }
-  .filter-bar, .pager, .pagelinks, .chips, .filter-clear { display: none; }
+  .filter-bar, form.filters, .pager, .pagelinks, .chips, .filter-clear, .clearbtn { display: none; }
   .content { padding: 0.5rem; max-width: 100%; }
   table.grid { font-size: 9pt; }
   table.grid thead th { position: static; background: #eee; border-bottom: 2px solid #000; }

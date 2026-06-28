@@ -73,9 +73,9 @@
       <div class="tl-label">Final recommendation</div>
       <div class="tl-body">{% if ns.primary %}{{ field_val(ns.primary.selection) }} {{ field_val(ns.primary.market) }} @ {{ field_val(ns.primary.odds) }} · edge {{ pct_field_val(ns.primary.engine_edge) }}{% else %}<span class="muted">no recommendation emitted</span>{% endif %}</div>
     </div>
-    <div class="tl-step {{ 'ok' if detail.outcome else 'skipped' }}">
+    <div class="tl-step {{ 'ok' if (detail.outcome or detail.prop_outcomes) else 'skipped' }}">
       <div class="tl-label">Outcome</div>
-      <div class="tl-body">{% if detail.outcome %}graded{% else %}<span class="muted">not graded yet</span>{% endif %}</div>
+      <div class="tl-body">{% if detail.outcome or detail.prop_outcomes %}graded{% else %}<span class="muted">not graded yet</span>{% endif %}</div>
     </div>
   </div>
 </section>

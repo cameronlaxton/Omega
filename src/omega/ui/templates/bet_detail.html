@@ -57,7 +57,7 @@
 <section class="block">
   <h2>Linked trace recommendation values {{ src_badge('db_trace_payload') }}</h2>
   {% if detail.linked_strip %}
-  <div class="rec-strip">{{ comp_strip(detail.linked_strip) }} <span class="muted small">Omega vs market · win probability</span></div>
+  <div class="rec-strip">{{ comp_strip(detail.linked_strip) }} <span class="muted small">Omega vs market · {{ detail.linked_strip.unit }}</span></div>
   {% endif %}
   {% if detail.linked_trace_recommendations is not none %}
     <p>From trace <a href="/traces/{{ detail.linked_trace_id }}"><code>{{ detail.linked_trace_id }}</code></a>

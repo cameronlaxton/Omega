@@ -61,16 +61,31 @@
     }
     return tip;
   }
+  function appendLine(el, text, opts) {
+    if (el.childNodes.length) el.appendChild(document.createElement("br"));
+    var node = opts && opts.strong ? document.createElement("strong") : document.createElement("span");
+    if (opts && opts.muted) node.style.opacity = ".7";
+    node.textContent = text == null ? "" : String(text);
+    el.appendChild(node);
+  }
+  function setTipLines(el, lines) {
+    el.replaceChildren();
+    lines.forEach(function (line) {
+      if (!line || line.text == null || line.text === "") return;
+      appendLine(el, line.text, line);
+    });
+  }
   document.querySelectorAll(".chart-dot").forEach(function (dot) {
     dot.addEventListener("mouseenter", function () {
       var t = ensureTip();
       var label = dot.getAttribute("data-label") || "";
       var m = dot.getAttribute("data-model");
       var k = dot.getAttribute("data-market");
-      var html = "<strong>" + label + "</strong>";
-      if (m) html += "<br>Omega: " + m + "%";
-      if (k) html += "<br>Market: " + k + "%";
-      t.innerHTML = html;
+      setTipLines(t, [
+        { text: label, strong: true },
+        m ? { text: "Omega: " + m + "%" } : null,
+        k ? { text: "Market: " + k + "%" } : null,
+      ]);
       t.style.opacity = "1";
     });
     dot.addEventListener("mousemove", function (ev) {
@@ -85,10 +100,10 @@
 
   // Generic display-only tooltip binder for the V2 visuals. Each handler only
   // reads data-* attributes the server already computed — no derivation here.
-  function bindTooltip(el, htmlFn) {
+  function bindTooltip(el, linesFn) {
     el.addEventListener("mouseenter", function () {
       var t = ensureTip();
-      t.innerHTML = htmlFn(el);
+      setTipLines(t, linesFn(el));
       t.style.opacity = "1";
     });
     el.addEventListener("mousemove", function (ev) {
@@ -107,17 +122,23 @@
       var label = el.getAttribute("data-strip-label") || "";
       var val = el.getAttribute("data-strip-value") || "";
       var unit = el.getAttribute("data-strip-unit") || "";
-      return "<strong>" + label + "</strong><br>" + val + (unit ? "<br><span style=\"opacity:.7\">" + unit + "</span>" : "");
+      return [
+        { text: label, strong: true },
+        { text: val },
+        unit ? { text: unit, muted: true } : null,
+      ];
     });
   });
 
   // Reliability diagram dots (model bucket vs realized hit rate).
   document.querySelectorAll(".reliability-dot").forEach(function (d) {
     bindTooltip(d, function (el) {
-      return "<strong>" + (el.getAttribute("data-rel-label") || "") + "</strong>" +
-        "<br>model " + el.getAttribute("data-rel-model") + "%" +
-        "<br>realized " + el.getAttribute("data-rel-hit") + "%" +
-        "<br>n=" + el.getAttribute("data-rel-n");
+      return [
+        { text: el.getAttribute("data-rel-label") || "", strong: true },
+        { text: "model " + el.getAttribute("data-rel-model") + "%" },
+        { text: "realized " + el.getAttribute("data-rel-hit") + "%" },
+        { text: "n=" + el.getAttribute("data-rel-n") },
+      ];
     });
   });
 
@@ -125,10 +146,12 @@
   document.querySelectorAll(".scatter-dot").forEach(function (d) {
     bindTooltip(d, function (el) {
       var st = el.getAttribute("data-sc-status");
-      return "<strong>" + (el.getAttribute("data-sc-label") || "") + "</strong>" +
-        "<br>CLV " + el.getAttribute("data-sc-clv") +
-        "<br>net " + el.getAttribute("data-sc-pnl") +
-        (st ? "<br>" + st : "");
+      return [
+        { text: el.getAttribute("data-sc-label") || "", strong: true },
+        { text: "CLV " + el.getAttribute("data-sc-clv") },
+        { text: "net " + el.getAttribute("data-sc-pnl") },
+        st ? { text: st } : null,
+      ];
     });
   });
 })();

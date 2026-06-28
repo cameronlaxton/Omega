@@ -682,10 +682,9 @@ class EdgeScannerRow(BaseModel):
     kind: str | None = None
     market: ExtractedFieldModel
     selection: ExtractedFieldModel
-    # Market-aware model output (never forced into "line" language):
-    # Spread→Model Spread, Total→Model Total, Moneyline→Model Probability,
-    # Props→Model Projection, Unknown→Model Output. ``model_output_is_pct`` tells
-    # the template to format the value as a probability percentage.
+    # Market-aware output: recorded lines stay recorded lines; moneyline uses the
+    # model probability. ``model_output_is_pct`` tells the template to format the
+    # value as a probability percentage.
     model_output_label: str
     model_output: ExtractedFieldModel
     model_output_is_pct: bool = False
@@ -697,8 +696,7 @@ class EdgeScannerRow(BaseModel):
     # formatter normalizes both to a percent string. None when no edge exists.
     edge_display: str | None = None
     edge_positive: bool | None = None
-    # Confidence via the source hierarchy: model tier → calibrated-prob bucket
-    # (computed) → unavailable. ``confidence_source`` names which tier produced it.
+    # Engine-owned confidence tier only; unavailable when the trace did not stamp one.
     confidence: str | None = None
     confidence_source: str = "unavailable"
     confidence_computed: bool = False
