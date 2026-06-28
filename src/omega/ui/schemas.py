@@ -185,6 +185,54 @@ class SessionHealthViewModel(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Comparison strip (dumbbell / market-movement ribbon)
+#
+# A compact two-marker strip on a SINGLE shared axis. Defined here so every view
+# below (trace/bet detail, CLV rows, edge-scanner rows) can embed one. ALL pixel
+# geometry is server-computed; the template only drops coordinates into SVG.
+# ---------------------------------------------------------------------------
+
+
+class ComparisonStripDot(BaseModel):
+    """One marker on a 1-D comparison strip (pixel x is server-computed)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str  # "model" | "market" | "taken" | "closing"
+    label: str  # "Omega" | "Market" | "Taken" | "Close"
+    cx: float  # server-computed pixel x on the strip
+    value: float  # raw value (e.g. 0.58 probability)
+    display: str  # pre-formatted, e.g. "58.0%"
+    tone: str = "model"  # colour class: model | market | neutral
+
+
+class ComparisonStrip(BaseModel):
+    """A compact two-marker strip on a SINGLE shared axis (dumbbell / ribbon).
+
+    ``mode='model_vs_market'`` is the per-bet dumbbell (Omega P(selection) vs the
+    market's implied probability). ``mode='market_movement'`` is the ribbon (the
+    price taken vs the closing price). Both axes are probability in [0, 1] so the
+    domain is fixed and rows stay visually comparable.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: str
+    unit: str  # explicit axis unit, e.g. "win probability" / "implied prob (incl. vig)"
+    view_w: int = 200
+    view_h: int = 24
+    cy: float = 12.0
+    seg_x1: float | None = None  # connecting bar endpoints (server-computed)
+    seg_x2: float | None = None
+    seg_tone: str = "neutral"  # pos | neg | neutral
+    dots: list[ComparisonStripDot] = Field(default_factory=list)
+    gap_display: str | None = None  # e.g. "+2.00%" (signed, model − market)
+    gap_positive: bool | None = None
+    outcome: str | None = None  # ribbon end-cap: won | lost | push | None
+    note: str | None = None  # honest note when a side is missing, e.g. "no close"
+
+
+# ---------------------------------------------------------------------------
 # Traces
 # ---------------------------------------------------------------------------
 
@@ -248,6 +296,9 @@ class TraceDetail(BaseModel):
     # selection-aware recommendations and evidence coverage. None when the
     # normalizer produced nothing (e.g. malformed payload).
     recommendation_view: TraceRecommendationViewModel | None = None
+    # Per-trace dumbbell for the primary recommendation: Omega P(selection) vs
+    # the market's implied probability (server geometry). None when unavailable.
+    primary_strip: ComparisonStrip | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
 
 
@@ -302,6 +353,9 @@ class BetDetail(BaseModel):
     # assumed to live in bet_ledger). None when no trace is linked/found.
     linked_trace_id: str | None = None
     linked_trace_recommendations: Any | None = None
+    # Dumbbell from the linked trace's primary recommendation (Omega vs market
+    # implied probability). None when no trace is linked or no probability exists.
+    linked_strip: ComparisonStrip | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
 
 
@@ -576,6 +630,9 @@ class ClvRow(BaseModel):
     clv_points: float | None = None  # computed: closing_implied - taken_implied
     beat_close: bool | None = None
     closing_source: str | None = None
+    net_pnl: float | None = None  # bet_ledger.net_pnl (for the CLV scatter y-axis)
+    # Market-movement ribbon (taken implied → closing implied), server geometry.
+    strip: ComparisonStrip | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
 
 
@@ -599,5 +656,297 @@ class ClvView(BaseModel):
     summary: ClvSummary
     filters: dict[str, Any] = Field(default_factory=dict)
     scan_capped: bool = False
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1
+
+
+# ---------------------------------------------------------------------------
+# Edge Scanner (V2) — recent DB-backed recommendations with HONEST columns.
+#
+# This is NOT a live feed and NOT a fabricated "value score". Every column is a
+# real engine value from the trace payload (or an explicitly computed/labeled
+# derivation). ``recorded_price`` is the price recorded on the trace at decision
+# time — Omega has no live multi-book quote, so we never claim "best price".
+# ---------------------------------------------------------------------------
+
+
+class EdgeScannerRow(BaseModel):
+    """One recent recommendation, surfaced with honest, source-labeled columns."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trace_id: str
+    timestamp: str | None = None
+    league: str | None = None
+    matchup: str | None = None
+    kind: str | None = None
+    market: ExtractedFieldModel
+    selection: ExtractedFieldModel
+    # Market-aware output: recorded lines stay recorded lines; moneyline uses the
+    # model probability. ``model_output_is_pct`` tells the template to format the
+    # value as a probability percentage.
+    model_output_label: str
+    model_output: ExtractedFieldModel
+    model_output_is_pct: bool = False
+    # The price recorded on the trace at decision time (NOT a live/best quote).
+    recorded_price: ExtractedFieldModel
+    edge: ExtractedFieldModel  # engine_edge (real; db_trace_payload)
+    # Server-formatted edge so neither template nor JS assumes a unit. The
+    # source value may be a fraction (0.04) or already a percent (4.0); the
+    # formatter normalizes both to a percent string. None when no edge exists.
+    edge_display: str | None = None
+    edge_positive: bool | None = None
+    # Engine-owned confidence tier only; unavailable when the trace did not stamp one.
+    confidence: str | None = None
+    confidence_source: str = "unavailable"
+    confidence_computed: bool = False
+    # Data quality: clean | warn | fail | unknown (from trace_quality + evidence).
+    data_quality: str = "unknown"
+    data_quality_detail: str | None = None
+    has_outcome: bool = False
+    # Compact dumbbell: Omega P(selection) vs the market's implied probability
+    # (server-computed geometry). None when neither probability is available.
+    strip: ComparisonStrip | None = None
+    field_sources: dict[str, str] = Field(default_factory=dict)
+
+
+class EdgeScannerView(BaseModel):
+    """Recent DB-backed recommendations ranked by engine edge (read-only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rows: list[EdgeScannerRow] = Field(default_factory=list)
+    scan_capped: bool = False
+    generated_at: str
+    filters: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1
+
+
+# ---------------------------------------------------------------------------
+# Calibration chart (V2) — a SINGLE-UNIT, server-computed time series.
+#
+# Doctrine: the chart never mixes incompatible units. It declares its Y-axis
+# ``unit`` explicitly, and the SVG geometry (polylines/dots) is computed
+# server-side so the template only drops coordinates in — no math in Jinja/JS,
+# and the frontend never computes a protected betting value.
+# ---------------------------------------------------------------------------
+
+
+class CalibrationChartPoint(BaseModel):
+    """One time bucket: the model and market values share ONE unit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    model_value: float | None = None
+    market_value: float | None = None
+    n: int = 0
+
+
+class CalibrationChartDot(BaseModel):
+    """Pre-laid-out hover anchor (pixel coords) for one model point."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cx: float
+    cy: float
+    label: str
+    model_value: float | None = None
+    market_value: float | None = None
+
+
+class CalibrationChart(BaseModel):
+    """Single-unit model-vs-market time series with server-computed geometry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: str  # e.g. "implied_prob_model_vs_market"
+    unit: str  # explicit Y-axis unit, e.g. "implied probability (%)"
+    y_label: str
+    model_series_label: str
+    market_series_label: str
+    points: list[CalibrationChartPoint] = Field(default_factory=list)
+    # Server-computed SVG geometry (no client math):
+    view_w: int = 680
+    view_h: int = 220
+    model_polyline: str = ""
+    market_polyline: str = ""
+    dots: list[CalibrationChartDot] = Field(default_factory=list)
+    y_min: float = 0.0
+    y_max: float = 1.0
+    sample: int = 0
+    filters: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1
+
+
+# ---------------------------------------------------------------------------
+# Command Center (V2 landing) — a SUMMARY composed from the existing read views.
+#
+# Each panel carries its own PanelState so the landing degrades one panel at a
+# time (failure isolation) instead of 500-ing the whole page. The CommandCenter
+# introduces NO new DB access: it only aggregates HealthResponse / DiagnosticsView
+# / ReviewQueueView / ClvView (and, later, the Edge Scanner + calibration chart).
+# ---------------------------------------------------------------------------
+
+
+class PanelState(BaseModel):
+    """Per-panel render state for the Command Center (failure isolation).
+
+    ``state`` is one of ``data`` | ``empty`` | ``degraded``. ``message`` carries
+    the honest empty/degraded copy; ``source`` is the provenance label so the
+    panel can show where its numbers came from.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    title: str
+    state: str  # "data" | "empty" | "degraded"
+    message: str | None = None
+    source: str | None = None
+
+
+class CommandCenterView(BaseModel):
+    """V2 landing summary: bounded, per-panel-isolated aggregation of reads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    generated_at: str
+    panels: dict[str, PanelState] = Field(default_factory=dict)
+    health: HealthResponse | None = None
+    review: ReviewQueueView | None = None
+    diagnostics: DiagnosticsView | None = None
+    clv: ClvView | None = None
+    scanner: EdgeScannerView | None = None
+    calibration_chart: CalibrationChart | None = None
+    review_count: int = 0
+    schema_version: int = 1
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 V2 visuals (first wave) — compact comparison strips, reliability
+# diagram, CLV scatter, data-quality heatmap.
+#
+# Same doctrine as the calibration chart: ALL geometry is server-computed (the
+# template only drops coordinates into SVG / colours into cells), every chart
+# declares ONE explicit unit, low-n series are *suppressed* (never drawn), and an
+# empty source renders an honest empty state rather than a fabricated mark.
+#
+# ``ComparisonStrip`` / ``ComparisonStripDot`` are defined ABOVE ``EdgeScannerRow``
+# (which embeds a strip), since deferred annotations still need the name resolvable
+# at class-build time.
+# ---------------------------------------------------------------------------
+
+
+class ReliabilityBin(BaseModel):
+    """One probability bucket: model midpoint vs realized hit rate (pixels too)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str  # e.g. "55–60%"
+    p_mid: float  # bucket midpoint (model probability, 0-1)
+    hit_rate: float  # realized win rate in the bucket (0-1)
+    n: int  # graded pairs in the bucket
+    cx: float
+    cy: float
+
+
+class ReliabilityDiagram(BaseModel):
+    """Model probability bucket vs realized hit rate, with the y=x diagonal.
+
+    Built from graded bets joined to the model probability that produced them.
+    Bins below ``min_n`` are suppressed (not plotted) so thin buckets never lie.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    unit: str = "probability (%)"
+    view_w: int = 360
+    view_h: int = 360
+    # Perfect-calibration diagonal endpoints (server pixels).
+    diag_x1: float = 0.0
+    diag_y1: float = 0.0
+    diag_x2: float = 0.0
+    diag_y2: float = 0.0
+    bins: list[ReliabilityBin] = Field(default_factory=list)
+    n_pairs: int = 0  # total graded (model_prob, hit) pairs considered
+    n_plotted: int = 0  # bins actually drawn (n >= min_n)
+    min_n: int = 0  # suppression threshold applied
+    filters: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1
+
+
+class ClvScatterPoint(BaseModel):
+    """One bet plotted as (CLV, net result) with server-computed pixels."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ledger_id: str
+    cx: float
+    cy: float
+    clv_points: float
+    net_pnl: float
+    status: str | None = None
+    tone: str = "neutral"  # pos | neg | neutral (by net result)
+    label: str  # short matchup/selection for the tooltip
+    clv_display: str
+    pnl_display: str
+
+
+class ClvScatter(BaseModel):
+    """Process-vs-luck scatter: CLV (x) against net result (y) with quadrants."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    view_w: int = 480
+    view_h: int = 320
+    x0: float | None = None  # pixel of CLV=0 (quadrant guide); None if off-domain
+    y0: float | None = None  # pixel of net=0 (quadrant guide); None if off-domain
+    x_label: str = "CLV (closing − taken implied prob)"
+    y_label: str = "net result ($)"
+    points: list[ClvScatterPoint] = Field(default_factory=list)
+    n_plotted: int = 0
+    n_excluded: int = 0  # bets without a close or not yet graded
+    filters: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    schema_version: int = 1
+
+
+class QualityCell(BaseModel):
+    """One coverage ratio cell in the data-quality heatmap."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str  # "evidence" | "closing_line" | "outcome" | "bet"
+    ratio: float | None = None  # 0-1; None when there is nothing to measure
+    pct_display: str = "—"
+    count: int = 0  # numerator
+    total: int = 0  # denominator
+    tone: str = "muted"  # good | warn | bad | muted
+
+
+class QualityRow(BaseModel):
+    """One league's coverage across the quality dimensions (heatmap row)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    league: str
+    traces: int = 0
+    cells: list[QualityCell] = Field(default_factory=list)
+
+
+class QualityHeatmap(BaseModel):
+    """Per-league data-coverage heatmap (counts only; bounded read scan)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    columns: list[str] = Field(default_factory=list)  # column labels, in cell order
+    rows: list[QualityRow] = Field(default_factory=list)
+    traces_scanned: int = 0
+    scan_capped: bool = False
+    filters: dict[str, Any] = Field(default_factory=dict)
     warnings: list[OperatorWarningModel] = Field(default_factory=list)
     schema_version: int = 1

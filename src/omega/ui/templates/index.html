@@ -1,89 +1,183 @@
 {% extends "base.html" %}
-{% block title %}Omega Operator Console{% endblock %}
+{% from "base.html" import field_val, pct_field_val, warning_chips, cal_chart %}
+{% block title %}Sports Analytics Platform · Omega Console{% endblock %}
+
+{% macro panel_status(p) -%}
+{%- if p.state == 'degraded' -%}
+<div class="panel-degraded">{{ p.message or 'Unavailable; source read failed.' }}</div>
+{%- elif p.state == 'empty' -%}
+<div class="panel-empty">{{ p.message or 'No data.' }}</div>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro model_value(r) -%}
+{%- if r.model_output_is_pct -%}
+  {{ pct_field_val(r.model_output) }}
+{%- else -%}
+  {{ field_val(r.model_output) }}
+{%- endif -%}
+{%- endmacro %}
+
 {% block content %}
-<div class="hero">
-  <h1>Operator Console</h1>
-  <p>Read-only exploration of traces, bets, and session QA. All values are DB-backed; session sidecars are process/narrative only.</p>
-</div>
+<section class="platform-hero">
+  <div>
+    <h1>Sports Analytics Platform</h1>
+    <p>Live market review, calibration health, and trace quality.</p>
+  </div>
+  <div class="hero-status">
+    <span class="hero-dot"></span>
+    <span>{{ health.status | upper if health else 'LOCAL' }}</span>
+    {% if cc.review_count %}<strong>{{ cc.review_count }}</strong>{% endif %}
+  </div>
+</section>
 
-<div class="vitals">
-  <div class="vital">
-    <span class="vital-label">Status</span>
-    <span class="vital-value {{ 'ok' if health.status == 'OK' else 'warn' }}">{{ health.status }}</span>
-  </div>
-  <div class="vital">
-    <span class="vital-label">Traces</span>
-    <span class="vital-value">{{ health.trace_count }}</span>
-  </div>
-  <div class="vital">
-    <span class="vital-label">Schema</span>
-    <span class="vital-value" style="font-size: 16px;">{{ health.schema_version }}</span>
-  </div>
-  <div class="vital">
-    <span class="vital-label">DB Source</span>
-    <span class="vital-value" style="font-size: 14px;">{{ health.db_source }}</span>
-  </div>
-  <div class="vital">
-    <span class="vital-label">Read Only</span>
-    <span class="vital-value" style="font-size: 14px;">{{ health.read_only }}</span>
-  </div>
-  <div class="vital">
-    <span class="vital-label">Milestone</span>
-    <span class="vital-value" style="font-size: 14px; color: var(--pos);">{{ health.milestone }}</span>
-  </div>
-</div>
+<section class="mockup-grid">
+  <div class="mockup-left">
+    {% set p = cc.panels.scanner %}
+    <section class="panel mock-panel scanner-panel{{ ' hot' if p.state == 'data' else '' }}">
+      <div class="panel-head">
+        <h2>Live Market Scanner</h2>
+        <span class="panel-meta">recent - ranked by edge</span>
+      </div>
+      {% if p.state == 'data' and cc.scanner %}
+      <div class="panel-body flush">
+        <div class="table-wrap market-table-wrap">
+          <table class="grid scanner market-table">
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Time</th>
+                <th>Market</th>
+                <th>Omega Model</th>
+                <th>Recorded Odds</th>
+                <th>Edge</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in cc.scanner.rows[:7] %}
+              <tr>
+                <td>
+                  <a class="event-link" href="/traces/{{ r.trace_id }}">{{ r.matchup or r.trace_id }}</a>
+                  {% if r.league %}<span class="league-chip">{{ r.league }}</span>{% endif %}
+                </td>
+                <td><span class="live-chip">DB</span>{% if r.timestamp %} {{ r.timestamp[11:16] or r.timestamp[:10] }}{% endif %}</td>
+                <td>{{ field_val(r.market) }}</td>
+                <td>
+                  {{ model_value(r) }}
+                  <span class="model-label">{{ r.model_output_label }}</span>
+                </td>
+                <td class="mono">{{ field_val(r.recorded_price) }}</td>
+                <td>
+                  {% if r.edge_display %}
+                  <span class="edge-chip {{ 'pos' if r.edge_positive else 'neg' }}">{{ r.edge_display }}</span>
+                  {% else %}
+                  <span class="muted">-</span>
+                  {% endif %}
+                </td>
+                <td><a class="neon-action" href="/traces/{{ r.trace_id }}">Review</a></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}{{ panel_status(p) }}{% endif %}
+    </section>
 
-<div class="cards">
-  <a class="card" href="/traces">
-    <div class="card-icon">&#x1F50D;</div>
-    <h2>Trace Ledger Explorer</h2>
-    <p>Browse persisted analysis traces, filter by date/league/kind/confidence/session, and inspect linked evidence, simulation distributions, outcomes, bets, and QA.</p>
-  </a>
-  <a class="card" href="/bets">
-    <div class="card-icon">&#x1F4B0;</div>
-    <h2>Bet Ledger Explorer</h2>
-    <p>Browse <code>bet_ledger</code> entries with settlement/PnL, staking metadata, and correlation groups; drill into the linked trace recommendation values.</p>
-  </a>
-  <a class="card" href="/sessions">
-    <div class="card-icon">&#x1F4CB;</div>
-    <h2>Session Review</h2>
-    <p>Validated JSON session sidecars with audit events, assumptions, bugs, and agent notes — correlated to DB traces by <code>session_id</code>.</p>
-  </a>
-  <a class="card" href="/diagnostics">
-    <div class="card-icon">&#x2764;</div>
-    <h2>Diagnostics</h2>
-    <p>System health: runtime DB counts, calibration-registry summary, and signal-scoring freshness.</p>
-  </a>
-  <a class="card" href="/calibration">
-    <div class="card-icon">&#x1F3AF;</div>
-    <h2>Calibration Status</h2>
-    <p>Versioned calibration profiles with the active production profile and its held-out metrics.</p>
-  </a>
-  <a class="card" href="/signals">
-    <div class="card-icon">&#x1F4CA;</div>
-    <h2>Signal Performance</h2>
-    <p>Retrospective scoring of evidence signals — direction accuracy, hit rate, calibration gap, brier — from the latest run.</p>
-  </a>
-  <a class="card" href="/review">
-    <div class="card-icon">&#x1F4E5;</div>
-    <h2>Review Queue</h2>
-    <p>Work to act on: ungraded traces, pending bets, and problem sessions — aggregated from existing reads.</p>
-  </a>
-  <a class="card" href="/clv">
-    <div class="card-icon">&#x1F4C8;</div>
-    <h2>Market Movement / CLV</h2>
-    <p>Closing-line value per bet: the price you took versus the attached closing line, with beat-the-close coverage.</p>
-  </a>
-</div>
+    {% set p = cc.panels.calibration %}
+    <section class="panel mock-panel calibration-panel">
+      <div class="panel-head">
+        <h2>Calibration Tuning</h2>
+        <span class="panel-meta">historical performance</span>
+      </div>
+      {% if p.state == 'data' %}
+      <div class="panel-body">
+        {% if cc.calibration_chart and cc.calibration_chart.points %}
+          {{ cal_chart(cc.calibration_chart) }}
+        {% else %}
+          {{ panel_status({'state': 'empty', 'message': 'No model-vs-market chart data yet.'}) }}
+        {% endif %}
+        {% if cc.diagnostics %}
+        {% set cal = cc.diagnostics.calibration %}
+        <div class="calibration-strip">
+          <span><strong>{{ cal.production }}</strong> production</span>
+          <span><strong>{{ cal.candidate }}</strong> candidate</span>
+          <span><strong>{{ cal.total_profiles }}</strong> profiles</span>
+          <a href="/calibration">Open</a>
+        </div>
+        {% endif %}
+      </div>
+      {% else %}{{ panel_status(p) }}{% endif %}
+    </section>
+  </div>
 
-{% if nav_placeholders %}
-<div class="future">
-  <h3>Planned (later milestones — disabled)</h3>
-  <ul class="ph-list">
-    {% for item in nav_placeholders %}
-      <li><span class="navph">{{ item.label }}</span> <em>Milestone {{ item.milestone }}</em></li>
-    {% endfor %}
-  </ul>
-</div>
-{% endif %}
+  <aside class="mockup-right">
+    {% set p = cc.panels.review %}
+    <section class="panel mock-panel review-panel">
+      <div class="panel-head">
+        <h2>Interactive Review Queue</h2>
+        <span class="panel-menu">...</span>
+      </div>
+      {% if p.state == 'data' and cc.review %}
+      <div class="review-stack" data-keynav>
+        {% for b in cc.review.buckets if b.count > 0 %}
+        {% for it in b['items'][:1] %}
+        <article class="review-card sev-{{ b.severity }}" tabindex="0">
+          <div class="review-card-head">
+            <a href="{{ it.href }}">{{ it.label or it.id }}</a>
+            <span>{{ b.severity }}</span>
+          </div>
+          <p>{{ it.detail or b.title }}</p>
+          <dl>
+            <dt>Matchup</dt><dd>{{ it.detail or '-' }}</dd>
+            <dt>Status</dt><dd><span class="status-word sev-{{ b.severity }}">{{ b.title }}</span></dd>
+          </dl>
+          <div class="card-actions">
+            <a class="small-action" href="{{ it.href }}">View details</a>
+            <span class="flag-btn" aria-hidden="true">Flag</span>
+          </div>
+        </article>
+        {% endfor %}
+        {% endfor %}
+      </div>
+      {% else %}{{ panel_status(p) }}{% endif %}
+    </section>
+
+    {% set p = cc.panels.failures %}
+    <section class="panel mock-panel review-panel lower-review">
+      <div class="panel-head">
+        <h2>Trace QA Queue</h2>
+        <span class="panel-menu">...</span>
+      </div>
+      {% if p.state == 'data' and cc.review %}
+      <div class="review-stack compact" data-keynav>
+        {% set rendered = namespace(n=0) %}
+        {% for b in cc.review.buckets if b.count > 0 %}
+        {% for it in b['items'][:2] %}
+        {% if rendered.n < 5 %}
+        <article class="review-card sev-{{ b.severity }}" tabindex="0">
+          <div class="review-card-head">
+            <a href="{{ it.href }}">{{ it.label or it.id }}</a>
+            <span>{{ b.count }}</span>
+          </div>
+          <p>{{ b.title }}</p>
+          <dl>
+            <dt>Type</dt><dd>{{ it.kind }}</dd>
+            <dt>Signal</dt><dd>{{ it.detail or '-' }}</dd>
+          </dl>
+          <div class="card-actions">
+            <a class="small-action" href="{{ it.href }}">View details</a>
+          </div>
+        </article>
+        {% set rendered.n = rendered.n + 1 %}
+        {% endif %}
+        {% endfor %}
+        {% endfor %}
+        {% if rendered.n == 0 %}{{ panel_status({'state': 'empty', 'message': 'No review items in the scan window.'}) }}{% endif %}
+      </div>
+      {% else %}{{ panel_status(p) }}{% endif %}
+    </section>
+  </aside>
+</section>
 {% endblock %}

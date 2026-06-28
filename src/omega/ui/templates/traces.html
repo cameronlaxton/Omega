@@ -1,10 +1,16 @@
 {% extends "base.html" %}
 {% from "base.html" import src_badge, pager, filter_chips %}
-{% block title %}Traces · Omega Console{% endblock %}
+{% block title %}Traces - Omega Console{% endblock %}
 {% block content %}
-<h1>Trace Ledger Explorer</h1>
+<section class="ledger-hero">
+  <div>
+    <h1>Trace Ledger</h1>
+    <p>DB-backed analysis traces, scanned by matchup first and audit identity second.</p>
+  </div>
+  <a class="action-btn" href="/scanner">Edge Scanner</a>
+</section>
 
-<form class="filters" method="get" action="/traces">
+<form class="filters ledger-filters" method="get" action="/traces">
   <label>Date from <input type="date" name="date_from" value="{{ data.filters.date_from or '' }}"></label>
   <label>Date to <input type="date" name="date_to" value="{{ data.filters.date_to or '' }}"></label>
   <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="e.g. MLB" autocomplete="off"></label>
@@ -19,47 +25,93 @@
   </label>
   <label>Market <input type="text" name="market" value="{{ data.filters.market or '' }}" placeholder="e.g. moneyline" autocomplete="off"></label>
   <label>Confidence <input type="text" name="confidence" value="{{ data.filters.confidence or '' }}" placeholder="e.g. A or B" autocomplete="off"></label>
-  <label>Session <input type="text" name="session_id" value="{{ data.filters.session_id or '' }}" placeholder="e.g. sess-…" autocomplete="off"></label>
+  <label>Session <input type="text" name="session_id" value="{{ data.filters.session_id or '' }}" placeholder="e.g. sess-..." autocomplete="off"></label>
   <button type="submit">Filter</button>
   <a class="clearbtn" href="/traces">Clear</a>
 </form>
 
 {{ filter_chips(request, data.filters, '/traces') }}
 
-<p class="srcnote">Row numbers sourced from {{ src_badge('db_trace_payload') }} (trace JSON) and {{ src_badge('outcomes') }} (graded?).</p>
+<p class="srcnote">Rows are sourced from {{ src_badge('db_trace_payload') }} and {{ src_badge('outcomes') }}. Trace IDs remain available as compact audit chips.</p>
 
-<table class="grid">
-  <thead>
-    <tr>
-      <th>trace_id</th><th>timestamp</th><th>league / sport</th><th>kind</th>
-      <th>matchup</th><th>confidence</th><th>markets</th><th>evidence</th><th>agg. quality</th><th>graded?</th><th>session</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for row in data.rows %}
-    <tr>
-      <td><a href="/traces/{{ row.trace_id }}"><code>{{ row.trace_id }}</code></a></td>
-      <td class="nowrap">{{ row.timestamp or '—' }}</td>
-      <td>{{ row.league or '—' }}{% if row.sport %} <span class="muted">/ {{ row.sport }}</span>{% endif %}</td>
-      <td>{{ row.kind or '—' }}</td>
-      <td>{{ row.matchup or '—' }}</td>
-      <td>{{ row.confidence_tiers | join(', ') or '—' }}</td>
-      <td>{{ row.markets | join(', ') or '—' }}</td>
-      <td class="evcol">
-        {%- if row.evidence_coverage -%}
-        <span title="applied {{ row.evidence_coverage.applied_signals }} · shadow {{ row.evidence_coverage.shadow_signals }}">{{ row.evidence_coverage.total_signals }}</span>
-        {%- if row.evidence_coverage.total_signals == 0 %} <span class="warn" title="zero evidence signals linked to this trace">⚠</span>{% endif -%}
-        {%- else -%}—{%- endif -%}
-      </td>
-      <td>{{ '%.3f' % row.aggregate_quality if row.aggregate_quality is not none else '—' }}</td>
-      <td>{{ 'yes' if row.has_outcome else 'no' }}</td>
-      <td>{% if row.session_id %}<a href="/sessions/{{ row.session_id }}">{{ row.session_id }}</a>{% else %}—{% endif %}</td>
-    </tr>
-    {% else %}
-    <tr><td colspan="11" class="empty">No traces match these filters.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+{% if data.rows %}
+<section class="panel mock-panel ledger-panel hot">
+  <div class="table-wrap market-table-wrap ledger-table-wrap">
+    <table class="grid scanner market-table ledger-table">
+      <thead>
+        <tr>
+          <th>Event</th>
+          <th>Time</th>
+          <th>Type</th>
+          <th>Confidence</th>
+          <th>Markets</th>
+          <th>evidence</th>
+          <th>Quality</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in data.rows %}
+        <tr>
+          <td class="entity-cell">
+            <a class="event-link" href="/traces/{{ row.trace_id }}">{{ row.matchup or ('Trace ' ~ (row.trace_id or '')[:8]) }}</a>
+            <div class="entity-sub">
+              <span>{{ row.league or 'unknown' }}{% if row.sport %} / {{ row.sport }}{% endif %}</span>
+              <code class="id-chip" title="{{ row.trace_id }}">trace {{ (row.trace_id or '')[:12] }}</code>
+              {% if row.session_id %}<a class="id-chip link-chip" href="/sessions/{{ row.session_id }}" title="{{ row.session_id }}">session {{ row.session_id[:10] }}</a>{% endif %}
+            </div>
+          </td>
+          <td class="nowrap">
+            <span class="live-chip">DB</span>
+            <span>{{ row.timestamp[:16] if row.timestamp else '-' }}</span>
+          </td>
+          <td>
+            <span class="pill pill-gray">{{ row.kind or 'unknown' }}</span>
+          </td>
+          <td>
+            {% if row.confidence_tiers %}
+              {% for tier in row.confidence_tiers[:3] %}
+                <span class="grade {{ tier | lower }}">{{ tier }}</span>{% if not loop.last %} {% endif %}
+              {% endfor %}
+            {% else %}
+              <span class="muted">-</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.markets %}
+              {% for market in row.markets[:3] %}
+                <span class="market-pill">{{ market }}</span>
+              {% endfor %}
+              {% if row.markets | length > 3 %}<span class="model-label">+{{ (row.markets | length) - 3 }} more</span>{% endif %}
+            {% else %}
+              <span class="muted">-</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.evidence_coverage %}
+              <span class="evidence-meter{{ ' empty' if row.evidence_coverage.total_signals == 0 else '' }}"
+                    title="applied {{ row.evidence_coverage.applied_signals }} / shadow {{ row.evidence_coverage.shadow_signals }}">
+                {{ row.evidence_coverage.total_signals }} signals
+              </span>
+            {% else %}
+              <span class="muted">-</span>
+            {% endif %}
+          </td>
+          <td class="mono">{{ '%.3f' % row.aggregate_quality if row.aggregate_quality is not none else '-' }}</td>
+          <td>
+            <span class="pill {{ 'pill-green' if row.has_outcome else 'pill-amber' }}">{{ 'graded' if row.has_outcome else 'open' }}</span>
+          </td>
+          <td><a class="neon-action" href="/traces/{{ row.trace_id }}">Review</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<div class="panel"><div class="panel-empty">No traces match these filters.</div></div>
+{% endif %}
 
 {{ pager(request, data.pagination) }}
 {% endblock %}

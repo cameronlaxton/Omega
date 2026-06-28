@@ -56,17 +56,33 @@ from omega.ui.schemas import (
     BetDetail,
     BetListResponse,
     BetRow,
+    CalibrationChart,
+    CalibrationChartDot,
+    CalibrationChartPoint,
     CalibrationProfileRow,
     CalibrationStatusView,
     CalibrationSummary,
     ClvRow,
+    ClvScatter,
+    ClvScatterPoint,
     ClvSummary,
     ClvView,
+    CommandCenterView,
+    ComparisonStrip,
+    ComparisonStripDot,
     DiagnosticsView,
+    EdgeScannerRow,
+    EdgeScannerView,
     EvidenceCoverageSummary,
     HealthResponse,
     OperatorWarningModel,
     Pagination,
+    PanelState,
+    QualityCell,
+    QualityHeatmap,
+    QualityRow,
+    ReliabilityBin,
+    ReliabilityDiagram,
     ReviewBucket,
     ReviewItem,
     ReviewQueueView,
@@ -90,6 +106,15 @@ _REVIEW_SAMPLE = 10
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 200
 DEFAULT_MAX_SCAN = 2000
+
+# Edge Scanner: how many recent traces to normalize for the full page vs. the
+# Command Center snapshot. Bounded so the scanner is never an unbounded scan.
+DEFAULT_SCANNER_LIMIT = 50
+SCANNER_SNAPSHOT_LIMIT = 8
+
+# Calibration chart SVG canvas (server-computed geometry; no client math).
+CHART_W = 680
+CHART_H = 220
 
 # Only filenames matching this are accepted as a session_id when resolving a
 # sidecar path — blocks path traversal on the filesystem-backed session reads.
@@ -182,6 +207,369 @@ def _paginate(
 
 
 # ---------------------------------------------------------------------------
+# Edge Scanner helpers (pure; honest column derivation)
+# ---------------------------------------------------------------------------
+
+
+def _market_family(market: Any) -> str:
+    """Coarse market family for market-aware labels. Never raises."""
+    if not market:
+        return "unknown"
+    s = str(market).lower()
+    if "spread" in s or "handicap" in s:
+        return "spread"
+    if "total" in s or "over_under" in s or "o/u" in s or s in {"over", "under"}:
+        return "total"
+    if "prop" in s:
+        return "prop"
+    if "moneyline" in s or "money_line" in s or s in {"ml", "h2h"}:
+        return "moneyline"
+    return "unknown"
+
+
+def _model_output_field(rec) -> tuple[Any, str, bool]:
+    """Pick the market-aware model output (field, label, is_pct).
+
+    Spread/Total/Prop use the model line/projection; Moneyline uses the model
+    probability directly (no prob→odds conversion). Returns the existing
+    ExtractedFieldModel so provenance/computed flags are preserved.
+    """
+    fam = _market_family(rec.market.value)
+    prob = rec.calibrated_probability if rec.calibrated_probability.value is not None else rec.raw_probability
+    if fam == "spread":
+        return rec.line, "Recorded Spread", False
+    if fam == "total":
+        return rec.line, "Recorded Total", False
+    if fam == "prop":
+        return rec.line, "Recorded Line", False
+    if fam == "moneyline":
+        return prob, "Model Probability", True
+    # unknown — prefer a line if present, else the model probability.
+    if rec.line.value is not None:
+        return rec.line, "Model Output", False
+    if prob.value is not None:
+        return prob, "Model Probability", True
+    return rec.line, "Model Output", False
+
+
+def _confidence_grade(rec) -> tuple[str | None, str, bool]:
+    """Confidence only when stamped by the engine."""
+    tier = rec.raw_confidence_tier.value
+    if tier is not None and str(tier).strip():
+        return str(tier).strip().upper(), "model_confidence_tier", False
+    return None, "unavailable", False
+
+
+def _normalize_edge_pct(value: Any, source_path: str | None = None) -> float | None:
+    """Normalize known engine edge fields to percentage points."""
+    v = _as_float(value)
+    if v is None:
+        return None
+    source = (source_path or "").lower()
+    if "edge_pct" in source or "ev_pct" in source:
+        return v
+    if source.endswith(".edge") or source == "edge":
+        return v * 100
+    return v * 100 if abs(v) <= 1 else v
+
+
+def _edge_display(value: Any, source_path: str | None = None) -> tuple[str | None, bool | None]:
+    """Format an engine edge as a percent string from its source contract."""
+    pct = _normalize_edge_pct(value, source_path)
+    if pct is None:
+        return None, None
+    return f"{pct:+.2f}%", pct > 0
+
+
+def _data_quality(trace: dict[str, Any], evidence_count: int) -> tuple[str, str | None]:
+    """Data-quality verdict (state, detail) from trace_quality + evidence count.
+
+    Handles both textual verdicts (pass/warn/fail) and numeric aggregate_quality.
+    Zero evidence never reads as 'clean'."""
+    tq = trace.get("trace_quality") if isinstance(trace.get("trace_quality"), dict) else {}
+    agg = tq.get("aggregate_quality")
+    state = "unknown"
+    if isinstance(agg, str):
+        a = agg.strip().lower()
+        if a in {"pass", "ok", "clean", "complete"}:
+            state = "clean"
+        elif a == "fail":
+            state = "fail"
+        elif a in {"warn", "partial", "warning"}:
+            state = "warn"
+    elif isinstance(agg, (int, float)):
+        state = "clean" if agg >= 0.8 else "warn" if agg >= 0.5 else "fail"
+
+    detail: str | None = None
+    if evidence_count == 0:
+        if state in {"clean", "unknown"}:
+            state = "warn"
+        detail = "zero evidence"
+    elif state == "fail":
+        detail = "QA fail"
+    elif state == "clean":
+        detail = "clean"
+    return state, detail
+
+
+def _calibration_geometry(
+    points: list[CalibrationChartPoint], view_w: int, view_h: int
+) -> tuple[str, str, list[CalibrationChartDot], float, float]:
+    """Lay out a single-unit two-line series into SVG coords (pure; tested).
+
+    This is presentation geometry only — it scales already-computed values into
+    pixels. It derives no betting quantity. Returns
+    (model_polyline, market_polyline, dots, y_min, y_max).
+    """
+    pad_l, pad_r, pad_t, pad_b = 44, 14, 14, 26
+    plot_w = view_w - pad_l - pad_r
+    plot_h = view_h - pad_t - pad_b
+
+    vals: list[float] = []
+    for p in points:
+        if p.model_value is not None:
+            vals.append(p.model_value)
+        if p.market_value is not None:
+            vals.append(p.market_value)
+    if vals:
+        lo, hi = min(vals), max(vals)
+        if hi - lo < 1e-9:
+            lo -= 0.05
+            hi += 0.05
+        pad = (hi - lo) * 0.12
+        y_min, y_max = lo - pad, hi + pad
+    else:
+        y_min, y_max = 0.0, 1.0
+    span = (y_max - y_min) or 1.0
+    n = len(points)
+
+    def xcoord(i: int) -> float:
+        if n <= 1:
+            return pad_l + plot_w / 2
+        return pad_l + plot_w * i / (n - 1)
+
+    def ycoord(v: float) -> float:
+        return pad_t + plot_h * (1 - (v - y_min) / span)
+
+    model_pts: list[str] = []
+    market_pts: list[str] = []
+    dots: list[CalibrationChartDot] = []
+    for i, p in enumerate(points):
+        x = round(xcoord(i), 1)
+        if p.model_value is not None:
+            my = round(ycoord(p.model_value), 1)
+            model_pts.append(f"{x},{my}")
+            dots.append(
+                CalibrationChartDot(
+                    cx=x,
+                    cy=my,
+                    label=p.label,
+                    model_value=p.model_value,
+                    market_value=p.market_value,
+                )
+            )
+        if p.market_value is not None:
+            market_pts.append(f"{x},{round(ycoord(p.market_value), 1)}")
+    return " ".join(model_pts), " ".join(market_pts), dots, round(y_min, 4), round(y_max, 4)
+
+
+# ---------------------------------------------------------------------------
+# V2 visual geometry (first wave) — pure, server-side, tested.
+#
+# These scale already-computed values into pixels (strips, scatter) or pick a
+# colour tone from a ratio (heatmap). They derive NO betting quantity.
+# ---------------------------------------------------------------------------
+
+# Compact comparison strip (dumbbell / ribbon) canvas.
+STRIP_W = 200
+STRIP_H = 24
+
+
+def _strip_x(value: float, lo: float, hi: float, view_w: int, pad: float = 8.0) -> float:
+    """Map a value on a fixed [lo, hi] axis to a pixel x on the strip (clamped)."""
+    plot_w = view_w - 2 * pad
+    span = (hi - lo) or 1.0
+    frac = (value - lo) / span
+    frac = 0.0 if frac < 0.0 else 1.0 if frac > 1.0 else frac
+    return round(pad + plot_w * frac, 1)
+
+
+def _prob01(value: Any) -> float | None:
+    """Coerce a probability to the [0, 1] scale (a percent like 58.0 -> 0.58).
+
+    Returns None for missing/invalid/negative input. Defensive only: the
+    normalizer already yields 0-1 probabilities, but a percent-scaled source must
+    never clamp to 1.0 on the strip."""
+    f = _as_float(value)
+    if f is None or f < 0.0:
+        return None
+    return f / 100.0 if f > 1.0 else f
+
+
+def _prob_strip(
+    *,
+    mode: str,
+    unit: str,
+    primary: tuple[float | None, str, str, str],  # (value, key, label, tone)
+    secondary: tuple[float | None, str, str, str],
+    gap: float | None,
+    outcome: str | None = None,
+    missing_note: str | None = None,
+) -> ComparisonStrip | None:
+    """Build a fixed-domain [0, 1] probability strip (dumbbell or ribbon).
+
+    Returns ``None`` when both sides are missing. When only one side is present it
+    renders that single dot plus ``missing_note`` — it never invents the other
+    side. ``gap`` is the signed delta (model − market, or closing − taken); a
+    positive gap is the favourable direction in both modes, so it tints the bar.
+    """
+    cy = round(STRIP_H / 2, 1)
+    dots: list[ComparisonStripDot] = []
+    xs: list[float] = []
+    for value, key, label, tone in (primary, secondary):
+        if value is None:
+            continue
+        v = float(value)
+        cx = _strip_x(v, 0.0, 1.0, STRIP_W)
+        xs.append(cx)
+        dots.append(
+            ComparisonStripDot(
+                key=key, label=label, cx=cx, value=round(v, 6), display=f"{v * 100:.1f}%", tone=tone
+            )
+        )
+    if not dots:
+        return None
+    both = len(dots) == 2
+    gap_display: str | None = None
+    gap_positive: bool | None = None
+    seg_tone = "neutral"
+    if both and gap is not None:
+        gap_positive = gap > 0
+        gap_display = f"{gap * 100:+.2f}%"
+        if gap > 0:
+            seg_tone = "pos"
+        elif gap < 0:
+            seg_tone = "neg"
+    return ComparisonStrip(
+        mode=mode,
+        unit=unit,
+        view_w=STRIP_W,
+        view_h=STRIP_H,
+        cy=cy,
+        seg_x1=(min(xs) if both else None),
+        seg_x2=(max(xs) if both else None),
+        seg_tone=seg_tone,
+        dots=dots,
+        gap_display=gap_display,
+        gap_positive=gap_positive,
+        outcome=outcome,
+        note=(missing_note if not both else None),
+    )
+
+
+def _model_vs_market_strip(rec: Any) -> ComparisonStrip | None:
+    """Per-bet dumbbell from a normalized recommendation: Omega P(selection) vs
+    the market's implied probability. Probability-space so the unit is the same
+    for every market and the gap is exactly the computed edge."""
+    raw = (
+        rec.calibrated_probability.value
+        if rec.calibrated_probability.value is not None
+        else rec.raw_probability.value
+    )
+    model_p = _prob01(raw)
+    market_p = _prob01(rec.implied_probability.value)
+    if model_p is None and market_p is None:
+        return None
+    gap = (model_p - market_p) if (model_p is not None and market_p is not None) else None
+    return _prob_strip(
+        mode="model_vs_market",
+        unit="win probability",
+        primary=(model_p, "model", "Omega", "model"),
+        secondary=(market_p, "market", "Market", "market"),
+        gap=gap,
+        missing_note=("market price only" if model_p is None else "model only"),
+    )
+
+
+def _match_rec_prob(recs: list[Any], bet: dict[str, Any]) -> float | None:
+    """Model probability (calibrated, else raw) for the recommendation that a
+    graded bet realized — for the reliability diagram. Matches by market family
+    then exact selection, falling back to the sole recommendation. Returns None
+    (skip the pair) when no confident match exists — never guesses."""
+    if not recs:
+        return None
+    bet_fam = _market_family(bet.get("market"))
+    candidates = [r for r in recs if _market_family(r.market.value) == bet_fam] or list(recs)
+    chosen = None
+    bet_sel = str(bet.get("selection") or "").strip().lower()
+    if bet_sel:
+        for r in candidates:
+            if str(r.selection.value or "").strip().lower() == bet_sel:
+                chosen = r
+                break
+    if chosen is None and len(candidates) == 1:
+        chosen = candidates[0]
+    if chosen is None and len(recs) == 1:
+        chosen = recs[0]
+    if chosen is None:
+        return None
+    raw = (
+        chosen.calibrated_probability.value
+        if chosen.calibrated_probability.value is not None
+        else chosen.raw_probability.value
+    )
+    return _prob01(raw)
+
+
+def _scatter_geometry(
+    points: list[tuple[float, float]],
+    *,
+    x_lo: float,
+    x_hi: float,
+    y_lo: float,
+    y_hi: float,
+    view_w: int,
+    view_h: int,
+    pad_l: int = 48,
+    pad_r: int = 16,
+    pad_t: int = 16,
+    pad_b: int = 30,
+) -> tuple[list[tuple[float, float]], float | None, float | None]:
+    """Lay out (x, y) values into pixel coords; also return the pixel of x=0 and
+    y=0 (for quadrant guides), or None when 0 is outside the domain. Pure."""
+    plot_w = view_w - pad_l - pad_r
+    plot_h = view_h - pad_t - pad_b
+    xspan = (x_hi - x_lo) or 1.0
+    yspan = (y_hi - y_lo) or 1.0
+
+    def xc(x: float) -> float:
+        f = (x - x_lo) / xspan
+        f = 0.0 if f < 0.0 else 1.0 if f > 1.0 else f
+        return round(pad_l + plot_w * f, 1)
+
+    def yc(y: float) -> float:
+        f = (y - y_lo) / yspan
+        f = 0.0 if f < 0.0 else 1.0 if f > 1.0 else f
+        return round(pad_t + plot_h * (1 - f), 1)
+
+    out = [(xc(px), yc(py)) for px, py in points]
+    x0 = xc(0.0) if x_lo <= 0.0 <= x_hi else None
+    y0 = yc(0.0) if y_lo <= 0.0 <= y_hi else None
+    return out, x0, y0
+
+
+def _quality_tone(ratio: float | None) -> str:
+    """Green/amber/red/muted tone for a coverage ratio (0-1). None -> muted."""
+    if ratio is None:
+        return "muted"
+    if ratio >= 0.8:
+        return "good"
+    if ratio >= 0.5:
+        return "warn"
+    return "bad"
+
+
+# ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
 
@@ -247,6 +635,161 @@ class ConsoleService:
             trace_count=trace_count,
             schema_version=schema_version,
             sessions_dir=str(self.sessions_dir),
+        )
+
+    # -- command center (V2 landing) -------------------------------------
+
+    def _safe_panel(
+        self,
+        panels: dict[str, PanelState],
+        code: str,
+        title: str,
+        fn,
+        *,
+        source: str | None = None,
+        empty_when=None,
+        empty_msg: str | None = None,
+        degraded_msg: str | None = None,
+    ):
+        """Run one Command Center panel's read in isolation.
+
+        Records a PanelState (data | empty | degraded) and returns the read's
+        value, or ``None`` if it raised. A single panel failing degrades only
+        that panel — the landing page never 500s because one read broke.
+        """
+        try:
+            value = fn()
+        except Exception:  # noqa: BLE001 — failure isolation is the whole point
+            logging.getLogger(__name__).exception("command_center panel %r failed", code)
+            panels[code] = PanelState(
+                code=code,
+                title=title,
+                state="degraded",
+                message=degraded_msg or f"{title} unavailable; source read failed.",
+                source=source,
+            )
+            return None
+        is_empty = bool(empty_when(value)) if empty_when is not None else False
+        panels[code] = PanelState(
+            code=code,
+            title=title,
+            state="empty" if is_empty else "data",
+            message=empty_msg if is_empty else None,
+            source=source,
+        )
+        return value
+
+    def command_center(self) -> CommandCenterView:
+        """Compose the V2 landing 'Command Center' from existing read methods.
+
+        A SUMMARY (the Review Queue page is the workbench). Every panel is read
+        independently with failure isolation; all reads are bounded (``max_scan``)
+        and no new DB access pattern is introduced. Calibration Health and Recent
+        Trace Failures are derived from already-fetched views (diagnostics /
+        review) so they cost no extra read.
+        """
+        panels: dict[str, PanelState] = {}
+
+        # Vitals bar source (never raises; degrades internally).
+        health = self.health()
+
+        scanner = self._safe_panel(
+            panels,
+            "scanner",
+            "Edge Scanner",
+            lambda: self.edge_scanner(limit=SCANNER_SNAPSHOT_LIMIT),
+            source=Source.DB_TRACE_PAYLOAD,
+            empty_when=lambda v: len(v.rows) == 0,
+            empty_msg="No recent DB-backed recommendations found.",
+        )
+        review = self._safe_panel(
+            panels,
+            "review",
+            "Review Queue",
+            self.review_queue,
+            source=Source.RUNTIME,
+            empty_when=lambda v: sum(b.count for b in v.buckets) == 0,
+            empty_msg="Nothing needs review right now.",
+        )
+        diagnostics = self._safe_panel(
+            panels,
+            "diagnostics",
+            "Data Quality Watch",
+            self.diagnostics,
+            source=Source.RUNTIME,
+        )
+        clv = self._safe_panel(
+            panels,
+            "ledger",
+            "Ledger Snapshot",
+            self.clv_report,
+            source=Source.BET_LEDGER,
+            empty_when=lambda v: v.summary.bets_scanned == 0,
+            empty_msg="No bets in the ledger yet.",
+        )
+
+        # Calibration Health — derived from diagnostics (no extra read).
+        if diagnostics is not None:
+            cal = diagnostics.calibration
+            has_cal = cal.registry_available and cal.total_profiles > 0
+            panels["calibration"] = PanelState(
+                code="calibration",
+                title="Calibration Health",
+                state="data" if has_cal else "empty",
+                message=None if has_cal else "No calibration profiles in the registry.",
+                source=Source.CALIBRATION_REGISTRY,
+            )
+        else:
+            panels["calibration"] = PanelState(
+                code="calibration",
+                title="Calibration Health",
+                state="degraded",
+                message="Calibration health unavailable; diagnostics read failed.",
+                source=Source.CALIBRATION_REGISTRY,
+            )
+
+        # Recent Trace Failures — derived from the review qa_fail bucket.
+        if review is not None:
+            qa = next((b for b in review.buckets if b.code == "qa_fail"), None)
+            n_fail = qa.count if qa else 0
+            panels["failures"] = PanelState(
+                code="failures",
+                title="Recent Trace Failures",
+                state="data" if n_fail else "empty",
+                message=None if n_fail else "No QA-failing traces in the scan window.",
+                source=Source.DB_TRACE_PAYLOAD,
+            )
+        else:
+            panels["failures"] = PanelState(
+                code="failures",
+                title="Recent Trace Failures",
+                state="degraded",
+                message="Trace failures unavailable; review read failed.",
+                source=Source.DB_TRACE_PAYLOAD,
+            )
+
+        review_count = sum(b.count for b in review.buckets) if review is not None else 0
+
+        # Calibration summary chart — reuse the already-fetched CLV view so the
+        # landing does not run a second ledger scan (perf contract). Never fatal.
+        calibration_chart = None
+        if clv is not None:
+            try:
+                calibration_chart = self.calibration_chart(clv=clv)
+            except Exception:  # noqa: BLE001 — the chart is a nicety, never fatal
+                logging.getLogger(__name__).exception("command_center calibration chart failed")
+                calibration_chart = None
+
+        return CommandCenterView(
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            panels=panels,
+            health=health,
+            review=review,
+            diagnostics=diagnostics,
+            clv=clv,
+            scanner=scanner,
+            calibration_chart=calibration_chart,
+            review_count=review_count,
         )
 
     # -- diagnostics (Milestone B.2) -------------------------------------
@@ -754,10 +1297,21 @@ class ConsoleService:
                     clv_points=clv.clv_points,
                     beat_close=clv.beat_close,
                     closing_source=match.get("source"),
+                    net_pnl=_as_float(bet.get("net_pnl")),
+                    strip=_prob_strip(
+                        mode="market_movement",
+                        unit="implied probability (incl. vig)",
+                        primary=(clv.taken_implied, "taken", "Taken", "model"),
+                        secondary=(clv.closing_implied, "closing", "Close", "market"),
+                        gap=clv.clv_points,
+                        outcome=bet.get("status"),
+                        missing_note="no close",
+                    ),
                     field_sources={
                         "taken_odds": Source.BET_LEDGER,
                         "closing_odds": Source.CLOSING_LINES,
                         "clv_points": "computed:closing_minus_taken_implied",
+                        "net_pnl": Source.BET_LEDGER,
                     },
                 )
             )
@@ -803,6 +1357,434 @@ class ConsoleService:
                 if c.get("market") == market:
                     return c
         return None
+
+    # -- edge scanner (V2) -----------------------------------------------
+
+    def edge_scanner(
+        self, *, limit: int | None = None, league: str | None = None
+    ) -> EdgeScannerView:
+        """Recent DB-backed recommendations with honest columns (read-only).
+
+        NOT a live feed: rows are the most recent traces that produced a
+        recommendation, ranked by engine edge. Bounded by ``limit`` (default
+        ``DEFAULT_SCANNER_LIMIT``). Every column is a real engine value or a
+        clearly labeled/computed derivation — there is no fabricated value score,
+        and ``recorded_price`` is the price recorded on the trace at decision
+        time (Omega has no live multi-book quote).
+        """
+        league = _clean(league)
+        n = max(1, int(limit or DEFAULT_SCANNER_LIMIT))
+        traces = self.store.query_traces(league=league, limit=n)
+        scan_capped = len(traces) >= n
+        tids = [str(t.get("trace_id") or "") for t in traces]
+        ev_counts = self.get_trace_evidence_counts(tids) if tids else {}
+
+        rows: list[EdgeScannerRow] = []
+        for t in traces:
+            tid = str(t.get("trace_id") or "")
+            view = build_trace_recommendation_view(t)
+            rvm = TraceRecommendationViewModel.model_validate(dataclasses.asdict(view))
+            if not rvm.recommendations:
+                continue  # only surface traces that produced a recommendation
+            rec = next((r for r in rvm.recommendations if r.is_primary), rvm.recommendations[0])
+            model_output, label, is_pct = _model_output_field(rec)
+            edge_display, edge_positive = _edge_display(
+                rec.engine_edge.value, rec.engine_edge.source_path
+            )
+            grade, csource, ccomputed = _confidence_grade(rec)
+            cov = ev_counts.get(tid)
+            ev_n = cov.total_signals if cov else 0
+            dq, dq_detail = _data_quality(t, ev_n)
+            strip = _model_vs_market_strip(rec)
+            rows.append(
+                EdgeScannerRow(
+                    trace_id=tid,
+                    timestamp=t.get("timestamp"),
+                    league=t.get("league"),
+                    matchup=t.get("matchup"),
+                    kind=t.get("kind"),
+                    market=rec.market,
+                    selection=rec.selection,
+                    model_output_label=label,
+                    model_output=model_output,
+                    model_output_is_pct=is_pct,
+                    recorded_price=rec.odds,
+                    edge=rec.engine_edge,
+                    edge_display=edge_display,
+                    edge_positive=edge_positive,
+                    confidence=grade,
+                    confidence_source=csource,
+                    confidence_computed=ccomputed,
+                    data_quality=dq,
+                    data_quality_detail=dq_detail,
+                    has_outcome=bool(t.get("_outcome") or t.get("_prop_outcomes")),
+                    strip=strip,
+                    field_sources={
+                        "market": Source.DB_TRACE_PAYLOAD,
+                        "selection": Source.DB_TRACE_PAYLOAD,
+                        "model_output": Source.DB_TRACE_PAYLOAD,
+                        "recorded_price": Source.DB_TRACE_PAYLOAD,
+                        "edge": Source.DB_TRACE_PAYLOAD,
+                        "confidence": Source.DB_TRACE_PAYLOAD,
+                        "data_quality": Source.DB_TRACE_PAYLOAD,
+                    },
+                )
+            )
+
+        # Rank by engine edge desc (unit-normalized); rows without an edge sort last.
+        def _edge_sort_key(r: EdgeScannerRow) -> tuple[bool, float]:
+            v = _normalize_edge_pct(r.edge.value, r.edge.source_path)
+            if v is None:
+                return (True, 0.0)
+            return (False, -v)
+
+        rows.sort(key=_edge_sort_key)
+
+        warnings: list[OperatorWarningModel] = []
+        if scan_capped:
+            warnings.append(
+                OperatorWarningModel(
+                    code="scan_capped",
+                    severity="info",
+                    message=f"scanner scan capped at {n}; older traces not included",
+                )
+            )
+        return EdgeScannerView(
+            rows=rows,
+            scan_capped=scan_capped,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            filters={"league": league, "limit": n},
+            warnings=warnings,
+        )
+
+    # -- calibration chart (V2) ------------------------------------------
+
+    def calibration_chart(
+        self, *, league: str | None = None, clv: ClvView | None = None
+    ) -> CalibrationChart:
+        """Single-unit model-vs-market time series (read-only, no recomputation).
+
+        Plots, per day, the average *implied probability* Omega took vs. the
+        market's closing implied probability — both in the SAME unit (probability
+        %). The gap between the lines is closing-line value. Composed from
+        :meth:`clv_report` (pass a precomputed ``clv`` to avoid a second scan).
+        """
+        league = _clean(league)
+        clv = clv if clv is not None else self.clv_report(league=league)
+
+        agg: dict[str, dict[str, list[float]]] = {}
+        for r in clv.rows:
+            d = (r.bet_date or "")[:10]
+            if not d:
+                continue
+            a = agg.setdefault(d, {"m": [], "k": []})
+            if r.taken_implied is not None:
+                a["m"].append(r.taken_implied)
+            if r.closing_implied is not None:
+                a["k"].append(r.closing_implied)
+
+        points: list[CalibrationChartPoint] = []
+        for d in sorted(agg):
+            m, k = agg[d]["m"], agg[d]["k"]
+            points.append(
+                CalibrationChartPoint(
+                    label=d,
+                    model_value=(sum(m) / len(m)) if m else None,
+                    market_value=(sum(k) / len(k)) if k else None,
+                    n=max(len(m), len(k)),
+                )
+            )
+
+        model_pl, market_pl, dots, y_min, y_max = _calibration_geometry(points, CHART_W, CHART_H)
+        warnings: list[OperatorWarningModel] = []
+        if not points:
+            warnings.append(
+                OperatorWarningModel(
+                    code="no_clv_data",
+                    severity="info",
+                    message="no matched closing lines to chart yet (CLV needs a captured close)",
+                )
+            )
+        return CalibrationChart(
+            mode="implied_prob_model_vs_market",
+            unit="implied probability (%)",
+            y_label="Implied probability",
+            model_series_label="Omega (taken)",
+            market_series_label="Market close",
+            points=points,
+            view_w=CHART_W,
+            view_h=CHART_H,
+            model_polyline=model_pl,
+            market_polyline=market_pl,
+            dots=dots,
+            y_min=y_min,
+            y_max=y_max,
+            sample=len(clv.rows),
+            filters={"league": league},
+            warnings=warnings,
+        )
+
+    # -- CLV scatter (V2: process vs luck) -------------------------------
+
+    def clv_scatter(self, *, league: str | None = None, clv: ClvView | None = None) -> ClvScatter:
+        """Per-bet scatter of CLV (x) against net result (y), with quadrant guides.
+
+        Only bets that have BOTH an attached closing line and a graded net result
+        are plotted; the excluded count is reported honestly. Read-only; composed
+        from :meth:`clv_report` (pass a precomputed ``clv`` to avoid a second scan).
+        """
+        league = _clean(league)
+        clv = clv if clv is not None else self.clv_report(league=league)
+        view_w, view_h = 480, 320
+
+        pairs = [r for r in clv.rows if r.clv_points is not None and r.net_pnl is not None]
+        excluded = max(0, clv.summary.bets_scanned - len(pairs))
+        warnings: list[OperatorWarningModel] = []
+        if not pairs:
+            warnings.append(
+                OperatorWarningModel(
+                    code="no_graded_clv",
+                    severity="info",
+                    message="no bets with both a closing line and a graded result yet",
+                )
+            )
+            return ClvScatter(
+                view_w=view_w,
+                view_h=view_h,
+                n_plotted=0,
+                n_excluded=excluded,
+                filters={"league": league},
+                warnings=warnings,
+            )
+
+        xs = [float(r.clv_points) for r in pairs]
+        ys = [float(r.net_pnl) for r in pairs]
+        x_mag = max(0.01, max(abs(min(xs)), abs(max(xs))))
+        x_lo, x_hi = -x_mag * 1.1, x_mag * 1.1
+        y_min, y_max = min(ys + [0.0]), max(ys + [0.0])
+        if y_max - y_min < 1e-9:
+            y_min, y_max = y_min - 1.0, y_max + 1.0
+        y_pad = (y_max - y_min) * 0.1
+        y_lo, y_hi = y_min - y_pad, y_max + y_pad
+
+        coords, x0, y0 = _scatter_geometry(
+            [(float(r.clv_points), float(r.net_pnl)) for r in pairs],
+            x_lo=x_lo,
+            x_hi=x_hi,
+            y_lo=y_lo,
+            y_hi=y_hi,
+            view_w=view_w,
+            view_h=view_h,
+        )
+        points: list[ClvScatterPoint] = []
+        for r, (cx, cy) in zip(pairs, coords):
+            pnl = float(r.net_pnl)
+            tone = "pos" if pnl > 0 else "neg" if pnl < 0 else "neutral"
+            points.append(
+                ClvScatterPoint(
+                    ledger_id=r.ledger_id,
+                    cx=cx,
+                    cy=cy,
+                    clv_points=round(float(r.clv_points), 6),
+                    net_pnl=round(pnl, 2),
+                    status=r.status,
+                    tone=tone,
+                    label=(r.matchup or r.selection or r.ledger_id),
+                    clv_display=f"{float(r.clv_points) * 100:+.2f}%",
+                    pnl_display=f"{pnl:+.2f}",
+                )
+            )
+        return ClvScatter(
+            view_w=view_w,
+            view_h=view_h,
+            x0=x0,
+            y0=y0,
+            points=points,
+            n_plotted=len(points),
+            n_excluded=excluded,
+            filters={"league": league},
+            warnings=warnings,
+        )
+
+    # -- reliability diagram (V2: over-confidence detector) --------------
+
+    def reliability_diagram(
+        self, *, league: str | None = None, bins: int = 10, min_n: int = 5
+    ) -> ReliabilityDiagram:
+        """Model probability bucket vs realized hit rate, with the y=x diagonal.
+
+        Built from graded (won/lost) bets joined to the model probability of the
+        recommendation that produced them. Buckets with fewer than ``min_n`` pairs
+        are SUPPRESSED (not plotted) so thin buckets never read as calibrated.
+        Read-only; no engine quantity is recomputed.
+        """
+        league = _clean(league)
+        view_w, view_h = 360, 360
+        bins = max(2, int(bins))
+        min_n = max(1, int(min_n))
+
+        bets = self.store.query_ledger(league=league, limit=self.max_scan)
+        graded = [b for b in bets if str(b.get("status") or "").lower() in {"won", "lost"}]
+
+        rec_cache: dict[str, list[Any]] = {}
+        pairs: list[tuple[float, int]] = []
+        for b in graded:
+            tid = b.get("trace_id")
+            if not tid:
+                continue
+            if tid not in rec_cache:
+                tr = self.store.get_trace(tid)
+                rec_cache[tid] = list(build_trace_recommendation_view(tr).recommendations) if tr else []
+            prob = _match_rec_prob(rec_cache[tid], b)
+            if prob is None:
+                continue
+            pairs.append((prob, 1 if str(b.get("status")).lower() == "won" else 0))
+
+        # diagonal endpoints are the plot corners (data (0,0) and (1,1)).
+        diag, _x0, _y0 = _scatter_geometry(
+            [(0.0, 0.0), (1.0, 1.0)], x_lo=0.0, x_hi=1.0, y_lo=0.0, y_hi=1.0, view_w=view_w, view_h=view_h
+        )
+        (diag_x1, diag_y1), (diag_x2, diag_y2) = diag
+
+        width = 1.0 / bins
+        agg: dict[int, list[int]] = {}
+        for p, hit in pairs:
+            idx = min(bins - 1, int(p / width))
+            cell = agg.setdefault(idx, [0, 0])
+            cell[0] += 1
+            cell[1] += hit
+
+        kept = [
+            (idx, n, (idx + 0.5) * width, hits / n)
+            for idx, (n, hits) in sorted(agg.items())
+            if n >= min_n
+        ]
+        coords, _, _ = _scatter_geometry(
+            [(mid, rate) for _, _, mid, rate in kept],
+            x_lo=0.0,
+            x_hi=1.0,
+            y_lo=0.0,
+            y_hi=1.0,
+            view_w=view_w,
+            view_h=view_h,
+        )
+        rel_bins: list[ReliabilityBin] = []
+        for (idx, n, mid, rate), (cx, cy) in zip(kept, coords):
+            lo_pct = round(idx * width * 100)
+            hi_pct = round((idx + 1) * width * 100)
+            rel_bins.append(
+                ReliabilityBin(
+                    label=f"{lo_pct}-{hi_pct}%",
+                    p_mid=round(mid, 4),
+                    hit_rate=round(rate, 4),
+                    n=n,
+                    cx=cx,
+                    cy=cy,
+                )
+            )
+
+        warnings: list[OperatorWarningModel] = []
+        if not rel_bins:
+            warnings.append(
+                OperatorWarningModel(
+                    code="insufficient_graded_outcomes",
+                    severity="info",
+                    message=(
+                        f"not enough graded bets to chart calibration "
+                        f"(need >= {min_n} per probability bucket)"
+                    ),
+                )
+            )
+        return ReliabilityDiagram(
+            view_w=view_w,
+            view_h=view_h,
+            diag_x1=diag_x1,
+            diag_y1=diag_y1,
+            diag_x2=diag_x2,
+            diag_y2=diag_y2,
+            bins=rel_bins,
+            n_pairs=len(pairs),
+            n_plotted=len(rel_bins),
+            min_n=min_n,
+            filters={"league": league},
+            warnings=warnings,
+        )
+
+    # -- data-quality heatmap (V2: coverage by league) -------------------
+
+    def data_quality(self, *, league: str | None = None) -> QualityHeatmap:
+        """Per-league data-coverage heatmap: evidence / closing-line / outcome
+        attachment rates over a bounded scan of recent traces. Counts only — green
+        is real coverage, never an assumed default. Read-only (two batch reads)."""
+        league = _clean(league)
+        traces = self.store.query_traces(league=league, limit=self.max_scan)
+        scan_capped = len(traces) >= self.max_scan
+        tids = [str(t.get("trace_id") or "") for t in traces if t.get("trace_id")]
+        facts = self.store.get_session_trace_facts_batch(tids) if tids else {}
+        closes = self.store.get_closing_lines_batch(tids) if tids else {}
+
+        agg: dict[str, dict[str, int]] = {}
+        for t in traces:
+            tid = str(t.get("trace_id") or "")
+            lg = t.get("league") or "—"
+            a = agg.setdefault(lg, {"traces": 0, "evidence": 0, "closing": 0, "outcome": 0})
+            a["traces"] += 1
+            f = facts.get(tid, {})
+            if int(f.get("evidence_signal_count") or 0) > 0:
+                a["evidence"] += 1
+            if bool(f.get("has_outcome")):
+                a["outcome"] += 1
+            if closes.get(tid):
+                a["closing"] += 1
+
+        rows: list[QualityRow] = []
+        for lg in sorted(agg):
+            a = agg[lg]
+            n = a["traces"]
+            cells: list[QualityCell] = []
+            for key, num in (
+                ("evidence", a["evidence"]),
+                ("closing_line", a["closing"]),
+                ("outcome", a["outcome"]),
+            ):
+                ratio = (num / n) if n else None
+                cells.append(
+                    QualityCell(
+                        key=key,
+                        ratio=ratio,
+                        pct_display=(f"{ratio * 100:.0f}%" if ratio is not None else "—"),
+                        count=num,
+                        total=n,
+                        tone=_quality_tone(ratio),
+                    )
+                )
+            rows.append(QualityRow(league=lg, traces=n, cells=cells))
+
+        warnings: list[OperatorWarningModel] = []
+        if scan_capped:
+            warnings.append(
+                OperatorWarningModel(
+                    code="scan_capped",
+                    severity="info",
+                    message=f"trace scan capped at {self.max_scan}; older traces not included",
+                )
+            )
+        if not rows:
+            warnings.append(
+                OperatorWarningModel(
+                    code="no_traces",
+                    severity="info",
+                    message="no traces found to assess data coverage",
+                )
+            )
+        return QualityHeatmap(
+            columns=["evidence", "closing line", "outcome"],
+            rows=rows,
+            traces_scanned=len(traces),
+            scan_capped=scan_capped,
+            filters={"league": league},
+            warnings=warnings,
+        )
 
     # -- traces ----------------------------------------------------------
 
@@ -895,6 +1877,13 @@ class ConsoleService:
         # JSON-safe Pydantic mirror (dataclass -> asdict -> model_validate).
         view = build_trace_recommendation_view(trace, evidence_signals=evidence)
         recommendation_view = TraceRecommendationViewModel.model_validate(dataclasses.asdict(view))
+        primary_strip = None
+        if recommendation_view.recommendations:
+            prec = next(
+                (r for r in recommendation_view.recommendations if r.is_primary),
+                recommendation_view.recommendations[0],
+            )
+            primary_strip = _model_vs_market_strip(prec)
         return TraceDetail(
             trace_id=trace_id,
             timestamp=trace.get("timestamp"),
@@ -916,6 +1905,7 @@ class ConsoleService:
             closing_lines=closing_lines,
             qa_verdict=qa_verdict,
             recommendation_view=recommendation_view,
+            primary_strip=primary_strip,
             field_sources={
                 "recommendations": Source.DB_TRACE_PAYLOAD,
                 "predictions": Source.DB_TRACE_PAYLOAD,
@@ -1078,6 +2068,7 @@ class ConsoleService:
         }
         linked_trace_id = row.get("trace_id")
         linked_recs: Any | None = None
+        linked_strip: ComparisonStrip | None = None
         if linked_trace_id:
             linked = self.store.get_trace(linked_trace_id)
             if linked is not None:
@@ -1085,6 +2076,13 @@ class ConsoleService:
                 # the linked trace's DB payload — never assumed to live in
                 # bet_ledger.
                 linked_recs = linked.get("recommendations")
+                view = build_trace_recommendation_view(linked)
+                rvm = TraceRecommendationViewModel.model_validate(dataclasses.asdict(view))
+                if rvm.recommendations:
+                    prec = next(
+                        (r for r in rvm.recommendations if r.is_primary), rvm.recommendations[0]
+                    )
+                    linked_strip = _model_vs_market_strip(prec)
         return BetDetail(
             ledger_id=ledger_id,
             trace_id=linked_trace_id,
@@ -1093,6 +2091,7 @@ class ConsoleService:
             correlation_group=row.get("correlation_group"),
             linked_trace_id=linked_trace_id if linked_recs is not None else None,
             linked_trace_recommendations=linked_recs,
+            linked_strip=linked_strip,
             field_sources={
                 "ledger": Source.BET_LEDGER,
                 "settlement": Source.BET_LEDGER,

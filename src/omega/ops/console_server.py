@@ -53,11 +53,13 @@ _OPEN_PATHS = ("/healthz",)
 # Navigation: Milestone-A pages are enabled; later-milestone destinations are
 # rendered as disabled placeholders (no working endpoint behind them).
 NAV_ENABLED = (
+    {"key": "scanner", "label": "Edge Scanner", "href": "/scanner"},
     {"key": "traces", "label": "Trace Ledger", "href": "/traces"},
     {"key": "bets", "label": "Bet Ledger", "href": "/bets"},
     {"key": "sessions", "label": "Session Review", "href": "/sessions"},
     {"key": "diagnostics", "label": "Diagnostics", "href": "/diagnostics"},
     {"key": "calibration", "label": "Calibration Status", "href": "/calibration"},
+    {"key": "data_quality", "label": "Data Quality", "href": "/data-quality"},
     {"key": "signals", "label": "Signal Performance", "href": "/signals"},
     {"key": "review", "label": "Review Queue", "href": "/review"},
     {"key": "clv", "label": "Market Movement / CLV", "href": "/clv"},
@@ -240,10 +242,29 @@ def build_console_app(
 
     @app.get("/", response_class=HTMLResponse)
     def page_index(request: Request, service=Depends(get_service)):
+        cc = service.command_center()
         return templates.TemplateResponse(
             request,
             "index.html",
-            _ctx(request, health=service.health().model_dump(), active="home"),
+            _ctx(
+                request,
+                cc=cc.model_dump(),
+                health=(cc.health.model_dump() if cc.health else None),
+                review_count=cc.review_count,
+                active="home",
+            ),
+        )
+
+    @app.get("/scanner", response_class=HTMLResponse)
+    def page_scanner(
+        request: Request,
+        service=Depends(get_service),
+        league: str | None = Query(None),
+        limit: int | None = Query(None, ge=1, le=200),
+    ):
+        data = service.edge_scanner(limit=limit, league=league)
+        return templates.TemplateResponse(
+            request, "scanner.html", _ctx(request, data=data.model_dump(), active="scanner")
         )
 
     @app.get("/traces", response_class=HTMLResponse)
@@ -385,10 +406,31 @@ def build_console_app(
         status: str | None = Query(None),
     ):
         data = service.calibration_status(league=league, status=status)
+        chart = service.calibration_chart(league=league)
+        reliability = service.reliability_diagram(league=league)
         return templates.TemplateResponse(
             request,
             "calibration.html",
-            _ctx(request, data=data.model_dump(), active="calibration"),
+            _ctx(
+                request,
+                data=data.model_dump(),
+                chart=chart.model_dump(),
+                reliability=reliability.model_dump(),
+                active="calibration",
+            ),
+        )
+
+    @app.get("/data-quality", response_class=HTMLResponse)
+    def page_data_quality(
+        request: Request,
+        service=Depends(get_service),
+        league: str | None = Query(None),
+    ):
+        data = service.data_quality(league=league)
+        return templates.TemplateResponse(
+            request,
+            "data_quality.html",
+            _ctx(request, data=data.model_dump(), active="data_quality"),
         )
 
     @app.get("/signals", response_class=HTMLResponse)
@@ -405,12 +447,19 @@ def build_console_app(
         )
 
     @app.get("/review", response_class=HTMLResponse)
-    def page_review(request: Request, service=Depends(get_service)):
-        data = service.review_queue()
+    def page_review(
+        request: Request,
+        service=Depends(get_service),
+        severity: str | None = Query(None),
+    ):
+        data = service.review_queue().model_dump()
+        severity = (severity or "").strip().lower() or None
+        if severity in {"info", "warn", "fail"}:
+            data["buckets"] = [b for b in data["buckets"] if b["severity"] == severity]
         return templates.TemplateResponse(
             request,
             "review.html",
-            _ctx(request, data=data.model_dump(), active="review"),
+            _ctx(request, data=data, active="review", severity=severity),
         )
 
     @app.get("/clv", response_class=HTMLResponse)
@@ -420,10 +469,11 @@ def build_console_app(
         league: str | None = Query(None),
     ):
         data = service.clv_report(league=league)
+        scatter = service.clv_scatter(league=league, clv=data)
         return templates.TemplateResponse(
             request,
             "clv.html",
-            _ctx(request, data=data.model_dump(), active="clv"),
+            _ctx(request, data=data.model_dump(), scatter=scatter.model_dump(), active="clv"),
         )
 
     return app

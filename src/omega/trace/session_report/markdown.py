@@ -71,6 +71,11 @@ def _context_section(title: str, bullets: list[ContextBullet], bucket: str) -> l
 
 
 def _engine_line(card: TraceReportCard) -> str:
+    if _is_research_candidate(card.output_mode):
+        return (
+            "protected engine values withheld for RESEARCH_CANDIDATE output; "
+            "retained in the persisted trace"
+        )
     ev = card.engine_view
     bits = [
         f"model probability: {_clean(ev.model_probability)}",
@@ -82,6 +87,16 @@ def _engine_line(card: TraceReportCard) -> str:
     return "; ".join(bits)
 
 
+def _is_research_candidate(output_mode: str | None) -> bool:
+    return str(output_mode or "").casefold() == "research_candidate"
+
+
+def _display_trace_id(trace_id: str, output_mode: str | None) -> str:
+    if _is_research_candidate(output_mode):
+        return "[withheld]"
+    return f"`{trace_id}`"
+
+
 def _honesty_lines(card: TraceReportCard) -> list[str]:
     """Truth-in-labeling block: how trustworthy is this recommendation?
 
@@ -91,15 +106,11 @@ def _honesty_lines(card: TraceReportCard) -> list[str]:
     ev = card.engine_view
     return [
         "**Honesty**",
-        f"- confidence tier: {_clean(ev.tier)}"
-        + (
-            f" (capped: {_clean(ev.confidence_cap_reason)})"
-            if ev.confidence_cap_reason
-            else ""
-        ),
+        f"- confidence cap reason: {_clean(ev.confidence_cap_reason)}",
         f"- trace quality: {_clean(ev.aggregate_quality)}/100 ({_clean(ev.quality_band)})",
         f"- evidence: mode={_clean(ev.evidence_mode)}, status={_clean(ev.evidence_status)}, "
-        f"signals={_clean(ev.evidence_signal_count)}, applied_factor={_clean(ev.evidence_applied_factor)}",
+        f"signals={_clean(ev.evidence_signal_count)}, "
+        f"applied_factor={_clean(ev.evidence_applied_factor)}",
         f"- calibration: path={_clean(ev.calibration_path)}, profile={_clean(ev.profile_id)}, "
         f"status={_clean(ev.profile_status)}, maturity={_clean(ev.profile_maturity)}",
         f"- profile metrics: n={_clean(ev.profile_sample_size)}, ECE={_clean(ev.profile_ece)}, "
@@ -139,7 +150,7 @@ def _render_card(card: TraceReportCard) -> list[str]:
         f"- market: {_clean(card.market)}",
         f"- book: {_clean(card.book)}",
         f"- stake/status: {_clean(card.stake_status)}",
-        f"- trace id: `{card.trace_id}`",
+        f"- trace id: {_display_trace_id(card.trace_id, card.output_mode)}",
         "",
         "**Engine View**",
         f"- {_engine_line(card)}",
@@ -192,9 +203,10 @@ _AUDIT_HEADERS = [
 
 
 def _audit_row_cells(row: AuditRow) -> list[str]:
+    research_candidate = str(row.output_mode or "").casefold() == "research_candidate"
     warnings_tag = f"⚠ {len(row.resolver_warnings)}" if row.resolver_warnings else "—"
     return [
-        f"`{row.trace_id}`",
+        "[withheld]" if research_candidate else f"`{row.trace_id}`",
         _clean(row.league),
         _clean(row.matchup),
         _clean(row.market_type),
@@ -204,7 +216,7 @@ def _audit_row_cells(row: AuditRow) -> list[str]:
         _clean(row.bookmaker),
         _clean(row.odds_resolved_at),
         _clean(row.output_mode),
-        _clean(row.confidence_tier),
+        "[withheld]" if research_candidate else _clean(row.confidence_tier),
         _clean(row.calibration_eligible),
         _clean(row.aggregate_quality),
         str(row.evidence_count),
@@ -295,9 +307,11 @@ def render_intake_markdown(data: IntakeReportData) -> str:
     lines.extend(["## Full Trace Ledger", ""])
     lines.extend(["| Trace | League | Market | Status | Ledger |", "|---|---|---|---|---|"])
     for card in data.cards:
+        ledger_status = _clean(card.ledger_view.provenance or card.ledger_view.status)
         lines.append(
-            f"| `{card.trace_id}` | {_clean(card.league)} | {_clean(card.market)} | "
-            f"{_clean(card.trace_quality_status)} | {_clean(card.ledger_view.provenance or card.ledger_view.status)} |"
+            f"| {_display_trace_id(card.trace_id, card.output_mode)} | "
+            f"{_clean(card.league)} | {_clean(card.market)} | "
+            f"{_clean(card.trace_quality_status)} | {ledger_status} |"
         )
     if not data.cards:
         lines.append("| none | not captured | not captured | not captured | not captured |")

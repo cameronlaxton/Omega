@@ -164,6 +164,53 @@ This made the pipeline inspectable and created the basis for trace persistence, 
 - 22 new tests added
 - total at that point: 295 passing
 
+## Phase 8 — Operator Console (read-only)
+
+**Status:** in progress (read-only console live; V2 re-skin + first wave of data
+visualizations landed)
+
+### Delivered
+- a standalone, loopback-fail-closed, **read-only** FastAPI console (`omega-console`,
+  `src/omega/ui/` + `src/omega/ops/console_server.py`) for auditing traces, bets, sessions,
+  calibration, signals, diagnostics, review queue, and closing-line value — no mutation path
+  (the service refuses a writable store; every route is GET)
+- a V2 "mission-control" re-skin of the console pages (hero headers, restructured ledgers,
+  dark design-token system)
+- **first wave of data visualizations** (server-computed SVG geometry; no client charting
+  library; one explicit unit per chart; honest empty/low-n states):
+  - per-bet **comparison strip / dumbbell** — Omega P(selection) vs market implied
+    probability (Edge Scanner, Trace Detail, Bet Detail)
+  - **market-movement ribbon** — taken → closing implied with outcome cap (CLV page)
+  - **calibration reliability diagram** — model-probability bucket vs realized hit rate with
+    the y=x diagonal; low-n buckets suppressed (Calibration page)
+  - **CLV scatter** — closing-line value vs net result with quadrant guides (CLV page)
+  - **data-quality heatmap** — per-league evidence / closing-line / outcome coverage on a new
+    `/data-quality` page
+- the reusable geometry primitives behind them (`_strip_x` / `_prob_strip`,
+  `_scatter_geometry`) plus the `comp_strip` / `reliability_chart` / `clv_scatter` /
+  `quality_heatmap` Jinja macros
+
+### Deferred (by design)
+The remaining visualization backlog is specced in
+[`docs/phase8/CONSOLE_V2_VISUALS.md`](../phase8/CONSOLE_V2_VISUALS.md) and intentionally not
+built in this wave:
+- bankroll / PnL equity curve (top of backlog)
+- trace-lifecycle coverage funnel (reframed from a Sankey)
+- signal coverage-vs-usefulness scatter (reframed from a radar)
+- evidence coverage bar (reframed from a contribution "waterfall")
+- review-queue kanban; per-trace lifecycle timeline enhancement; league/market treemap
+- explicitly out of scope (no backing data): odds-freshness column, live multi-book quote
+  spread, native-unit spread/total/prop dumbbell
+
+### Why it mattered
+The console turns the engine's already-persisted, audit-grade data into something an operator
+can read at a glance — *did we beat the close, where is Omega over/under-confident, where is
+coverage thin, is good process being rewarded* — without ever recomputing a protected
+quantity or fabricating a value when data is absent.
+
+### Testing
+- `tests/ui` at 215 passing (25 added for the visualization first wave)
+
 ## Current historical milestones
 
 ### Completed phases
@@ -181,6 +228,7 @@ This made the pipeline inspectable and created the basis for trace persistence, 
 |---|---|---|
 | Phase 6h | Calibration and Runtime Hardening (current phase) | Active |
 | Phase 7 | Multi-Sport Expansion (Soccer, Tennis, NFL) | Deferred (except explicitly marked experimental parts) |
+| Phase 8 | Operator Console (read-only) — V2 re-skin + data-visualization first wave | Active; visualization backlog deferred (see `docs/phase8/CONSOLE_V2_VISUALS.md`) |
 | Phase 4 | Research Sandbox — exploratory mode, model comparison, what-if scenarios | lowest priority |
 
 ## Deferred by design
@@ -207,6 +255,11 @@ They did not directly prevent bad sim inputs, bad recommendations, bad replay, o
 | After Phase 3A | 245 |
 | After Phase 3B | 273 |
 | After Phase 5 | 295 |
+| Phase 8 — operator console (`tests/ui` suite) | 215 |
+
+> Note: the Phase 8 figure is the `tests/ui` suite only (the console is an isolated
+> read-only surface), not the repository-wide total, which has grown well beyond the
+> Phase-5 baseline across the Phase 6/7 work tracked outside this file.
 
 ## Notes for future readers
 

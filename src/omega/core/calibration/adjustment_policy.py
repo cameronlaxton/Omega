@@ -26,6 +26,16 @@ coefficients are unfitted priors — they are recorded and may feed retrospectiv
 learning, but never move a prediction until an operator flips the mode.
 
 Storage: omega/core/calibration/adjustment_policies.json
+
+Schema versions (per-policy ``schema_version`` and the file's top-level marker):
+  * v1 — original hand-seed. No ``unfitted_reliability_prior`` field; an absent
+    field deserialized at the model default of 1.0 (full trust).
+  * v2 — adds ``unfitted_reliability_prior``. A policy persisted under v1 (the
+    field absent) is backfilled to :data:`SEED_UNFITTED_RELIABILITY_PRIOR` at
+    load time by :func:`_migrate_policy_dict` so it cannot silently restore full
+    trust and defeat the bounded_live safety design. The in-memory model default
+    stays 1.0 so ad-hoc / test policies (which never round-trip through the
+    registry) keep legacy parity.
 """
 
 from __future__ import annotations
@@ -46,7 +56,10 @@ UTC = timezone.utc
 logger = logging.getLogger("omega.core.calibration.adjustment_policy")
 
 _DEFAULT_PATH = Path(__file__).parent / "adjustment_policies.json"
-_SCHEMA_VERSION = 1
+# v1 -> v2: ``unfitted_reliability_prior`` added. Persisted policies missing the
+# field are backfilled on load (see _migrate_policy_dict); the model default is
+# left at 1.0 for ad-hoc parity.
+_SCHEMA_VERSION = 2
 
 # Graduated evidence-application ladder. Each rung strictly contains the audit
 # guarantees of the one before it and adds (at most) one new effect:
@@ -128,8 +141,8 @@ class AdjustmentPolicy(BaseModel):
     """
 
     # Identity
-    policy_id: str = Field(description="Unique ID, e.g. 'adj_v1_seed'")
-    schema_version: int = 1
+    policy_id: str = Field(description="Unique ID, e.g. 'adj_v2_seed'")
+    schema_version: int = _SCHEMA_VERSION
     version: int = Field(ge=1, description="Monotonically increasing")
     status: ProfileStatus = ProfileStatus.CANDIDATE
     mode: EvidenceMode = Field(
@@ -159,8 +172,10 @@ class AdjustmentPolicy(BaseModel):
     # (graduated-apply prior). The evidence handlers use this as the default
     # reliability when the coefficient omits reliability_weight, so an unscored
     # signal moves a live prediction only a sliver until the fit measures it.
-    # Defaults to DEFAULT_UNFITTED_RELIABILITY_PRIOR; only consulted in applying
-    # modes (bounded_live/live).
+    # Only consulted in applying modes (bounded_live/live). The model default is
+    # 1.0 (full trust) for ad-hoc/in-memory/test parity; a policy PERSISTED before
+    # this field existed is backfilled to SEED_UNFITTED_RELIABILITY_PRIOR by the
+    # registry on load (see _migrate_policy_dict), never silently restored to 1.0.
     unfitted_reliability_prior: float = Field(
         default=1.0,
         ge=0.0,
@@ -311,6 +326,33 @@ class AdjustmentPolicy(BaseModel):
         )
 
 
+def _migrate_policy_dict(raw: dict[str, Any]) -> dict[str, Any]:
+    """Bring a persisted adjustment-policy dict up to the current schema (in place).
+
+    Schema v1 -> v2: a policy persisted before ``unfitted_reliability_prior``
+    existed must NOT deserialize at the model's ad-hoc default of 1.0 (full
+    trust) — that would silently restore the very full-trust posture bounded_live
+    was designed to bound. A field-less persisted policy is backfilled to the
+    conservative :data:`SEED_UNFITTED_RELIABILITY_PRIOR` so its unscored signals
+    keep applying only a sliver.
+
+    The backfill is keyed on field ABSENCE, not ``schema_version``: a policy
+    persisted after the field was introduced but before this bump (schema_version
+    1 *with* the field — e.g. a candidate fitted post-PR#35) already carries a
+    deliberate prior, so resetting it would clobber an intentional value. The
+    ``schema_version`` stamp is advanced separately, purely as a marker.
+    """
+    if "unfitted_reliability_prior" not in raw:
+        raw["unfitted_reliability_prior"] = SEED_UNFITTED_RELIABILITY_PRIOR
+    try:
+        current = int(raw.get("schema_version", 1))
+    except (TypeError, ValueError):
+        current = 1
+    if current < _SCHEMA_VERSION:
+        raw["schema_version"] = _SCHEMA_VERSION
+    return raw
+
+
 class AdjustmentPolicyRegistry:
     """Stores versioned adjustment policies with a promotion workflow.
 
@@ -326,10 +368,24 @@ class AdjustmentPolicyRegistry:
             return {"schema_version": _SCHEMA_VERSION, "policies": []}
         try:
             with open(self._path, encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to read adjustment policy registry at %s: %s", self._path, exc)
             return {"schema_version": _SCHEMA_VERSION, "policies": []}
+        # Single load-time chokepoint for the schema migration: every reader
+        # (get_production_policy / get_policy / list_policies) and every mutator
+        # routes through here, so a persisted policy missing fields is upgraded
+        # uniformly (and lazily re-persisted on the next _save).
+        for policy in data.get("policies", []):
+            if isinstance(policy, dict):
+                _migrate_policy_dict(policy)
+        try:
+            current = int(data.get("schema_version", 1) or 1)
+        except (TypeError, ValueError):
+            current = 1
+        if current < _SCHEMA_VERSION:
+            data["schema_version"] = _SCHEMA_VERSION
+        return data
 
     def _save(self, data: dict[str, Any]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)

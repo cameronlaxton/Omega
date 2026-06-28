@@ -116,3 +116,18 @@ def test_review_page_renders(tmp_path):
     html = _client(tmp_path).get("/review").text
     assert "<h1>Review Queue</h1>" in html
     assert "Ungraded traces" in html and "Pending bets" in html
+
+
+def test_review_severity_filter(tmp_path):
+    # An ungraded trace populates the info-severity "Ungraded traces" bucket.
+    def setup(store, sessions):
+        store.persist(make_trace("ungraded-x", kind="game"))
+
+    client = _client(tmp_path, setup=setup)
+    full = client.get("/review").text
+    assert "Ungraded traces" in full
+    assert "data-keynav" in full  # keyboard-nav container present when items exist
+
+    warn_only = client.get("/review?severity=warn").text
+    assert "Ungraded traces" not in warn_only  # info bucket hidden by the warn filter
+    assert "Pending bets" in warn_only  # warn bucket still shown

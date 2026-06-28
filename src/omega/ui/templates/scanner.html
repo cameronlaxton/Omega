@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, warning_chips, comp_strip %}
+{% block title %}Edge Scanner - Omega Console{% endblock %}
+{% block content %}
+<section class="ledger-hero scanner-hero">
+  <div>
+    <h1>Edge Scanner</h1>
+    <p>Recent <strong>DB-backed</strong> recommendations ranked by engine edge. This is not a live feed or a fabricated value score; <strong>Recorded Price</strong> is the decision-time trace price.</p>
+  </div>
+</section>
+
+{{ warning_chips(data.warnings) }}
+
+{% if data.rows %}
+<div class="table-wrap market-table-wrap scanner-table-wrap">
+  <table class="grid scanner market-table">
+    <thead>
+      <tr>
+        <th>Event</th>
+        <th>Market</th>
+        <th>Model Output {{ src_badge('db_trace_payload') }}</th>
+        <th>Recorded Price</th>
+        <th>Edge {{ src_badge('db_trace_payload') }}</th>
+        <th>Omega vs Market</th>
+        <th>Confidence</th>
+        <th>Data Quality</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in data.rows %}
+      <tr>
+        <td class="entity-cell">
+          <a class="event-link" href="/traces/{{ r.trace_id }}">{{ r.matchup or r.trace_id }}</a>
+          <div class="rc-sub">{{ r.league or '' }}{% if r.timestamp %} - {{ r.timestamp[:10] }}{% endif %}{% if r.has_outcome %} - <span class="pos">graded</span>{% endif %}</div>
+        </td>
+        <td>
+          <span class="market-pill">{{ r.market.value if r.market and r.market.value is not none else '-' }}</span>
+          <div class="rc-sub">{{ r.selection.value if r.selection and r.selection.value is not none else '-' }}</div>
+        </td>
+        <td>
+          {% if r.model_output and r.model_output.value is not none %}
+            {% if r.model_output_is_pct %}{{ (r.model_output.value * 100) | round(2) }}%{% else %}{{ r.model_output.value }}{% endif %}
+          {% else %}<span class="muted">-</span>{% endif %}
+          <div class="rc-sub">{{ r.model_output_label }}</div>
+        </td>
+        <td class="mono">{{ r.recorded_price.value if r.recorded_price and r.recorded_price.value is not none else '-' }}</td>
+        <td>
+          {% if r.edge_display %}
+          <span class="edge-chip {{ 'pos' if r.edge_positive else 'neg' }}">{{ r.edge_display }}</span>
+          {% else %}<span class="muted" title="no engine edge persisted">-</span>{% endif %}
+        </td>
+        <td>{{ comp_strip(r.strip) }}</td>
+        <td>
+          {% if r.confidence %}
+          <span class="grade {{ r.confidence | lower }}">{{ r.confidence }}</span>{% if r.confidence_computed %} <span class="cbadge" title="console-derived: {{ r.confidence_source }}">computed</span>{% endif %}
+          {% else %}<span class="muted" title="confidence unavailable">-</span>{% endif %}
+        </td>
+        <td>
+          <span class="pill {{ 'pill-green' if r.data_quality == 'clean' else 'pill-amber' if r.data_quality == 'warn' else 'pill-red' if r.data_quality == 'fail' else 'pill-gray' }}"
+                {% if r.data_quality_detail %}title="{{ r.data_quality_detail }}"{% endif %}>{{ r.data_quality }}</span>
+        </td>
+        <td><a class="neon-action" href="/traces/{{ r.trace_id }}">Review</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if data.scan_capped %}<p class="muted small">Scan-capped: older traces beyond the window are not shown.</p>{% endif %}
+<p class="srcnote">Edge and Model Output are engine values from the trace payload. Confidence prefers the engine's confidence tier; Data Quality is from <code>trace_quality</code> plus evidence coverage.</p>
+{% else %}
+<div class="panel"><div class="panel-empty">No recent DB-backed recommendations found.</div></div>
+{% endif %}
+{% endblock %}

@@ -261,3 +261,23 @@ def test_card_analyst_thesis_falls_back_to_reasoning_narrative(store):
     # Absent analyst fields degrade gracefully rather than breaking the card.
     assert "Market read: not captured" in rendered
     assert "Verdict: not captured" in rendered
+
+
+def test_research_candidate_report_suppresses_protected_card_values(store):
+    trace = _trace()
+    trace["trace_quality"]["output_mode"] = "research_candidate"
+    trace["trace_quality"]["aggregate_quality"] = "72"
+    trace["trace_quality"]["quality_band"] = "thin"
+    store.persist(trace)
+
+    rendered = render_intake_markdown(extract_intake_report(store, session_id="sess-report"))
+
+    assert "protected engine values withheld for RESEARCH_CANDIDATE output" in rendered
+    assert "model probability:" not in rendered
+    assert "edge:" not in rendered
+    assert "units:" not in rendered
+    assert "confidence tier:" not in rendered
+    assert "`sandbox-intake1`" not in rendered
+    assert "[withheld]" in rendered
+    assert "| research_candidate | [withheld] |" in rendered
+    assert "**Honesty**" in rendered

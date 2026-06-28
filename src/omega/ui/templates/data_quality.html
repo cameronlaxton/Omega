@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, warning_chips, filter_chips, quality_heatmap %}
+{% block title %}Data Quality · Omega Console{% endblock %}
+{% block content %}
+<h1>Data Quality</h1>
+<p class="lede">Per-league data coverage across a bounded scan of recent traces: how often
+evidence signals, a closing line, and a graded outcome are attached. Green is real coverage,
+not an assumed default; empty leagues read muted. Read-only; counts from
+{{ src_badge('evidence_signals') }}, {{ src_badge('closing_lines') }}, {{ src_badge('outcomes') }}.</p>
+
+<form class="filters" method="get" action="/data-quality">
+  <label>League <input type="text" name="league" value="{{ data.filters.league or '' }}" placeholder="e.g. NBA" autocomplete="off"></label>
+  <button type="submit">Filter</button>
+  <a class="clearbtn" href="/data-quality">Clear</a>
+</form>
+
+{{ filter_chips(request, data.filters, '/data-quality') }}
+{{ warning_chips(data.warnings) }}
+
+<div class="tiles">
+  <div class="tile"><span class="tlabel">traces scanned</span><span class="tval">{{ data.traces_scanned }}</span></div>
+  <div class="tile"><span class="tlabel">leagues</span><span class="tval">{{ data.rows | length }}</span></div>
+</div>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Coverage by league</h2>
+    <span class="panel-meta">green ≥ 80% · amber ≥ 50% · red &lt; 50%</span>
+  </div>
+  <div class="panel-body">
+    {{ quality_heatmap(data) }}
+    <p class="muted small">Each cell is the share of a league's scanned traces that have the attachment;
+    hover for the raw count. Amber/red columns are where calibration and CLV inputs are missing.</p>
+  </div>
+</section>
+{% if data.scan_capped %}<p class="muted small">Scan-capped: older traces beyond the window are not included.</p>{% endif %}
+{% endblock %}

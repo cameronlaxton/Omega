@@ -43,7 +43,9 @@ Run the Omega {league} daily analysis session for {slate_date}.
 
 7. **Bet confirmation (optional).** If the user confirms a bet, re-export the same trace with the populated `bet_record` and `selection_descriptor`. Single-trace policy.
 
-8. **Close the session.** Set `closed_at`, finalize `agent_notes` (freeform summary), and stop. Do not run `ingest_traces` or `render_audit` from inside this session — those are deterministic follow-up steps.
+8. **User-facing narrative render.** Before closing the session, produce a narrative-first slate report following [`prompts/reference/presentation_contract.md`](reference/presentation_contract.md). Include a slate snapshot, ranked recommendations/watchlist, per-matchup narrative blocks, an honesty block for every recommendation/watchlist item, and explicit pass rationale for major markets scanned but not recommended. Include formal Bet Cards only when authorized by `output_modes.<market>` and using engine-owned values. For `RESEARCH_CANDIDATE` markets, use research-only language and defer to [`output_modes.md`](reference/output_modes.md) for the forbidden-value list.
+
+9. **Close the session.** Set `closed_at`, finalize `agent_notes` (freeform summary), and stop. Do not run `ingest_traces` or `render_audit` from inside this session — those are deterministic follow-up steps.
 
 ## Post-session (deterministic, run separately)
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from omega.core.contracts.evidence import EvidenceSignal
 
@@ -255,6 +255,18 @@ class SlateAnalysisRequest(BaseModel):
     )
 
 
+class ReasoningPresentation(BaseModel):
+    """Qualitative analyst-note prose persisted with a batch trace."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    thesis: str | None = None
+    market_read: str | None = None
+    why: str | None = None
+    risks: str | None = None
+    verdict: str | None = None
+
+
 class BatchAnalysisEntry(BaseModel):
     """One entry in an omega_run_batch call — either a game or a player prop.
 
@@ -278,6 +290,13 @@ class BatchAnalysisEntry(BaseModel):
     evidence: list[dict[str, Any]] = Field(default_factory=list, description="EvidenceSignal dicts")
     reasoning_narrative: str | None = Field(
         default=None, description="2–4 sentence summary of reasoning"
+    )
+    reasoning_presentation: ReasoningPresentation | None = Field(
+        default=None,
+        description=(
+            "Optional analyst-note prose keyed thesis/market_read/why/risks/verdict. "
+            "Qualitative only; no protected engine values."
+        ),
     )
     reasoning_sources: list[str] = Field(
         default_factory=list, description="Sources consulted, e.g. espn.com"

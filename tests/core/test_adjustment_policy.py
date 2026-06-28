@@ -7,6 +7,8 @@ workflow, and the hand-seeded v1 production policy.
 
 from __future__ import annotations
 
+import json
+import os
 import tempfile
 
 import pytest
@@ -43,11 +45,32 @@ class TestSeedPolicy:
     """The checked-in adjustment_policies.json seed."""
 
     def test_seed_loads_as_production(self):
+        # adj_v2_seed re-versions adj_v1_seed (PR #35 remediation): the production
+        # seed is now v2, while v1 is retained ARCHIVED for trace attribution.
         policy = AdjustmentPolicyRegistry().get_production_policy()
         assert policy is not None
-        assert policy.policy_id == "adj_v1_seed"
-        assert policy.version == 1
+        assert policy.policy_id == "adj_v2_seed"
+        assert policy.version == 2
         assert policy.status is ProfileStatus.PRODUCTION
+
+    def test_archived_v1_seed_preserves_score_only_attribution(self):
+        # PR #35 remediation: adj_v1_seed is re-versioned rather than mutated in
+        # place. The original hand-seed is retained ARCHIVED so traces stamped
+        # policy_version='adj_v1_seed' stay attributable to the score_only behavior
+        # they actually ran under (not the later bounded_live posture of adj_v2_seed).
+        v1 = AdjustmentPolicyRegistry().get_policy("adj_v1_seed")
+        assert v1 is not None
+        assert v1.status is ProfileStatus.ARCHIVED
+        assert v1.version == 1
+        assert v1.mode == "score_only"
+        # The curated directional signals did NOT carry full reliability in v1 —
+        # that is an adj_v2_seed change and must not bleed back into the record.
+        for signal_type in ("b2b_fatigue", "rest_advantage", "def_matchup_weak", "def_matchup_strong"):
+            assert "reliability_weight" not in v1.coeffs_for(signal_type)
+        # The v1 record is field-less on disk (schema 1); the registry backfills the
+        # v2 prior on load (inert in score_only, which never applies it).
+        assert v1.unfitted_reliability_prior == SEED_UNFITTED_RELIABILITY_PRIOR
+        assert v1.schema_version == 2
 
     def test_seed_is_bounded_live_mode(self):
         # Graduated-apply default: the shipped seed applies evidence under hard
@@ -235,3 +258,87 @@ class TestRegistryWorkflow:
         assert loaded.notes == "round trip"
         assert loaded.sample_size == 42
         assert loaded.coefficients == original.coefficients
+
+
+class TestSchemaMigration:
+    """Schema v1 -> v2 load-time backfill of ``unfitted_reliability_prior``."""
+
+    @staticmethod
+    def _registry_with(policy: dict) -> AdjustmentPolicyRegistry:
+        """A registry whose file holds one raw (un-migrated) policy dict."""
+        tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+        tmp.close()
+        with open(tmp.name, "w", encoding="utf-8") as f:
+            json.dump({"schema_version": 1, "policies": [policy]}, f)
+        return AdjustmentPolicyRegistry(path=tmp.name)
+
+    @staticmethod
+    def _raw(**overrides) -> dict:
+        base = {
+            "policy_id": "old_persisted",
+            "schema_version": 1,
+            "version": 1,
+            "status": "production",
+            "mode": "bounded_live",
+            "coefficients": {"usage_spike": {"scale": 1.0, "cap": 0.2}},
+        }
+        base.update(overrides)
+        return base
+
+    def test_fieldless_persisted_policy_backfills_prior(self):
+        # A policy persisted before the field existed must NOT deserialize at the
+        # model's ad-hoc default (1.0, full trust); the registry backfills the
+        # conservative seed prior on load and stamps the new schema_version.
+        reg = self._registry_with(self._raw())  # no unfitted_reliability_prior
+        loaded = reg.get_production_policy()
+        assert loaded is not None
+        assert loaded.unfitted_reliability_prior == SEED_UNFITTED_RELIABILITY_PRIOR
+        assert loaded.schema_version == 2
+
+    def test_fieldless_backfill_applies_via_get_policy_and_list(self):
+        # Every read path routes through _load, so get_policy/list_policies migrate too.
+        reg = self._registry_with(self._raw(status="candidate"))
+        assert reg.get_policy("old_persisted").unfitted_reliability_prior == (
+            SEED_UNFITTED_RELIABILITY_PRIOR
+        )
+        assert reg.list_policies()[0].unfitted_reliability_prior == (
+            SEED_UNFITTED_RELIABILITY_PRIOR
+        )
+
+    def test_deliberate_prior_at_old_schema_not_clobbered(self):
+        # A policy persisted WITH a deliberate prior (even at schema_version 1, e.g.
+        # a candidate fitted post-PR#35) keeps its value: the backfill keys on field
+        # absence, not on schema_version, so it never resets an intentional prior.
+        reg = self._registry_with(self._raw(unfitted_reliability_prior=0.5))
+        assert reg.get_production_policy().unfitted_reliability_prior == 0.5
+
+    def test_model_default_unchanged_for_adhoc_policies(self):
+        # The in-memory model default stays 1.0 (legacy parity): an ad-hoc / test
+        # policy that never round-trips through the registry keeps full trust.
+        assert AdjustmentPolicy(policy_id="adhoc", version=1).unfitted_reliability_prior == 1.0
+
+    def test_backfill_persisted_lazily_on_next_save(self):
+        # Migration happens in _load, so a mutation (which loads then saves) upgrades
+        # the on-disk file: the field is written and schema_version advanced.
+        reg = self._registry_with(self._raw(status="candidate"))
+        reg.set_mode("old_persisted", "score_only")  # any mutation triggers _save
+        with open(reg._path, encoding="utf-8") as f:
+            on_disk = json.load(f)
+        os.unlink(reg._path)
+        persisted = on_disk["policies"][0]
+        assert persisted["unfitted_reliability_prior"] == SEED_UNFITTED_RELIABILITY_PRIOR
+        assert persisted["schema_version"] == 2
+        assert on_disk["schema_version"] == 2
+
+    def test_malformed_top_level_schema_version_defaults_to_current(self):
+        reg = self._registry_with(self._raw())
+        with open(reg._path, "r+", encoding="utf-8") as f:
+            data = json.load(f)
+            data["schema_version"] = "not-an-int"
+            f.seek(0)
+            json.dump(data, f)
+            f.truncate()
+
+        loaded = reg._load()
+
+        assert loaded["schema_version"] == 2
