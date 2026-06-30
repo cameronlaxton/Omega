@@ -185,6 +185,194 @@ class SessionHealthViewModel(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Decision-quality insight views (Phase 8 B.4)
+#
+# Pydantic mirrors of the read-only dataclasses in ``omega.ui.insights``. Same
+# one-directional dependency as the B.1 views: the insight builders own all
+# interpretation; these models only carry the output over the API/templates.
+# ---------------------------------------------------------------------------
+
+
+class EvidenceAuditItemModel(BaseModel):
+    """One present/missing grounding check (mirror of ``EvidenceAuditItem``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    label: str
+    present: bool
+    source: str
+    critical: bool
+    impact: str | None = None
+
+
+class EvidenceAuditViewModel(BaseModel):
+    """Deterministic missing-evidence audit (mirror of ``EvidenceAuditView``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[EvidenceAuditItemModel] = Field(default_factory=list)
+    evidence_quality: str  # good | partial | poor
+    present_count: int
+    total_count: int
+    summary: str
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+
+
+class MarketMovementViewModel(BaseModel):
+    """Opener→taken→close line-movement read (mirror of ``MarketMovementView``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    available: bool
+    market: str | None = None
+    selection: str | None = None
+    taken_line: float | None = None
+    taken_odds: float | None = None
+    closing_line: float | None = None
+    closing_odds: float | None = None
+    taken_implied: float | None = None
+    closing_implied: float | None = None
+    model_probability: float | None = None
+    point_delta: float | None = None
+    price_delta: float | None = None
+    clv_points: float | None = None
+    residual_edge: float | None = None
+    direction: str  # toward | against | flat | unknown
+    interpretation: str
+    headline: str
+    closing_source: str | None = None
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+
+
+class SignalConflictRowModel(BaseModel):
+    """One classified evidence signal (mirror of ``SignalConflictRow``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    signal_type: str | None = None
+    direction: str | None = None
+    confidence: float | None = None
+    applied: bool
+    stance: str  # supports | opposes | neutral
+    family_role: str | None = None
+
+
+class SignalConflictViewModel(BaseModel):
+    """Model-vs-evidence conflict view (mirror of ``SignalConflictView``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conflict_level: str  # low | medium | high
+    dominant_conflict: str | None = None
+    headline: str
+    conflicts: list[str] = Field(default_factory=list)
+    supporting_count: int
+    opposing_count: int
+    neutral_count: int
+    applied_count: int
+    rows: list[SignalConflictRowModel] = Field(default_factory=list)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+
+
+class SimilarCohort(BaseModel):
+    """A cohort of settled bets that share structure with the target trace."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str  # structural | signal_overlap | edge_bucket | league_kind
+    label: str
+    sample: int  # settled bets (wins+losses+pushes)
+    wins: int
+    losses: int
+    pushes: int
+    hit_rate: float | None = None  # wins / (wins + losses); pushes excluded
+    thin_sample: bool = False
+
+
+class SimilarSpotsView(BaseModel):
+    """How comparable historical spots actually performed (settled bets only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trace_id: str
+    available: bool = False
+    league: str | None = None
+    kind: str | None = None
+    market_family: str | None = None
+    edge_bucket: str | None = None
+    signal_types: list[str] = Field(default_factory=list)
+    historical_support: str = "insufficient"  # strong | mixed | weak | insufficient
+    cohorts: list[SimilarCohort] = Field(default_factory=list)
+    settled_bets_scanned: int = 0
+    scan_capped: bool = False
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+    field_sources: dict[str, str] = Field(default_factory=dict)
+    schema_version: int = 1
+
+
+class TrustContributionModel(BaseModel):
+    """One +/− factor in a trust bucket (mirror of ``TrustContribution``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    polarity: str  # positive | negative | neutral
+
+
+class TrustBucketModel(BaseModel):
+    """One trust dimension (mirror of ``TrustBucket``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    summary: str
+    polarity: str
+    contributions: list[TrustContributionModel] = Field(default_factory=list)
+
+
+class TrustBreakdownViewModel(BaseModel):
+    """Six-bucket trust decomposition (mirror of ``TrustBreakdownView``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    aggregate_quality: float | None = None
+    quality_band: str | None = None
+    confidence_cap: str | None = None
+    trace_weight: float | None = None
+    headline: str
+    buckets: list[TrustBucketModel] = Field(default_factory=list)
+    positives: list[str] = Field(default_factory=list)
+    negatives: list[str] = Field(default_factory=list)
+    warnings: list[OperatorWarningModel] = Field(default_factory=list)
+
+
+class GuardrailModel(BaseModel):
+    """One ranked risk flag (mirror of ``Guardrail``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    severity: str  # info | warn | fail (fail == Blocker)
+    message: str
+    suggested_action: str | None = None
+    source: str | None = None
+
+
+class GuardrailsViewModel(BaseModel):
+    """Severity-ranked auto risk flags (mirror of ``GuardrailsView``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    worst_severity: str  # ok | info | warn | fail
+    blocker_count: int
+    warning_count: int
+    info_count: int
+    guardrails: list[GuardrailModel] = Field(default_factory=list)
+    summary: str
+
+
+# ---------------------------------------------------------------------------
 # Traces
 # ---------------------------------------------------------------------------
 
@@ -207,6 +395,9 @@ class TraceRow(BaseModel):
     # Compact evidence counts (Milestone B.1). Populated only for the visible
     # (paginated) window of the trace list; None elsewhere. Backward compatible.
     evidence_coverage: EvidenceCoverageSummary | None = None
+    # Light worst-severity guardrail token (ok | info | warn | fail) derived from
+    # trace_quality alone, so risk is visible before drill-down (Phase 8 B.4).
+    guardrail: str = "ok"
     field_sources: dict[str, str] = Field(default_factory=dict)
 
 
@@ -248,6 +439,15 @@ class TraceDetail(BaseModel):
     # selection-aware recommendations and evidence coverage. None when the
     # normalizer produced nothing (e.g. malformed payload).
     recommendation_view: TraceRecommendationViewModel | None = None
+    # Decision-quality insight views (Phase 8 B.4). New keys only; all raw fields
+    # above are unchanged for backward compatibility. Each is computed read-only
+    # from this trace's already-loaded rows by ``omega.ui.insights``. None when
+    # the builder produced nothing (e.g. malformed payload).
+    evidence_audit: EvidenceAuditViewModel | None = None
+    market_movement: MarketMovementViewModel | None = None
+    signal_conflict: SignalConflictViewModel | None = None
+    trust_breakdown: TrustBreakdownViewModel | None = None
+    guardrails: GuardrailsViewModel | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
 
 
@@ -575,6 +775,9 @@ class ClvRow(BaseModel):
     closing_implied: float | None = None  # computed: raw implied (incl. vig)
     clv_points: float | None = None  # computed: closing_implied - taken_implied
     beat_close: bool | None = None
+    # Coarse, price-only movement read (market_confirms | market_disagrees |
+    # no_confirmation) derived from clv_points alone — no model edge consulted.
+    interpretation: str | None = None
     closing_source: str | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
 
@@ -648,6 +851,8 @@ class EdgeScannerRow(BaseModel):
     # Data quality: clean | warn | fail | unknown (from trace_quality + evidence).
     data_quality: str = "unknown"
     data_quality_detail: str | None = None
+    # Light worst-severity guardrail token (ok | info | warn | fail), Phase 8 B.4.
+    guardrail: str = "ok"
     has_outcome: bool = False
     field_sources: dict[str, str] = Field(default_factory=dict)
 

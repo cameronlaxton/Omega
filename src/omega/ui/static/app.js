@@ -1,5 +1,7 @@
 // Minimal progressive enhancement for the read-only console.
-// No data mutation, no network calls — just local UI niceties.
+// The console itself never mutates data. The only network calls are the optional
+// Deep Dive panel, which talks to the SEPARATE, opt-in enrichment service mounted
+// at /enrich (omega-enrich) — generation POSTs land there, never on console data.
 (function () {
   "use strict";
 
@@ -82,4 +84,80 @@
       if (tip) tip.style.opacity = "0";
     });
   });
+
+  // ---- Deep Dive (optional /enrich enrichment service) --------------------
+  (function () {
+    var panel = document.querySelector(".deepdive[data-trace]");
+    if (!panel) return;
+    var traceId = panel.getAttribute("data-trace");
+    var body = panel.querySelector("#deepdive-body");
+    var status = panel.querySelector("#deepdive-status");
+    var genBtn = panel.querySelector("#deepdive-generate");
+    function setStatus(t) { if (status) status.textContent = t; }
+
+    function mdToHtml(md) {
+      var esc = (md || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      var out = [], inList = false;
+      esc.split("\n").forEach(function (line) {
+        if (/^### /.test(line)) { if (inList){out.push("</ul>");inList=false;} out.push("<h5>" + line.slice(4) + "</h5>"); }
+        else if (/^## /.test(line)) { if (inList){out.push("</ul>");inList=false;} out.push("<h4>" + line.slice(3) + "</h4>"); }
+        else if (/^- /.test(line)) { if (!inList){out.push("<ul>");inList=true;} out.push("<li>" + line.slice(2) + "</li>"); }
+        else if (line.trim()) { if (inList){out.push("</ul>");inList=false;} out.push("<p>" + line + "</p>"); }
+      });
+      if (inList) out.push("</ul>");
+      return out.join("");
+    }
+    function feedbackHtml(id) {
+      return '<div class="deepdive-feedback" data-eid="' + id + '">' +
+        '<span class="muted small">Was this useful?</span> ' +
+        '<button type="button" data-rate="1">\u{1F44D}</button> ' +
+        '<button type="button" data-rate="-1">\u{1F44E}</button> ' +
+        '<span class="deepdive-fbmsg muted small"></span></div>';
+    }
+    function wireFeedback(id) {
+      var fb = body.querySelector(".deepdive-feedback");
+      if (!fb) return;
+      fb.querySelectorAll("button[data-rate]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          fetch("/enrich/enrichments/" + id + "/feedback", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_rating: parseInt(b.getAttribute("data-rate"), 10) })
+          }).then(function () {
+            var m = fb.querySelector(".deepdive-fbmsg"); if (m) m.textContent = "thanks";
+          }).catch(function () {});
+        });
+      });
+    }
+    function renderRecord(rec) {
+      if (!rec) { setStatus("not generated"); return; }
+      if (rec.status === "completed" && rec.narrative_md) {
+        body.innerHTML = mdToHtml(rec.narrative_md) + feedbackHtml(rec.id);
+        wireFeedback(rec.id);
+        setStatus("completed" + (rec.provider ? " · " + rec.provider : ""));
+      } else if (rec.status === "failed") {
+        setStatus("failed: " + (rec.error || "unknown"));
+      } else { setStatus(rec.status || ""); }
+    }
+    function poll(eid, tries) {
+      if (tries <= 0) { setStatus("timed out"); if (genBtn) genBtn.disabled = false; return; }
+      fetch("/enrich/enrichments/" + eid).then(function (r) { return r.json(); }).then(function (rec) {
+        if (rec.status === "completed" || rec.status === "failed") {
+          renderRecord(rec); if (genBtn) genBtn.disabled = false;
+        } else { setStatus(rec.status || "running"); setTimeout(function () { poll(eid, tries - 1); }, 1200); }
+      }).catch(function () { setStatus("error polling"); if (genBtn) genBtn.disabled = false; });
+    }
+    if (genBtn) {
+      genBtn.addEventListener("click", function () {
+        genBtn.disabled = true; setStatus("queued"); body.innerHTML = "";
+        fetch("/enrich/traces/" + encodeURIComponent(traceId), { method: "POST" })
+          .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+          .then(function (j) { poll(j.enrichment_id, 30); })
+          .catch(function () { setStatus("enrichment service not running (start omega-enrich)"); genBtn.disabled = false; });
+      });
+    }
+    fetch("/enrich/traces/" + encodeURIComponent(traceId) + "/latest")
+      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function (j) { if (j.latest) renderRecord(j.latest); })
+      .catch(function () { setStatus("not generated"); });
+  })();
 })();

@@ -313,6 +313,20 @@ def build_console_app(
             request, "trace_detail.html", _ctx(request, detail=detail.model_dump(), active="traces")
         )
 
+    @app.get("/traces/{trace_id}/similar", response_class=HTMLResponse)
+    def page_trace_similar(request: Request, trace_id: str, service=Depends(get_service)):
+        view = service.similar_spots(trace_id)
+        if view is None:
+            return templates.TemplateResponse(
+                request,
+                "similar.html",
+                _ctx(request, view=None, not_found_id=trace_id, active="traces"),
+                status_code=404,
+            )
+        return templates.TemplateResponse(
+            request, "similar.html", _ctx(request, view=view.model_dump(), active="traces")
+        )
+
     @app.get("/bets", response_class=HTMLResponse)
     def page_bets(
         request: Request,

@@ -25,6 +25,7 @@ from omega.ui.schemas import (
     SessionDetail,
     SessionListResponse,
     SignalPerformanceView,
+    SimilarSpotsView,
     TraceDetail,
     TraceListResponse,
 )
@@ -142,6 +143,16 @@ def get_trace(trace_id: str, service: ConsoleService = Depends(get_service)) -> 
     if detail is None:
         raise HTTPException(status_code=404, detail=f"trace {trace_id!r} not found")
     return detail
+
+
+@router.get("/traces/{trace_id}/similar", response_model=SimilarSpotsView)
+def get_similar_spots(
+    trace_id: str, service: ConsoleService = Depends(get_service)
+) -> SimilarSpotsView:
+    view = service.similar_spots(trace_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail=f"trace {trace_id!r} not found")
+    return view
 
 
 @router.get("/bets", response_model=BetListResponse)

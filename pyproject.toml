@@ -85,6 +85,7 @@ omega-validate-session-sidecars = "omega.ops.validate_session_sidecars:main"
 omega-validate-trace-export = "omega.ops.validate_trace_export:main"
 omega-mcp-http = "omega.mcp.http:main"
 omega-console = "omega.ops.console_server:main"
+omega-enrich = "omega.enrichment.server:main"
 
 [project.optional-dependencies]
 dev = [
@@ -165,6 +166,9 @@ no_implicit_optional = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "smoke: fast sanity checks covering core engine, trace store, and MCP contracts (~30s)",
+]
 
 
 [tool.setuptools.packages.find]
