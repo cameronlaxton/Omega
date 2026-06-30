@@ -165,6 +165,7 @@ APPROVED_OMEGA_IMPORTS = {
     "omega.ui.service",
     "omega.ui.schemas",
     "omega.ui.normalizers",
+    "omega.ui.insights",
     "omega.ui.clv",
     "omega.core.config.leagues",
     # Read-only calibration registry access (list_profiles/get_production only).

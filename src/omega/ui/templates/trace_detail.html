@@ -20,6 +20,54 @@
   <tr><th>session</th><td>{% if detail.session_id %}<a href="/sessions/{{ detail.session_id }}">{{ detail.session_id }}</a>{% else %}—{% endif %}</td></tr>
 </table>
 
+{% set gr = detail.guardrails %}
+{% if gr and gr['guardrails'] %}
+<section class="block guardrails sev-banner-{{ gr.worst_severity }}">
+  <h2>Trace Guardrails {{ src_badge('db_trace_payload') }}
+    <span class="qband qband-gr-{{ gr.worst_severity }}">{{ gr.worst_severity }}</span>
+  </h2>
+  <p class="gr-summary">{{ gr.summary }}</p>
+  <ul class="gr-list">
+    {% for g in gr['guardrails'] %}
+    <li class="gr-item gr-sev-{{ g.severity }}">
+      <span class="gr-tag">{{ 'BLOCKER' if g.severity == 'fail' else g.severity | upper }}</span>
+      <span class="gr-msg">{{ g.message }}{% if g.suggested_action %} <span class="gr-action">→ {{ g.suggested_action }}</span>{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if detail.trust_breakdown %}
+{% set tb = detail.trust_breakdown %}
+<section class="block trust-breakdown">
+  <h2>Trust Breakdown {{ src_badge('db_trace_payload') }}
+    {% if tb.quality_band %}<span class="qband qband-{{ tb.quality_band }}">{{ tb.quality_band }}</span>{% endif %}
+  </h2>
+  <p class="trust-headline">{{ tb.headline }}{% if tb.aggregate_quality is not none %} · score {{ '%g' % tb.aggregate_quality }}{% endif %}{% if tb.trace_weight is not none %} · weight {{ '%g' % tb.trace_weight }}{% endif %}</p>
+  {{ warning_chips(tb.warnings) }}
+  <div class="trust-cols">
+    <div class="trust-col trust-pos">
+      <h3>Positive</h3>
+      {% if tb.positives %}<ul>{% for p in tb.positives %}<li>{{ p }}</li>{% endfor %}</ul>{% else %}<p class="muted">—</p>{% endif %}
+    </div>
+    <div class="trust-col trust-neg">
+      <h3>Negative</h3>
+      {% if tb.negatives %}<ul>{% for n in tb.negatives %}<li>{{ n }}</li>{% endfor %}</ul>{% else %}<p class="muted">—</p>{% endif %}
+    </div>
+  </div>
+  <div class="trust-buckets">
+    {% for b in tb.buckets %}
+    <div class="trust-bucket pol-{{ b.polarity }}" title="{% for c in b.contributions %}{{ c.text }}{% if not loop.last %} · {% endif %}{% endfor %}">
+      <span class="tb-name">{{ b.name }}</span>
+      <span class="tb-summary">{{ b.summary }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted small">Reconstructed from the persisted trace_quality verdict + the panels below. Edge is described, never re-quoted.</p>
+</section>
+{% endif %}
+
 {# ---- Decision Replay timeline (Trace Replay) ----------------------------
    A vertical reconstruction of the decision from this trace's persisted
    fields. Read-only: it only reorders/labels existing values — nothing is
@@ -160,6 +208,26 @@
   {% endif %}
 </section>
 
+{% if detail.market_movement %}
+{% set mm = detail.market_movement %}
+<section class="block market-movement">
+  <h2>Market Movement {{ src_badge('closing_lines') }}
+    <span class="qband qband-mm-{{ mm.direction }}">{{ mm.direction }}</span>
+  </h2>
+  <p class="mm-headline">{{ mm.headline }}</p>
+  {% if mm.available %}
+  <table class="kv mmkv">
+    <tr><th>recorded price</th><td>{{ mm.taken_odds if mm.taken_odds is not none else '—' }}</td><th>closing price</th><td>{{ mm.closing_odds if mm.closing_odds is not none else '—' }}{% if mm.closing_source %} <span class="muted small">({{ mm.closing_source }})</span>{% endif %}</td></tr>
+    <tr><th>taken line</th><td>{{ mm.taken_line if mm.taken_line is not none else '—' }}</td><th>closing line</th><td>{{ mm.closing_line if mm.closing_line is not none else '—' }}{% if mm.point_delta is not none %} <span class="muted small">(delta {{ mm.point_delta }})</span>{% endif %}</td></tr>
+    <tr><th>taken implied</th><td>{{ (mm.taken_implied * 100) | round(2) ~ '%' if mm.taken_implied is not none else '—' }}</td><th>closing implied</th><td>{{ (mm.closing_implied * 100) | round(2) ~ '%' if mm.closing_implied is not none else '—' }}</td></tr>
+    <tr><th>CLV (prob pts)</th><td class="{{ 'mm-pos' if mm.clv_points and mm.clv_points > 0 else 'mm-neg' if mm.clv_points and mm.clv_points < 0 else '' }}">{{ (mm.clv_points * 100) | round(2) if mm.clv_points is not none else '—' }}</td><th>price delta</th><td>{{ mm.price_delta if mm.price_delta is not none else '—' }}</td></tr>
+  </table>
+  {% endif %}
+  {{ warning_chips(mm.warnings) }}
+  <p class="muted small">CLV reuses the console's closing-line arithmetic; the read combines public price and line movement without exposing protected model numbers.</p>
+</section>
+{% endif %}
+
 {% if rv %}
 {% set ev = rv.evidence_coverage %}
 <section class="block">
@@ -175,6 +243,69 @@
   <p class="muted small">Coverage counts which signals exist and were applied — not a strength/quality score.</p>
 </section>
 {% endif %}
+
+{% if detail.signal_conflict %}
+{% set sc = detail.signal_conflict %}
+<section class="block signal-conflict">
+  <h2>Signal Conflict {{ src_badge('evidence_signals') }}
+    <span class="qband qband-{{ sc.conflict_level }}">{{ sc.conflict_level }} conflict</span>
+  </h2>
+  <p class="mm-headline">{{ sc.headline }}</p>
+  <div class="evcov">
+    <span class="evstat">supporting <strong>{{ sc.supporting_count }}</strong></span>
+    <span class="evstat">opposing <strong>{{ sc.opposing_count }}</strong></span>
+    <span class="evstat">neutral <strong>{{ sc.neutral_count }}</strong></span>
+    <span class="evstat">applied <strong>{{ sc.applied_count }}</strong></span>
+  </div>
+  {% if sc.rows %}
+  <table class="grid conflict-rows">
+    <thead><tr><th>signal</th><th>dir</th><th>conf</th><th>applied</th><th>stance</th><th>role</th></tr></thead>
+    <tbody>
+    {% for r in sc.rows %}
+    <tr class="stance-{{ r.stance }}">
+      <td>{{ r.signal_type or '—' }}</td>
+      <td>{{ r.direction or '—' }}</td>
+      <td>{{ '%.2f' % r.confidence if r.confidence is not none else '—' }}</td>
+      <td>{{ 'yes' if r.applied else 'shadow' }}</td>
+      <td>{{ r.stance }}</td>
+      <td>{{ r.family_role or '—' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {{ warning_chips(sc.warnings) }}
+  <p class="muted small">Classifies each signal relative to the pick; flags where model output and evidence disagree. No edge is recomputed.</p>
+</section>
+{% endif %}
+
+{% if detail.evidence_audit %}
+{% set ea = detail.evidence_audit %}
+<section class="block evidence-audit">
+  <h2>Evidence Auditor {{ src_badge('db_trace_payload') }}
+    <span class="qband qband-{{ ea.evidence_quality }}">{{ ea.evidence_quality }}</span>
+    <span class="count">{{ ea.present_count }}/{{ ea.total_count }}</span>
+  </h2>
+  <p class="muted small">{{ ea.summary }}</p>
+  <ul class="audit-list">
+    {% for it in ea['items'] %}
+    <li class="audit-item {{ 'present' if it.present else 'missing' }}{% if it.critical %} critical{% endif %}">
+      <span class="audit-mark" aria-hidden="true">{{ '✓' if it.present else '✕' }}</span>
+      <span class="audit-label">{{ it.label }}{% if it.critical %} <em class="crit">critical</em>{% endif %}</span>
+      {% if not it.present and it.impact %}<span class="audit-impact">{{ it.impact }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {{ warning_chips(ea.warnings) }}
+  <p class="muted small">Deterministic presence checks — a coverage verdict, not a strength score.</p>
+</section>
+{% endif %}
+
+<section class="block similar-teaser">
+  <h2>Similar Historical Spots {{ src_badge('bet_ledger') }}</h2>
+  <p class="muted">Compare this spot to how structurally-similar settled bets actually performed.</p>
+  <a class="spot-link" href="/traces/{{ detail.trace_id }}/similar">Find Similar Spots →</a>
+</section>
 
 <section class="block">
   <h2>Predictions {{ src_badge('db_trace_payload') }}</h2>
@@ -225,6 +356,18 @@
 <section class="block">
   <h2>Closing lines {{ src_badge('closing_lines') }}</h2>
   <pre class="json">{{ detail.closing_lines | tojson(indent=2) }}</pre>
+</section>
+{% endif %}
+
+{% if enrichment_enabled %}
+<section class="block deepdive" data-trace="{{ detail.trace_id }}">
+  <h2>Deep Dive <span class="muted">(LLM narrative — explains, never decides)</span></h2>
+  <div class="deepdive-actions">
+    <button type="button" class="spot-link" id="deepdive-generate">Generate Deep Dive</button>
+    <span class="deepdive-status muted small" id="deepdive-status">not generated</span>
+  </div>
+  <div class="deepdive-body" id="deepdive-body"></div>
+  <p class="muted small">Grounded in the deterministic panels above; the engine still owns every probability, edge, EV, and stake. Requires the opt-in enrichment service (<code>omega-enrich</code>).</p>
 </section>
 {% endif %}
 

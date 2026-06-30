@@ -24,6 +24,7 @@
         <th>Omega vs Market</th>
         <th>Confidence</th>
         <th>Data Quality</th>
+        <th>Risk</th>
         <th>Action</th>
       </tr>
     </thead>
@@ -60,6 +61,7 @@
           <span class="pill {{ 'pill-green' if r.data_quality == 'clean' else 'pill-amber' if r.data_quality == 'warn' else 'pill-red' if r.data_quality == 'fail' else 'pill-gray' }}"
                 {% if r.data_quality_detail %}title="{{ r.data_quality_detail }}"{% endif %}>{{ r.data_quality }}</span>
         </td>
+        <td><span class="gr-dot gr-dot-{{ r.guardrail }}" title="worst-severity guardrail (trace_quality)">{{ r.guardrail }}</span></td>
         <td><a class="neon-action" href="/traces/{{ r.trace_id }}">Review</a></td>
       </tr>
       {% endfor %}

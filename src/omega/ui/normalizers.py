@@ -128,6 +128,7 @@ class NormalizedRecommendation:
 
     market: ExtractedField
     selection: ExtractedField
+    selection_kind: str
     line: ExtractedField
     odds: ExtractedField
 
@@ -843,6 +844,7 @@ def normalize_recommendation(
         rank=rank,
         market=market,
         selection=selection,
+        selection_kind=selection_kind,
         line=line,
         odds=odds,
         raw_probability=raw_probability,

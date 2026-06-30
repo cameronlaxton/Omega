@@ -193,6 +193,7 @@ def build_console_app(
     max_scan: int | None = None,
     calibration_registry: str | Path | None = None,
     auth_token: str | None = None,
+    enrichment_enabled: bool = False,
 ):
     """Build the read-only console FastAPI app.
 
@@ -234,6 +235,7 @@ def build_console_app(
             "request": request,
             "nav_enabled": NAV_ENABLED,
             "nav_placeholders": NAV_PLACEHOLDERS,
+            "enrichment_enabled": enrichment_enabled,
         }
         base.update(extra)
         return base
@@ -312,6 +314,20 @@ def build_console_app(
             )
         return templates.TemplateResponse(
             request, "trace_detail.html", _ctx(request, detail=detail.model_dump(), active="traces")
+        )
+
+    @app.get("/traces/{trace_id}/similar", response_class=HTMLResponse)
+    def page_trace_similar(request: Request, trace_id: str, service=Depends(get_service)):
+        view = service.similar_spots(trace_id)
+        if view is None:
+            return templates.TemplateResponse(
+                request,
+                "similar.html",
+                _ctx(request, view=None, not_found_id=trace_id, active="traces"),
+                status_code=404,
+            )
+        return templates.TemplateResponse(
+            request, "similar.html", _ctx(request, view=view.model_dump(), active="traces")
         )
 
     @app.get("/bets", response_class=HTMLResponse)

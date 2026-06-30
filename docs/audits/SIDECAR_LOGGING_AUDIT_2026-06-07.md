@@ -1,5 +1,7 @@
 # QA Audit — Session Sidecars & Logging
 
+> **Status as of 2026-06-29:** 4 finding families were fixed during this audit pass (F1, F4, F6, F5/F13 — see §3). The 15 backlog items in §4 represent outstanding work as of 2026-06-07. Mirror/append hardening (F2, F3) remains the highest-priority open item. Other backlog items may have been addressed in subsequent sessions — check `git log` or run a fresh sidecar audit to confirm current state before triaging new work.
+
 **Date:** 2026-06-07
 **Auditor:** multi-agent QA pass (5 parallel read-only workstreams + lead consolidation)
 **Scope:** session sidecars (`var/inbox/sessions/<sid>.json`) + the `<sid>.events.jsonl`

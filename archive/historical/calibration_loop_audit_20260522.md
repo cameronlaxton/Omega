@@ -1,3 +1,5 @@
+> **RESOLVED** — Issues in this audit were addressed by Phase 8 (structural calibration loop, PR #30, 2026-06-23). Retained as design history per [`docs/DOC_LIFECYCLE.md`](../../docs/DOC_LIFECYCLE.md).
+
 # Omega Calibration Loop Audit — 2026-05-22
 
 **Prepared by:** Cowork agent (claude-sonnet-4-6), sess-20260521-c001  
