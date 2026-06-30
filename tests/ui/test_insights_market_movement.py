@@ -14,8 +14,10 @@ from omega.ui.normalizers import build_trace_recommendation_view
 from tests.ui.conftest import make_trace
 
 
-def _rec(*, odds, side="home", market="moneyline", true_prob=None, calibrated=None):
+def _rec(*, odds, side="home", market="moneyline", true_prob=None, calibrated=None, line=None):
     rec: dict = {"side": side, "market": market, "odds": odds}
+    if line is not None:
+        rec["line"] = line
     if true_prob is not None:
         rec["true_prob"] = true_prob
     if calibrated is not None:
@@ -26,8 +28,9 @@ def _rec(*, odds, side="home", market="moneyline", true_prob=None, calibrated=No
     return view.recommendations[0]
 
 
-def _close(odds, line=None, market="moneyline"):
-    return [{"market": market, "selection_descriptor": "home_moneyline",
+def _close(odds, line=None, market="moneyline", side="home"):
+    descriptor = "home_moneyline" if market == "moneyline" else f"{market}_{side}"
+    return [{"market": market, "selection_descriptor": descriptor,
              "closing_odds": odds, "closing_line": line, "source": "test"}]
 
 
@@ -45,7 +48,8 @@ def test_market_moved_toward_with_large_edge_is_early_value():
     assert mm.direction == "toward"
     assert mm.clv_points > 0
     assert mm.interpretation == "early_value"
-    assert mm.residual_edge > 0
+    assert mm.residual_edge is None
+    assert mm.model_probability is None
 
 
 def test_market_moved_toward_but_value_absorbed():
@@ -85,12 +89,24 @@ def test_no_recommendation_is_insufficient_data():
 def test_point_delta_when_lines_present():
     mm = build_market_movement(
         rec=_rec(odds=-110, side="over", market="total", true_prob=0.55),
-        closing_lines=_close(-110, line=224.5, market="total"),
+        closing_lines=_close(-110, line=224.5, market="total", side="over"),
     )
     # taken line comes from the rec; here only the close has a line, so point_delta
     # needs both — assert it is None when the taken line is absent (no guessing).
     assert mm.point_delta is None
     assert mm.closing_line == 224.5
+
+
+def test_total_point_move_same_price_counts_as_market_movement():
+    mm = build_market_movement(
+        rec=_rec(odds=-110, side="over", market="total", true_prob=0.55, line=224.5),
+        closing_lines=_close(-110, line=226.5, market="total", side="over"),
+    )
+    assert mm.available is True
+    assert mm.clv_points == 0
+    assert mm.point_delta == 2.0
+    assert mm.direction == "toward"
+    assert mm.interpretation in {"early_value", "market_confirms", "value_absorbed"}
 
 
 def _client(tmp_path: Path, setup: Callable[[TraceStore], None]) -> TestClient:

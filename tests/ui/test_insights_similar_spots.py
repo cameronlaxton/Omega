@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from omega.ops.console_server import build_console_app
 from omega.trace.ledger_bet import BetProvenance, LedgerBet, LedgerStatus
 from omega.trace.store import TraceStore
+from omega.ui import service as service_module
 from tests.ui.conftest import make_trace
 
 
@@ -112,6 +113,14 @@ def test_target_excluded_from_its_own_cohort(tmp_path):
     view = client.get("/api/traces/target/similar").json()
     s = _structural(view)
     assert s["wins"] + s["losses"] == 25
+
+
+def test_candidate_trace_cap_is_reported(tmp_path, monkeypatch):
+    monkeypatch.setattr(service_module, "SIMILAR_MAX_TRACES", 1)
+    client = _client(tmp_path, n_win=2, n_loss=0)
+    view = client.get("/api/traces/target/similar").json()
+    assert view["scan_capped"] is True
+    assert any(w["code"] == "candidate_trace_cap" for w in view["warnings"])
 
 
 def test_similar_page_renders_and_404(tmp_path):

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import src_badge, warning_chips, filter_chips %}
+{% from "base.html" import src_badge, warning_chips, filter_chips, comp_strip, clv_scatter %}
 {% block title %}Market Movement / CLV · Omega Console{% endblock %}
 {% block content %}
 <h1>Closing-Line Value</h1>
@@ -24,11 +24,25 @@ book's vig); a positive value means you beat the close. Read-only; taken price
   <div class="tile"><span class="tlabel">avg CLV pts</span><span class="tval">{{ '%+.4f' % data.summary.avg_clv_points if data.summary.avg_clv_points is not none else '—' }}</span></div>
 </div>
 
+{% if scatter %}
+<section class="panel" style="margin-bottom:1.25rem;">
+  <div class="panel-head">
+    <h2>Process vs Luck — CLV against net result</h2>
+    <span class="panel-meta">{{ src_badge('bet_ledger') }} · {{ src_badge('closing_lines') }}</span>
+  </div>
+  <div class="panel-body">
+    {{ clv_scatter(scatter) }}
+    <p class="muted small">Each dot is one graded bet: closing-line value on the x-axis, net result on the y-axis.
+    Top-left is process-good but result-bad; bottom-right is process-bad but lucky. Quadrant guides mark CLV=0 and net=0.</p>
+  </div>
+</section>
+{% endif %}
+
 <table class="grid">
   <thead>
     <tr>
       <th>bet</th><th>date</th><th>matchup</th><th>market</th><th>selection</th><th>status</th>
-      <th>taken</th><th>close</th><th>CLV pts</th><th>beat?</th><th>read</th>
+      <th>taken</th><th>close</th><th>CLV pts</th><th>beat?</th><th>read</th><th>movement</th>
     </tr>
   </thead>
   <tbody>
@@ -45,9 +59,10 @@ book's vig); a positive value means you beat the close. Read-only; taken price
       <td class="{{ 'pos' if r.clv_points is not none and r.clv_points > 0 else ('neg' if r.clv_points is not none and r.clv_points < 0 else '') }}">{{ '%+.4f' % r.clv_points if r.clv_points is not none else '—' }}</td>
       <td>{{ 'yes' if r.beat_close else 'no' }}</td>
       <td class="nowrap">{{ (r.interpretation or '—') | replace('_', ' ') }}</td>
+      <td>{{ comp_strip(r.strip) }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="11" class="empty">No bets with an attached closing line{% if data.filters.league %} for {{ data.filters.league }}{% endif %}.</td></tr>
+    <tr><td colspan="12" class="empty">No bets with an attached closing line{% if data.filters.league %} for {{ data.filters.league }}{% endif %}.</td></tr>
     {% endfor %}
   </tbody>
 </table>

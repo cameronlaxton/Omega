@@ -90,6 +90,30 @@ def test_single_supporting_signal_is_dominant_single():
     assert sc.supporting_count == 1 and sc.neutral_count == 1
 
 
+def test_team_name_selection_maps_to_home_side():
+    trace = {
+        "trace_id": "team-side",
+        "kind": "game",
+        "home_team": "Indiana Fever",
+        "away_team": "Chicago Sky",
+        "recommendations": [{"selection": "Indiana Fever", "market": "moneyline", "odds": -120}],
+        "predictions": {"home_win_prob": 0.58},
+        "result": {},
+    }
+    rec = build_trace_recommendation_view(trace).recommendations[0]
+    sc = _conflict(rec, [_sig("usage", "home", 0.7), _sig("rest", "away", 0.8)])
+    assert rec.selection_kind == "home"
+    assert sc.supporting_count == 1
+    assert sc.opposing_count == 1
+    assert "signal_disagreement" in sc.conflicts
+
+
+def test_unapplied_support_does_not_trigger_single_signal_dominance():
+    sc = _conflict(_rec(), [_sig("usage", "home", 0.7, applied=False), _sig("pace", None, 0.5)])
+    assert "dominant_single_signal" not in sc.conflicts
+    assert sc.dominant_conflict != "dominant_single_signal"
+
+
 def _client(tmp_path: Path, setup: Callable[[TraceStore], None]) -> TestClient:
     db = str(tmp_path / "a3.db")
     sessions = tmp_path / "sessions"

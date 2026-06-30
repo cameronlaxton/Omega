@@ -150,7 +150,7 @@
         <h2>Trace QA Queue</h2>
         <span class="panel-menu">...</span>
       </div>
-      {% if cc.review %}
+      {% if p.state == 'data' and cc.review %}
       <div class="review-stack compact" data-keynav>
         {% set rendered = namespace(n=0) %}
         {% for b in cc.review.buckets if b.count > 0 %}

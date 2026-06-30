@@ -48,6 +48,7 @@ def build_app_with_enrichment(
         max_scan=max_scan,
         calibration_registry=calibration_registry,
         auth_token=auth_token,
+        enrichment_enabled=True,
     )
     enrich = build_enrichment_app(
         enrich_db=enrich_db or str(enrichment_db_path()),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,6 @@ from omega.enrichment.schemas import (
 from omega.enrichment.store import EnrichmentStore
 from omega.enrichment.worker import render_narrative_md, run_enrichment
 from omega.ui.service import open_service
-
 
 # ---- schemas --------------------------------------------------------------
 
@@ -57,6 +57,8 @@ def test_store_lifecycle(enrich_db: str):
     store.add_feedback(eid, EnrichmentFeedback(user_rating=1, feedback_text="useful"))
     assert store.latest_for_trace("t1").id == eid
     assert store.trace_id_for(eid) == "t1"
+    with pytest.raises(sqlite3.IntegrityError):
+        store.add_feedback("missing", EnrichmentFeedback(user_rating=-1))
     store.close()
 
 
@@ -66,6 +68,8 @@ def test_store_lifecycle(enrich_db: str):
 def test_get_provider_defaults_to_stub():
     assert isinstance(get_provider(None), StubProvider)
     assert isinstance(get_provider("stub"), StubProvider)
+    with pytest.raises(ValueError):
+        get_provider("stbu")
 
 
 def test_stub_provider_builds_valid_result_from_pack():
@@ -110,10 +114,19 @@ def test_context_pack_composes_views_without_protected_numbers(traces_db: str, t
     for key in ("trust", "guardrails", "market_movement", "signal_conflict",
                 "missing_context", "historical_support"):
         assert key in pack
-    rec = pack.get("recommendation") or {}
-    # Public market fields are allowed; engine-owned numbers must NOT be present.
+    # Public market fields are allowed; engine-owned numbers must NOT be present anywhere.
     for forbidden in ("edge", "edge_pct", "ev", "probability", "kelly", "stake"):
-        assert forbidden not in rec
+        assert forbidden not in set(_walk_keys(pack))
+
+
+def _walk_keys(value):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            yield key
+            yield from _walk_keys(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_keys(child)
 
 
 def test_context_pack_missing_trace_raises(traces_db: str, tmp_path: Path):

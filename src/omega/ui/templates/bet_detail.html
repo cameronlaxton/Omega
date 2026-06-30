@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import src_badge, provenance_legend %}
+{% from "base.html" import src_badge, provenance_legend, comp_strip %}
 {% block title %}Bet {{ not_found_id or detail.ledger_id }} · Omega Console{% endblock %}
 {% block content %}
 <p class="crumbs"><a href="/bets">‹ Bet Ledger</a></p>
@@ -56,6 +56,9 @@
 
 <section class="block">
   <h2>Linked trace recommendation values {{ src_badge('db_trace_payload') }}</h2>
+  {% if detail.linked_strip %}
+  <div class="rec-strip">{{ comp_strip(detail.linked_strip) }} <span class="muted small">Omega vs market · {{ detail.linked_strip.unit }}</span></div>
+  {% endif %}
   {% if detail.linked_trace_recommendations is not none %}
     <p>From trace <a href="/traces/{{ detail.linked_trace_id }}"><code>{{ detail.linked_trace_id }}</code></a>
     — edge%, Kelly, units, fair price etc. are read here from the trace's DB payload, not from <code>bet_ledger</code>.</p>

@@ -8,13 +8,23 @@ write here targets the enrichment sidecar DB only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 
 from omega.enrichment.schemas import EnrichmentFeedback
 from omega.enrichment.store import EnrichmentStore
 from omega.enrichment.worker import run_enrichment
+
+_WRITE_INTENT_HEADER = "X-Omega-Enrich-Intent"
+_WRITE_INTENT_VALUE = "operator-console"
+
+
+def _require_write_intent(
+    value: Annotated[str | None, Header(alias=_WRITE_INTENT_HEADER)] = None,
+) -> None:
+    if value != _WRITE_INTENT_VALUE:
+        raise HTTPException(status_code=403, detail="missing enrichment write intent")
 
 
 def build_enrichment_app(
@@ -39,7 +49,12 @@ def build_enrichment_app(
         return record.model_dump(mode="json")
 
     @app.post("/traces/{trace_id}")
-    def enqueue(trace_id: str, background_tasks: BackgroundTasks) -> dict[str, str]:
+    def enqueue(
+        trace_id: str,
+        background_tasks: BackgroundTasks,
+        write_intent: Annotated[str | None, Header(alias=_WRITE_INTENT_HEADER)] = None,
+    ) -> dict[str, str]:
+        _require_write_intent(write_intent)
         store = _store()
         try:
             eid = store.create(
@@ -88,7 +103,12 @@ def build_enrichment_app(
         return {"trace_id": trace_id, "latest": _record_payload(record) if record else None}
 
     @app.post("/enrichments/{enrichment_id}/feedback")
-    def feedback(enrichment_id: str, body: EnrichmentFeedback) -> dict[str, str]:
+    def feedback(
+        enrichment_id: str,
+        body: EnrichmentFeedback,
+        write_intent: Annotated[str | None, Header(alias=_WRITE_INTENT_HEADER)] = None,
+    ) -> dict[str, str]:
+        _require_write_intent(write_intent)
         store = _store()
         try:
             if store.trace_id_for(enrichment_id) is None:

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import src_badge, warning_chips, filter_chips, cal_chart %}
+{% from "base.html" import src_badge, warning_chips, filter_chips, cal_chart, reliability_chart %}
 {% block title %}Calibration Cockpit · Omega Console{% endblock %}
 {% block content %}
 <h1>Calibration Cockpit</h1>
@@ -17,6 +17,21 @@ resolves for that league / slice / market. Read-only.</p>
     {{ cal_chart(chart) }}
     <p class="muted small">Per day: average implied probability Omega took vs. the market's closing
     implied probability — one unit (probability). The gap between the lines is closing-line value.</p>
+  </div>
+</section>
+{% endif %}
+
+{% if reliability %}
+<section class="panel" style="margin-bottom:1.25rem;">
+  <div class="panel-head">
+    <h2>Reliability — model probability vs realized hit rate</h2>
+    <span class="panel-meta">{{ src_badge('bet_ledger') }} · {{ src_badge('db_trace_payload') }}</span>
+  </div>
+  <div class="panel-body">
+    {{ reliability_chart(reliability) }}
+    <p class="muted small">Each dot is a model-probability bucket plotted against the realized win rate of the
+    graded bets in it; the dashed line is perfect calibration. Dots above the line mean Omega was under-confident,
+    below means over-confident. Buckets with fewer than {{ reliability.min_n }} graded bets are not drawn.</p>
   </div>
 </section>
 {% endif %}
@@ -40,7 +55,8 @@ resolves for that league / slice / market. Read-only.</p>
 
 <p class="srcnote">Profiles and held-out metrics sourced from {{ src_badge('calibration_registry') }}.</p>
 
-<table class="grid">
+<div class="table-wrap">
+<table class="grid calibration-table">
   <thead>
     <tr>
       <th>profile_id</th><th>league</th><th>market</th><th>slice</th><th>method</th><th>ver</th>
@@ -70,4 +86,5 @@ resolves for that league / slice / market. Read-only.</p>
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

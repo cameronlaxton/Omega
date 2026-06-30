@@ -739,6 +739,14 @@ class TestTopLevelCompatMerge:
 
         assert block["trace"]["reasoning_narrative"] == "INNER WINS"
 
+    def test_export_schema_version_stays_wrapper_metadata(self):
+        block = self._wrapped_with_siblings()
+        block["export_schema_version"] = 2
+
+        ingest_traces._merge_top_level_compat_fields(block)
+
+        assert "export_schema_version" not in block["trace"]
+
     def test_raw_pattern_b_payloads_are_unaffected(self):
         raw = _make_analyze_out("sandbox-rawb-1", kind="prop")
         raw["reasoning_narrative"] = "already-nested"

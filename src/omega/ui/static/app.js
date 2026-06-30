@@ -63,16 +63,31 @@
     }
     return tip;
   }
+  function appendLine(el, text, opts) {
+    if (el.childNodes.length) el.appendChild(document.createElement("br"));
+    var node = opts && opts.strong ? document.createElement("strong") : document.createElement("span");
+    if (opts && opts.muted) node.style.opacity = ".7";
+    node.textContent = text == null ? "" : String(text);
+    el.appendChild(node);
+  }
+  function setTipLines(el, lines) {
+    el.replaceChildren();
+    lines.forEach(function (line) {
+      if (!line || line.text == null || line.text === "") return;
+      appendLine(el, line.text, line);
+    });
+  }
   document.querySelectorAll(".chart-dot").forEach(function (dot) {
     dot.addEventListener("mouseenter", function () {
       var t = ensureTip();
       var label = dot.getAttribute("data-label") || "";
       var m = dot.getAttribute("data-model");
       var k = dot.getAttribute("data-market");
-      var html = "<strong>" + label + "</strong>";
-      if (m) html += "<br>Omega: " + m + "%";
-      if (k) html += "<br>Market: " + k + "%";
-      t.innerHTML = html;
+      setTipLines(t, [
+        { text: label, strong: true },
+        m ? { text: "Omega: " + m + "%" } : null,
+        k ? { text: "Market: " + k + "%" } : null,
+      ]);
       t.style.opacity = "1";
     });
     dot.addEventListener("mousemove", function (ev) {
@@ -93,26 +108,53 @@
     var body = panel.querySelector("#deepdive-body");
     var status = panel.querySelector("#deepdive-status");
     var genBtn = panel.querySelector("#deepdive-generate");
+    var intentHeaders = { "X-Omega-Enrich-Intent": "operator-console" };
+    var jsonIntentHeaders = {
+      "Content-Type": "application/json",
+      "X-Omega-Enrich-Intent": "operator-console"
+    };
     function setStatus(t) { if (status) status.textContent = t; }
+    function clearBody() { if (body) body.textContent = ""; }
 
-    function mdToHtml(md) {
-      var esc = (md || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      var out = [], inList = false;
-      esc.split("\n").forEach(function (line) {
-        if (/^### /.test(line)) { if (inList){out.push("</ul>");inList=false;} out.push("<h5>" + line.slice(4) + "</h5>"); }
-        else if (/^## /.test(line)) { if (inList){out.push("</ul>");inList=false;} out.push("<h4>" + line.slice(3) + "</h4>"); }
-        else if (/^- /.test(line)) { if (!inList){out.push("<ul>");inList=true;} out.push("<li>" + line.slice(2) + "</li>"); }
-        else if (line.trim()) { if (inList){out.push("</ul>");inList=false;} out.push("<p>" + line + "</p>"); }
-      });
-      if (inList) out.push("</ul>");
-      return out.join("");
+    function addText(target, tag, text) {
+      var el = document.createElement(tag);
+      el.textContent = text;
+      target.appendChild(el);
+      return el;
     }
-    function feedbackHtml(id) {
-      return '<div class="deepdive-feedback" data-eid="' + id + '">' +
-        '<span class="muted small">Was this useful?</span> ' +
-        '<button type="button" data-rate="1">\u{1F44D}</button> ' +
-        '<button type="button" data-rate="-1">\u{1F44E}</button> ' +
-        '<span class="deepdive-fbmsg muted small"></span></div>';
+    function appendMarkdown(target, md) {
+      var list = null;
+      (md || "").split("\n").forEach(function (line) {
+        if (/^### /.test(line)) { list = null; addText(target, "h5", line.slice(4)); }
+        else if (/^## /.test(line)) { list = null; addText(target, "h4", line.slice(3)); }
+        else if (/^- /.test(line)) {
+          if (!list) { list = document.createElement("ul"); target.appendChild(list); }
+          addText(list, "li", line.slice(2));
+        } else if (line.trim()) { list = null; addText(target, "p", line); }
+      });
+    }
+    function appendFeedback(id) {
+      var fb = document.createElement("div");
+      fb.className = "deepdive-feedback";
+      fb.setAttribute("data-eid", id);
+      var prompt = document.createElement("span");
+      prompt.className = "muted small";
+      prompt.textContent = "Was this useful?";
+      fb.appendChild(prompt);
+      ["1", "-1"].forEach(function (rate) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("data-rate", rate);
+        b.textContent = rate === "1" ? "Yes" : "No";
+        fb.appendChild(document.createTextNode(" "));
+        fb.appendChild(b);
+      });
+      fb.appendChild(document.createTextNode(" "));
+      var msg = document.createElement("span");
+      msg.className = "deepdive-fbmsg muted small";
+      fb.appendChild(msg);
+      body.appendChild(fb);
+      wireFeedback(id);
     }
     function wireFeedback(id) {
       var fb = body.querySelector(".deepdive-feedback");
@@ -120,19 +162,23 @@
       fb.querySelectorAll("button[data-rate]").forEach(function (b) {
         b.addEventListener("click", function () {
           fetch("/enrich/enrichments/" + id + "/feedback", {
-            method: "POST", headers: { "Content-Type": "application/json" },
+            method: "POST", headers: jsonIntentHeaders,
             body: JSON.stringify({ user_rating: parseInt(b.getAttribute("data-rate"), 10) })
-          }).then(function () {
+          }).then(function (r) {
+            if (!r.ok) throw new Error();
             var m = fb.querySelector(".deepdive-fbmsg"); if (m) m.textContent = "thanks";
-          }).catch(function () {});
+          }).catch(function () {
+            var m = fb.querySelector(".deepdive-fbmsg"); if (m) m.textContent = "feedback failed";
+          });
         });
       });
     }
     function renderRecord(rec) {
       if (!rec) { setStatus("not generated"); return; }
       if (rec.status === "completed" && rec.narrative_md) {
-        body.innerHTML = mdToHtml(rec.narrative_md) + feedbackHtml(rec.id);
-        wireFeedback(rec.id);
+        clearBody();
+        appendMarkdown(body, rec.narrative_md);
+        appendFeedback(rec.id);
         setStatus("completed" + (rec.provider ? " · " + rec.provider : ""));
       } else if (rec.status === "failed") {
         setStatus("failed: " + (rec.error || "unknown"));
@@ -140,7 +186,10 @@
     }
     function poll(eid, tries) {
       if (tries <= 0) { setStatus("timed out"); if (genBtn) genBtn.disabled = false; return; }
-      fetch("/enrich/enrichments/" + eid).then(function (r) { return r.json(); }).then(function (rec) {
+      fetch("/enrich/enrichments/" + eid).then(function (r) {
+        if (!r.ok) throw new Error();
+        return r.json();
+      }).then(function (rec) {
         if (rec.status === "completed" || rec.status === "failed") {
           renderRecord(rec); if (genBtn) genBtn.disabled = false;
         } else { setStatus(rec.status || "running"); setTimeout(function () { poll(eid, tries - 1); }, 1200); }
@@ -148,8 +197,11 @@
     }
     if (genBtn) {
       genBtn.addEventListener("click", function () {
-        genBtn.disabled = true; setStatus("queued"); body.innerHTML = "";
-        fetch("/enrich/traces/" + encodeURIComponent(traceId), { method: "POST" })
+        genBtn.disabled = true; setStatus("queued"); clearBody();
+        fetch("/enrich/traces/" + encodeURIComponent(traceId), {
+          method: "POST",
+          headers: intentHeaders
+        })
           .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
           .then(function (j) { poll(j.enrichment_id, 30); })
           .catch(function () { setStatus("enrichment service not running (start omega-enrich)"); genBtn.disabled = false; });
@@ -160,4 +212,60 @@
       .then(function (j) { if (j.latest) renderRecord(j.latest); })
       .catch(function () { setStatus("not generated"); });
   })();
+  // Generic display-only tooltip binder for the V2 visuals. Each handler only
+  // reads data-* attributes the server already computed — no derivation here.
+  function bindTooltip(el, linesFn) {
+    el.addEventListener("mouseenter", function () {
+      var t = ensureTip();
+      setTipLines(t, linesFn(el));
+      t.style.opacity = "1";
+    });
+    el.addEventListener("mousemove", function (ev) {
+      var t = ensureTip();
+      t.style.left = ev.clientX + 12 + "px";
+      t.style.top = ev.clientY + 12 + "px";
+    });
+    el.addEventListener("mouseleave", function () {
+      if (tip) tip.style.opacity = "0";
+    });
+  }
+
+  // Comparison strip dots (dumbbell / ribbon).
+  document.querySelectorAll(".strip-dot").forEach(function (d) {
+    bindTooltip(d, function (el) {
+      var label = el.getAttribute("data-strip-label") || "";
+      var val = el.getAttribute("data-strip-value") || "";
+      var unit = el.getAttribute("data-strip-unit") || "";
+      return [
+        { text: label, strong: true },
+        { text: val },
+        unit ? { text: unit, muted: true } : null,
+      ];
+    });
+  });
+
+  // Reliability diagram dots (model bucket vs realized hit rate).
+  document.querySelectorAll(".reliability-dot").forEach(function (d) {
+    bindTooltip(d, function (el) {
+      return [
+        { text: el.getAttribute("data-rel-label") || "", strong: true },
+        { text: "model " + el.getAttribute("data-rel-model") + "%" },
+        { text: "realized " + el.getAttribute("data-rel-hit") + "%" },
+        { text: "n=" + el.getAttribute("data-rel-n") },
+      ];
+    });
+  });
+
+  // CLV scatter dots (closing-line value vs net result).
+  document.querySelectorAll(".scatter-dot").forEach(function (d) {
+    bindTooltip(d, function (el) {
+      var st = el.getAttribute("data-sc-status");
+      return [
+        { text: el.getAttribute("data-sc-label") || "", strong: true },
+        { text: "CLV " + el.getAttribute("data-sc-clv") },
+        { text: "net " + el.getAttribute("data-sc-pnl") },
+        st ? { text: st } : null,
+      ];
+    });
+  });
 })();

@@ -40,11 +40,13 @@ CREATE INDEX IF NOT EXISTS idx_trace_enrichments_trace ON trace_enrichments(trac
 CREATE INDEX IF NOT EXISTS idx_trace_enrichments_status ON trace_enrichments(status);
 CREATE TABLE IF NOT EXISTS trace_enrichment_feedback (
     id TEXT PRIMARY KEY,
-    enrichment_id TEXT NOT NULL,
+    enrichment_id TEXT NOT NULL REFERENCES trace_enrichments(id) ON DELETE CASCADE,
     user_rating INTEGER,
     feedback_text TEXT,
     created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_trace_enrichment_feedback_enrichment_id
+    ON trace_enrichment_feedback(enrichment_id);
 """
 
 
@@ -65,6 +67,8 @@ class EnrichmentStore:
         else:
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
             self.conn = sqlite3.connect(self.db_path)
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        if not read_only:
             self.conn.executescript(_SCHEMA)
             self.conn.commit()
         self.conn.row_factory = sqlite3.Row

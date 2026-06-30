@@ -20,7 +20,6 @@ from typing import Any, Protocol
 from omega.enrichment import PROMPT_VERSION
 from omega.enrichment.schemas import (
     EnrichmentResult,
-    MarketContext,
     sanitize_raw_result,
 )
 
@@ -116,7 +115,11 @@ class StubProvider:
                 "model_case": positives or ["Model produced a position; supporting factors are limited."],
                 "market_context": {
                     "line_movement": mm.get("direction") or "unknown",
-                    "interpretation": mm.get("headline") or "No market read available.",
+                    "interpretation": (
+                        mm.get("interpretation")
+                        or mm.get("headline")
+                        or "No market read available."
+                    ),
                 },
                 "counter_case": counter_case or ["No material counterargument surfaced."],
                 "risk_rating": _risk_from_guardrails(gr.get("worst_severity")),
@@ -167,10 +170,13 @@ class AnthropicProvider:
 
 def get_provider(name: str | None, model: str | None = None) -> NarrativeProvider:
     """Resolve a provider by name (``OMEGA_ENRICH_PROVIDER`` if unset)."""
-    name = (name or os.environ.get("OMEGA_ENRICH_PROVIDER") or "stub").strip().lower()
-    if name in ("anthropic", "claude"):
+    raw_name = name or os.environ.get("OMEGA_ENRICH_PROVIDER")
+    resolved = (raw_name or "stub").strip().lower()
+    if resolved in ("", "stub"):
+        return StubProvider()
+    if resolved in ("anthropic", "claude"):
         return AnthropicProvider(model=model)
-    return StubProvider()
+    raise ValueError(f"Unsupported enrichment provider: {resolved}")
 
 
 __all__ = [

@@ -120,15 +120,38 @@ def test_happy_path_prop_writes_export_block(tmp_path: Path) -> None:
     import json
 
     block = json.loads(export_path.read_text())
+    assert block["export_schema_version"] == 2
     assert block["trace"]["trace_id"] == "sandbox-prop-001"
     assert "reasoning_inputs" not in block
     assert "reasoning_narrative" not in block
+    assert "reasoning_presentation" not in block
     assert block["trace"]["reasoning_inputs"]["market_context"]["prop_type"] == "hits"
     assert block["trace"]["reasoning_narrative"] == "Julio's contact profile fits this matchup."
     assert block["trace"]["reasoning_presentation"] == presentation
     # A4: export block carries a top-level session_id so the prediction->session
     # link survives outside the DB and passes the strict export validator.
     assert block["session_id"] == "sess-test"
+
+
+def test_batch_reasoning_presentation_rejects_extra_or_numeric_fields() -> None:
+    with patch("omega.mcp.server._formal_output_gate_failures", return_value=[]):
+        result = omega_run_batch(
+            entries=[
+                _prop_entry(
+                    reasoning_presentation={
+                        "thesis": "Qualitative only.",
+                        "edge_pct": "not allowed",
+                        "why": 12,
+                    }
+                )
+            ],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["status"] == "error"
+    assert result["entries_error"] == 1
+    assert "reasoning_presentation" in result["errors"][0]["error"]
 
 
 def test_happy_path_game_writes_export_block(tmp_path: Path) -> None:

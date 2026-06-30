@@ -50,20 +50,20 @@ from omega.ui.schemas import Source
 __all__ = [
     "EvidenceAuditItem",
     "EvidenceAuditView",
-    "build_evidence_audit",
+    "Guardrail",
+    "GuardrailsView",
     "MarketMovementView",
-    "build_market_movement",
-    "clv_interpretation",
     "SignalConflictRow",
     "SignalConflictView",
-    "build_signal_conflict",
     "TrustContribution",
     "TrustBucket",
     "TrustBreakdownView",
+    "build_evidence_audit",
+    "build_market_movement",
+    "build_signal_conflict",
     "build_trust_breakdown",
-    "Guardrail",
-    "GuardrailsView",
     "build_trace_guardrails",
+    "clv_interpretation",
     "STALE_ODDS_SECONDS",
 ]
 
@@ -348,10 +348,10 @@ _EDGE_EPS = 0.005
 _EDGE_EPS_BIG = 0.03
 
 _MOVEMENT_HEADLINES = {
-    "early_value": "Market moved toward Omega's side and a meaningful edge remains at the close — early value.",
+    "early_value": "Market moved toward Omega's side and a meaningful edge remains at the close - early value.",
     "market_confirms": "Market moved toward Omega's side; some edge remains at the close.",
     "value_absorbed": "Market moved toward Omega's side, but most of the value has been absorbed by the close.",
-    "market_disagrees": "Market moved against Omega's side — the close is shorter on the other side.",
+    "market_disagrees": "Market moved against Omega's side - the close is shorter on the other side.",
     "no_confirmation": "Market has not meaningfully confirmed or contradicted this position.",
     "insufficient_data": "Not enough market data (no closing line or recorded price) to read movement.",
 }
@@ -359,7 +359,7 @@ _MOVEMENT_HEADLINES = {
 
 @dataclass(frozen=True)
 class MarketMovementView:
-    """Opener→taken→close line-movement read for the primary recommendation."""
+    """Opener-to-taken-to-close line-movement read for the primary recommendation."""
 
     available: bool
     market: str | None
@@ -416,6 +416,36 @@ def _match_closing_line(
             if str(c.get("market") or "").strip().lower() == mkt:
                 return c
     return rows[0]
+
+
+def _market_family_token(market: Any) -> str:
+    token = str(market or "").strip().lower()
+    if "total" in token or token in {"over", "under", "o/u"}:
+        return "total"
+    if "spread" in token or "handicap" in token:
+        return "spread"
+    if "moneyline" in token or token in {"ml", "h2h"}:
+        return "moneyline"
+    return "unknown"
+
+
+def _side_adjusted_point_delta(
+    *, market: Any, selection: Any, point_delta: float | None
+) -> float | None:
+    """Return positive when point movement favored the recorded selection."""
+    if point_delta is None:
+        return None
+    family = _market_family_token(market)
+    if family == "total":
+        side = _canon_side(selection)
+        if side == "over":
+            return point_delta
+        if side == "under":
+            return -point_delta
+        return None
+    if family == "spread":
+        return -point_delta
+    return None
 
 
 def build_market_movement(
@@ -485,8 +515,11 @@ def build_market_movement(
         if model_probability is not None and closing_implied is not None
         else None
     )
+    point_signal = _side_adjusted_point_delta(
+        market=market, selection=selection, point_delta=point_delta
+    )
 
-    available = clv_points is not None
+    available = clv_points is not None or point_signal is not None
     warnings: list[OperatorWarning] = []
     if match is None:
         warnings.append(OperatorWarning(
@@ -502,7 +535,7 @@ def build_market_movement(
     if not available:
         direction = "unknown"
         interpretation = "insufficient_data"
-    elif clv_points > _CLV_EPS:
+    elif clv_points is not None and clv_points > _CLV_EPS:
         direction = "toward"
         if residual_edge is not None and residual_edge > _EDGE_EPS_BIG:
             interpretation = "early_value"
@@ -510,7 +543,18 @@ def build_market_movement(
             interpretation = "market_confirms"
         else:
             interpretation = "value_absorbed"
-    elif clv_points < -_CLV_EPS:
+    elif clv_points is not None and clv_points < -_CLV_EPS:
+        direction = "against"
+        interpretation = "market_disagrees"
+    elif point_signal is not None and point_signal > _CLV_EPS:
+        direction = "toward"
+        if residual_edge is not None and residual_edge > _EDGE_EPS_BIG:
+            interpretation = "early_value"
+        elif residual_edge is not None and residual_edge > _EDGE_EPS:
+            interpretation = "market_confirms"
+        else:
+            interpretation = "value_absorbed"
+    elif point_signal is not None and point_signal < -_CLV_EPS:
         direction = "against"
         interpretation = "market_disagrees"
     else:
@@ -527,11 +571,11 @@ def build_market_movement(
         closing_odds=closing_odds,
         taken_implied=taken_implied,
         closing_implied=closing_implied,
-        model_probability=model_probability,
+        model_probability=None,
         point_delta=point_delta,
         price_delta=price_delta,
         clv_points=clv_points,
-        residual_edge=residual_edge,
+        residual_edge=None,
         direction=direction,
         interpretation=interpretation,
         headline=_MOVEMENT_HEADLINES[interpretation],
@@ -610,6 +654,24 @@ def _canon_side(value: Any) -> str | None:
     return None
 
 
+def _recommendation_side(rec: NormalizedRecommendation | None) -> str | None:
+    if rec is None:
+        return None
+    side = _canon_side(getattr(rec, "selection_kind", None))
+    if side is not None:
+        return side
+    side = _canon_side(rec.selection.value)
+    if side is not None:
+        return side
+    for prob_field in (rec.raw_probability, rec.calibrated_probability, rec.implied_probability):
+        path = str(prob_field.source_path or "").lower()
+        if "home_win_prob" in path:
+            return "home"
+        if "away_win_prob" in path:
+            return "away"
+    return None
+
+
 def _family_roles(evidence_application: list[dict[str, Any]] | None) -> dict[str, str]:
     """Map signal_type -> family_role from the Issue-22 evidence_application block."""
     out: dict[str, str] = {}
@@ -640,13 +702,14 @@ def build_signal_conflict(
     rows_in = [r for r in (evidence_signals or []) if isinstance(r, dict)]
     roles = _family_roles(evidence_application)
 
-    rec_side = _canon_side(rec.selection.value) if rec is not None else None
+    rec_side = _recommendation_side(rec)
     edge_val = rec.engine_edge.value if rec is not None else None
     edge_positive = _is_number(edge_val) and float(edge_val) > 0
 
     rows: list[SignalConflictRow] = []
     weights: dict[str, float] = {}
     supporting = opposing = neutral = applied_count = 0
+    applied_supporting = applied_opposing = 0
     for r in rows_in:
         direction = _canon_side(r.get("direction"))
         conf = float(r["confidence"]) if _is_number(r.get("confidence")) else None
@@ -660,9 +723,13 @@ def build_signal_conflict(
         if rec_side and direction == rec_side:
             stance = "supports"
             supporting += 1
+            if applied:
+                applied_supporting += 1
         elif rec_side and _OPPOSITE_SIDE.get(rec_side) == direction:
             stance = "opposes"
             opposing += 1
+            if applied:
+                applied_opposing += 1
         else:
             stance = "neutral"
             neutral += 1
@@ -730,7 +797,13 @@ def build_signal_conflict(
         ))
 
     # Single-signal dominance: exactly one applied supporting signal.
-    if rec_side and supporting == 1 and applied_count >= 1 and opposing == 0 and "model_edge_conflict" not in conflicts:
+    if (
+        rec_side
+        and applied_supporting == 1
+        and applied_count >= 1
+        and applied_opposing == 0
+        and "model_edge_conflict" not in conflicts
+    ):
         conflicts.append("dominant_single_signal")
         warnings.append(OperatorWarning(
             code="dominant_single_signal", severity=SEVERITY_INFO,
@@ -779,7 +852,7 @@ _BAND_LABELS = {
 
 @dataclass(frozen=True)
 class TrustContribution:
-    """One +/− factor inside a trust bucket."""
+    """One +/- factor inside a trust bucket."""
 
     text: str
     polarity: str  # positive | negative | neutral
@@ -797,7 +870,7 @@ class TrustBucket:
 
 @dataclass(frozen=True)
 class TrustBreakdownView:
-    """Why a trace is trusted the way it is — six buckets + a +/− digest.
+    """Why a trace is trusted the way it is - six buckets + a +/- digest.
 
     Reconstructs the persisted ``trace_quality`` verdict and composes the A1–A3
     views into the file's six buckets. It restates no protected number: edge is
@@ -1005,7 +1078,7 @@ def build_trust_breakdown(
 
 
 def _as_fraction_or_pct(value: Any) -> float | None:
-    """Normalize an engine edge to percentage points (|v|<=1 ⇒ fraction ×100)."""
+    """Normalize an engine edge to percentage points (|v|<=1 => fraction x100)."""
     if not _is_number(value):
         return None
     v = float(value)

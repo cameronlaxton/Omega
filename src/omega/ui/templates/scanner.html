@@ -1,18 +1,19 @@
 {% extends "base.html" %}
-{% from "base.html" import src_badge, field_val, pct_field_val, warning_chips %}
-{% block title %}Edge Scanner · Omega Console{% endblock %}
+{% from "base.html" import src_badge, warning_chips, comp_strip %}
+{% block title %}Edge Scanner - Omega Console{% endblock %}
 {% block content %}
-<h1>Edge Scanner</h1>
-<p class="lede">Recent <strong>DB-backed</strong> recommendations ranked by engine edge — this is
-<em>not</em> a live feed and <em>not</em> a fabricated value score. Every column is a real engine
-value; <strong>Recorded Price</strong> is the price recorded on the trace at decision time, not a
-live multi-book quote. Action opens the trace; the console never places a bet.</p>
+<section class="ledger-hero scanner-hero">
+  <div>
+    <h1>Edge Scanner</h1>
+    <p>Recent <strong>DB-backed</strong> recommendations ranked by engine edge. This is not a live feed or a fabricated value score; <strong>Recorded Price</strong> is the decision-time trace price.</p>
+  </div>
+</section>
 
 {{ warning_chips(data.warnings) }}
 
 {% if data.rows %}
-<div class="table-wrap">
-  <table class="grid scanner">
+<div class="table-wrap market-table-wrap scanner-table-wrap">
+  <table class="grid scanner market-table">
     <thead>
       <tr>
         <th>Event</th>
@@ -20,6 +21,7 @@ live multi-book quote. Action opens the trace; the console never places a bet.</
         <th>Model Output {{ src_badge('db_trace_payload') }}</th>
         <th>Recorded Price</th>
         <th>Edge {{ src_badge('db_trace_payload') }}</th>
+        <th>Omega vs Market</th>
         <th>Confidence</th>
         <th>Data Quality</th>
         <th>Risk</th>
@@ -29,41 +31,45 @@ live multi-book quote. Action opens the trace; the console never places a bet.</
     <tbody>
       {% for r in data.rows %}
       <tr>
-        <td>
-          <a class="link" href="/traces/{{ r.trace_id }}">{{ r.matchup or r.trace_id }}</a>
-          <div class="rc-sub">{{ r.league or '' }}{% if r.timestamp %} · {{ r.timestamp[:10] }}{% endif %}{% if r.has_outcome %} · <span class="pos">graded</span>{% endif %}</div>
+        <td class="entity-cell">
+          <a class="event-link" href="/traces/{{ r.trace_id }}">{{ r.matchup or r.trace_id }}</a>
+          <div class="rc-sub">{{ r.league or '' }}{% if r.timestamp %} - {{ r.timestamp[:10] }}{% endif %}{% if r.has_outcome %} - <span class="pos">graded</span>{% endif %}</div>
         </td>
-        <td>{{ field_val(r.market) }}<div class="rc-sub">{{ field_val(r.selection) }}</div></td>
-        <td title="{{ r.model_output_label }}">
-          {% if r.model_output_is_pct %}{{ pct_field_val(r.model_output) }}{% else %}{{ field_val(r.model_output) }}{% endif %}
+        <td>
+          <span class="market-pill">{{ r.market.value if r.market and r.market.value is not none else '-' }}</span>
+          <div class="rc-sub">{{ r.selection.value if r.selection and r.selection.value is not none else '-' }}</div>
+        </td>
+        <td>
+          {% if r.model_output and r.model_output.value is not none %}
+            {% if r.model_output_is_pct %}{{ (r.model_output.value * 100) | round(2) }}%{% else %}{{ r.model_output.value }}{% endif %}
+          {% else %}<span class="muted">-</span>{% endif %}
           <div class="rc-sub">{{ r.model_output_label }}</div>
         </td>
-        <td class="mono">{{ field_val(r.recorded_price) }}</td>
+        <td class="mono">{{ r.recorded_price.value if r.recorded_price and r.recorded_price.value is not none else '-' }}</td>
         <td>
           {% if r.edge_display %}
-          <span class="edge-chip {{ 'pos' if r.edge_positive else 'neg' }}" title="source: {{ r.edge.source_path }}">{{ r.edge_display }}</span>
-          {% else %}<span class="muted" title="no engine edge persisted">—</span>{% endif %}
+          <span class="edge-chip {{ 'pos' if r.edge_positive else 'neg' }}">{{ r.edge_display }}</span>
+          {% else %}<span class="muted" title="no engine edge persisted">-</span>{% endif %}
         </td>
+        <td>{{ comp_strip(r.strip) }}</td>
         <td>
           {% if r.confidence %}
           <span class="grade {{ r.confidence | lower }}">{{ r.confidence }}</span>{% if r.confidence_computed %} <span class="cbadge" title="console-derived: {{ r.confidence_source }}">computed</span>{% endif %}
-          {% else %}<span class="muted" title="confidence unavailable">—</span>{% endif %}
+          {% else %}<span class="muted" title="confidence unavailable">-</span>{% endif %}
         </td>
         <td>
           <span class="pill {{ 'pill-green' if r.data_quality == 'clean' else 'pill-amber' if r.data_quality == 'warn' else 'pill-red' if r.data_quality == 'fail' else 'pill-gray' }}"
                 {% if r.data_quality_detail %}title="{{ r.data_quality_detail }}"{% endif %}>{{ r.data_quality }}</span>
         </td>
         <td><span class="gr-dot gr-dot-{{ r.guardrail }}" title="worst-severity guardrail (trace_quality)">{{ r.guardrail }}</span></td>
-        <td><a class="action-btn" href="/traces/{{ r.trace_id }}">Review</a></td>
+        <td><a class="neon-action" href="/traces/{{ r.trace_id }}">Review</a></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
-{% if data.scan_capped %}<p class="muted small">Scan-capped — older traces beyond the window are not shown.</p>{% endif %}
-<p class="srcnote">Edge and Model Output are engine values from the trace payload; hover the
-<span class="cbadge">computed</span> badge to see console-derived confidence buckets. Confidence
-prefers the engine's confidence tier; Data Quality is from <code>trace_quality</code> + evidence coverage.</p>
+{% if data.scan_capped %}<p class="muted small">Scan-capped: older traces beyond the window are not shown.</p>{% endif %}
+<p class="srcnote">Edge and Model Output are engine values from the trace payload. Confidence prefers the engine's confidence tier; Data Quality is from <code>trace_quality</code> plus evidence coverage.</p>
 {% else %}
 <div class="panel"><div class="panel-empty">No recent DB-backed recommendations found.</div></div>
 {% endif %}

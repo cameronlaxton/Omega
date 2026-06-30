@@ -119,6 +119,8 @@ def test_row_guardrail_token():
     assert _row_guardrail({"trace_quality": {"quality_band": "strong"}}) == "ok"
     assert _row_guardrail({"trace_quality": {"aggregate_quality": 0.85}}) == "ok"
     assert _row_guardrail({"trace_quality": {"aggregate_quality": 0.3}}) == "warn"
+    assert _row_guardrail({"trace_quality": {"aggregate_quality": "fail"}}) == "fail"
+    assert _row_guardrail({"trace_quality": {"aggregate_quality": "weak"}}) == "warn"
 
 
 def _client(tmp_path: Path, setup: Callable[[TraceStore], None]) -> TestClient:
@@ -144,3 +146,5 @@ def test_guardrails_surface_on_detail_and_lists(tmp_path):
     scan = client.get("/api/scanner").json()["rows"]
     assert all(r["guardrail"] in {"ok", "info", "warn", "fail"} for r in scan)
     assert "Trace Guardrails" in client.get("/traces/gr-1").text
+    assert "gr-dot-" in client.get("/traces").text
+    assert "gr-dot-" in client.get("/scanner").text

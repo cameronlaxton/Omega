@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "base.html" import src_badge, provenance_legend, field_val, pct_field_val, warning_chips %}
+{% from "base.html" import src_badge, provenance_legend, field_val, pct_field_val, warning_chips, comp_strip %}
 {% block title %}Trace {{ not_found_id or detail.trace_id }} · Omega Console{% endblock %}
 {% block content %}
 <p class="crumbs"><a href="/traces">‹ Trace Ledger</a></p>
@@ -121,9 +121,9 @@
       <div class="tl-label">Final recommendation</div>
       <div class="tl-body">{% if ns.primary %}{{ field_val(ns.primary.selection) }} {{ field_val(ns.primary.market) }} @ {{ field_val(ns.primary.odds) }} · edge {{ pct_field_val(ns.primary.engine_edge) }}{% else %}<span class="muted">no recommendation emitted</span>{% endif %}</div>
     </div>
-    <div class="tl-step {{ 'ok' if detail.outcome else 'skipped' }}">
+    <div class="tl-step {{ 'ok' if (detail.outcome or detail.prop_outcomes) else 'skipped' }}">
       <div class="tl-label">Outcome</div>
-      <div class="tl-body">{% if detail.outcome %}graded{% else %}<span class="muted">not graded yet</span>{% endif %}</div>
+      <div class="tl-body">{% if detail.outcome or detail.prop_outcomes %}graded{% else %}<span class="muted">not graded yet</span>{% endif %}</div>
     </div>
   </div>
 </section>
@@ -188,6 +188,9 @@
       {% if rec.is_primary %}<span class="pill primary">primary</span>{% else %}<span class="pill alt">alt{% if rec.rank is not none %} #{{ rec.rank }}{% endif %}</span>{% endif %}
       <span class="band">{{ field_val(rec.display_confidence_band) }}</span>
     </div>
+    {% if rec.is_primary and detail.primary_strip %}
+    <div class="rec-strip">{{ comp_strip(detail.primary_strip) }} <span class="muted small">Omega vs market · win probability</span></div>
+    {% endif %}
     <table class="kv reckv">
       <tr><th>line</th><td>{{ field_val(rec.line) }}</td><th>odds</th><td>{{ field_val(rec.odds) }}</td></tr>
       <tr><th>raw prob</th><td>{{ pct_field_val(rec.raw_probability) }}</td><th>calibrated</th><td>{{ pct_field_val(rec.calibrated_probability) }}</td></tr>
@@ -215,13 +218,13 @@
   {% if mm.available %}
   <table class="kv mmkv">
     <tr><th>recorded price</th><td>{{ mm.taken_odds if mm.taken_odds is not none else '—' }}</td><th>closing price</th><td>{{ mm.closing_odds if mm.closing_odds is not none else '—' }}{% if mm.closing_source %} <span class="muted small">({{ mm.closing_source }})</span>{% endif %}</td></tr>
-    <tr><th>taken line</th><td>{{ mm.taken_line if mm.taken_line is not none else '—' }}</td><th>closing line</th><td>{{ mm.closing_line if mm.closing_line is not none else '—' }}{% if mm.point_delta is not none %} <span class="muted small">(Δ {{ mm.point_delta }})</span>{% endif %}</td></tr>
+    <tr><th>taken line</th><td>{{ mm.taken_line if mm.taken_line is not none else '—' }}</td><th>closing line</th><td>{{ mm.closing_line if mm.closing_line is not none else '—' }}{% if mm.point_delta is not none %} <span class="muted small">(delta {{ mm.point_delta }})</span>{% endif %}</td></tr>
     <tr><th>taken implied</th><td>{{ (mm.taken_implied * 100) | round(2) ~ '%' if mm.taken_implied is not none else '—' }}</td><th>closing implied</th><td>{{ (mm.closing_implied * 100) | round(2) ~ '%' if mm.closing_implied is not none else '—' }}</td></tr>
-    <tr><th>CLV (prob pts)</th><td class="{{ 'mm-pos' if mm.clv_points and mm.clv_points > 0 else 'mm-neg' if mm.clv_points and mm.clv_points < 0 else '' }}">{{ (mm.clv_points * 100) | round(2) if mm.clv_points is not none else '—' }}</td><th>edge at close</th><td>{{ (mm.residual_edge * 100) | round(2) ~ ' pts' if mm.residual_edge is not none else '—' }}</td></tr>
+    <tr><th>CLV (prob pts)</th><td class="{{ 'mm-pos' if mm.clv_points and mm.clv_points > 0 else 'mm-neg' if mm.clv_points and mm.clv_points < 0 else '' }}">{{ (mm.clv_points * 100) | round(2) if mm.clv_points is not none else '—' }}</td><th>price delta</th><td>{{ mm.price_delta if mm.price_delta is not none else '—' }}</td></tr>
   </table>
   {% endif %}
   {{ warning_chips(mm.warnings) }}
-  <p class="muted small">CLV reuses the console's closing-line arithmetic; the read combines the price move with the edge left at the close — no protected number is recomputed.</p>
+  <p class="muted small">CLV reuses the console's closing-line arithmetic; the read combines public price and line movement without exposing protected model numbers.</p>
 </section>
 {% endif %}
 
@@ -356,6 +359,7 @@
 </section>
 {% endif %}
 
+{% if enrichment_enabled %}
 <section class="block deepdive" data-trace="{{ detail.trace_id }}">
   <h2>Deep Dive <span class="muted">(LLM narrative — explains, never decides)</span></h2>
   <div class="deepdive-actions">
@@ -365,6 +369,7 @@
   <div class="deepdive-body" id="deepdive-body"></div>
   <p class="muted small">Grounded in the deterministic panels above; the engine still owns every probability, edge, EV, and stake. Requires the opt-in enrichment service (<code>omega-enrich</code>).</p>
 </section>
+{% endif %}
 
 <section class="block">
   <h2>Full trace payload {{ src_badge('db_trace_payload') }}</h2>

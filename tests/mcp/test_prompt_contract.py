@@ -163,6 +163,7 @@ def test_daily_prompts_require_narrative_first_rendering():
     for name in ("nba_daily.md", "wnba_daily.md", "mlb_daily.md", "daily_all_sports.md"):
         text = (daily_dir / name).read_text(encoding="utf-8").lower()
         assert "presentation_contract.md" in text
+        assert "output_modes.md" in text
         assert "narrative-first" in text
         assert "slate snapshot" in text
         assert "honesty block" in text
@@ -172,6 +173,7 @@ def test_manual_league_prompt_requires_narrative_first_rendering():
     text = (ROOT / "prompts" / "league_analysis_prompt.md").read_text(encoding="utf-8").lower()
 
     assert "presentation_contract.md" in text
+    assert "output_modes.md" in text
     assert "narrative-first" in text
     assert "slate snapshot" in text
     assert "honesty block" in text

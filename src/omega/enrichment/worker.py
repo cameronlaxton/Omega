@@ -89,4 +89,4 @@ def run_enrichment(
         store.close()
 
 
-__all__ = ["run_enrichment", "render_narrative_md"]
+__all__ = ["render_narrative_md", "run_enrichment"]

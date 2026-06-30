@@ -188,7 +188,9 @@ def _warn_drift(trace_id: str, input_snap: dict[str, Any], bet_block: dict[str, 
 
 # Keys at the export-block root that are structural (not trace-level fields).
 # These are never promoted into the inner trace by _merge_top_level_compat_fields.
-_BLOCK_STRUCTURAL_KEYS = frozenset({"trace", "bet_record", "clv_capture_instructions"})
+_BLOCK_STRUCTURAL_KEYS = frozenset(
+    {"trace", "bet_record", "clv_capture_instructions", "export_schema_version"}
+)
 
 _PROP_IDENTITY_FIELDS = ("player_name", "home_team", "away_team", "game_date", "line")
 _REASONING_INPUTS_REQUIRED_KEYS = ("sources", "fields_gathered", "missing_fields")
