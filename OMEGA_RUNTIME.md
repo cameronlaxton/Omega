@@ -5,6 +5,8 @@
 
 This is the runtime instruction set for an Omega agent running with local repo access. For product doctrine, output standards, and artifact authority, see [AGENTS.md](AGENTS.md). The local MCP runtime is the standard model. Use the local MCP server first; use direct repo imports only when MCP is unavailable in the current client.
 
+> **First read, every session:** [`.agents/skills/omega-session-bootstrap/SKILL.md`](.agents/skills/omega-session-bootstrap/SKILL.md) — preflight gate, SQLite workaround, and minting a **unique** session ID + opening the sidecar. For read-only trace inspection prefer the typed recipes in [`docs/TRACE_QUERY_COOKBOOK.md`](docs/TRACE_QUERY_COOKBOOK.md) over raw `sqlite3`.
+
 ## 1. Ownership Boundary
 
 The LLM owns intent classification, evidence gathering, source arbitration, input mapping, downgrade decisions, narrative explanation, and local automation.
@@ -279,26 +281,35 @@ omega_run_batch(
 )
 ```
 
-When MCP is unavailable and a CLI loop is impractical (N > 5), a batch Python script is
-an authorized fallback. Every such script **must**:
+When MCP is unavailable, use **`omega-run-batch`** — the CLI equivalent of the
+`omega_run_batch` tool. It runs the *same* implementation (odds resolution, deterministic
+seed derivation, formal-gate enforcement, atomic export-block writing), so there is no
+second pipeline and no need to hand-roll a loop:
+
+```bash
+# entries.json is a JSON array of the same entry dicts shown above (or {"entries": [...]}).
+omega-run-batch --entries-json entries.json --session-id sess-YYYYMMDD-XXXX --bankroll 1000
+```
+
+For a single request, the direct-engine CLI remains:
+
+```bash
+omega-run-analyze --kind game --request-json request.json --session-id sess-YYYYMMDD-XXXX --bankroll 1000 --trace-out var/inbox/traces
+```
+
+**Only if neither CLI is usable** is a hand-written batch Python script a last-resort
+fallback. Every such script **must**:
 
 1. Call `cowork_preflight.run_formal_output_gate()` at the top — abort if gate fails.
 2. Derive every seed deterministically as `int.from_bytes(hashlib.sha256(f"{prompt}|{date}".encode("utf-8")).digest()[:4], "big")` — never `random`.
 3. Include at least one `EvidenceSignal` per trace, or set `reasoning_downgrade_rationale`
    explaining why evidence is empty.
-4. Not hardcode `trace_quality.aggregate_quality`; omit it or compute from input quality.
+4. Not hardcode `trace_quality.aggregate_quality`; omit it or compute from input quality
+   (`omega-validate-trace-export` will WARN on a batch where every trace shares one value).
 5. Not mutate shared state as a side effect (e.g., deleting the entire odds cache).
 
 Scripts violating these rules produce uncalibrated traces and may contaminate the
 calibration loop with incorrect quality scores.
-
-If the client cannot expose MCP tools, use the sanctioned direct-engine CLI for
-repeatable one-off or batch calls instead of creating scratch Python under
-`src/omega/ops/`:
-
-```bash
-omega-run-analyze --kind game --request-json request.json --session-id sess-YYYYMMDD-XXXX --bankroll 1000 --trace-out var/inbox/traces
-```
 
 Direct smoke test when no MCP client is available:
 

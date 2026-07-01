@@ -6,6 +6,14 @@ that points here and carries no independent rules.
 
 ### Canonical references (read before acting)
 
+- **[`.agents/skills/omega-session-bootstrap/SKILL.md`](.agents/skills/omega-session-bootstrap/SKILL.md)**
+  — **mandatory first read for any operating session**: interpreter/preflight gate, SQLite
+  workaround, and how to mint a *unique* session ID and open the sidecar. Skipping it is the
+  single strongest predictor of the operational drift (guessed commands, reused session IDs,
+  raw-SQL scratch writes) that repeated audits have flagged.
+- [`docs/TRACE_QUERY_COOKBOOK.md`](docs/TRACE_QUERY_COOKBOOK.md) — typed `TraceStore` recipes for
+  read-only trace inspection, so you don't hand-roll raw `sqlite3` schema-guessing. Reads only;
+  all mutations stay on the typed MCP/CLI paths.
 - **[`prompts/reference/output_modes.md`](prompts/reference/output_modes.md)** — output-mode
   semantics (`RESEARCH_CANDIDATE` vs `ACTIONABLE`), downgrade discipline, and the engine-execution
   rule. **Single source of truth; do not restate it elsewhere.**
