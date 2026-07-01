@@ -47,6 +47,7 @@
           <th>Markets</th>
           <th>evidence</th>
           <th>Quality</th>
+          <th>Risk</th>
           <th>Status</th>
           <th>Action</th>
         </tr>
@@ -99,6 +100,7 @@
             {% endif %}
           </td>
           <td class="mono">{{ '%.3f' % row.aggregate_quality if row.aggregate_quality is not none else '-' }}</td>
+          <td><span class="gr-dot gr-dot-{{ row.guardrail }}" title="worst-severity guardrail (trace_quality)">{{ row.guardrail }}</span></td>
           <td>
             <span class="pill {{ 'pill-green' if row.has_outcome else 'pill-amber' }}">{{ 'graded' if row.has_outcome else 'open' }}</span>
           </td>

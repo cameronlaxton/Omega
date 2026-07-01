@@ -46,6 +46,14 @@ from omega.trace.session_sidecar import (
 )
 from omega.trace.store import TraceStore
 from omega.ui.clv import closing_line_value
+from omega.ui.insights import (
+    build_evidence_audit,
+    build_market_movement,
+    build_signal_conflict,
+    build_trace_guardrails,
+    build_trust_breakdown,
+    clv_interpretation,
+)
 from omega.ui.normalizers import (
     SessionTraceFacts,
     build_evidence_coverage,
@@ -79,8 +87,11 @@ from omega.ui.schemas import (
     DiagnosticsView,
     EdgeScannerRow,
     EdgeScannerView,
+    EvidenceAuditViewModel,
     EvidenceCoverageSummary,
+    GuardrailsViewModel,
     HealthResponse,
+    MarketMovementViewModel,
     OperatorWarningModel,
     Pagination,
     PanelState,
@@ -96,14 +107,18 @@ from omega.ui.schemas import (
     SessionHealthViewModel,
     SessionListResponse,
     SessionSummary,
+    SignalConflictViewModel,
     SignalPerformanceRow,
     SignalPerformanceView,
     SignalScoringSummary,
+    SimilarCohort,
+    SimilarSpotsView,
     Source,
     TraceDetail,
     TraceListResponse,
     TraceRecommendationViewModel,
     TraceRow,
+    TrustBreakdownViewModel,
 )
 
 # Max sample items shown per Review Queue bucket (counts are full; lists are bounded).
@@ -117,6 +132,12 @@ DEFAULT_MAX_SCAN = 2000
 # Command Center snapshot. Bounded so the scanner is never an unbounded scan.
 DEFAULT_SCANNER_LIMIT = 50
 SCANNER_SNAPSHOT_LIMIT = 8
+
+# Similar Historical Spots (B.4): a settled-bet cohort needs this many decided
+# (win+loss) results before it yields a verdict; below it the cohort is flagged
+# thin (no verdict). Distinct candidate trace reads are bounded for a local budget.
+SIMILAR_MIN_SAMPLE = 25
+SIMILAR_MAX_TRACES = 400
 
 # Calibration chart SVG canvas (server-computed geometry; no client math).
 CHART_W = 680
@@ -235,6 +256,32 @@ def _market_family(market: Any) -> str:
         return "moneyline"
     return "unknown"
 
+def _edge_bucket(value: Any) -> str | None:
+    """Coarse edge bucket for similar-spot cohorting. Unit-normalized like
+    :func:`_edge_display`: |v|<=1 is treated as a fraction (x100)."""
+    v = _as_float(value)
+    if v is None:
+        return None
+    pct = abs(v * 100 if abs(v) <= 1 else v)
+    if pct < 3.0:
+        return "0-3%"
+    if pct < 6.0:
+        return "3-6%"
+    return "6%+"
+
+
+def _prob_bucket(p: float) -> str:
+    """Coarse confidence letter from a calibrated probability (0-1).
+
+    A clearly-labeled, computed derivation — surfaced only as a fallback when the
+    engine did not stamp a confidence tier (see ``_confidence_grade``)."""
+    if p >= 0.65:
+        return "A"
+    if p >= 0.58:
+        return "B"
+    if p >= 0.53:
+        return "C"
+    return "D"
 
 def _model_output_field(rec) -> tuple[Any, str, bool]:
     """Pick the market-aware model output (field, label, is_pct).
@@ -319,6 +366,73 @@ def _data_quality(trace: dict[str, Any], evidence_count: int) -> tuple[str, str 
     elif state == "clean":
         detail = "clean"
     return state, detail
+
+
+def _odds_age_seconds(trace: dict[str, Any]) -> float | None:
+    """Best-effort recorded-price age (seconds) from wherever it was persisted."""
+    for container in (
+        trace,
+        trace.get("result"),
+        trace.get("trace_quality"),
+        trace.get("odds_snapshot"),
+    ):
+        if isinstance(container, dict) and container.get("odds_age_seconds") is not None:
+            return _as_float(container.get("odds_age_seconds"))
+    return None
+
+
+# Reason tokens that warrant a list-row caution (subset of quality.py tokens).
+_ROW_WARN_REASONS = frozenset(
+    {
+        "high_imputation",
+        "static_identity_calibration",
+        "not_calibration_eligible",
+        "missing_identity",
+        "baseline_context",
+        "empty_evidence_provided_context",
+    }
+)
+
+
+def _row_guardrail(trace: dict[str, Any]) -> str:
+    """Light worst-severity guardrail (ok|info|warn|fail) from trace_quality only.
+
+    A cheap pre-drill-down risk signal for list rows — the full
+    :func:`omega.ui.insights.build_trace_guardrails` runs on trace detail."""
+    tq = trace.get("trace_quality") if isinstance(trace.get("trace_quality"), dict) else {}
+    reasons = tq.get("quality_reasons") if isinstance(tq.get("quality_reasons"), list) else []
+    band = tq.get("quality_band")
+    if (
+        "qa_failed" in reasons
+        or "zero_evidence_empty_context" in reasons
+        or tq.get("confidence_cap") == "Pass"
+        or band == "invalid"
+    ):
+        return "fail"
+    if band == "weak" or any(r in _ROW_WARN_REASONS for r in reasons):
+        return "warn"
+    if band == "usable":
+        return "info"
+    if band == "strong":
+        return "ok"
+    agg = tq.get("aggregate_quality")
+    if isinstance(agg, str):
+        token = agg.strip().lower()
+        if token in {"fail", "invalid"}:
+            return "fail"
+        if token in {"warn", "weak"}:
+            return "warn"
+        if token in {"info", "usable"}:
+            return "info"
+    if isinstance(agg, (int, float)) and not isinstance(agg, bool):
+        norm = agg / 100.0 if agg > 1.0 else agg
+        if norm < 0.20:
+            return "fail"
+        if norm < 0.50:
+            return "warn"
+        if norm < 0.75:
+            return "info"
+    return "ok"
 
 
 def _calibration_geometry(
@@ -1396,6 +1510,7 @@ class ConsoleService:
                     closing_implied=clv.closing_implied,
                     clv_points=clv.clv_points,
                     beat_close=clv.beat_close,
+                    interpretation=clv_interpretation(clv.clv_points),
                     closing_source=match.get("source"),
                     net_pnl=_as_float(bet.get("net_pnl")),
                     strip=_prob_strip(
@@ -1411,6 +1526,7 @@ class ConsoleService:
                         "taken_odds": Source.BET_LEDGER,
                         "closing_odds": Source.CLOSING_LINES,
                         "clv_points": "computed:closing_minus_taken_implied",
+                        "interpretation": "computed:clv_interpretation",
                         "net_pnl": Source.BET_LEDGER,
                     },
                 )
@@ -1517,6 +1633,7 @@ class ConsoleService:
                     confidence_computed=ccomputed,
                     data_quality=dq,
                     data_quality_detail=dq_detail,
+                    guardrail=_row_guardrail(t),
                     has_outcome=bool(t.get("_outcome") or t.get("_prop_outcomes")),
                     strip=strip,
                     field_sources={
@@ -1527,6 +1644,7 @@ class ConsoleService:
                         "edge": Source.DB_TRACE_PAYLOAD,
                         "confidence": Source.DB_TRACE_PAYLOAD,
                         "data_quality": Source.DB_TRACE_PAYLOAD,
+                        "guardrail": Source.DB_TRACE_PAYLOAD,
                     },
                 )
             )
@@ -1977,6 +2095,59 @@ class ConsoleService:
         # JSON-safe Pydantic mirror (dataclass -> asdict -> model_validate).
         view = build_trace_recommendation_view(trace, evidence_signals=evidence)
         recommendation_view = TraceRecommendationViewModel.model_validate(dataclasses.asdict(view))
+        # Decision-quality insight views (B.4) — read-only, composed from the rows
+        # already loaded above. dataclass -> asdict -> model_validate, same as B.1.
+        primary_rec = next(
+            (r for r in view.recommendations if r.is_primary),
+            view.recommendations[0] if view.recommendations else None,
+        )
+        # Build the insight dataclasses first so the composers (trust breakdown,
+        # guardrails) can consume them, then convert each to its Pydantic mirror.
+        evidence_audit_dc = build_evidence_audit(
+            trace=trace,
+            evidence_signals=evidence,
+            outcome=outcome,
+            prop_outcomes=prop_outcomes,
+            closing_lines=closing_lines,
+            qa_verdict=qa_verdict,
+        )
+        market_movement_dc = build_market_movement(rec=primary_rec, closing_lines=closing_lines)
+        signal_conflict_dc = build_signal_conflict(
+            rec=primary_rec,
+            evidence_signals=evidence,
+            evidence_application=trace.get("evidence_application"),
+            market_movement=market_movement_dc,
+        )
+        trust_breakdown_dc = build_trust_breakdown(
+            trace_quality=trace.get("trace_quality") or {},
+            rec=primary_rec,
+            evidence_audit=evidence_audit_dc,
+            market_movement=market_movement_dc,
+            signal_conflict=signal_conflict_dc,
+        )
+        evidence_audit = EvidenceAuditViewModel.model_validate(dataclasses.asdict(evidence_audit_dc))
+        market_movement = MarketMovementViewModel.model_validate(
+            dataclasses.asdict(market_movement_dc)
+        )
+        signal_conflict = SignalConflictViewModel.model_validate(
+            dataclasses.asdict(signal_conflict_dc)
+        )
+        trust_breakdown = TrustBreakdownViewModel.model_validate(
+            dataclasses.asdict(trust_breakdown_dc)
+        )
+        guardrails = GuardrailsViewModel.model_validate(
+            dataclasses.asdict(
+                build_trace_guardrails(
+                    trace_quality=trace.get("trace_quality") or {},
+                    rec=primary_rec,
+                    evidence_audit=evidence_audit_dc,
+                    market_movement=market_movement_dc,
+                    signal_conflict=signal_conflict_dc,
+                    trust_breakdown=trust_breakdown_dc,
+                    odds_age_seconds=_odds_age_seconds(trace),
+                )
+            )
+        )
         primary_strip = None
         if recommendation_view.recommendations:
             prec = next(
@@ -2005,10 +2176,20 @@ class ConsoleService:
             closing_lines=closing_lines,
             qa_verdict=qa_verdict,
             recommendation_view=recommendation_view,
+            evidence_audit=evidence_audit,
+            market_movement=market_movement,
+            signal_conflict=signal_conflict,
+            trust_breakdown=trust_breakdown,
+            guardrails=guardrails,
             primary_strip=primary_strip,
             field_sources={
                 "recommendations": Source.DB_TRACE_PAYLOAD,
                 "predictions": Source.DB_TRACE_PAYLOAD,
+                "evidence_audit": Source.DB_TRACE_PAYLOAD,
+                "market_movement": Source.CLOSING_LINES,
+                "signal_conflict": Source.EVIDENCE_SIGNALS,
+                "trust_breakdown": Source.DB_TRACE_PAYLOAD,
+                "guardrails": Source.DB_TRACE_PAYLOAD,
                 "aggregate_quality": Source.DB_TRACE_PAYLOAD,
                 "payload": Source.DB_TRACE_PAYLOAD,
                 "evidence_signals": Source.EVIDENCE_SIGNALS,
@@ -2020,6 +2201,183 @@ class ConsoleService:
                 "qa_verdict": Source.TRACE_QA_VERDICTS,
             },
         )
+
+    def similar_spots(self, trace_id: str) -> SimilarSpotsView | None:
+        """How comparable historical spots actually performed (read-only, B.4).
+
+        Derives a similarity key from the target trace (league, market family,
+        edge bucket, dominant signal types) and groups *settled* bets that share
+        that structure into cohorts, reporting each cohort's realized hit rate.
+        Realized results come from ``bet_ledger.status`` (won/lost/push) — the
+        honest, already-graded signal — never from re-grading a model number.
+        Bounded by ``max_scan`` bets and ``SIMILAR_MAX_TRACES`` distinct reads.
+        """
+        target = self.store.get_trace(trace_id)
+        if target is None:
+            return None
+
+        league = target.get("league")
+        kind = target.get("kind")
+        t_ev = self.store.get_evidence_signals(trace_id)
+        t_view = build_trace_recommendation_view(target, evidence_signals=t_ev)
+        t_primary = next(
+            (r for r in t_view.recommendations if r.is_primary),
+            t_view.recommendations[0] if t_view.recommendations else None,
+        )
+        market_family = _market_family(t_primary.market.value) if t_primary else "unknown"
+        edge_bucket = _edge_bucket(t_primary.engine_edge.value) if t_primary else None
+        target_signals = {str(r.get("signal_type")) for r in t_ev if r.get("signal_type")}
+
+        bets = self.store.query_ledger(league=league, limit=self.max_scan)
+        scan_capped = len(bets) >= self.max_scan
+        settled = [b for b in bets if str(b.get("status") or "").lower() in ("won", "lost", "push")]
+
+        acc = {
+            code: {"wins": 0, "losses": 0, "pushes": 0}
+            for code in ("structural", "signal_overlap", "edge_bucket", "league_kind")
+        }
+        dims_cache: dict[str, dict[str, Any] | None] = {}
+        candidate_trace_capped = False
+        for bet in settled:
+            tid = bet.get("trace_id")
+            if not tid or tid == trace_id:
+                continue
+            if tid not in dims_cache:
+                if len(dims_cache) >= SIMILAR_MAX_TRACES:
+                    candidate_trace_capped = True
+                    continue
+                dims_cache[tid] = self._candidate_dims(tid, bet.get("market"))
+            dims = dims_cache[tid]
+            if dims is None:
+                continue
+            status = str(bet.get("status") or "").lower()
+            key = "wins" if status == "won" else "losses" if status == "lost" else "pushes"
+            if (
+                dims["league"] == league
+                and dims["market_family"] == market_family
+                and dims["edge_bucket"] == edge_bucket
+            ):
+                acc["structural"][key] += 1
+            if dims["market_family"] == market_family and (dims["signal_types"] & target_signals):
+                acc["signal_overlap"][key] += 1
+            if edge_bucket is not None and dims["edge_bucket"] == edge_bucket:
+                acc["edge_bucket"][key] += 1
+            if dims["league"] == league and dims["kind"] == kind:
+                acc["league_kind"][key] += 1
+
+        labels = {
+            "structural": f"{league or '—'} · {market_family} · {edge_bucket or 'any edge'}",
+            "signal_overlap": f"{market_family} sharing ≥1 of this trace's signals",
+            "edge_bucket": f"{edge_bucket or 'any'} edge (any market)",
+            "league_kind": f"{league or '—'} {kind or ''} spots".strip(),
+        }
+        cohorts: list[SimilarCohort] = []
+        for code in ("structural", "signal_overlap", "edge_bucket", "league_kind"):
+            a = acc[code]
+            decided = a["wins"] + a["losses"]
+            cohorts.append(
+                SimilarCohort(
+                    code=code,
+                    label=labels[code],
+                    sample=decided + a["pushes"],
+                    wins=a["wins"],
+                    losses=a["losses"],
+                    pushes=a["pushes"],
+                    hit_rate=(a["wins"] / decided) if decided > 0 else None,
+                    thin_sample=decided < SIMILAR_MIN_SAMPLE,
+                )
+            )
+
+        def _verdict(c: SimilarCohort) -> str | None:
+            decided = c.wins + c.losses
+            if c.hit_rate is None or decided < SIMILAR_MIN_SAMPLE:
+                return None
+            if c.hit_rate >= 0.54:
+                return "strong"
+            if c.hit_rate <= 0.47:
+                return "weak"
+            return "mixed"
+
+        historical_support = _verdict(cohorts[0]) or _verdict(cohorts[1]) or "insufficient"
+        available = any(c.sample > 0 for c in cohorts)
+
+        warnings: list[OperatorWarningModel] = []
+        if not available:
+            warnings.append(
+                OperatorWarningModel(
+                    code="no_comparable_history",
+                    severity="info",
+                    message="no settled bets with comparable structure found yet",
+                )
+            )
+        elif historical_support == "insufficient":
+            warnings.append(
+                OperatorWarningModel(
+                    code="thin_history",
+                    severity="info",
+                    message="comparable history is too thin for a verdict",
+                )
+            )
+        if scan_capped:
+            warnings.append(
+                OperatorWarningModel(
+                    code="scan_capped",
+                    severity="info",
+                    message=f"bet scan capped at {self.max_scan}; older bets not included",
+                )
+            )
+        if candidate_trace_capped:
+            warnings.append(
+                OperatorWarningModel(
+                    code="candidate_trace_cap",
+                    severity="info",
+                    message=(
+                        f"candidate trace reads capped at {SIMILAR_MAX_TRACES}; "
+                        "some comparable bets were skipped"
+                    ),
+                )
+            )
+
+        return SimilarSpotsView(
+            trace_id=trace_id,
+            available=available,
+            league=league,
+            kind=kind,
+            market_family=market_family,
+            edge_bucket=edge_bucket,
+            signal_types=sorted(target_signals),
+            historical_support=historical_support,
+            cohorts=cohorts,
+            settled_bets_scanned=len(settled),
+            scan_capped=scan_capped or candidate_trace_capped,
+            warnings=warnings,
+            field_sources={
+                "cohorts": Source.BET_LEDGER,
+                "signal_types": Source.EVIDENCE_SIGNALS,
+                "edge_bucket": Source.DB_TRACE_PAYLOAD,
+            },
+        )
+
+    def _candidate_dims(self, trace_id: str, bet_market: Any) -> dict[str, Any] | None:
+        """Similarity dimensions for one candidate trace (read-only)."""
+        ct = self.store.get_trace(trace_id)
+        if ct is None:
+            return None
+        cev = self.store.get_evidence_signals(trace_id)
+        cview = build_trace_recommendation_view(ct, evidence_signals=cev)
+        cprimary = next(
+            (r for r in cview.recommendations if r.is_primary),
+            cview.recommendations[0] if cview.recommendations else None,
+        )
+        return {
+            "league": ct.get("league"),
+            "kind": ct.get("kind"),
+            "market_family": (
+                _market_family(cprimary.market.value) if cprimary else _market_family(bet_market)
+            ),
+            "edge_bucket": _edge_bucket(cprimary.engine_edge.value) if cprimary else None,
+            "signal_types": {str(r.get("signal_type")) for r in cev if r.get("signal_type")},
+        }
 
     def _trace_row(self, trace: dict[str, Any]) -> TraceRow:
         recs = trace.get("recommendations")
@@ -2049,11 +2407,13 @@ class ConsoleService:
             confidence_tiers=tiers,
             markets=markets,
             has_outcome=has_outcome,
+            guardrail=_row_guardrail(trace),
             field_sources={
                 "aggregate_quality": Source.DB_TRACE_PAYLOAD,
                 "confidence_tiers": Source.DB_TRACE_PAYLOAD,
                 "markets": Source.DB_TRACE_PAYLOAD,
                 "has_outcome": outcome_source,
+                "guardrail": Source.DB_TRACE_PAYLOAD,
             },
         )
 

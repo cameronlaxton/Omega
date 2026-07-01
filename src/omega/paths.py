@@ -82,6 +82,19 @@ def trace_db_path() -> Path:
     return runtime_path("omega_traces.db")
 
 
+def enrichment_db_path() -> Path:
+    """Return the default SQLite enrichment sidecar path under the runtime root.
+
+    A SEPARATE database file from the canonical trace store: the read-only
+    console never opens it writable, and the (opt-in) enrichment service never
+    opens ``omega_traces.db`` writable. ``OMEGA_ENRICH_DB`` overrides it.
+    """
+    override = os.environ.get("OMEGA_ENRICH_DB")
+    if override:
+        return Path(override).expanduser()
+    return runtime_path("omega_enrichments.db")
+
+
 def default_trace_db_path() -> Path:
     """Return the default SQLite trace store path under the runtime root.
 

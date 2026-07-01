@@ -42,7 +42,7 @@ book's vig); a positive value means you beat the close. Read-only; taken price
   <thead>
     <tr>
       <th>bet</th><th>date</th><th>matchup</th><th>market</th><th>selection</th><th>status</th>
-      <th>taken</th><th>close</th><th>CLV pts</th><th>beat?</th><th>movement</th>
+      <th>taken</th><th>close</th><th>CLV pts</th><th>beat?</th><th>read</th><th>movement</th>
     </tr>
   </thead>
   <tbody>
@@ -58,10 +58,11 @@ book's vig); a positive value means you beat the close. Read-only; taken price
       <td>{{ r.closing_odds if r.closing_odds is not none else '—' }}</td>
       <td class="{{ 'pos' if r.clv_points is not none and r.clv_points > 0 else ('neg' if r.clv_points is not none and r.clv_points < 0 else '') }}">{{ '%+.4f' % r.clv_points if r.clv_points is not none else '—' }}</td>
       <td>{{ 'yes' if r.beat_close else 'no' }}</td>
+      <td class="nowrap">{{ (r.interpretation or '—') | replace('_', ' ') }}</td>
       <td>{{ comp_strip(r.strip) }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="11" class="empty">No bets with an attached closing line{% if data.filters.league %} for {{ data.filters.league }}{% endif %}.</td></tr>
+    <tr><td colspan="12" class="empty">No bets with an attached closing line{% if data.filters.league %} for {{ data.filters.league }}{% endif %}.</td></tr>
     {% endfor %}
   </tbody>
 </table>

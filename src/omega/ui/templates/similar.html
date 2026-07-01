@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "base.html" import src_badge, warning_chips, provenance_legend %}
+{% block title %}Similar Spots · {{ not_found_id or view.trace_id }} · Omega Console{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/traces/{{ not_found_id or view.trace_id }}">‹ Back to trace</a></p>
+{% if view is none %}
+  <h1>Trace not found</h1>
+  <p>No trace with id <code>{{ not_found_id }}</code> exists in the trace ledger.</p>
+{% else %}
+<h1>Similar Historical Spots</h1>
+<p class="lede">How settled bets that share this trace's structure actually performed.
+Hit rate is realized wins ÷ decided (wins + losses); pushes excluded. Read-only;
+cohorts {{ src_badge('bet_ledger') }}, signal profile {{ src_badge('evidence_signals') }}.</p>
+
+<div class="spotkey">
+  <span class="kchip">league <strong>{{ view.league or '—' }}</strong></span>
+  <span class="kchip">kind <strong>{{ view.kind or '—' }}</strong></span>
+  <span class="kchip">market <strong>{{ view.market_family or '—' }}</strong></span>
+  <span class="kchip">edge <strong>{{ view.edge_bucket or '—' }}</strong></span>
+  <span class="kchip">signals <strong>{{ view.signal_types | length }}</strong></span>
+</div>
+
+<div class="support-banner support-{{ view.historical_support }}">
+  Historical support: <strong>{{ view.historical_support }}</strong>
+  <span class="muted">· {{ view.settled_bets_scanned }} settled bet(s) scanned</span>
+</div>
+
+{{ warning_chips(view.warnings) }}
+
+<table class="grid">
+  <thead><tr><th>cohort</th><th>sample</th><th>W</th><th>L</th><th>P</th><th>hit rate</th></tr></thead>
+  <tbody>
+    {% for c in view.cohorts %}
+    <tr>
+      <td>{{ c.label }}{% if c.thin_sample %} <span class="wchip sev-info">thin</span>{% endif %}</td>
+      <td>{{ c.sample }}</td>
+      <td class="pos">{{ c.wins }}</td>
+      <td class="neg">{{ c.losses }}</td>
+      <td>{{ c.pushes }}</td>
+      <td>{{ '%.1f%%' % (c.hit_rate * 100) if c.hit_rate is not none else '—' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="empty">No comparable settled bets found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="muted small">Realized results from settled bets (bet_ledger), not re-graded model numbers. Cohorts overlap by design — a bet can appear in more than one.</p>
+{{ provenance_legend(view.field_sources) }}
+{% endif %}
+{% endblock %}
