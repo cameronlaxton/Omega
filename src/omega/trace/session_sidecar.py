@@ -19,6 +19,7 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -40,32 +41,116 @@ _LOCK_TIMEOUT_SECONDS = 10.0
 _LOCK_POLL_SECONDS = 0.05
 
 
+def _lock_owner_payload() -> bytes:
+    payload = {
+        "pid": os.getpid(),
+        "created_at": time.time(),
+        "lock_version": 1,
+    }
+    return json.dumps(payload, sort_keys=True).encode("utf-8")
+
+
+def _read_lock_owner(lock_path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        pid = int(payload["pid"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return {"pid": pid, "created_at": payload.get("created_at")}
+
+
+def _process_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if pid == os.getpid():
+        return True
+    if os.name == "nt":
+        return _windows_process_is_running(pid)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _windows_process_is_running(pid: int) -> bool:
+    # Avoid os.kill(pid, 0) on Windows: unlike POSIX, it can terminate a process.
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    process_query_limited_information = 0x1000
+    still_active = 259
+    error_access_denied = 5
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, int(pid))
+    if not handle:
+        return ctypes.get_last_error() == error_access_denied
+    try:
+        exit_code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _remove_lock_file(lock_path: Path) -> None:
+    deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
+    while True:
+        try:
+            lock_path.unlink(missing_ok=True)
+            return
+        except PermissionError as exc:
+            if time.monotonic() > deadline:
+                logger.warning("Could not remove sidecar lock %s (%s)", lock_path, exc)
+                return
+            time.sleep(_LOCK_POLL_SECONDS)
+
+
 @contextlib.contextmanager
-def _sidecar_lock(path: Path):
+def _sidecar_lock(path: Path) -> Iterator[None]:
     """Advisory cross-process lock for one sidecar's read-modify-write section.
 
-    A lock file older than ``_LOCK_TIMEOUT_SECONDS`` is assumed to belong to a
-    crashed process and is forcibly reclaimed rather than deadlocking every
-    future writer forever.
+    Recovery is based on owner liveness, not file age. A slow but healthy writer
+    must never have its lock stolen because a FUSE/SMB write exceeded the
+    acquisition timeout.
     """
     lock_path = path.with_suffix(path.suffix + _LOCK_SUFFIX)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
     deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
     fd: int | None = None
     while True:
         try:
             fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                os.write(fd, _lock_owner_payload())
+                os.fsync(fd)
+                os.close(fd)
+                fd = None
+            except BaseException:
+                if fd is not None:
+                    os.close(fd)
+                fd = None
+                lock_path.unlink(missing_ok=True)
+                raise
             break
         except FileExistsError:
             # TOCTOU: the holder can unlink lock_path between the O_EXCL failure
-            # above and this stat() (normal completion, not just a crash), so
-            # catch the race directly rather than pre-checking .exists() — which
-            # is itself a second, narrower TOCTOU window.
-            try:
-                age = time.time() - lock_path.stat().st_mtime
-            except FileNotFoundError:
-                age = 0.0
-            if age > _LOCK_TIMEOUT_SECONDS:
-                logger.warning("Reclaiming stale sidecar lock %s (age=%.1fs)", lock_path, age)
+            # above and this metadata read (normal completion, not just a crash).
+            owner = _read_lock_owner(lock_path)
+            if owner is not None and not _process_is_running(int(owner["pid"])):
+                logger.warning(
+                    "Reclaiming stale sidecar lock %s (pid=%s)", lock_path, owner["pid"]
+                )
                 try:
                     lock_path.unlink(missing_ok=True)
                 except OSError as exc:
@@ -78,9 +163,10 @@ def _sidecar_lock(path: Path):
                     time.sleep(_LOCK_POLL_SECONDS)
                 continue
             if time.monotonic() > deadline:
+                owner_note = f"pid={owner['pid']}" if owner is not None else "unknown owner"
                 raise TimeoutError(
                     f"Could not acquire sidecar lock {lock_path} within "
-                    f"{_LOCK_TIMEOUT_SECONDS}s; another writer may be stuck."
+                    f"{_LOCK_TIMEOUT_SECONDS}s; another writer may be stuck ({owner_note})."
                 )
             time.sleep(_LOCK_POLL_SECONDS)
     try:
@@ -91,7 +177,7 @@ def _sidecar_lock(path: Path):
         # FILE_SHARE_DELETE). Do not reorder these two lines.
         if fd is not None:
             os.close(fd)
-        lock_path.unlink(missing_ok=True)
+        _remove_lock_file(lock_path)
 
 _PROTECTED_QUANT_FIELDS: frozenset[str] = frozenset(
     {
@@ -325,6 +411,13 @@ def _mirror_missing_events(path: Path, all_events: list[dict[str, Any]]) -> None
     _mirror_events_jsonl(path, missing)
 
 
+def _write_sidecar_unlocked(path: Path, sidecar: SessionSidecar) -> None:
+    from omega.trace._atomic import atomic_write_text
+
+    atomic_write_text(path, json.dumps(sidecar.model_dump(mode="json"), indent=2))
+    _mirror_missing_events(path, [e.model_dump(mode="json") for e in sidecar.audit_events])
+
+
 def write_sidecar(path: Path, sidecar: SessionSidecar) -> None:
     """Atomically write a full sidecar (temp + fsync + replace), keeping the JSONL
     mirror a true superset of every persisted audit_events entry.
@@ -334,11 +427,8 @@ def write_sidecar(path: Path, sidecar: SessionSidecar) -> None:
     the mirror update happen under the sidecar lock so a concurrent append cannot
     interleave.
     """
-    from omega.trace._atomic import atomic_write_text
-
     with _sidecar_lock(path):
-        atomic_write_text(path, json.dumps(sidecar.model_dump(mode="json"), indent=2))
-        _mirror_missing_events(path, [e.model_dump(mode="json") for e in sidecar.audit_events])
+        _write_sidecar_unlocked(path, sidecar)
 
 
 def create_sidecar(
@@ -361,36 +451,37 @@ def create_sidecar(
     Replaces non-atomic ``path.write_text(json.dumps(...))`` session creation,
     which was a truncation source.
     """
-    if path.exists():
-        if not allow_reopen:
-            raise FileExistsError(
-                f"Session sidecar already exists: {path}. If you are the same "
-                f"session continuing (e.g. re-invoking to ingest/render after the "
-                f"engine phase), pass allow_reopen=True. If you are a different "
-                f"conversation, choose a distinct session_id — do not reuse one; "
-                f"see omega-session-bootstrap SKILL.md."
-            )
-        existing = load_sidecar_safe(path)
-        if existing is None:
-            raise FileExistsError(
-                f"Session sidecar {path} exists but is unreadable/corrupt; "
-                f"quarantine it first (validate_session_sidecars.py --quarantine) "
-                f"before opening a new session at this path."
-            )
-        if existing.closed_at is not None:
-            raise FileExistsError(
-                f"Session sidecar {path} is already closed "
-                f"(closed_at={existing.closed_at}); a closed session cannot be "
-                f"reopened. Choose a new session_id."
-            )
-        # Legitimate reopen of a still-open session: return existing state
-        # unchanged so append_audit_events() is the caller's next step (do NOT
-        # re-validate/rewrite the payload, which would reset audit_events).
-        return existing
+    with _sidecar_lock(path):
+        if path.exists():
+            if not allow_reopen:
+                raise FileExistsError(
+                    f"Session sidecar already exists: {path}. If you are the same "
+                    f"session continuing (e.g. re-invoking to ingest/render after the "
+                    f"engine phase), pass allow_reopen=True. If you are a different "
+                    f"conversation, choose a distinct session_id - do not reuse one; "
+                    f"see omega-session-bootstrap SKILL.md."
+                )
+            existing = load_sidecar_safe(path)
+            if existing is None:
+                raise FileExistsError(
+                    f"Session sidecar {path} exists but is unreadable/corrupt; "
+                    f"quarantine it first (validate_session_sidecars.py --quarantine) "
+                    f"before opening a new session at this path."
+                )
+            if existing.closed_at is not None:
+                raise FileExistsError(
+                    f"Session sidecar {path} is already closed "
+                    f"(closed_at={existing.closed_at}); a closed session cannot be "
+                    f"reopened. Choose a new session_id."
+                )
+            # Legitimate reopen of a still-open session: return existing state
+            # unchanged so append_audit_events() is the caller's next step (do NOT
+            # re-validate/rewrite the payload, which would reset audit_events).
+            return existing
 
-    sidecar = SessionSidecar.model_validate(payload)
-    write_sidecar(path, sidecar)
-    return sidecar
+        sidecar = SessionSidecar.model_validate(payload)
+        _write_sidecar_unlocked(path, sidecar)
+        return sidecar
 
 
 def append_audit_events(path: Path, events: list[dict[str, Any]]) -> None:

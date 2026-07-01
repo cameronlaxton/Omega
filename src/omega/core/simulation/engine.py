@@ -927,6 +927,12 @@ def run_player_simulation(
             f"mean={player_proj.get('mean')!r}, variance={player_proj.get('variance')!r}, "
             f"market_line={player_proj.get('market_line')!r}"
         ) from exc
+    if not (math.isfinite(mean) and math.isfinite(variance) and math.isfinite(market_line)):
+        raise ValueError(
+            "run_player_simulation requires finite numeric mean/variance/market_line; got "
+            f"mean={player_proj.get('mean')!r}, variance={player_proj.get('variance')!r}, "
+            f"market_line={player_proj.get('market_line')!r}"
+        )
 
     dist = select_distribution(stat_key, league, mean=mean, override=distribution_override)
     sigma = max(0.1, variance**0.5)
@@ -2541,6 +2547,10 @@ class OmegaSimulationEngine:
             raise ValueError(
                 f"run_player_prop_simulation requires a numeric line; got {line!r}"
             ) from exc
+        if not math.isfinite(line):
+            raise ValueError(
+                f"run_player_prop_simulation requires a finite numeric line; got {line!r}"
+            )
 
         try:
             import importlib

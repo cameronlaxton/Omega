@@ -277,7 +277,7 @@ omega_run_batch(
          "game_context": {"is_playoff": False, "rest_days": 1}},
     ],
     bankroll=1000.0,
-    session_id="sess-20260603-mlb1",
+    session_id="sess-20260603-143502a1b2",
 )
 ```
 
@@ -288,13 +288,13 @@ second pipeline and no need to hand-roll a loop:
 
 ```bash
 # entries.json is a JSON array of the same entry dicts shown above (or {"entries": [...]}).
-omega-run-batch --entries-json entries.json --session-id sess-YYYYMMDD-XXXX --bankroll 1000
+omega-run-batch --entries-json entries.json --session-id sess-YYYYMMDD-HHMMSSXXXX --bankroll 1000
 ```
 
 For a single request, the direct-engine CLI remains:
 
 ```bash
-omega-run-analyze --kind game --request-json request.json --session-id sess-YYYYMMDD-XXXX --bankroll 1000 --trace-out var/inbox/traces
+omega-run-analyze --kind game --request-json request.json --session-id sess-YYYYMMDD-HHMMSSXXXX --bankroll 1000 --trace-out var/inbox/traces
 ```
 
 **Only if neither CLI is usable** is a hand-written batch Python script a last-resort
@@ -344,11 +344,11 @@ smoke = analyze(
         "n_iterations": 1000,
         "seed": seed,
     },
-    session_id="sess-20260518-smok",
+    session_id="sess-20260518-143502a1b2",
     bankroll=1000.0,
 )
 assert smoke["trace_id"].startswith("sandbox-")
-assert smoke["session_id"] == "sess-20260518-smok"
+assert smoke["session_id"] == "sess-20260518-143502a1b2"
 assert smoke["bankroll"] == 1000.0
 print("engine_ready:", smoke["trace_id"])
 ```
@@ -405,7 +405,8 @@ The `OddsApiBudgetExceeded` error is triggered when local consumption reaches th
 
 Mint once per conversation and reuse for every trace, bet record, and session sidecar.
 
-Format: `sess-YYYYMMDD-XXXX`
+Format: `sess-YYYYMMDD-HHMMSSXXXX` (UTC seconds timestamp plus 4 random
+hex chars, matching `omega-session-run`'s generator).
 
 At session start, resume the current-day session ID from workspace memory when present. If the date changed, mint a new one.
 
@@ -417,7 +418,7 @@ After every analysis, write the trace file to `var/inbox/traces/<trace_id>.json`
 {
   "trace": {
     "trace_id": "sandbox-XXXX",
-    "session_id": "sess-20260518-a1b2",
+    "session_id": "sess-20260518-143502a1b2",
     "model_version": "omega-core-phase6h",
     "ran_at": "2026-05-18T18:00:00Z",
     "kind": "game",
@@ -654,7 +655,7 @@ Write `var/inbox/sessions/<session_id>.json` via `omega.trace.session_sidecar.ap
 
 ```json
 {
-  "session_id": "sess-YYYYMMDD-XXXX",
+  "session_id": "sess-YYYYMMDD-HHMMSSXXXX",
   "opened_at": "2026-05-21T18:00:00Z",
   "closed_at": "2026-05-21T19:15:00Z",
   "model_version": "claude-sonnet-4-6",

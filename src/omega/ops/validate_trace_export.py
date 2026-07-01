@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 
@@ -72,7 +73,6 @@ def _uniform_quality_warning(samples: list[float], *, min_n: int = 5) -> str | N
     script that may have set the value, only the artifact it left behind."""
     if len(samples) < min_n:
         return None
-    from collections import Counter
 
     counts = Counter(round(v, 6) for v in samples)
     value, n = counts.most_common(1)[0]

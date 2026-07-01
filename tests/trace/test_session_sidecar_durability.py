@@ -223,6 +223,17 @@ class TestAtomicCreate:
         assert reloaded is not None and reloaded.bankroll == 500.0
         assert not path.with_suffix(path.suffix + ".tmp").exists()  # no temp leftover
 
+    def test_create_sidecar_creates_missing_parent_before_lock(self, tmp_path):
+        path = tmp_path / "fresh" / "sessions" / "sess-new.json"
+
+        create_sidecar(
+            path,
+            bootstrap_payload("sess-new", model_version="m", purpose="p", bankroll=500.0),
+        )
+
+        assert path.exists()
+        assert not path.with_suffix(path.suffix + ".lock").exists()
+
 
 class TestNotedBugFixes:
     def test_rebuild_sidecar_is_schema_compliant(self, tmp_path):
@@ -344,18 +355,17 @@ class TestConcurrencyRaceF2:
         # Every worker's distinct step survived (no silent overwrite).
         assert {e.step for e in reloaded.audit_events} == {f"w{i}" for i in range(n)}
 
-    def test_stale_lock_is_reclaimed(self, tmp_path):
-        import os
+    def test_dead_owner_lock_is_reclaimed(self, tmp_path):
         import time
 
         from omega.trace import session_sidecar as ss
 
         path = tmp_path / "sess-stale.json"
         lock_path = path.with_suffix(path.suffix + ss._LOCK_SUFFIX)
-        lock_path.write_text("", encoding="utf-8")
-        # Backdate well beyond the timeout so the lock is treated as crashed.
-        old = time.time() - (ss._LOCK_TIMEOUT_SECONDS + 5)
-        os.utime(lock_path, (old, old))
+        lock_path.write_text(
+            json.dumps({"pid": 0, "created_at": time.time(), "lock_version": 1}),
+            encoding="utf-8",
+        )
 
         acquired = False
         with ss._sidecar_lock(path):
@@ -363,30 +373,55 @@ class TestConcurrencyRaceF2:
         assert acquired
         assert not lock_path.exists()  # released/cleaned up
 
-    def test_lock_survives_lockfile_vanishing_during_stat(self, tmp_path, monkeypatch):
+    def test_live_owner_lock_is_not_reclaimed_by_age(self, tmp_path, monkeypatch):
+        import os
+        import time
+
+        import pytest
+
+        from omega.trace import session_sidecar as ss
+
+        monkeypatch.setattr(ss, "_LOCK_TIMEOUT_SECONDS", 0.1)
+        monkeypatch.setattr(ss, "_LOCK_POLL_SECONDS", 0.01)
+
+        path = tmp_path / "sess-live.json"
+        lock_path = path.with_suffix(path.suffix + ss._LOCK_SUFFIX)
+        lock_path.write_text(
+            json.dumps({"pid": os.getpid(), "created_at": time.time(), "lock_version": 1}),
+            encoding="utf-8",
+        )
+        old = time.time() - 3600
+        os.utime(lock_path, (old, old))
+
+        with pytest.raises(TimeoutError, match="another writer may be stuck"):
+            with ss._sidecar_lock(path):
+                pass
+        assert lock_path.exists()
+
+    def test_lock_survives_lockfile_vanishing_during_metadata_read(self, tmp_path, monkeypatch):
         # TOCTOU: the holder can unlink the lock between the O_EXCL failure and the
-        # stat() age-check. stat() then raises FileNotFoundError; the waiter must
-        # treat age as 0 and retry, not crash.
+        # metadata read. The waiter must retry, not crash.
         from omega.trace import session_sidecar as ss
 
         path = tmp_path / "sess-toctou.json"
         lock_path = path.with_suffix(path.suffix + ss._LOCK_SUFFIX)
-        lock_path.write_text("", encoding="utf-8")  # pre-existing lock
+        lock_path.write_text(
+            json.dumps({"pid": 0, "created_at": 0.0, "lock_version": 1}),
+            encoding="utf-8",
+        )
 
-        real_stat = Path.stat
+        real_read_text = Path.read_text
         calls = {"n": 0}
 
-        def flaky_stat(self, *args, **kwargs):
+        def flaky_read_text(self, *args, **kwargs):
             if self == lock_path:
                 calls["n"] += 1
                 if calls["n"] == 1:
-                    # Pretend the lock vanished mid-check (and actually remove it
-                    # so the next acquire attempt succeeds).
                     lock_path.unlink(missing_ok=True)
                     raise FileNotFoundError
-            return real_stat(self, *args, **kwargs)
+            return real_read_text(self, *args, **kwargs)
 
-        monkeypatch.setattr(Path, "stat", flaky_stat)
+        monkeypatch.setattr(Path, "read_text", flaky_read_text)
 
         acquired = False
         with ss._sidecar_lock(path):  # must not raise
@@ -462,6 +497,45 @@ class TestSessionIdCollision:
         _open(path)
         with pytest.raises(FileExistsError, match="already exists"):
             _open(path)  # a second, unrelated create at the same path
+
+    def test_concurrent_create_sidecar_allows_only_one_winner(self, tmp_path):
+        import threading
+
+        path = tmp_path / "sess-concurrent-create.json"
+        n = 8
+        barrier = threading.Barrier(n)
+        successes: list[str] = []
+        collisions: list[FileExistsError] = []
+        unexpected: list[Exception] = []
+
+        def worker(i: int) -> None:
+            payload = bootstrap_payload(
+                f"sess-concurrent-{i}",
+                model_version="m",
+                purpose="p",
+                bankroll=100.0,
+            )
+            try:
+                barrier.wait()
+                created = create_sidecar(path, payload)
+                successes.append(created.session_id)
+            except FileExistsError as exc:
+                collisions.append(exc)
+            except Exception as exc:  # noqa: BLE001
+                unexpected.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not unexpected, unexpected
+        assert len(successes) == 1
+        assert len(collisions) == n - 1
+        reloaded = load_sidecar_safe(path)
+        assert reloaded is not None
+        assert reloaded.session_id == successes[0]
 
     def test_allow_reopen_returns_open_session(self, tmp_path):
         path = tmp_path / "sess-reopen.json"

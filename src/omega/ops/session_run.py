@@ -22,7 +22,7 @@ still emitted so the operator can run the session in research mode).
 Example
 -------
     omega-session-run \\
-        --session-id sess-20260619-live \\
+        --session-id sess-20260619-143502a1b2 \\
         --date 2026-06-19 \\
         --leagues MLB,TENNIS,FIFA_WORLD_CUP_2026 \\
         --mlb-games 9 --mlb-props 10 \\
@@ -456,7 +456,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--session-id",
         default=None,
-        help="Unique session identifier (e.g. sess-20260619-live). Auto-generated if omitted.",
+        help=(
+            "Unique session identifier (e.g. sess-20260619-143502a1b2). "
+            "Auto-generated if omitted."
+        ),
     )
     parser.add_argument(
         "--date",

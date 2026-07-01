@@ -20,11 +20,11 @@ one. Prior-injection provenance is appended to that sidecar if it exists.
 
 Usage::
 
-    omega-run-batch --entries-json entries.json --session-id sess-20260701-a1b2 --bankroll 1000
+    omega-run-batch --entries-json entries.json --session-id sess-20260701-143502a1b2 --bankroll 1000
 
 ``entries.json`` is either a JSON array of BatchAnalysisEntry dicts, or an object
-with an ``"entries"`` array (an optional ``"bankroll"`` / ``"session_id"`` there
-are overridden by the CLI flags).
+with an ``"entries"`` array (any optional ``"bankroll"`` / ``"session_id"`` keys
+there are overridden by the CLI flags).
 
 Exit codes::
 

@@ -626,6 +626,21 @@ class TestPlayerSimulationNumericGuards:
         with pytest.raises(ValueError, match="numeric mean/variance/market_line"):
             run_player_simulation(proj, n_iter=100, seed=1)
 
+    def test_run_player_simulation_nonfinite_inputs_raise_valueerror(self):
+        import pytest
+
+        from omega.core.simulation.engine import run_player_simulation
+
+        for field, value in (
+            ("mean", "nan"),
+            ("variance", "inf"),
+            ("market_line", "-inf"),
+        ):
+            proj = self._valid_proj()
+            proj[field] = value
+            with pytest.raises(ValueError, match="finite numeric mean/variance/market_line"):
+                run_player_simulation(proj, n_iter=100, seed=1)
+
     def test_run_player_prop_simulation_none_line_raises_valueerror(self):
         """The Markov-based sibling path guards `line` before the `v > line`
         comparison (same bug class, second unguarded surface)."""
@@ -644,3 +659,21 @@ class TestPlayerSimulationNumericGuards:
                 game_context={"home_context": {}, "away_context": {}, "home_players": []},
                 player_context={"pts_mean": 20.0},
             )
+
+    def test_run_player_prop_simulation_nonfinite_line_raises_valueerror(self):
+        import pytest
+
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        for line in ("nan", "inf", "-inf"):
+            with pytest.raises(ValueError, match="finite numeric line"):
+                OmegaSimulationEngine().run_player_prop_simulation(
+                    player_name="Test Player",
+                    team="Home",
+                    opponent="Away",
+                    league="NBA",
+                    prop_type="pts",
+                    line=line,
+                    game_context={"home_context": {}, "away_context": {}, "home_players": []},
+                    player_context={"pts_mean": 20.0},
+                )

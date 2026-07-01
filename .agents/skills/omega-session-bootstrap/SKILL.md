@@ -123,12 +123,14 @@ omega-ingest-traces --db "$OMEGA_TRACE_DB" --verbose
 
 ## Step 4 — Mint Session ID and Open Sidecar
 
-Format: `sess-YYYYMMDD-XXXX` (4-char alphanumeric suffix). Mint once, reuse for all
-traces **within this one session**. Choose a **unique** ID — `create_sidecar` fails
-closed with `FileExistsError` if a sidecar for that ID already exists (this prevents
-two conversations silently interleaving into one audit trail). If you are legitimately
-re-invoking to ingest/render an already-open session, pass `allow_reopen=True`; do NOT
-reuse another conversation's ID to "share" a session.
+Format: `sess-YYYYMMDD-HHMMSSXXXX` (UTC seconds timestamp plus 4 random
+hex chars, matching `omega-session-run`'s generator). Mint once, reuse for all
+traces **within this one session**. Choose a **unique** ID — `create_sidecar`
+fails closed with `FileExistsError` if a sidecar for that ID already exists
+(this prevents two conversations silently interleaving into one audit trail).
+If you are legitimately re-invoking to ingest/render an already-open session,
+pass `allow_reopen=True`; do NOT reuse another conversation's ID to "share" a
+session.
 
 ```python
 from omega.trace.session_sidecar import create_sidecar, bootstrap_payload, append_audit_events
@@ -136,7 +138,7 @@ from omega.trace.store import TraceStore
 from datetime import datetime, timezone
 from pathlib import Path
 
-session_id = "sess-20260528-a1b2"
+session_id = "sess-20260528-143502a1b2"
 path = Path(f"var/inbox/sessions/{session_id}.json")
 
 # Record which trace DB this session actually resolved to (path + how it was
