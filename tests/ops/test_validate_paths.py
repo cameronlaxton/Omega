@@ -44,8 +44,41 @@ def test_validate_directory_counts_valid_and_invalid(tmp_path):
     )
     (tmp_path / "sess-20260607-bad.json").write_text("{not valid json", encoding="utf-8")
 
-    valid, invalid = validate_session_sidecars.validate_directory(tmp_path)
+    valid, invalid, warned = validate_session_sidecars.validate_directory(tmp_path)
     assert (valid, invalid) == (1, 1)
+    assert warned == 0  # the good sidecar has no mirror/close inconsistency
+
+
+def test_validate_directory_warns_on_mirror_count_mismatch(tmp_path):
+    # A structurally valid sidecar whose JSONL mirror has more lines than the JSON
+    # summary's audit_events (the F2/F3 drift signature) is WARNed, not counted
+    # invalid, and never fails the run.
+    from omega.trace.session_sidecar import append_audit_events
+
+    good = tmp_path / "sess-20260607-drift.json"
+    create_sidecar(
+        good,
+        bootstrap_payload("sess-20260607-drift", model_version="m", purpose="p", bankroll=100.0),
+    )
+    append_audit_events(
+        good,
+        [
+            {
+                "ts": "2026-06-07T00:00:00Z",
+                "event_type": "note",
+                "step": "x",
+                "status": "ok",
+                "trace_ids": [],
+            }
+        ],
+    )
+    # Simulate drift: append an extra line to the mirror only.
+    mirror = good.with_suffix(".events.jsonl")
+    with mirror.open("a", encoding="utf-8") as fh:
+        fh.write('{"ts": "2026-06-07T00:00:01Z", "event_type": "note", "step": "y", "status": "ok"}\n')
+
+    valid, invalid, warned = validate_session_sidecars.validate_directory(tmp_path)
+    assert (valid, invalid, warned) == (1, 0, 1)
 
 
 def test_validate_all_warns_for_root_inbox_even_when_var_paths_are_clean(

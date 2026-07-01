@@ -22,7 +22,7 @@ still emitted so the operator can run the session in research mode).
 Example
 -------
     omega-session-run \\
-        --session-id sess-20260619-live \\
+        --session-id sess-20260619-143502a1b2 \\
         --date 2026-06-19 \\
         --leagues MLB,TENNIS,FIFA_WORLD_CUP_2026 \\
         --mlb-games 9 --mlb-props 10 \\
@@ -43,6 +43,7 @@ import argparse
 import logging
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -77,8 +78,12 @@ _PROP_CAPABLE_LEAGUES = frozenset({"MLB", "NBA", "NFL", "NHL", "WNBA"})
 
 
 def _generate_session_id(date: str) -> str:
-    ts = datetime.now(UTC).strftime("%H%M")
-    return f"sess-{date}-{ts}"
+    # Seconds + a short random suffix so two auto-generated IDs on the same day
+    # can't collide within the same minute. Belt-and-suspenders only: the real
+    # collision guard is create_sidecar()'s fail-closed existence check, which
+    # catches reused *manually-supplied* IDs (the sess-20260701-ops1 case) too.
+    ts = datetime.now(UTC).strftime("%H%M%S")
+    return f"sess-{date}-{ts}{uuid.uuid4().hex[:4]}"
 
 
 def _league_list(raw: str) -> list[str]:
@@ -451,7 +456,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--session-id",
         default=None,
-        help="Unique session identifier (e.g. sess-20260619-live). Auto-generated if omitted.",
+        help=(
+            "Unique session identifier (e.g. sess-20260619-143502a1b2). "
+            "Auto-generated if omitted."
+        ),
     )
     parser.add_argument(
         "--date",

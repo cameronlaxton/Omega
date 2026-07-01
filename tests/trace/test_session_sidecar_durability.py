@@ -20,6 +20,7 @@ from omega.trace.session_sidecar import (
     quality_gate_verdict_for_trace,
     quarantine_sidecar,
     rebuild_sidecar_from_jsonl,
+    write_sidecar,
 )
 
 
@@ -222,6 +223,17 @@ class TestAtomicCreate:
         assert reloaded is not None and reloaded.bankroll == 500.0
         assert not path.with_suffix(path.suffix + ".tmp").exists()  # no temp leftover
 
+    def test_create_sidecar_creates_missing_parent_before_lock(self, tmp_path):
+        path = tmp_path / "fresh" / "sessions" / "sess-new.json"
+
+        create_sidecar(
+            path,
+            bootstrap_payload("sess-new", model_version="m", purpose="p", bankroll=500.0),
+        )
+
+        assert path.exists()
+        assert not path.with_suffix(path.suffix + ".lock").exists()
+
 
 class TestNotedBugFixes:
     def test_rebuild_sidecar_is_schema_compliant(self, tmp_path):
@@ -239,6 +251,29 @@ class TestNotedBugFixes:
         assert sidecar.session_id == "sess-20260530-tst1"
         assert sidecar.opened_at.endswith("Z")
         assert len(sidecar.audit_events) == 2
+
+    def test_bootstrap_payload_carries_db_status_fields(self, tmp_path):
+        # Default None (backward compatible) ...
+        default = bootstrap_payload("sess-a", model_version="m", purpose="p", bankroll=100.0)
+        assert default["effective_db_path"] is None
+        assert default["runtime_db_status"] is None
+        # ... and populated when supplied, surviving a create/reload round-trip.
+        path = tmp_path / "sess-db.json"
+        create_sidecar(
+            path,
+            bootstrap_payload(
+                "sess-b",
+                model_version="m",
+                purpose="p",
+                bankroll=100.0,
+                effective_db_path="/var/omega_traces.db",
+                runtime_db_status="default",
+            ),
+        )
+        reloaded = load_sidecar_safe(path)
+        assert reloaded is not None
+        assert reloaded.effective_db_path == "/var/omega_traces.db"
+        assert reloaded.runtime_db_status == "default"
 
     def test_timezone_format_consistency(self, tmp_path):
         payload = bootstrap_payload("sess-1", model_version="m", purpose="p", bankroll=100.0)
@@ -268,3 +303,279 @@ class TestNotedBugFixes:
         with pytest.raises(ProtectedValueError) as excinfo:
             append_audit_events(path, [nested_event])
         assert "contains protected engine field" in str(excinfo.value)
+
+
+class TestConcurrencyRaceF2:
+    """SIDECAR_LOGGING_AUDIT_2026-06-07 F2: the read-modify-write in
+    append_audit_events must be serialized so concurrent appends don't clobber
+    each other (the mechanism behind the 18 audit_events count mismatches)."""
+
+    def test_concurrent_appends_all_land(self, tmp_path):
+        import threading
+
+        path = tmp_path / "sess-conc.json"
+        _open(path)
+
+        n = 24
+        barrier = threading.Barrier(n)
+        errors: list[Exception] = []
+
+        def worker(i: int) -> None:
+            try:
+                barrier.wait()  # release all threads at once to maximize contention
+                append_audit_events(
+                    path,
+                    [
+                        {
+                            "ts": "2026-05-28T00:00:00Z",
+                            "event_type": "note",
+                            "step": f"w{i}",
+                            "status": "ok",
+                            "trace_ids": [],
+                        }
+                    ],
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, errors
+        reloaded = load_sidecar_safe(path)
+        assert reloaded is not None
+        # No append was lost to a read-modify-write race.
+        assert len(reloaded.audit_events) == n
+        jsonl = path.with_suffix(".events.jsonl")
+        lines = [ln for ln in jsonl.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        assert len(lines) == n
+        # Every worker's distinct step survived (no silent overwrite).
+        assert {e.step for e in reloaded.audit_events} == {f"w{i}" for i in range(n)}
+
+    def test_dead_owner_lock_is_reclaimed(self, tmp_path):
+        import time
+
+        from omega.trace import session_sidecar as ss
+
+        path = tmp_path / "sess-stale.json"
+        lock_path = path.with_suffix(path.suffix + ss._LOCK_SUFFIX)
+        lock_path.write_text(
+            json.dumps({"pid": 0, "created_at": time.time(), "lock_version": 1}),
+            encoding="utf-8",
+        )
+
+        acquired = False
+        with ss._sidecar_lock(path):
+            acquired = True
+        assert acquired
+        assert not lock_path.exists()  # released/cleaned up
+
+    def test_live_owner_lock_is_not_reclaimed_by_age(self, tmp_path, monkeypatch):
+        import os
+        import time
+
+        import pytest
+
+        from omega.trace import session_sidecar as ss
+
+        monkeypatch.setattr(ss, "_LOCK_TIMEOUT_SECONDS", 0.1)
+        monkeypatch.setattr(ss, "_LOCK_POLL_SECONDS", 0.01)
+
+        path = tmp_path / "sess-live.json"
+        lock_path = path.with_suffix(path.suffix + ss._LOCK_SUFFIX)
+        lock_path.write_text(
+            json.dumps({"pid": os.getpid(), "created_at": time.time(), "lock_version": 1}),
+            encoding="utf-8",
+        )
+        old = time.time() - 3600
+        os.utime(lock_path, (old, old))
+
+        with pytest.raises(TimeoutError, match="another writer may be stuck"):
+            with ss._sidecar_lock(path):
+                pass
+        assert lock_path.exists()
+
+    def test_lock_survives_lockfile_vanishing_during_metadata_read(self, tmp_path, monkeypatch):
+        # TOCTOU: the holder can unlink the lock between the O_EXCL failure and the
+        # metadata read. The waiter must retry, not crash.
+        from omega.trace import session_sidecar as ss
+
+        path = tmp_path / "sess-toctou.json"
+        lock_path = path.with_suffix(path.suffix + ss._LOCK_SUFFIX)
+        lock_path.write_text(
+            json.dumps({"pid": 0, "created_at": 0.0, "lock_version": 1}),
+            encoding="utf-8",
+        )
+
+        real_read_text = Path.read_text
+        calls = {"n": 0}
+
+        def flaky_read_text(self, *args, **kwargs):
+            if self == lock_path:
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    lock_path.unlink(missing_ok=True)
+                    raise FileNotFoundError
+            return real_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", flaky_read_text)
+
+        acquired = False
+        with ss._sidecar_lock(path):  # must not raise
+            acquired = True
+        assert acquired
+        assert calls["n"] >= 1
+
+
+class TestMirrorSupersetF3:
+    """SIDECAR_LOGGING_AUDIT_2026-06-07 F3: the JSONL mirror must stay a faithful
+    superset — no duplicate events on re-write, no silent drops of distinct
+    same-second events."""
+
+    def test_write_sidecar_twice_does_not_duplicate_mirror(self, tmp_path):
+        path = tmp_path / "sess-dup.json"
+        _open(path)
+        append_audit_events(path, [_event(event_type="engine_run")])
+        reloaded = load_sidecar_safe(path)
+        assert reloaded is not None
+        write_sidecar(path, reloaded)
+        write_sidecar(path, reloaded)
+        jsonl = path.with_suffix(".events.jsonl")
+        lines = [ln for ln in jsonl.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        assert len(lines) == 1  # not 3 — dedup-aware mirror
+
+    def test_mirror_retains_distinct_same_second_events(self, tmp_path):
+        # Two events share ts + step + event_type but differ in notes. A coarse
+        # (ts, step, event_type) dedup key would drop the second; the full-content
+        # signature keeps both — the exact F3 regression this guards (the observed
+        # sess-20260701-ops1 same-second multiplicity).
+        path = tmp_path / "sess-samesec.json"
+        _open(path)
+        append_audit_events(
+            path,
+            [
+                {
+                    "ts": "2026-05-28T12:57:33Z",
+                    "event_type": "data_provenance",
+                    "step": "inject",
+                    "status": "ok",
+                    "notes": "player A",
+                    "trace_ids": [],
+                },
+                {
+                    "ts": "2026-05-28T12:57:33Z",
+                    "event_type": "data_provenance",
+                    "step": "inject",
+                    "status": "ok",
+                    "notes": "player B",
+                    "trace_ids": [],
+                },
+            ],
+        )
+        reloaded = load_sidecar_safe(path)
+        assert reloaded is not None
+        # Force the full-list mirror path (write_sidecar -> _mirror_missing_events)
+        # and confirm it neither drops nor duplicates the two same-second events.
+        write_sidecar(path, reloaded)
+        jsonl = path.with_suffix(".events.jsonl")
+        lines = [ln for ln in jsonl.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        assert len(lines) == 2
+        assert sorted(json.loads(ln)["notes"] for ln in lines) == ["player A", "player B"]
+
+
+class TestSessionIdCollision:
+    """sess-20260701-ops1: three independent conversations reused one session ID
+    and interleaved writes. create_sidecar now fails closed on collision."""
+
+    def test_create_sidecar_fails_closed_on_existing_path(self, tmp_path):
+        import pytest
+
+        path = tmp_path / "sess-collide.json"
+        _open(path)
+        with pytest.raises(FileExistsError, match="already exists"):
+            _open(path)  # a second, unrelated create at the same path
+
+    def test_concurrent_create_sidecar_allows_only_one_winner(self, tmp_path):
+        import threading
+
+        path = tmp_path / "sess-concurrent-create.json"
+        n = 8
+        barrier = threading.Barrier(n)
+        successes: list[str] = []
+        collisions: list[FileExistsError] = []
+        unexpected: list[Exception] = []
+
+        def worker(i: int) -> None:
+            payload = bootstrap_payload(
+                f"sess-concurrent-{i}",
+                model_version="m",
+                purpose="p",
+                bankroll=100.0,
+            )
+            try:
+                barrier.wait()
+                created = create_sidecar(path, payload)
+                successes.append(created.session_id)
+            except FileExistsError as exc:
+                collisions.append(exc)
+            except Exception as exc:  # noqa: BLE001
+                unexpected.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not unexpected, unexpected
+        assert len(successes) == 1
+        assert len(collisions) == n - 1
+        reloaded = load_sidecar_safe(path)
+        assert reloaded is not None
+        assert reloaded.session_id == successes[0]
+
+    def test_allow_reopen_returns_open_session(self, tmp_path):
+        path = tmp_path / "sess-reopen.json"
+        _open(path)
+        again = create_sidecar(
+            path,
+            bootstrap_payload(
+                "sess-20260528-zzzz",
+                model_version="m",
+                purpose="p",
+                bankroll=1.0,
+            ),
+            allow_reopen=True,
+        )
+        assert again.closed_at is None  # continuing the same still-open session
+
+    def test_allow_reopen_rejects_different_session_id(self, tmp_path):
+        import pytest
+
+        path = tmp_path / "sess-reopen-mismatch.json"
+        _open(path)
+        with pytest.raises(FileExistsError, match="refusing to reopen"):
+            create_sidecar(
+                path,
+                bootstrap_payload("sess-different", model_version="m", purpose="p", bankroll=1.0),
+                allow_reopen=True,
+            )
+
+    def test_allow_reopen_rejects_closed_session(self, tmp_path):
+        import pytest
+
+        path = tmp_path / "sess-closed.json"
+        _open(path)
+        sc = load_sidecar_safe(path)
+        assert sc is not None
+        sc.closed_at = "2026-05-28T13:00:00Z"
+        write_sidecar(path, sc)
+        with pytest.raises(FileExistsError, match="already closed"):
+            create_sidecar(
+                path,
+                bootstrap_payload("sess-y", model_version="m", purpose="p", bankroll=1.0),
+                allow_reopen=True,
+            )

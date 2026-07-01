@@ -24,15 +24,51 @@ logger = logging.getLogger("validate_session_sidecars")
 _DEFAULT_SESSIONS_INBOX = _REPO_ROOT / "var" / "inbox" / "sessions"
 
 
-def validate_directory(path: Path, *, quarantine: bool = False) -> tuple[int, int]:
+def _consistency_issues(sidecar: SessionSidecar, sidecar_path: Path) -> list[str]:
+    """Non-fatal mirror/close invariants — WARN, never quarantine.
+
+    These are the invariants that would have caught the SIDECAR_LOGGING_AUDIT
+    F2/F3 drift (18 sessions with audit_events counts that don't match their
+    ``.events.jsonl`` line counts) at validation time. They are deliberately kept
+    out of the ``--quarantine`` path: a count mismatch means the mirror invariant
+    is broken, not that the JSON is malformed, and moving an otherwise-valid,
+    readable sidecar would be a worse regression than the drift it flags.
+    """
+    issues: list[str] = []
+    jsonl_path = sidecar_path.with_suffix(".events.jsonl")
+    if jsonl_path.exists():
+        try:
+            json_count = len(sidecar.audit_events)
+            jsonl_count = sum(
+                1 for ln in jsonl_path.read_text(encoding="utf-8").splitlines() if ln.strip()
+            )
+            if json_count != jsonl_count:
+                issues.append(
+                    f"audit_events count ({json_count}) != mirror line count ({jsonl_count})"
+                )
+        except OSError as exc:
+            issues.append(f"could not read mirror {jsonl_path.name}: {exc}")
+    if sidecar.closed_at is not None and not sidecar.exec_stats:
+        issues.append("closed session has empty exec_stats")
+    return issues
+
+
+def validate_directory(path: Path, *, quarantine: bool = False) -> tuple[int, int, int]:
+    """Returns ``(valid, invalid, warned)``.
+
+    ``invalid`` = schema/parse failures (drive the exit code, and quarantine when
+    requested). ``warned`` = structurally valid but failing a soft consistency
+    invariant (never fail the run, never move the file).
+    """
     if not path.exists():
         raise FileNotFoundError(f"Session inbox does not exist: {path}")
 
     valid = 0
     invalid = 0
+    warned = 0
     for sidecar in sorted(path.glob("*.json")):
         try:
-            SessionSidecar.from_path(sidecar)
+            parsed = SessionSidecar.from_path(sidecar)
         except (OSError, ValueError, ValidationError) as exc:
             invalid += 1
             logger.error("INVALID %s: %s", sidecar.name, exc)
@@ -40,10 +76,16 @@ def validate_directory(path: Path, *, quarantine: bool = False) -> tuple[int, in
                 # The ONLY place that moves files: idempotent, leaves the JSONL
                 # mirror in place for recovery.
                 quarantine_sidecar(sidecar, f"{type(exc).__name__}: {exc}")
+            continue
+        valid += 1
+        issues = _consistency_issues(parsed, sidecar)
+        if issues:
+            warned += 1
+            for issue in issues:
+                logger.warning("WARN %s: %s", sidecar.name, issue)
         else:
-            valid += 1
             logger.info("OK %s", sidecar.name)
-    return valid, invalid
+    return valid, invalid, warned
 
 
 def main() -> int:
@@ -68,12 +110,16 @@ def main() -> int:
     )
 
     try:
-        valid, invalid = validate_directory(args.sessions_inbox, quarantine=args.quarantine)
+        valid, invalid, warned = validate_directory(
+            args.sessions_inbox, quarantine=args.quarantine
+        )
     except FileNotFoundError as exc:
         logger.error("%s", exc)
         return 1
 
-    logger.info("Validated %d sidecar(s); %d invalid.", valid, invalid)
+    logger.info("Validated %d sidecar(s); %d invalid, %d warned.", valid, invalid, warned)
+    # Exit code stays gated on schema `invalid` only — soft consistency warnings
+    # surface the signal without failing existing CI/pre-push callers.
     return 1 if invalid else 0
 
 

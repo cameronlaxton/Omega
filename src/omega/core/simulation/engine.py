@@ -910,6 +910,30 @@ def run_player_simulation(
     distribution_override = player_proj.get("distribution")
     dud_prob = player_proj.get("dud_prob", 0.0)
 
+    # Fail closed with a clear error if any required numeric is None/non-numeric.
+    # Every typed contract path (analyze_player_prop) already guards mean is None
+    # upstream, so this is a no-op there (float() on a float is identity); it only
+    # fires for out-of-contract direct callers, where letting None reach the
+    # `x > market_line` comparisons below raises an opaque
+    # "'>' not supported between instances of 'NoneType' and 'int'" that names no
+    # field. Mirrors NegBinomPropBackend.run()'s projection_mean guard.
+    try:
+        mean = float(mean)
+        variance = float(variance)
+        market_line = float(market_line)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "run_player_simulation requires numeric mean/variance/market_line; got "
+            f"mean={player_proj.get('mean')!r}, variance={player_proj.get('variance')!r}, "
+            f"market_line={player_proj.get('market_line')!r}"
+        ) from exc
+    if not (math.isfinite(mean) and math.isfinite(variance) and math.isfinite(market_line)):
+        raise ValueError(
+            "run_player_simulation requires finite numeric mean/variance/market_line; got "
+            f"mean={player_proj.get('mean')!r}, variance={player_proj.get('variance')!r}, "
+            f"market_line={player_proj.get('market_line')!r}"
+        )
+
     dist = select_distribution(stat_key, league, mean=mean, override=distribution_override)
     sigma = max(0.1, variance**0.5)
 
@@ -2511,6 +2535,22 @@ class OmegaSimulationEngine:
                 "prop_type": prop_type,
                 "line": line,
             }
+
+        # Fail closed on a non-numeric line before it reaches the `v > line`
+        # comparisons below. Same bug class as run_player_simulation's market_line:
+        # `line` is typed float but nothing enforces it for direct callers, and a
+        # None here would raise an opaque "'>' not supported between 'int' and
+        # 'NoneType'" naming no field.
+        try:
+            line = float(line)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"run_player_prop_simulation requires a numeric line; got {line!r}"
+            ) from exc
+        if not math.isfinite(line):
+            raise ValueError(
+                f"run_player_prop_simulation requires a finite numeric line; got {line!r}"
+            )
 
         try:
             import importlib

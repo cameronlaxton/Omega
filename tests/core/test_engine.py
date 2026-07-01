@@ -579,3 +579,101 @@ class TestLegacyMarkovMethods:
         assert result["success"] is True
         assert result["projected_value"] > 0
         assert 0 <= result["over_prob"] <= 100
+
+
+class TestPlayerSimulationNumericGuards:
+    """Fail-closed guards: None/non-numeric inputs raise a clear ValueError naming
+    the field, instead of an opaque `'>' not supported between 'NoneType' and 'int'`
+    from a downstream comparison (the sess-20260629-ops1 prop-simulation crash)."""
+
+    def _valid_proj(self):
+        return {
+            "league": "NBA",
+            "stat_key": "pts",
+            "mean": 20.0,
+            "variance": 25.0,
+            "market_line": 19.5,
+        }
+
+    def test_run_player_simulation_valid_input_is_deterministic(self):
+        """Guard is a no-op on the typed path: valid floats produce bit-identical
+        output across two seeded runs (float() on a float is identity)."""
+        from omega.core.simulation.engine import run_player_simulation
+
+        r1 = run_player_simulation(self._valid_proj(), n_iter=2000, seed=42)
+        r2 = run_player_simulation(self._valid_proj(), n_iter=2000, seed=42)
+        assert r1["over_prob"] == r2["over_prob"]
+        assert r1["under_prob"] == r2["under_prob"]
+        assert 0.0 <= r1["over_prob"] <= 1.0
+
+    def test_run_player_simulation_none_mean_raises_valueerror(self):
+        import pytest
+
+        from omega.core.simulation.engine import run_player_simulation
+
+        proj = self._valid_proj()
+        proj["mean"] = None
+        with pytest.raises(ValueError, match="numeric mean/variance/market_line"):
+            run_player_simulation(proj, n_iter=100, seed=1)
+
+    def test_run_player_simulation_none_market_line_raises_valueerror(self):
+        import pytest
+
+        from omega.core.simulation.engine import run_player_simulation
+
+        proj = self._valid_proj()
+        proj["market_line"] = None
+        with pytest.raises(ValueError, match="numeric mean/variance/market_line"):
+            run_player_simulation(proj, n_iter=100, seed=1)
+
+    def test_run_player_simulation_nonfinite_inputs_raise_valueerror(self):
+        import pytest
+
+        from omega.core.simulation.engine import run_player_simulation
+
+        for field, value in (
+            ("mean", "nan"),
+            ("variance", "inf"),
+            ("market_line", "-inf"),
+        ):
+            proj = self._valid_proj()
+            proj[field] = value
+            with pytest.raises(ValueError, match="finite numeric mean/variance/market_line"):
+                run_player_simulation(proj, n_iter=100, seed=1)
+
+    def test_run_player_prop_simulation_none_line_raises_valueerror(self):
+        """The Markov-based sibling path guards `line` before the `v > line`
+        comparison (same bug class, second unguarded surface)."""
+        import pytest
+
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        with pytest.raises(ValueError, match="numeric line"):
+            OmegaSimulationEngine().run_player_prop_simulation(
+                player_name="Test Player",
+                team="Home",
+                opponent="Away",
+                league="NBA",
+                prop_type="pts",
+                line=None,
+                game_context={"home_context": {}, "away_context": {}, "home_players": []},
+                player_context={"pts_mean": 20.0},
+            )
+
+    def test_run_player_prop_simulation_nonfinite_line_raises_valueerror(self):
+        import pytest
+
+        from omega.core.simulation.engine import OmegaSimulationEngine
+
+        for line in ("nan", "inf", "-inf"):
+            with pytest.raises(ValueError, match="finite numeric line"):
+                OmegaSimulationEngine().run_player_prop_simulation(
+                    player_name="Test Player",
+                    team="Home",
+                    opponent="Away",
+                    league="NBA",
+                    prop_type="pts",
+                    line=line,
+                    game_context={"home_context": {}, "away_context": {}, "home_players": []},
+                    player_context={"pts_mean": 20.0},
+                )

@@ -12,10 +12,14 @@ trust the ledger.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import json
 import logging
+import os
+import time
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -23,6 +27,157 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger("omega.trace.session_sidecar")
+
+# --- Sidecar concurrency lock (fixes SIDECAR_LOGGING_AUDIT_2026-06-07 F2) -------
+# append_audit_events() is an unlocked read-modify-write: two near-simultaneous
+# callers can each read the sidecar, extend in memory, and write back, with the
+# second write clobbering the first's appended event. A sidecar-scoped advisory
+# lock serializes the R-M-W critical section. Stdlib only (os.open O_CREAT|O_EXCL
+# is atomic on both POSIX and Windows) — no new dependency, matching the engine's
+# numpy+pydantic-only policy. The atomic write primitive (_atomic.py) is left
+# untouched; per its own comment, cross-process locking "belongs elsewhere" — here.
+_LOCK_SUFFIX = ".lock"
+_LOCK_TIMEOUT_SECONDS = 10.0
+_LOCK_POLL_SECONDS = 0.05
+
+
+def _lock_owner_payload() -> bytes:
+    payload = {
+        "pid": os.getpid(),
+        "created_at": time.time(),
+        "lock_version": 1,
+    }
+    return json.dumps(payload, sort_keys=True).encode("utf-8")
+
+
+def _read_lock_owner(lock_path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        pid = int(payload["pid"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return {"pid": pid, "created_at": payload.get("created_at")}
+
+
+def _process_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if pid == os.getpid():
+        return True
+    if os.name == "nt":
+        return _windows_process_is_running(pid)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _windows_process_is_running(pid: int) -> bool:
+    # Avoid os.kill(pid, 0) on Windows: unlike POSIX, it can terminate a process.
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    process_query_limited_information = 0x1000
+    still_active = 259
+    error_access_denied = 5
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, int(pid))
+    if not handle:
+        return ctypes.get_last_error() == error_access_denied
+    try:
+        exit_code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _remove_lock_file(lock_path: Path) -> None:
+    deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
+    while True:
+        try:
+            lock_path.unlink(missing_ok=True)
+            return
+        except PermissionError as exc:
+            if time.monotonic() > deadline:
+                logger.warning("Could not remove sidecar lock %s (%s)", lock_path, exc)
+                return
+            time.sleep(_LOCK_POLL_SECONDS)
+
+
+@contextlib.contextmanager
+def _sidecar_lock(path: Path) -> Iterator[None]:
+    """Advisory cross-process lock for one sidecar's read-modify-write section.
+
+    Recovery is based on owner liveness, not file age. A slow but healthy writer
+    must never have its lock stolen because a FUSE/SMB write exceeded the
+    acquisition timeout.
+    """
+    lock_path = path.with_suffix(path.suffix + _LOCK_SUFFIX)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
+    fd: int | None = None
+    while True:
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                os.write(fd, _lock_owner_payload())
+                os.fsync(fd)
+                os.close(fd)
+                fd = None
+            except BaseException:
+                if fd is not None:
+                    os.close(fd)
+                fd = None
+                lock_path.unlink(missing_ok=True)
+                raise
+            break
+        except FileExistsError:
+            # TOCTOU: the holder can unlink lock_path between the O_EXCL failure
+            # above and this metadata read (normal completion, not just a crash).
+            owner = _read_lock_owner(lock_path)
+            if owner is not None and not _process_is_running(int(owner["pid"])):
+                logger.warning(
+                    "Reclaiming stale sidecar lock %s (pid=%s)", lock_path, owner["pid"]
+                )
+                try:
+                    lock_path.unlink(missing_ok=True)
+                except OSError as exc:
+                    # Windows: another process may still hold the handle open
+                    # (holder finishing now, or a concurrent reclaimer won the
+                    # race). missing_ok=True only swallows FileNotFoundError, not
+                    # PermissionError/WinError 32 — back off and re-evaluate next
+                    # loop instead of crashing the acquiring caller.
+                    logger.warning("Could not reclaim stale lock %s (%s); retrying", lock_path, exc)
+                    time.sleep(_LOCK_POLL_SECONDS)
+                continue
+            if time.monotonic() > deadline:
+                owner_note = f"pid={owner['pid']}" if owner is not None else "unknown owner"
+                raise TimeoutError(
+                    f"Could not acquire sidecar lock {lock_path} within "
+                    f"{_LOCK_TIMEOUT_SECONDS}s; another writer may be stuck ({owner_note})."
+                )
+            time.sleep(_LOCK_POLL_SECONDS)
+    try:
+        yield
+    finally:
+        # Close before unlink — required on Windows, where unlinking a file while
+        # its own handle is open raises PermissionError (a plain os.open has no
+        # FILE_SHARE_DELETE). Do not reorder these two lines.
+        if fd is not None:
+            os.close(fd)
+        _remove_lock_file(lock_path)
 
 _PROTECTED_QUANT_FIELDS: frozenset[str] = frozenset(
     {
@@ -138,8 +293,16 @@ def bootstrap_payload(
     purpose: str,
     bankroll: float,
     bankroll_confirmed: bool = False,
+    effective_db_path: str | None = None,
+    runtime_db_status: str | None = None,
 ) -> dict[str, Any]:
-    """Return a minimal dict suitable for SessionSidecar.model_validate."""
+    """Return a minimal dict suitable for SessionSidecar.model_validate.
+
+    ``effective_db_path`` / ``runtime_db_status`` record which trace DB the
+    session actually resolved to. Pass ``TraceStore().db_path`` and
+    ``.db_path_source`` (see omega-session-bootstrap SKILL.md); they default to
+    None for callers that don't resolve a store, preserving prior behavior.
+    """
     now = (
         datetime.datetime.now(datetime.timezone.utc)
         .replace(microsecond=0)
@@ -152,6 +315,8 @@ def bootstrap_payload(
         "closed_at": None,
         "model_version": model_version,
         "purpose": purpose,
+        "effective_db_path": effective_db_path,
+        "runtime_db_status": runtime_db_status,
         "bankroll": bankroll,
         "bankroll_confirmed": bankroll_confirmed,
         "exec_stats": {},
@@ -213,37 +378,140 @@ def _mirror_events_jsonl(path: Path, events: list[dict[str, Any]]) -> None:
         logger.warning("JSONL mirror append failed for %s: %s", path.name, exc)
 
 
-def write_sidecar(path: Path, sidecar: SessionSidecar) -> None:
-    """Atomically write a full sidecar (temp + fsync + replace)."""
+def _mirror_missing_events(path: Path, all_events: list[dict[str, Any]]) -> None:
+    """Append only events not already in the JSONL mirror, keeping it a true
+    superset of the JSON summary (fixes SIDECAR_LOGGING_AUDIT_2026-06-07 F3).
+
+    Dedup is by a canonical (sort_keys) JSON signature of the *full* event, not a
+    coarse (ts, step, event_type) key: ``ts`` is second-precision (see the
+    AuditEvent construction sites, e.g. append_null_data_audit's
+    ``.replace(microsecond=0)``), so a fast batch legitimately logging multiple
+    distinct events of the same step/type within one wall-clock second would
+    collide on the coarse key and silently drop real events — reintroducing the
+    exact JSON/JSONL divergence this helper exists to prevent. (Observed in
+    sess-20260701-ops1: duplicate injects fired 12:57:33 x3, 12:57:54 x2,
+    12:58:35 x3 — same-second multiplicity was the normal case, not an edge.)
+    """
+    jsonl = _events_jsonl_path(path)
+    existing_sigs: set[str] = set()
+    if jsonl.exists():
+        try:
+            for line in jsonl.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                existing_sigs.add(json.dumps(rec, sort_keys=True))
+        except OSError:
+            pass  # best-effort read; fall through and mirror everything
+    missing = [e for e in all_events if json.dumps(e, sort_keys=True) not in existing_sigs]
+    _mirror_events_jsonl(path, missing)
+
+
+def _write_sidecar_unlocked(path: Path, sidecar: SessionSidecar) -> None:
     from omega.trace._atomic import atomic_write_text
 
     atomic_write_text(path, json.dumps(sidecar.model_dump(mode="json"), indent=2))
+    _mirror_missing_events(path, [e.model_dump(mode="json") for e in sidecar.audit_events])
 
 
-def create_sidecar(path: Path, payload: dict[str, Any]) -> SessionSidecar:
+def write_sidecar(path: Path, sidecar: SessionSidecar) -> None:
+    """Atomically write a full sidecar (temp + fsync + replace), keeping the JSONL
+    mirror a true superset of every persisted audit_events entry.
+
+    This is the single mirror-writing path: callers no longer mirror separately
+    (which double-counted on re-call — the F3 duplicate-event bug). The write and
+    the mirror update happen under the sidecar lock so a concurrent append cannot
+    interleave.
+    """
+    with _sidecar_lock(path):
+        _write_sidecar_unlocked(path, sidecar)
+
+
+def create_sidecar(
+    path: Path,
+    payload: dict[str, Any],
+    *,
+    allow_reopen: bool = False,
+) -> SessionSidecar:
     """Validate ``payload`` and atomically create the sidecar + its JSONL mirror.
+
+    Fails closed on collision (fixes the sess-20260701-ops1 session-ID reuse that
+    let three independent conversations interleave writes into one sidecar): if
+    ``path`` already exists this raises ``FileExistsError`` unless
+    ``allow_reopen=True`` AND the existing sidecar is still open
+    (``closed_at is None``) — i.e. the caller is legitimately continuing the same
+    session (the ``--ingest --render-report`` re-invocation flow), not stomping a
+    different conversation's sidecar. A closed session can never be reopened here;
+    that would silently corrupt a finalized audit trail.
 
     Replaces non-atomic ``path.write_text(json.dumps(...))`` session creation,
     which was a truncation source.
     """
-    sidecar = SessionSidecar.model_validate(payload)
-    write_sidecar(path, sidecar)
-    _mirror_events_jsonl(path, [e.model_dump(mode="json") for e in sidecar.audit_events])
-    return sidecar
+    with _sidecar_lock(path):
+        if path.exists():
+            if not allow_reopen:
+                raise FileExistsError(
+                    f"Session sidecar already exists: {path}. If you are the same "
+                    f"session continuing (e.g. re-invoking to ingest/render after the "
+                    f"engine phase), pass allow_reopen=True. If you are a different "
+                    f"conversation, choose a distinct session_id - do not reuse one; "
+                    f"see omega-session-bootstrap SKILL.md."
+                )
+            existing = load_sidecar_safe(path)
+            if existing is None:
+                raise FileExistsError(
+                    f"Session sidecar {path} exists but is unreadable/corrupt; "
+                    f"quarantine it first (validate_session_sidecars.py --quarantine) "
+                    f"before opening a new session at this path."
+                )
+            if existing.closed_at is not None:
+                raise FileExistsError(
+                    f"Session sidecar {path} is already closed "
+                    f"(closed_at={existing.closed_at}); a closed session cannot be "
+                    f"reopened. Choose a new session_id."
+                )
+            incoming_session_id = payload.get("session_id")
+            if incoming_session_id != existing.session_id:
+                raise FileExistsError(
+                    f"Session sidecar {path} is already open for "
+                    f"session_id={existing.session_id}; refusing to reopen with "
+                    f"session_id={incoming_session_id!r}. Choose a new session_id."
+                )
+            # Legitimate reopen of a still-open session: return existing state
+            # unchanged so append_audit_events() is the caller's next step (do NOT
+            # re-validate/rewrite the payload, which would reset audit_events).
+            return existing
+
+        sidecar = SessionSidecar.model_validate(payload)
+        _write_sidecar_unlocked(path, sidecar)
+        return sidecar
 
 
 def append_audit_events(path: Path, events: list[dict[str, Any]]) -> None:
-    """Atomically append audit events to a session sidecar (+ JSONL mirror)."""
+    """Atomically append audit events to a session sidecar (+ JSONL mirror).
+
+    The read-modify-write is serialized under the sidecar lock so concurrent
+    appends can no longer race (F2): a second writer blocks until the first's
+    full R-M-W-mirror commits, then reads the fully-committed state.
+    """
     from omega.trace._atomic import atomic_write_text
 
     validated = [AuditEvent.model_validate(e) for e in events]
     for event in validated:
         _check_protected_fields(event)
 
-    sidecar = SessionSidecar.from_path(path)
-    sidecar.audit_events.extend(validated)
-    atomic_write_text(path, json.dumps(sidecar.model_dump(mode="json"), indent=2))
-    _mirror_events_jsonl(path, [e.model_dump(mode="json") for e in validated])
+    with _sidecar_lock(path):
+        sidecar = SessionSidecar.from_path(path)
+        sidecar.audit_events.extend(validated)
+        atomic_write_text(path, json.dumps(sidecar.model_dump(mode="json"), indent=2))
+        # This path already holds the exact delta, so mirror it directly — no
+        # dedup scan needed here (that's only for write_sidecar, which sees the
+        # full list and must reconstruct the delta).
+        _mirror_events_jsonl(path, [e.model_dump(mode="json") for e in validated])
 
 
 def load_sidecar_safe(path: Path) -> SessionSidecar | None:
