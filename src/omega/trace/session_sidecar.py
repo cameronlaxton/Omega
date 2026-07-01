@@ -474,6 +474,13 @@ def create_sidecar(
                     f"(closed_at={existing.closed_at}); a closed session cannot be "
                     f"reopened. Choose a new session_id."
                 )
+            incoming_session_id = payload.get("session_id")
+            if incoming_session_id != existing.session_id:
+                raise FileExistsError(
+                    f"Session sidecar {path} is already open for "
+                    f"session_id={existing.session_id}; refusing to reopen with "
+                    f"session_id={incoming_session_id!r}. Choose a new session_id."
+                )
             # Legitimate reopen of a still-open session: return existing state
             # unchanged so append_audit_events() is the caller's next step (do NOT
             # re-validate/rewrite the payload, which would reset audit_events).

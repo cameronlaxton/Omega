@@ -542,10 +542,27 @@ class TestSessionIdCollision:
         _open(path)
         again = create_sidecar(
             path,
-            bootstrap_payload("sess-x", model_version="m", purpose="p", bankroll=1.0),
+            bootstrap_payload(
+                "sess-20260528-zzzz",
+                model_version="m",
+                purpose="p",
+                bankroll=1.0,
+            ),
             allow_reopen=True,
         )
         assert again.closed_at is None  # continuing the same still-open session
+
+    def test_allow_reopen_rejects_different_session_id(self, tmp_path):
+        import pytest
+
+        path = tmp_path / "sess-reopen-mismatch.json"
+        _open(path)
+        with pytest.raises(FileExistsError, match="refusing to reopen"):
+            create_sidecar(
+                path,
+                bootstrap_payload("sess-different", model_version="m", purpose="p", bankroll=1.0),
+                allow_reopen=True,
+            )
 
     def test_allow_reopen_rejects_closed_session(self, tmp_path):
         import pytest
