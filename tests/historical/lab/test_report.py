@@ -133,6 +133,55 @@ def test_render_is_deterministic():
     assert render(*_build()) == render(*_build())
 
 
+def test_render_includes_scorecard_and_model_vs_market_with_backtest_report():
+    """The new fused sections render only when a BacktestReport is supplied."""
+    from omega.historical.contracts import (
+        BacktestReport,
+        BettingBlock,
+        MarginalValueBlock,
+        MetricBlock,
+        ModelVsMarketBlock,
+        ScorecardRow,
+        WalkForwardConfig,
+    )
+
+    lab_run, ledger, evidence = _build()
+    bt = BacktestReport(
+        manifest_id="mfest",
+        replay_id="rep1",
+        league="FIFA_INTL",
+        walk_forward_config=WalkForwardConfig(markets=["game"]),
+        aggregate_metrics_by_market={
+            "game": MetricBlock(raw_ece=0.10, calibrated_ece=0.05, n=100)
+        },
+        aggregate_betting=BettingBlock(n_bets=20, roi=0.05, avg_clv=1.0, max_drawdown=2.0),
+        aggregate_model_vs_market_by_market={
+            "game": ModelVsMarketBlock(
+                n=20, n_divergent=8, mean_signed_divergence=0.03, mean_abs_divergence=0.04,
+                clv_when_divergent=-0.1, divergent_beat_close_rate=0.3,
+            )
+        },
+        aggregate_marginal_value=[
+            MarginalValueBlock(signal_type="recent_form_residual", brier_delta=0.01, n=20)
+        ],
+        scorecard=[
+            ScorecardRow(
+                market="game", n_calibrated=100, raw_ece=0.10, calibrated_ece=0.05,
+                n_bets=20, roi=0.05, avg_clv=1.0, n_divergent=8,
+                mean_signed_divergence=0.03, clv_when_divergent=-0.1,
+                divergent_beat_close_rate=0.3, clv_coherent=False,
+            )
+        ],
+    )
+    out = render(lab_run, ledger, evidence, bt)
+    assert "## Model vs market (incremental edge)" in out
+    assert "## Scorecard (per plane)" in out
+    assert "## Marginal signal value" in out
+    assert "recent_form_residual" in out
+    # The incoherent plane surfaces its False flag in the scorecard row.
+    assert "| game |" in out
+
+
 if __name__ == "__main__":
     GOLDEN.parent.mkdir(parents=True, exist_ok=True)
     GOLDEN.write_text(render(*_build()), encoding="utf-8")

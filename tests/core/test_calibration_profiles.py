@@ -991,3 +991,103 @@ class TestDrawMarketSelection:
             assert game_cal != draw_cal
         finally:
             os.unlink(path)
+
+
+class TestCoverTotalExtractors:
+    """Point-spread (cover) and total (over/under) calibration-plane extraction.
+
+    Grading must match the simulation engine: home covers when
+    ``(home - away) + spread_home > 0``; over wins when ``home + away > line``;
+    exact pushes carry no calibration signal and are excluded.
+    """
+
+    @staticmethod
+    def _trace(*, preds, spread_home=None, over_under=None, hs, as_):
+        return {
+            "predictions": preds,
+            "odds_snapshot": {"spread_home": spread_home, "over_under": over_under},
+            "_outcome": {"home_score": hs, "away_score": as_},
+        }
+
+    def test_cover_home_covers(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        # home -3.5, wins by 7 → (24-17) + (-3.5) = 3.5 > 0 → covered.
+        t = self._trace(preds={"home_cover_prob": 60.0}, spread_home=-3.5, hs=24, as_=17)
+        preds, outs = CalibrationFitter.extract_cover_pairs([t])
+        assert preds == [pytest.approx(0.60, abs=1e-6)]
+        assert outs == [1]
+
+    def test_cover_does_not_cover(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        # home -7.5, wins by 7 → 7 + (-7.5) = -0.5 < 0 → did not cover.
+        t = self._trace(preds={"home_cover_prob": 55.0}, spread_home=-7.5, hs=24, as_=17)
+        _preds, outs = CalibrationFitter.extract_cover_pairs([t])
+        assert outs == [0]
+
+    def test_cover_push_excluded(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        # home -7, wins by exactly 7 → value 0 → push, no signal.
+        t = self._trace(preds={"home_cover_prob": 50.0}, spread_home=-7.0, hs=24, as_=17)
+        preds, outs = CalibrationFitter.extract_cover_pairs([t])
+        assert preds == [] and outs == []
+
+    def test_cover_skips_without_line(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        t = self._trace(preds={"home_cover_prob": 50.0}, spread_home=None, hs=24, as_=17)
+        preds, _outs = CalibrationFitter.extract_cover_pairs([t])
+        assert preds == []
+
+    def test_total_over_win_and_under_win(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        # total 41. line 38.5 → over wins; line 45.5 → under wins.
+        over_t = self._trace(
+            preds={"over_prob": 58.0, "under_prob": 42.0}, over_under=38.5, hs=24, as_=17
+        )
+        op, oo = CalibrationFitter.extract_total_pairs([over_t], "over")
+        assert op == [pytest.approx(0.58, abs=1e-6)] and oo == [1]
+
+        under_t = self._trace(
+            preds={"over_prob": 0.40, "under_prob": 0.60}, over_under=45.5, hs=24, as_=17
+        )
+        up, uo = CalibrationFitter.extract_total_pairs([under_t], "under")
+        assert up == [pytest.approx(0.60, abs=1e-6)] and uo == [1]
+
+    def test_total_push_excluded(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        t = self._trace(preds={"over_prob": 0.5, "under_prob": 0.5}, over_under=41.0, hs=24, as_=17)
+        preds, outs = CalibrationFitter.extract_total_pairs([t], "over")
+        assert preds == [] and outs == []
+
+    def test_total_reads_line_from_input_snapshot_odds(self):
+        from omega.core.calibration.fitter import CalibrationFitter
+
+        # Line under input_snapshot.odds (the mirror) rather than odds_snapshot.
+        t = {
+            "predictions": {"over_prob": 0.58},
+            "input_snapshot": {"odds": {"over_under": 38.5}},
+            "_outcome": {"home_score": 24, "away_score": 17},
+        }
+        _preds, outs = CalibrationFitter.extract_total_pairs([t], "over")
+        assert outs == [1]
+
+
+class TestCalibrationMarketRouting:
+    def test_routes_new_planes_to_their_markets(self):
+        from omega.core.calibration.market import calibration_market_for_plane
+
+        assert calibration_market_for_plane("cover") == "cover"
+        assert calibration_market_for_plane("over") == "over"
+        assert calibration_market_for_plane("under") == "under"
+        # Existing planes unchanged.
+        assert calibration_market_for_plane("game") == "game"
+        assert calibration_market_for_plane("draw") == "draw"
+        assert calibration_market_for_plane("prop") == "prop"
+        assert calibration_market_for_plane("unknown") == "game"
+        # Legacy market="draw" override still wins.
+        assert calibration_market_for_plane("game", market="draw") == "draw"

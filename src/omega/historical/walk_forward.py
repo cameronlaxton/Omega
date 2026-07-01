@@ -13,7 +13,13 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from omega.core.calibration.fitter import CalibrationFitter
+from omega.core.calibration.fitter import (
+    CalibrationFitter,
+    cover_pairs_for_trace,
+    over_pairs_for_trace,
+    prop_pairs_for_trace,
+    under_pairs_for_trace,
+)
 from omega.core.calibration.probability import calibrate_probability
 from omega.core.calibration.profiles import CalibrationProfile
 from omega.historical.contracts import (
@@ -26,7 +32,14 @@ from omega.historical.contracts import (
     WalkForwardConfig,
     stable_hash,
 )
-from omega.historical.metrics import betting_metrics, health_metrics, probability_metrics
+from omega.historical.metrics import (
+    betting_metrics,
+    build_scorecard,
+    health_metrics,
+    model_vs_market_from_selections,
+    probability_metrics,
+    selection_plane,
+)
 from omega.trace.store import TraceStore
 
 UTC = timezone.utc
@@ -38,23 +51,37 @@ _FIT_MIN_SAMPLES = 30  # CalibrationFitter floor
 # ---------------------------------------------------------------------------
 
 
-def _game_pair(trace: dict) -> tuple[float, int] | None:
+# Each pair function returns a LIST of (prediction, outcome) pairs for one trace.
+# Game/draw traces yield 0 or 1 pair; a prop trace is one-to-many (one pair per
+# attached prop_outcomes row), so the list shape is the common interface.
+
+
+def _game_pairs(trace: dict) -> list[tuple[float, int]]:
     p = (trace.get("predictions") or {}).get("home_win_prob")
     res = (trace.get("_outcome") or {}).get("result")
     if p is None or res not in ("home_win", "away_win", "draw"):
-        return None
-    return (p / 100.0 if p > 1 else float(p)), (1 if res == "home_win" else 0)
+        return []
+    return [((p / 100.0 if p > 1 else float(p)), (1 if res == "home_win" else 0))]
 
 
-def _draw_pair(trace: dict) -> tuple[float, int] | None:
+def _draw_pairs(trace: dict) -> list[tuple[float, int]]:
     p = (trace.get("predictions") or {}).get("draw_prob")
     res = (trace.get("_outcome") or {}).get("result")
     if p is None or res not in ("home_win", "away_win", "draw"):
-        return None
-    return (p / 100.0 if p > 1 else float(p)), (1 if res == "draw" else 0)
+        return []
+    return [((p / 100.0 if p > 1 else float(p)), (1 if res == "draw" else 0))]
 
 
-_PAIR_FN = {"game": _game_pair, "draw": _draw_pair}
+# prop / cover / over / under reuse the single shared per-trace extractors (parity
+# with the calibration fitter's extract_* — no second definition of pairing logic).
+_PAIR_FN = {
+    "game": _game_pairs,
+    "draw": _draw_pairs,
+    "prop": prop_pairs_for_trace,
+    "cover": cover_pairs_for_trace,
+    "over": over_pairs_for_trace,
+    "under": under_pairs_for_trace,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -261,14 +288,17 @@ def run_walk_forward(
             if pair_fn is None:
                 continue
 
-            base_pairs = [pf for t in train if (pf := pair_fn(t))]
+            # pair_fn returns a list per trace (props are one-to-many); flatten.
+            base_pairs = [pair for t in train for pair in pair_fn(t)]
             base_profile = _fit(base_pairs, league, market)
             frozen: dict[str | None, CalibrationProfile | None] = {None: base_profile}
             if base_profile is not None:
                 frozen_refs.append(_ref(market, None, base_profile))
 
             for s in config.slices:
-                s_pairs = [pf for t in train if _slice_of(t, [s]) == s and (pf := pair_fn(t))]
+                s_pairs = [
+                    pair for t in train if _slice_of(t, [s]) == s for pair in pair_fn(t)
+                ]
                 if len(s_pairs) >= config.min_slice_samples:
                     prof = _fit(s_pairs, league, market, context_slice=s)
                     if prof is not None:
@@ -282,34 +312,36 @@ def run_walk_forward(
                 lambda: ([], [], [])
             )
             for t in test:
-                pf = pair_fn(t)
-                if not pf:
+                pairs = pair_fn(t)
+                if not pairs:
                     continue
-                p, y = pf
+                # The slice label is a property of the event/trace — shared by all of
+                # the trace's pairs (a prop trace contributes several prop decisions).
                 label = _slice_of(t, config.slices)
-                if label is not None:
-                    fold_slice_total += 1
-                    if frozen.get(label) is None:
-                        fold_fb += 1
                 profile = frozen.get(label) or frozen.get(None)
-                c = _apply(profile, p)
-                raw.append(p)
-                cal.append(c)
-                outs.append(y)
-                key = label or "base"
-                ps = per_slice[key]
-                ps[0].append(p)
-                ps[1].append(c)
-                ps[2].append(y)
-                ap = agg_pairs[market]
-                ap[0].append(p)
-                ap[1].append(c)
-                ap[2].append(y)
                 if label is not None:
-                    apk = agg_pairs[f"{market}:{label}"]
-                    apk[0].append(p)
-                    apk[1].append(c)
-                    apk[2].append(y)
+                    fold_slice_total += len(pairs)
+                    if frozen.get(label) is None:
+                        fold_fb += len(pairs)
+                for p, y in pairs:
+                    c = _apply(profile, p)
+                    raw.append(p)
+                    cal.append(c)
+                    outs.append(y)
+                    key = label or "base"
+                    ps = per_slice[key]
+                    ps[0].append(p)
+                    ps[1].append(c)
+                    ps[2].append(y)
+                    ap = agg_pairs[market]
+                    ap[0].append(p)
+                    ap[1].append(c)
+                    ap[2].append(y)
+                    if label is not None:
+                        apk = agg_pairs[f"{market}:{label}"]
+                        apk[0].append(p)
+                        apk[1].append(c)
+                        apk[2].append(y)
 
             if not raw:
                 continue
@@ -319,10 +351,13 @@ def run_walk_forward(
                     continue
                 metrics_by_market[f"{market}:{key}"] = probability_metrics(rp, cp, oo)
 
-        # betting + health for the fold window
+        # betting + incremental-edge + health for the fold window
         fold_sels = [s for s in selections if ts_iso <= s.decision_time < te_iso]
         fold_betting = (
             betting_metrics(fold_sels, outcomes_by_event, closing_by_trace) if fold_sels else None
+        )
+        fold_mvm = (
+            model_vs_market_from_selections(fold_sels, closing_by_trace) if fold_sels else None
         )
         fold_records = (
             [r for r in (replay_records or []) if ts_iso <= r.decision_time < te_iso]
@@ -346,6 +381,7 @@ def run_walk_forward(
                 n_test=len(test),
                 metrics_by_market=metrics_by_market,
                 betting=fold_betting,
+                model_vs_market=fold_mvm,
                 health=fold_health,
                 frozen_profiles=frozen_refs,
             )
@@ -357,6 +393,23 @@ def run_walk_forward(
     aggregate_betting = (
         betting_metrics(selections, outcomes_by_event, closing_by_trace) if selections else None
     )
+
+    # Per-plane incremental-edge + betting, keyed by calibration plane so the scorecard,
+    # probability metrics, and model-vs-market views all share one key. These activate the
+    # issue-#28 metrics that were implemented + tested but previously wired nowhere.
+    sels_by_plane: dict[str, list[ReplayCandidateSelection]] = defaultdict(list)
+    for sel in selections:
+        sels_by_plane[selection_plane(sel)].append(sel)
+    aggregate_mvm_by_plane = {
+        plane: model_vs_market_from_selections(s, closing_by_trace)
+        for plane, s in sels_by_plane.items()
+    }
+    betting_by_plane = {
+        plane: betting_metrics(s, outcomes_by_event, closing_by_trace)
+        for plane, s in sels_by_plane.items()
+    }
+    scorecard = build_scorecard(aggregate_metrics, betting_by_plane, aggregate_mvm_by_plane)
+
     aggregate_health = health_metrics(
         replay_records or [],
         fallback_profile_rate=(agg_fb / agg_slice_total if agg_slice_total else 0.0),
@@ -370,5 +423,7 @@ def run_walk_forward(
         folds=folds,
         aggregate_metrics_by_market=aggregate_metrics,
         aggregate_betting=aggregate_betting,
+        aggregate_model_vs_market_by_market=aggregate_mvm_by_plane,
+        scorecard=scorecard,
         aggregate_health=aggregate_health,
     )

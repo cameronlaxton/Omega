@@ -950,3 +950,79 @@ class QualityHeatmap(BaseModel):
     filters: dict[str, Any] = Field(default_factory=dict)
     warnings: list[OperatorWarningModel] = Field(default_factory=list)
     schema_version: int = 1
+
+
+# ---------------------------------------------------------------------------
+# Backtest Scorecard (Phase 8 Wave 3c) — read-only view over lab-run artifacts
+# ---------------------------------------------------------------------------
+
+
+class BacktestScorecardRowView(BaseModel):
+    """One fused per-plane row read from a lab run's backtest_report.json scorecard."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    market: str
+    n_calibrated: int = 0
+    raw_ece: float | None = None
+    calibrated_ece: float | None = None
+    n_bets: int = 0
+    roi: float | None = None
+    avg_clv: float | None = None
+    mean_signed_divergence: float | None = None
+    clv_when_divergent: float | None = None
+    divergent_beat_close_rate: float | None = None
+    clv_coherent: bool = True
+
+
+class BacktestMarginalRowView(BaseModel):
+    """One per-signal marginal-value row (incremental forecast value)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    signal_type: str
+    brier_delta: float | None = None
+    log_loss_delta: float | None = None
+    n: int = 0
+
+
+class BacktestRunSummary(BaseModel):
+    """List-row summary of one historical-validation lab run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lab_run_id: str
+    league: str | None = None
+    plane: str | None = None
+    promotion_status: str | None = None
+    created_at: str | None = None
+    holdout_sealed: bool = False
+    clv_coherent: bool | None = None
+    has_report: bool = False
+
+
+class BacktestListView(BaseModel):
+    """The Backtest Scorecard index: every lab run found under the artifacts root."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    runs: list[BacktestRunSummary] = Field(default_factory=list)
+    backtests_dir: str = ""
+    warnings: list[str] = Field(default_factory=list)
+
+
+class BacktestRunDetail(BaseModel):
+    """Full scorecard for one lab run: calibration + betting + incremental edge."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lab_run_id: str
+    league: str | None = None
+    plane: str | None = None
+    promotion_status: str | None = None
+    created_at: str | None = None
+    holdout_sealed: bool = False
+    clv_coherent: bool | None = None
+    scorecard: list[BacktestScorecardRowView] = Field(default_factory=list)
+    marginal_value: list[BacktestMarginalRowView] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

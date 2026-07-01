@@ -64,6 +64,111 @@ def _is_early_market_trace(trace: dict[str, Any]) -> bool:
     )
 
 
+def prop_pairs_for_trace(trace: dict[str, Any]) -> list[tuple[float, int]]:
+    """All ``(predicted_prob, win)`` pairs from one prop trace's outcome rows.
+
+    The single per-trace prop-extraction rule, shared by
+    :meth:`CalibrationFitter.extract_prop_pairs` (calibration fitting) and the
+    historical walk-forward backtest (``omega.historical.walk_forward``) so the two
+    can never drift. A prop trace is one-to-many: each attached ``_prop_outcomes``
+    row is its own decision. The prediction is the trace's ``over_prob`` (side
+    'over') or ``under_prob`` (side 'under'); push/void rows are no-action and
+    excluded; percentage form is normalized to [0, 1].
+    """
+    preds = trace.get("predictions") or {}
+    prop_outcomes = trace.get("_prop_outcomes")
+    if not prop_outcomes:
+        return []
+    over_p = preds.get("over_prob")
+    under_p = preds.get("under_prob")
+    pairs: list[tuple[float, int]] = []
+    for row in prop_outcomes:
+        side = (row.get("side") or "").lower()
+        result = row.get("result")
+        if result in ("push", "void"):
+            continue
+        if side == "over" and over_p is not None:
+            prob = float(over_p)
+        elif side == "under" and under_p is not None:
+            prob = float(under_p)
+        else:
+            continue
+        if prob > 1.0:
+            prob = prob / 100.0
+        prob = max(0.0, min(1.0, prob))
+        pairs.append((prob, 1 if result == "win" else 0))
+    return pairs
+
+
+def _norm_prob(p: float) -> float:
+    """Normalize a percentage-or-fraction probability into a clipped [0, 1] float."""
+    prob = float(p) / 100.0 if p > 1.0 else float(p)
+    return max(0.0, min(1.0, prob))
+
+
+def _decision_lines(trace: dict[str, Any]) -> tuple[float | None, float | None]:
+    """Recover (spread_home, total_line) from a trace's persisted decision odds.
+
+    Both live as flat fields on the OddsInput captured in ``odds_snapshot`` (and
+    mirrored under ``input_snapshot.odds``). Returns (None, None) when unavailable.
+    """
+    odds = trace.get("odds_snapshot") or (trace.get("input_snapshot") or {}).get("odds") or {}
+    if not isinstance(odds, dict):
+        return None, None
+    return odds.get("spread_home"), odds.get("over_under")
+
+
+def cover_pairs_for_trace(trace: dict[str, Any]) -> list[tuple[float, int]]:
+    """``(P(home covers), did_home_cover)`` for one game trace, or [].
+
+    Requires the simulated ``home_cover_prob``, the decision spread line, and a
+    final score. The cover convention matches the simulation engine and the
+    strategy grader exactly: home covers when ``(home - away) + spread_home > 0``;
+    an exact push (== 0) carries no calibration signal and is excluded.
+    """
+    preds = trace.get("predictions") or {}
+    cover_p = preds.get("home_cover_prob")
+    spread_home, _ = _decision_lines(trace)
+    oc = trace.get("_outcome") or {}
+    hs, as_ = oc.get("home_score"), oc.get("away_score")
+    if cover_p is None or spread_home is None or hs is None or as_ is None:
+        return []
+    value = (hs - as_) + spread_home
+    if value == 0:
+        return []  # push
+    return [(_norm_prob(cover_p), 1 if value > 0 else 0)]
+
+
+def total_pairs_for_trace(trace: dict[str, Any], side: str) -> list[tuple[float, int]]:
+    """``(P(side), side_won)`` for one game trace's total market, or [].
+
+    ``side`` is 'over' or 'under'. Requires the matching simulated ``over_prob`` /
+    ``under_prob``, the decision total line, and a final score. Over wins when
+    ``home + away > total_line``; an exact push (== line) is excluded.
+    """
+    preds = trace.get("predictions") or {}
+    p = preds.get("over_prob") if side == "over" else preds.get("under_prob")
+    _, total_line = _decision_lines(trace)
+    oc = trace.get("_outcome") or {}
+    hs, as_ = oc.get("home_score"), oc.get("away_score")
+    if p is None or total_line is None or hs is None or as_ is None:
+        return []
+    total = hs + as_
+    if total == total_line:
+        return []  # push
+    went_over = total > total_line
+    actual = (1 if went_over else 0) if side == "over" else (0 if went_over else 1)
+    return [(_norm_prob(p), actual)]
+
+
+def over_pairs_for_trace(trace: dict[str, Any]) -> list[tuple[float, int]]:
+    return total_pairs_for_trace(trace, "over")
+
+
+def under_pairs_for_trace(trace: dict[str, Any]) -> list[tuple[float, int]]:
+    return total_pairs_for_trace(trace, "under")
+
+
 class CalibrationFitter:
     """Fit calibration profiles from historical prediction-outcome pairs."""
 
@@ -190,31 +295,53 @@ class CalibrationFitter:
         for trace in graded_traces:
             if not include_early_snapshots and _is_early_market_trace(trace):
                 continue
-            preds = trace.get("predictions") or {}
-            prop_outcomes = trace.get("_prop_outcomes")
-            if not prop_outcomes:
-                continue
-            over_p = preds.get("over_prob")
-            under_p = preds.get("under_prob")
-            for row in prop_outcomes:
-                side = (row.get("side") or "").lower()
-                result = row.get("result")
-                if result in ("push", "void"):
-                    continue
-                if side == "over" and over_p is not None:
-                    prob = float(over_p)
-                elif side == "under" and under_p is not None:
-                    prob = float(under_p)
-                else:
-                    continue
-                # Normalize percentage form
-                if prob > 1.0:
-                    prob = prob / 100.0
-                prob = max(0.0, min(1.0, prob))
-                actual = 1 if result == "win" else 0
+            for prob, actual in prop_pairs_for_trace(trace):
                 predictions.append(prob)
                 outcomes.append(actual)
 
+        return predictions, outcomes
+
+    @staticmethod
+    def extract_cover_pairs(
+        graded_traces: list[dict[str, Any]],
+        include_early_snapshots: bool = False,
+    ) -> tuple[list[float], list[int]]:
+        """Extract (home_cover_prob, did_home_cover) pairs from game traces.
+
+        Uses the shared :func:`cover_pairs_for_trace` rule so the point-spread
+        calibration plane grades covers identically to the simulation engine.
+        Traces without a spread line / cover prob / final score are skipped.
+        """
+        predictions: list[float] = []
+        outcomes: list[int] = []
+        for trace in graded_traces:
+            if not include_early_snapshots and _is_early_market_trace(trace):
+                continue
+            for prob, actual in cover_pairs_for_trace(trace):
+                predictions.append(prob)
+                outcomes.append(actual)
+        return predictions, outcomes
+
+    @staticmethod
+    def extract_total_pairs(
+        graded_traces: list[dict[str, Any]],
+        side: str,
+        include_early_snapshots: bool = False,
+    ) -> tuple[list[float], list[int]]:
+        """Extract (over_prob|under_prob, side_won) pairs from game traces.
+
+        ``side`` is 'over' or 'under'. Uses the shared
+        :func:`total_pairs_for_trace` rule (over wins when home+away > line) so the
+        total calibration plane grades identically to the simulation engine.
+        """
+        predictions: list[float] = []
+        outcomes: list[int] = []
+        for trace in graded_traces:
+            if not include_early_snapshots and _is_early_market_trace(trace):
+                continue
+            for prob, actual in total_pairs_for_trace(trace, side):
+                predictions.append(prob)
+                outcomes.append(actual)
         return predictions, outcomes
 
     @staticmethod

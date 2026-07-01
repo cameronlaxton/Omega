@@ -73,6 +73,7 @@ def render(
     gp = evidence.gate_report
     gate = "PASS" if (gp and gp.get("passed")) else ("FAIL" if gp else "not evaluated")
     w(f"- promotion_gate: {gate}")
+    w(f"- clv_coherent (incremental-edge risk flag, non-gating): {evidence.clv_coherent}")
     w("")
 
     wc = evidence.winners_curse
@@ -121,5 +122,59 @@ def render(
         else:
             w("- no graded bets")
         w("")
+
+        mvm = backtest_report.aggregate_model_vs_market_by_market
+        # The coherence verdict is computed once (metrics.clv_coherent) and stored on the
+        # scorecard rows; reuse it here rather than recompute (single source of truth).
+        coherent_by_plane = {r.market: r.clv_coherent for r in backtest_report.scorecard}
+        w("## Model vs market (incremental edge)")
+        w("")
+        w(
+            "A divergence from the close is *earned* only if it carries positive CLV. "
+            "`coherent=False` flags a plane where the model diverged materially yet did "
+            "not beat the close."
+        )
+        w("")
+        w("| plane | signed_div | abs_div | n_divergent | clv_when_divergent | beat_close | coherent |")
+        w("|---|---|---|---|---|---|---|")
+        for plane in sorted(mvm):
+            mb = mvm[plane]
+            coherent = coherent_by_plane.get(plane, True)
+            w(
+                f"| {plane} | {_f(mb.mean_signed_divergence)} | {_f(mb.mean_abs_divergence)} | "
+                f"{mb.n_divergent} | {_f(mb.clv_when_divergent)} | "
+                f"{_f(mb.divergent_beat_close_rate)} | {coherent} |"
+            )
+        w("")
+
+        w("## Scorecard (per plane)")
+        w("")
+        w(
+            "| plane | n_cal | raw_ece | cal_ece | n_bets | roi | avg_clv | signed_div | "
+            "div_clv | beat_close | coherent |"
+        )
+        w("|---|---|---|---|---|---|---|---|---|---|---|")
+        for row in backtest_report.scorecard:
+            w(
+                f"| {row.market} | {row.n_calibrated} | {_f(row.raw_ece)} | "
+                f"{_f(row.calibrated_ece)} | {row.n_bets} | {_f(row.roi)} | {_f(row.avg_clv)} | "
+                f"{_f(row.mean_signed_divergence)} | {_f(row.clv_when_divergent)} | "
+                f"{_f(row.divergent_beat_close_rate)} | {row.clv_coherent} |"
+            )
+        w("")
+
+        mv = backtest_report.aggregate_marginal_value
+        if mv:
+            w("## Marginal signal value (incremental forecast value)")
+            w("")
+            w("| signal_type | brier_delta | log_loss_delta | n |")
+            w("|---|---|---|---|")
+            # Most-helpful signals first (largest Brier improvement).
+            for blk in sorted(mv, key=lambda b: (b.brier_delta or 0.0), reverse=True):
+                w(
+                    f"| {blk.signal_type} | {_f(blk.brier_delta)} | "
+                    f"{_f(blk.log_loss_delta)} | {blk.n} |"
+                )
+            w("")
 
     return "\n".join(out) + "\n"

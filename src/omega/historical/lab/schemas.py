@@ -26,7 +26,7 @@ from omega.historical.contracts import current_code_version
 
 UTC = timezone.utc
 
-Plane = Literal["game", "prop", "draw"]
+Plane = Literal["game", "prop", "draw", "cover", "over", "under"]
 PromotionStatus = Literal["evidence_ready", "promoted", "blocked", "not_recommended", "shadow_only"]
 VariantStatus = Literal["selected", "rejected", "shadow", "skipped", "error"]
 ParityVerdict = Literal["PASS", "FAIL", "INCONCLUSIVE", "no_incumbent"]
@@ -209,6 +209,12 @@ class PromotionEvidenceBundle(BaseModel):
     attempted_variant_count: int = Field(default=0, ge=0)
     winners_curse: WinnersCurse | None = None
     working_tree_dirty: bool = False
+
+    # Incremental-edge diagnostic (issue #28) — evidence + risk flag, never a gate.
+    # ``model_vs_market`` is the winner plane's ModelVsMarketBlock dump; ``clv_coherent``
+    # is False when the model diverged materially from the close without beating it.
+    model_vs_market: dict[str, Any] | None = None
+    clv_coherent: bool = True
 
     gate_report: dict[str, Any] | None = None
     recommended: bool = False

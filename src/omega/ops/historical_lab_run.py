@@ -41,7 +41,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--league", required=True, help="League code, e.g. FIFA_INTL")
     parser.add_argument("--manifest-id", required=True, help="Ingested dataset manifest id")
-    parser.add_argument("--plane", choices=["game", "prop", "draw"], default="game")
+    parser.add_argument(
+        "--plane",
+        choices=["game", "prop", "draw", "cover", "over", "under"],
+        default="game",
+    )
     parser.add_argument(
         "--replay-db", required=True, help="Isolated sqlite path (NEVER the production DB)"
     )
@@ -65,6 +69,15 @@ def main(argv: list[str] | None = None) -> int:
         "--rho-profile", default=None, help="Frozen Dixon-Coles rho for soccer replay"
     )
     parser.add_argument("--lab-run-id", default=None)
+    parser.add_argument(
+        "--marginal-value",
+        action="store_true",
+        help=(
+            "Compute exact per-signal marginal value via counterfactual re-simulation "
+            "over the live evidence-bearing traces (requires --production-db). Default "
+            "off — the re-sim cost scales with live traces × applied signals."
+        ),
+    )
     parser.add_argument("--root", default=None, help="Artifact root (default var/historical)")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -94,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
             validation_window=args.validation_window,
             holdout_window=args.holdout_window,
             auto_promote=args.auto_promote,
+            compute_marginal_value=args.marginal_value,
             methods=tuple(args.methods),
             slices=tuple(args.slices),
             sport_family=args.sport_family,

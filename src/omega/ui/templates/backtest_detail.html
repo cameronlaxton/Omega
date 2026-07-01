@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Backtest {{ detail.lab_run_id if detail else not_found_id }} · Omega Console{% endblock %}
+{% block content %}
+{% if detail is none %}
+<h1>Lab run not found</h1>
+<p class="muted">No lab run <code>{{ not_found_id }}</code> under the artifacts root.</p>
+<p><a href="/backtests">← Back to Backtest Scorecard</a></p>
+{% else %}
+<h1>Backtest · {{ detail.lab_run_id }}</h1>
+<p><a href="/backtests">← All lab runs</a></p>
+
+<div class="tiles">
+  <div class="tile"><span class="tlabel">league</span><span class="tval">{{ detail.league or '—' }}</span></div>
+  <div class="tile"><span class="tlabel">plane</span><span class="tval">{{ detail.plane or '—' }}</span></div>
+  <div class="tile"><span class="tlabel">promotion</span><span class="tval">{{ detail.promotion_status or '—' }}</span></div>
+  <div class="tile"><span class="tlabel">holdout sealed</span><span class="tval">{{ 'yes' if detail.holdout_sealed else 'no' }}</span></div>
+  <div class="tile"><span class="tlabel">clv coherent</span><span class="tval">{% if detail.clv_coherent is none %}—{% elif detail.clv_coherent %}yes{% else %}no{% endif %}</span></div>
+</div>
+
+{% if detail.warnings %}
+<div class="warnchips" aria-label="Warnings">
+  {% for w in detail.warnings %}<span class="wchip sev-warn">{{ w }}</span>{% endfor %}
+</div>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Scorecard (per plane)</h2>
+    <span class="panel-meta">calibration · betting · incremental edge</span>
+  </div>
+  <div class="panel-body">
+  {% if detail.scorecard %}
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>plane</th><th>n cal</th><th>raw ECE</th><th>cal ECE</th><th>n bets</th>
+          <th>ROI</th><th>avg CLV</th><th>signed div</th><th>div CLV</th>
+          <th>beat close</th><th>coherent</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in detail.scorecard %}
+        <tr>
+          <td>{{ r.market }}</td>
+          <td class="mono">{{ r.n_calibrated }}</td>
+          <td class="mono">{{ r.raw_ece if r.raw_ece is not none else '—' }}</td>
+          <td class="mono">{{ r.calibrated_ece if r.calibrated_ece is not none else '—' }}</td>
+          <td class="mono">{{ r.n_bets }}</td>
+          <td class="mono">{{ r.roi if r.roi is not none else '—' }}</td>
+          <td class="mono">{{ r.avg_clv if r.avg_clv is not none else '—' }}</td>
+          <td class="mono">{{ r.mean_signed_divergence if r.mean_signed_divergence is not none else '—' }}</td>
+          <td class="mono">{{ r.clv_when_divergent if r.clv_when_divergent is not none else '—' }}</td>
+          <td class="mono">{{ r.divergent_beat_close_rate if r.divergent_beat_close_rate is not none else '—' }}</td>
+          <td>{% if r.clv_coherent %}<span class="pos">yes</span>{% else %}<span class="neg">no</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted small"><code>coherent=no</code> flags a plane where the model diverged
+    materially from the close yet those divergent decisions did not beat it.</p>
+  {% else %}
+    <div class="panel-empty">No scorecard rows (walk-forward produced no per-plane metrics for this run).</div>
+  {% endif %}
+  </div>
+</section>
+
+{% if detail.marginal_value %}
+<section class="panel">
+  <div class="panel-head">
+    <h2>Marginal signal value</h2>
+    <span class="panel-meta">incremental forecast value · most helpful first</span>
+  </div>
+  <div class="panel-body">
+    <table class="grid">
+      <thead><tr><th>signal</th><th>Brier Δ</th><th>log-loss Δ</th><th>n</th></tr></thead>
+      <tbody>
+        {% for m in detail.marginal_value %}
+        <tr>
+          <td>{{ m.signal_type }}</td>
+          <td class="mono">{{ m.brier_delta if m.brier_delta is not none else '—' }}</td>
+          <td class="mono">{{ m.log_loss_delta if m.log_loss_delta is not none else '—' }}</td>
+          <td class="mono">{{ m.n }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted small">Positive Brier Δ means the signal improved the forecast (lowered Brier).</p>
+  </div>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

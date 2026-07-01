@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Backtest Scorecard · Omega Console{% endblock %}
+{% block content %}
+<h1>Backtest Scorecard</h1>
+<p class="lede">Historical-validation lab runs. Each run's per-plane scorecard fuses calibration
+quality, betting ROI/CLV, and the <strong>incremental edge over the market</strong> — a
+divergence from the close is earned only if it beats the close. Read-only; every number on
+a run's page comes from that run's engine-produced <code>backtest_report.json</code>.</p>
+
+{% if data.warnings %}
+<div class="warnchips" aria-label="Warnings">
+  {% for w in data.warnings %}<span class="wchip sev-warn">{{ w }}</span>{% endfor %}
+</div>
+{% endif %}
+
+<p class="muted small">Artifacts root: <code>{{ data.backtests_dir }}</code></p>
+
+{% if data.runs %}
+<section class="panel">
+  <div class="panel-head">
+    <h2>Lab runs</h2>
+    <span class="panel-meta">{{ data.runs | length }} run(s) · newest first</span>
+  </div>
+  <div class="panel-body">
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>lab run</th><th>league</th><th>plane</th><th>promotion</th>
+          <th>holdout sealed</th><th>clv coherent</th><th>created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in data.runs %}
+        <tr>
+          <td><a href="/backtests/{{ r.lab_run_id }}">{{ r.lab_run_id }}</a></td>
+          <td>{{ r.league or '—' }}</td>
+          <td>{{ r.plane or '—' }}</td>
+          <td>{{ r.promotion_status or '—' }}</td>
+          <td>{{ 'yes' if r.holdout_sealed else 'no' }}</td>
+          <td>{% if r.clv_coherent is none %}—{% elif r.clv_coherent %}<span class="pos">yes</span>{% else %}<span class="neg">no</span>{% endif %}</td>
+          <td class="muted small">{{ r.created_at or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<div class="panel-empty">No lab runs found. Run <code>omega-historical-lab-run</code> to produce one.</div>
+{% endif %}
+{% endblock %}

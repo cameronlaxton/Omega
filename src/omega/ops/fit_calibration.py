@@ -190,6 +190,12 @@ def _extract_plane_pairs(
     if plane == "draw":
         predictions, outcomes = fitter.extract_draw_pairs(graded)
         return predictions, outcomes, "draw_prob/outcome"
+    if plane == "cover":
+        predictions, outcomes = fitter.extract_cover_pairs(graded)
+        return predictions, outcomes, "home_cover_prob/outcome"
+    if plane in ("over", "under"):
+        predictions, outcomes = fitter.extract_total_pairs(graded, plane)
+        return predictions, outcomes, f"{plane}_prob/outcome"
     predictions, outcomes = fitter.extract_pairs(graded)
     return predictions, outcomes, "home_win_prob/outcome"
 

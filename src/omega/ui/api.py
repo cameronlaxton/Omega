@@ -13,6 +13,8 @@ from collections.abc import Iterator
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from omega.ui.schemas import (
+    BacktestListView,
+    BacktestRunDetail,
     BetDetail,
     BetListResponse,
     CalibrationChart,
@@ -42,6 +44,7 @@ def get_service(request: Request) -> Iterator[ConsoleService]:
         sessions_dir=getattr(state, "console_sessions_dir", None),
         max_scan=getattr(state, "console_max_scan", None),
         calibration_registry_path=getattr(state, "console_calibration_registry", None),
+        backtests_dir=getattr(state, "console_backtests_dir", None),
     )
     try:
         yield service
@@ -223,4 +226,19 @@ def get_session(session_id: str, service: ConsoleService = Depends(get_service))
     detail = service.get_session_detail(session_id)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+    return detail
+
+
+@router.get("/backtests", response_model=BacktestListView)
+def list_backtests(service: ConsoleService = Depends(get_service)) -> BacktestListView:
+    return service.list_backtest_runs()
+
+
+@router.get("/backtests/{lab_run_id}", response_model=BacktestRunDetail)
+def get_backtest(
+    lab_run_id: str, service: ConsoleService = Depends(get_service)
+) -> BacktestRunDetail:
+    detail = service.backtest_run_detail(lab_run_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"lab run {lab_run_id!r} not found")
     return detail

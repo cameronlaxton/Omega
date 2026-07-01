@@ -30,6 +30,7 @@
 - clv_walk_forward: INCONCLUSIVE
 - historical_live_parity: INCONCLUSIVE
 - promotion_gate: not evaluated
+- clv_coherent (incremental-edge risk flag, non-gating): True
 
 ## Winner's-curse
 - attempted variants (N): 3

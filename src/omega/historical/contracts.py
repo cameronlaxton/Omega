@@ -518,8 +518,48 @@ class FoldResult(BaseModel):
     n_test: int
     metrics_by_market: dict[str, MetricBlock] = Field(default_factory=dict)
     betting: BettingBlock | None = None
+    model_vs_market: ModelVsMarketBlock | None = None
     health: HealthBlock = Field(default_factory=HealthBlock)
     frozen_profiles: list[FrozenProfileRef] = Field(default_factory=list)
+
+
+class ScorecardRow(BaseModel):
+    """One fused per-plane decision-quality row: calibration + betting + market edge.
+
+    A pure *stitch* of the typed blocks the single metric path already produced —
+    nothing is recomputed here. Keyed by calibration plane (game | draw | prop |
+    cover | over | under) so the probability, model-vs-market, and scorecard views
+    all share one key. ``clv_coherent`` is the headline risk flag (issue #28): it is
+    False only when the model diverged materially from the market yet those divergent
+    decisions failed to beat the close — a divergence is *earned* only if it carries
+    positive CLV.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    market: str = Field(description="Calibration plane: game | draw | prop | cover | over | under")
+
+    # Calibration quality (from MetricBlock; None when the plane was not evaluated).
+    n_calibrated: int = 0
+    raw_ece: float | None = None
+    calibrated_ece: float | None = None
+    raw_brier: float | None = None
+    calibrated_brier: float | None = None
+
+    # Betting (from BettingBlock; None when no graded bets on this plane).
+    n_bets: int = 0
+    roi: float | None = None
+    avg_clv: float | None = None
+    hit_rate: float | None = None
+    max_drawdown: float | None = None
+
+    # Incremental edge over market (from ModelVsMarketBlock).
+    n_divergent: int = 0
+    mean_signed_divergence: float | None = None
+    clv_when_divergent: float | None = None
+    divergent_beat_close_rate: float | None = None
+
+    clv_coherent: bool = True
 
 
 class BacktestReport(BaseModel):
@@ -534,6 +574,9 @@ class BacktestReport(BaseModel):
     folds: list[FoldResult] = Field(default_factory=list)
     aggregate_metrics_by_market: dict[str, MetricBlock] = Field(default_factory=dict)
     aggregate_betting: BettingBlock | None = None
+    aggregate_model_vs_market_by_market: dict[str, ModelVsMarketBlock] = Field(default_factory=dict)
+    aggregate_marginal_value: list[MarginalValueBlock] = Field(default_factory=list)
+    scorecard: list[ScorecardRow] = Field(default_factory=list)
     aggregate_health: HealthBlock = Field(default_factory=HealthBlock)
     code_version: str = Field(default_factory=current_code_version)
     generated_at: str = Field(default_factory=_utc_now_iso)

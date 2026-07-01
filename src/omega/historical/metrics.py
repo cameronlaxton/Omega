@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
-from omega.core.betting.odds import american_to_decimal
+from omega.core.betting.odds import american_to_decimal, implied_probability
 from omega.core.calibration.fitter import CalibrationFitter
 from omega.core.calibration.profiles import CalibrationProfile
 from omega.historical.contracts import (
@@ -23,6 +23,7 @@ from omega.historical.contracts import (
     ModelVsMarketBlock,
     ReplayCandidateSelection,
     ReplayEventRecord,
+    ScorecardRow,
 )
 from omega.trace.bet_settlement import compute_pnl, settle_game_bet
 from omega.trace.ledger_bet import LedgerStatus
@@ -36,6 +37,11 @@ _NONE_PROFILE = CalibrationProfile(
     sample_size=0,
     dataset_hash="none",
 )
+
+# Planes whose selections can be graded from a (home_score, away_score) pair via
+# settle_game_bet. Prop / exotic selections need their own outcome rows and are
+# skipped by betting_metrics rather than mis-graded (see the guard there).
+_GAME_SETTLEABLE_PLANES = {"game", "draw", "cover", "over", "under"}
 
 
 def probability_metrics(
@@ -182,6 +188,12 @@ def betting_metrics(
             continue
         if sel.decision_odds is None:
             continue
+        # Only game-shaped markets settle from (home_score, away_score). Prop/exotic
+        # selections are skipped here — settle_game_bet would otherwise fall through to
+        # its moneyline branch and silently mis-grade them. (Prop calibration quality is
+        # fully covered by the walk-forward; prop ROI/CLV is a tracked fast-follow.)
+        if selection_plane(sel) not in _GAME_SETTLEABLE_PLANES:
+            continue
         side = sel.selection_descriptor.split("_", 1)[0]
         status = settle_game_bet(
             sel.market, side, sel.decision_line, oc["home_score"], oc["away_score"]
@@ -232,3 +244,124 @@ def health_metrics(
         default_context_rate=round(sum(1 for r in records if r.context_source == "default") / n, 4),
         stale_context_rate=round(sum(1 for r in records if r.is_stale) / n, 4),
     )
+
+
+# ---------------------------------------------------------------------------
+# Scorecard fusion (issue #28 WS5): calibration + betting + incremental edge
+# ---------------------------------------------------------------------------
+
+# A coherence verdict needs enough divergent decisions to be meaningful; below
+# this the model-vs-market signal is too thin to disprove coherence.
+_MIN_DIVERGENT_FOR_COHERENCE = 5
+
+
+def selection_plane(sel: ReplayCandidateSelection) -> str:
+    """Map a candidate selection to its calibration plane — the shared scorecard key.
+
+    Calibration metrics are keyed by plane (game/draw/prop/cover/over/under) while
+    selections are keyed by betting market (moneyline/spread/total/prop); this is the
+    single place that bridges the two namespaces so the probability, model-vs-market,
+    and scorecard views all line up on one key.
+    """
+    market = (sel.market or "").lower()
+    desc = (sel.selection_descriptor or "").lower()
+    if market == "moneyline":
+        return "draw" if desc.startswith("draw") else "game"
+    if market == "spread":
+        return "cover"
+    if market == "total":
+        if desc.startswith("over"):
+            return "over"
+        if desc.startswith("under"):
+            return "under"
+        return "total"
+    return market or "game"
+
+
+def model_vs_market_from_selections(
+    selections: list[ReplayCandidateSelection],
+    closing_by_trace: dict[str, list[dict]] | None = None,
+    *,
+    divergence_threshold: float = 0.02,
+) -> ModelVsMarketBlock:
+    """Build a :class:`ModelVsMarketBlock` from graded candidate selections.
+
+    Reuses the single ``implied_probability`` (no second impl) for the market prob and
+    the same ``_clv`` the betting block uses for CLV — so the divergence diagnostic and
+    the ROI/CLV numbers are derived from one source. ``model_prob`` prefers the
+    calibrated probability (the number the engine actually bet on), falling back to raw.
+    Note: market implied probabilities carry book vig; this is a *divergence* diagnostic
+    and the CLV check (not the raw gap) is the arbiter of whether a divergence was earned.
+    """
+    closing_by_trace = closing_by_trace or {}
+    model_ps: list[float] = []
+    market_ps: list[float] = []
+    clvs: list[float | None] = []
+    for sel in selections:
+        if sel.decision_odds is None:
+            continue
+        mp = sel.calibrated_prob if sel.calibrated_prob is not None else sel.raw_prob
+        if mp is None:
+            continue
+        model_ps.append(float(mp))
+        market_ps.append(implied_probability(sel.decision_odds))
+        clvs.append(_clv(sel, closing_by_trace.get(sel.trace_id, [])))
+    return model_vs_market(model_ps, market_ps, clvs, divergence_threshold=divergence_threshold)
+
+
+def clv_coherent(block: ModelVsMarketBlock) -> bool:
+    """Headline risk flag (issue #28): a divergence is *earned* only if it beats the close.
+
+    False only when the model diverged from the market on a *material* number of
+    decisions yet those divergent decisions did not beat the close on average
+    (mean divergent CLV <= 0). Too few divergent decisions, or no closing-line data,
+    leaves it True — we cannot disprove coherence on thin evidence.
+    """
+    if block.n_divergent < _MIN_DIVERGENT_FOR_COHERENCE:
+        return True
+    if block.clv_when_divergent is None:
+        return True
+    return block.clv_when_divergent > 0
+
+
+def build_scorecard(
+    metrics_by_market: dict[str, MetricBlock],
+    betting_by_plane: dict[str, BettingBlock],
+    mvm_by_plane: dict[str, ModelVsMarketBlock],
+) -> list[ScorecardRow]:
+    """Stitch calibration + betting + incremental-edge blocks into per-plane rows.
+
+    Pure stitch: every value is read from a block the single metric path already
+    produced. Base planes only (slice keys like ``game:playoff`` stay in the detailed
+    probability section). A plane appears if it has calibration metrics, graded bets,
+    or divergence observations — so a market with betting evidence but no fitted
+    calibration plane yet still shows up (honest partial coverage).
+    """
+    planes = {k for k in metrics_by_market if ":" not in k}
+    planes |= set(betting_by_plane) | set(mvm_by_plane)
+    rows: list[ScorecardRow] = []
+    for plane in sorted(planes):
+        mb = metrics_by_market.get(plane)
+        bb = betting_by_plane.get(plane)
+        mvm = mvm_by_plane.get(plane)
+        rows.append(
+            ScorecardRow(
+                market=plane,
+                n_calibrated=mb.n if mb else 0,
+                raw_ece=mb.raw_ece if mb else None,
+                calibrated_ece=mb.calibrated_ece if mb else None,
+                raw_brier=mb.raw_brier if mb else None,
+                calibrated_brier=mb.calibrated_brier if mb else None,
+                n_bets=bb.n_bets if bb else 0,
+                roi=bb.roi if bb else None,
+                avg_clv=bb.avg_clv if bb else None,
+                hit_rate=bb.hit_rate if bb else None,
+                max_drawdown=bb.max_drawdown if bb else None,
+                n_divergent=mvm.n_divergent if mvm else 0,
+                mean_signed_divergence=mvm.mean_signed_divergence if mvm else None,
+                clv_when_divergent=mvm.clv_when_divergent if mvm else None,
+                divergent_beat_close_rate=mvm.divergent_beat_close_rate if mvm else None,
+                clv_coherent=clv_coherent(mvm) if mvm else True,
+            )
+        )
+    return rows

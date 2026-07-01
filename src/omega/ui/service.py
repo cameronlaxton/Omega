@@ -26,6 +26,7 @@ Milestone-B sharpening point and is intentionally not faked here.
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import math
 import os
@@ -53,6 +54,11 @@ from omega.ui.normalizers import (
 )
 from omega.ui.schemas import (
     AuditEventView,
+    BacktestListView,
+    BacktestMarginalRowView,
+    BacktestRunDetail,
+    BacktestRunSummary,
+    BacktestScorecardRowView,
     BetDetail,
     BetListResponse,
     BetRow,
@@ -119,6 +125,9 @@ CHART_H = 220
 # Only filenames matching this are accepted as a session_id when resolving a
 # sidecar path — blocks path traversal on the filesystem-backed session reads.
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+# Same posture for lab_run_id → directory name: block path traversal on the
+# filesystem-backed backtest-artifact reads.
+_LAB_RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 # ---------------------------------------------------------------------------
@@ -584,6 +593,7 @@ class ConsoleService:
         *,
         max_scan: int | None = None,
         calibration_registry_path: str | Path | None = None,
+        backtests_dir: str | Path | None = None,
     ) -> None:
         if not getattr(store, "read_only", False):
             raise ValueError(
@@ -592,6 +602,11 @@ class ConsoleService:
             )
         self.store = store
         self.sessions_dir = Path(sessions_dir) if sessions_dir else session_inbox_dir()
+        # Lab-run artifacts root (read-only JSON). Defaults to the orchestrator's
+        # var/historical/lab_runs (see omega.historical.lab.orchestrator.lab_dir).
+        self.backtests_dir = (
+            Path(backtests_dir) if backtests_dir else Path("var/historical/lab_runs")
+        )
         if max_scan is None:
             try:
                 max_scan = int(os.environ.get("OMEGA_CONSOLE_MAX_SCAN", DEFAULT_MAX_SCAN))
@@ -612,6 +627,91 @@ class ConsoleService:
 
     def close(self) -> None:
         self.store.close()
+
+    # -- backtest scorecard (read-only lab-run artifacts) ----------------
+
+    @staticmethod
+    def _read_json(path: Path) -> dict[str, Any] | None:
+        """Read a JSON object from disk, or None if absent/unreadable (read-only)."""
+        try:
+            if not path.is_file():
+                return None
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else None
+        except (OSError, ValueError):
+            return None
+
+    def list_backtest_runs(self) -> BacktestListView:
+        """Summaries of every historical-validation lab run under the artifacts root.
+
+        Reads each run's LAB_RUN.json (+ PROMOTION_EVIDENCE.json for the
+        incremental-edge coherence flag). Pure filesystem reads — no DB, no mutation;
+        the numbers shown on the detail page come from the engine-produced
+        backtest_report.json, never recomputed here.
+        """
+        root = self.backtests_dir
+        warnings: list[str] = []
+        if not root.is_dir():
+            warnings.append(
+                f"No lab-run artifacts directory at {root} (run omega-historical-lab-run)."
+            )
+            return BacktestListView(runs=[], backtests_dir=str(root), warnings=warnings)
+        runs: list[BacktestRunSummary] = []
+        for d in sorted(p for p in root.iterdir() if p.is_dir()):
+            lab_run = self._read_json(d / "LAB_RUN.json")
+            if lab_run is None:
+                continue
+            evidence = self._read_json(d / "PROMOTION_EVIDENCE.json") or {}
+            runs.append(
+                BacktestRunSummary(
+                    lab_run_id=str(lab_run.get("lab_run_id") or d.name),
+                    league=lab_run.get("league"),
+                    plane=lab_run.get("plane"),
+                    promotion_status=lab_run.get("promotion_status"),
+                    created_at=lab_run.get("created_at"),
+                    holdout_sealed=bool(lab_run.get("holdout_sealed")),
+                    clv_coherent=evidence.get("clv_coherent"),
+                    has_report=(d / "backtest_report.json").is_file(),
+                )
+            )
+        runs.sort(key=lambda r: r.created_at or "", reverse=True)
+        return BacktestListView(runs=runs, backtests_dir=str(root), warnings=warnings)
+
+    def backtest_run_detail(self, lab_run_id: str) -> BacktestRunDetail | None:
+        """Full scorecard for one lab run, or None when missing / id is unsafe."""
+        if not _LAB_RUN_ID_RE.match(lab_run_id or ""):
+            return None
+        d = self.backtests_dir / lab_run_id
+        lab_run = self._read_json(d / "LAB_RUN.json")
+        if lab_run is None:
+            return None
+        evidence = self._read_json(d / "PROMOTION_EVIDENCE.json") or {}
+        report = self._read_json(d / "backtest_report.json") or {}
+        warnings: list[str] = []
+        if not report:
+            warnings.append("No backtest_report.json (walk-forward did not run for this plane).")
+        scorecard = [
+            BacktestScorecardRowView.model_validate(row)
+            for row in report.get("scorecard", [])
+            if isinstance(row, dict)
+        ]
+        marginal = [
+            BacktestMarginalRowView.model_validate(row)
+            for row in report.get("aggregate_marginal_value", [])
+            if isinstance(row, dict)
+        ]
+        return BacktestRunDetail(
+            lab_run_id=str(lab_run.get("lab_run_id") or lab_run_id),
+            league=lab_run.get("league"),
+            plane=lab_run.get("plane"),
+            promotion_status=lab_run.get("promotion_status"),
+            created_at=lab_run.get("created_at"),
+            holdout_sealed=bool(lab_run.get("holdout_sealed")),
+            clv_coherent=evidence.get("clv_coherent"),
+            scorecard=scorecard,
+            marginal_value=marginal,
+            warnings=warnings,
+        )
 
     # -- health ----------------------------------------------------------
 
@@ -2340,6 +2440,7 @@ def open_service(
     *,
     max_scan: int | None = None,
     calibration_registry_path: str | Path | None = None,
+    backtests_dir: str | Path | None = None,
 ) -> ConsoleService:
     """Open a read-only ConsoleService (fresh read-only store per call).
 
@@ -2353,4 +2454,5 @@ def open_service(
         sessions_dir=sessions_dir,
         max_scan=max_scan,
         calibration_registry_path=calibration_registry_path,
+        backtests_dir=backtests_dir,
     )

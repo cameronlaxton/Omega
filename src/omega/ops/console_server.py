@@ -59,6 +59,7 @@ NAV_ENABLED = (
     {"key": "sessions", "label": "Session Review", "href": "/sessions"},
     {"key": "diagnostics", "label": "Diagnostics", "href": "/diagnostics"},
     {"key": "calibration", "label": "Calibration Status", "href": "/calibration"},
+    {"key": "backtests", "label": "Backtest Scorecard", "href": "/backtests"},
     {"key": "data_quality", "label": "Data Quality", "href": "/data-quality"},
     {"key": "signals", "label": "Signal Performance", "href": "/signals"},
     {"key": "review", "label": "Review Queue", "href": "/review"},
@@ -192,6 +193,7 @@ def build_console_app(
     sessions_dir: str | Path | None = None,
     max_scan: int | None = None,
     calibration_registry: str | Path | None = None,
+    backtests_dir: str | Path | None = None,
     auth_token: str | None = None,
 ):
     """Build the read-only console FastAPI app.
@@ -213,6 +215,7 @@ def build_console_app(
     app.state.console_calibration_registry = (
         str(calibration_registry) if calibration_registry else None
     )
+    app.state.console_backtests_dir = str(backtests_dir) if backtests_dir else None
 
     if auth_token:
         app.add_middleware(_BearerAuthMiddleware, token=auth_token, open_paths=_OPEN_PATHS)
@@ -474,6 +477,29 @@ def build_console_app(
             request,
             "clv.html",
             _ctx(request, data=data.model_dump(), scatter=scatter.model_dump(), active="clv"),
+        )
+
+    @app.get("/backtests", response_class=HTMLResponse)
+    def page_backtests(request: Request, service=Depends(get_service)):
+        data = service.list_backtest_runs()
+        return templates.TemplateResponse(
+            request, "backtests.html", _ctx(request, data=data.model_dump(), active="backtests")
+        )
+
+    @app.get("/backtests/{lab_run_id}", response_class=HTMLResponse)
+    def page_backtest_detail(request: Request, lab_run_id: str, service=Depends(get_service)):
+        detail = service.backtest_run_detail(lab_run_id)
+        if detail is None:
+            return templates.TemplateResponse(
+                request,
+                "backtest_detail.html",
+                _ctx(request, detail=None, not_found_id=lab_run_id, active="backtests"),
+                status_code=404,
+            )
+        return templates.TemplateResponse(
+            request,
+            "backtest_detail.html",
+            _ctx(request, detail=detail.model_dump(), active="backtests"),
         )
 
     return app

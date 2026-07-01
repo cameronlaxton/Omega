@@ -46,7 +46,7 @@ from omega.ops.replay_history import main as replay_history_main
 from omega.paths import default_trace_db_path
 from omega.trace.store import TraceStore
 
-_WF_PLANES = {"game", "draw"}  # walk_forward _PAIR_FN supports game/draw only
+_WF_PLANES = {"game", "draw", "prop", "cover", "over", "under"}  # walk_forward._PAIR_FN keys
 
 
 @dataclass
@@ -142,6 +142,7 @@ def run_lab_from_store(
     registry: CalibrationRegistry | None = None,
     live_store: TraceStore | None = None,
     auto_promote: bool = False,
+    compute_marginal_value: bool = False,
     sport_family: str | None = None,
     methods: tuple[str, ...] = grid_mod.DEFAULT_METHODS,
     slices: tuple[str, ...] = (),
@@ -289,9 +290,40 @@ def run_lab_from_store(
     )
     runner.record("historical_live_parity", "ok", outputs={"state": live_artifact["state"]})
 
+    # Optional slow confirmer (issue #28 WS1): exact per-signal marginal value via
+    # counterfactual re-simulation over the LIVE evidence-bearing traces — the replay
+    # corpus is evidence-free, so this is the only place applied signals exist.
+    # Default-off because the re-sim cost scales with live_traces × applied signals;
+    # when off, the report's aggregate_marginal_value stays [] (honest, not fabricated).
+    if compute_marginal_value and wf_report is not None and live_traces:
+        from omega.historical.marginal_value import (
+            aggregate_marginal_values,
+            engine_counterfactual_prob,
+        )
+
+        wf_report.aggregate_marginal_value = aggregate_marginal_values(
+            live_traces, engine_counterfactual_prob
+        )
+        paths["backtest_report"] = _write_json(
+            out_dir / "backtest_report.json", wf_report.model_dump(mode="json")
+        )
+        runner.record(
+            "marginal_value", "ok", outputs={"n_signals": len(wf_report.aggregate_marginal_value)}
+        )
+
     # Registry audit (reuse list_profiles; no new auditor).
     audit = [p.model_dump(mode="json") for p in registry.list_profiles(league=league)]
     paths["registry_audit"] = _write_json(out_dir / "registry_audit.json", audit)
+
+    # Incremental-edge diagnostic for the winner's plane (evidence + risk flag only).
+    mvm_block = None
+    clv_coherent_flag = True
+    if wf_report is not None:
+        blk = wf_report.aggregate_model_vs_market_by_market.get(plane)
+        mvm_block = blk.model_dump(mode="json") if blk is not None else None
+        clv_coherent_flag = next(
+            (r.clv_coherent for r in wf_report.scorecard if r.market == plane), True
+        )
 
     # Evidence + optional auto-promote through the single gate.
     ctx = EvidenceContext(
@@ -312,6 +344,8 @@ def run_lab_from_store(
         clv_walk_forward_path=paths.get("clv_walk_forward"),
         live_parity=live_artifact,
         registry_audit_path=paths.get("registry_audit"),
+        model_vs_market=mvm_block,
+        clv_coherent=clv_coherent_flag,
     )
     bundle = resolve(registry, ctx)
     runner.record(
@@ -375,6 +409,7 @@ def run_lab(
     lab_run_id: str | None = None,
     replay_id: str | None = None,
     auto_promote: bool = False,
+    compute_marginal_value: bool = False,
     methods: tuple[str, ...] = grid_mod.DEFAULT_METHODS,
     slices: tuple[str, ...] = (),
     sport_family: str | None = None,
@@ -458,6 +493,7 @@ def run_lab(
             registry=registry,
             live_store=live_store,
             auto_promote=auto_promote,
+            compute_marginal_value=compute_marginal_value,
             sport_family=sport_family,
             methods=methods,
             slices=slices,

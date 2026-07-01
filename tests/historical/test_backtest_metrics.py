@@ -2,8 +2,22 @@
 
 from __future__ import annotations
 
-from omega.historical.contracts import ReplayCandidateSelection, ReplayEventRecord
-from omega.historical.metrics import betting_metrics, health_metrics, probability_metrics
+from omega.historical.contracts import (
+    BettingBlock,
+    MetricBlock,
+    ModelVsMarketBlock,
+    ReplayCandidateSelection,
+    ReplayEventRecord,
+)
+from omega.historical.metrics import (
+    betting_metrics,
+    build_scorecard,
+    clv_coherent,
+    health_metrics,
+    model_vs_market_from_selections,
+    probability_metrics,
+    selection_plane,
+)
 
 
 def test_probability_metrics_separates_raw_and_calibrated():
@@ -59,6 +73,27 @@ def test_betting_metrics_empty_when_no_outcomes():
     sels = [_sel("e1", "t1", "home", -110, "2023-01-01T00:00:00+00:00")]
     b = betting_metrics(sels, outcomes_by_event={})
     assert b.n_bets == 0
+
+
+def test_betting_metrics_skips_prop_selections_not_misgrade():
+    """Prop selections are skipped (not settled as moneyline) — game-only grading guard."""
+    sels = [
+        _sel("e1", "t1", "home", -110, "2023-01-01T00:00:00+00:00"),
+        ReplayCandidateSelection(
+            replay_id="r",
+            event_id="e1",
+            trace_id="t2",
+            market="prop",
+            selection_descriptor="over",
+            raw_prob=0.6,
+            decision_odds=-110,
+            decision_time="2023-01-01T00:00:00+00:00",
+            stake_amount=100.0,
+        ),
+    ]
+    outcomes = {"e1": {"home_score": 24, "away_score": 17}}
+    b = betting_metrics(sels, outcomes)
+    assert b.n_bets == 1  # moneyline graded; prop skipped rather than mis-settled
 
 
 def _rec(event_id, **kw) -> ReplayEventRecord:
@@ -145,3 +180,96 @@ class TestMarginalAndModelVsMarket:
 
         blk = model_vs_market([], [], [])
         assert blk.n == 0
+
+
+def _sel_full(
+    *, market, descriptor, calibrated_prob, decision_odds, trace_id="t1", event_id="e1"
+) -> ReplayCandidateSelection:
+    return ReplayCandidateSelection(
+        replay_id="r",
+        event_id=event_id,
+        trace_id=trace_id,
+        market=market,
+        selection_descriptor=descriptor,
+        raw_prob=0.5,
+        calibrated_prob=calibrated_prob,
+        decision_odds=decision_odds,
+        decision_time="2023-01-01T00:00:00+00:00",
+        stake_amount=100.0,
+    )
+
+
+class TestScorecardFusion:
+    """Issue #28 WS5: the per-plane scorecard that fuses calibration + betting + edge."""
+
+    def test_selection_plane_bridges_market_to_calibration_plane(self):
+        cases = {
+            ("moneyline", "home"): "game",
+            ("moneyline", "away"): "game",
+            ("moneyline", "draw"): "draw",
+            ("spread", "home_-3.5"): "cover",
+            ("total", "over_45.5"): "over",
+            ("total", "under_45.5"): "under",
+            ("prop", "over"): "prop",
+        }
+        for (market, desc), plane in cases.items():
+            sel = _sel_full(market=market, descriptor=desc, calibrated_prob=0.5, decision_odds=-110)
+            assert selection_plane(sel) == plane
+
+    def test_model_vs_market_from_selections_counts_divergence_and_clv(self):
+        sels = [
+            # diverges from the +100 (0.50) close, and beat the close (decision +100 vs -150)
+            _sel_full(
+                market="moneyline", descriptor="home", calibrated_prob=0.62, decision_odds=100
+            ),
+            # sits on the market — not divergent
+            _sel_full(
+                market="moneyline", descriptor="home", calibrated_prob=0.50, decision_odds=100,
+                trace_id="t2",
+            ),
+        ]
+        closing = {
+            "t1": [{"market": "moneyline", "selection_descriptor": "home", "closing_odds": -150}]
+        }
+        blk = model_vs_market_from_selections(sels, closing)
+        assert blk.n == 2
+        assert blk.n_divergent == 1
+        assert blk.clv_when_divergent is not None and blk.clv_when_divergent > 0
+        assert blk.divergent_beat_close_rate == 1.0
+
+    def test_clv_coherent_flags_unearned_divergence(self):
+        # Materially divergent yet did not beat the close → incoherent.
+        incoherent = ModelVsMarketBlock(n=20, n_divergent=8, clv_when_divergent=-0.4)
+        assert clv_coherent(incoherent) is False
+        # Divergent AND beat the close → coherent.
+        earned = ModelVsMarketBlock(n=20, n_divergent=8, clv_when_divergent=0.3)
+        assert clv_coherent(earned) is True
+
+    def test_clv_coherent_true_on_thin_or_missing_evidence(self):
+        thin = ModelVsMarketBlock(n=20, n_divergent=2, clv_when_divergent=-0.9)
+        assert clv_coherent(thin) is True  # too few divergent decisions to disprove
+        no_clv = ModelVsMarketBlock(n=20, n_divergent=8, clv_when_divergent=None)
+        assert clv_coherent(no_clv) is True  # no closing-line data
+
+    def test_build_scorecard_fuses_blocks_and_excludes_slices(self):
+        metrics = {
+            "game": MetricBlock(
+                raw_ece=0.10, calibrated_ece=0.05, raw_brier=0.25, calibrated_brier=0.20, n=100
+            ),
+            "game:playoff": MetricBlock(n=10),  # slice key — must NOT become a scorecard row
+        }
+        betting = {"game": BettingBlock(n_bets=20, roi=0.05, avg_clv=1.0, hit_rate=0.55, max_drawdown=3.0)}
+        mvm = {
+            "game": ModelVsMarketBlock(
+                n=20, n_divergent=8, mean_signed_divergence=0.02, clv_when_divergent=-0.1,
+                divergent_beat_close_rate=0.3,
+            )
+        }
+        rows = build_scorecard(metrics, betting, mvm)
+        assert [r.market for r in rows] == ["game"]  # slice excluded
+        row = rows[0]
+        assert row.n_calibrated == 100
+        assert row.calibrated_ece == 0.05
+        assert row.n_bets == 20
+        assert row.roi == 0.05
+        assert row.clv_coherent is False  # diverged materially, did not beat the close

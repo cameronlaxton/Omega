@@ -52,6 +52,11 @@ class EvidenceContext:
     clv_walk_forward_path: str | None = None
     live_parity: dict[str, Any] | None = None
     registry_audit_path: str | None = None
+    # Incremental-edge diagnostic (issue #28): the winner plane's ModelVsMarketBlock and
+    # the coherence verdict. Surfaced as evidence + a risk flag ONLY — it never gates;
+    # promotion still flows solely through CalibrationRegistry.promote.
+    model_vs_market: dict[str, Any] | None = None
+    clv_coherent: bool = True
 
 
 def gate_inputs(profile: CalibrationProfile | None) -> dict[str, Any]:
@@ -182,6 +187,8 @@ def resolve(registry: CalibrationRegistry, ctx: EvidenceContext) -> PromotionEvi
         attempted_variant_count=ctx.attempted_variant_count,
         winners_curse=ctx.winners_curse,
         working_tree_dirty=ctx.working_tree_dirty,
+        model_vs_market=ctx.model_vs_market,
+        clv_coherent=ctx.clv_coherent,
         gate_report=gate_report,
         recommended=recommended or decision == "promoted",
         decision=decision,
