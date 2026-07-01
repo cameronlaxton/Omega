@@ -43,6 +43,7 @@ import argparse
 import logging
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -77,8 +78,12 @@ _PROP_CAPABLE_LEAGUES = frozenset({"MLB", "NBA", "NFL", "NHL", "WNBA"})
 
 
 def _generate_session_id(date: str) -> str:
-    ts = datetime.now(UTC).strftime("%H%M")
-    return f"sess-{date}-{ts}"
+    # Seconds + a short random suffix so two auto-generated IDs on the same day
+    # can't collide within the same minute. Belt-and-suspenders only: the real
+    # collision guard is create_sidecar()'s fail-closed existence check, which
+    # catches reused *manually-supplied* IDs (the sess-20260701-ops1 case) too.
+    ts = datetime.now(UTC).strftime("%H%M%S")
+    return f"sess-{date}-{ts}{uuid.uuid4().hex[:4]}"
 
 
 def _league_list(raw: str) -> list[str]:
