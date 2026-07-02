@@ -17,9 +17,12 @@ from omega.core.contracts import service
 def captured_market(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_apply(raw, league=None, context_hints=None, market="game", market_prob=None):
+    def fake_apply(
+        raw, league=None, context_hints=None, market="game", market_prob=None, substrate_ref=None
+    ):
         captured["market"] = market
         captured["market_prob"] = market_prob
+        captured["substrate_ref"] = substrate_ref
         return raw, {
             "raw_prob": raw,
             "calibrated_prob": raw,

@@ -61,3 +61,21 @@ def resolve_calibration_bucket(league: str) -> str:
     """
     league_uc = league.upper()
     return CALIBRATION_LEAGUE_BUCKETS.get(league_uc, league_uc)
+
+
+def resolve_prop_calibration_bucket(league: str, stat_type: str) -> str:
+    """Canonical competition bucket for a PROP backend parameter profile.
+
+    Prop structural knobs (e.g. the NB dispersion scale) correct one stat
+    family's distribution shape, and per-stat dispersion differs materially
+    (rushing vs passing yards), so the governed unit is per-(league, stat):
+    ``{league_bucket}__{CANONICAL_STAT}`` (e.g. ``NFL__RUSHING_YARDS``). The
+    league part reuses :func:`resolve_calibration_bucket`; the stat part reuses
+    the prop-routing canonicalizer so market-key aliases (``pass_yds`` ->
+    ``passing_yards``) collapse to one bucket. This is the single place prop
+    parameter-profile buckets are named.
+    """
+    from omega.core.simulation.backends import canonical_prop_stat_type
+
+    stat = canonical_prop_stat_type(league, stat_type).upper()
+    return f"{resolve_calibration_bucket(league)}__{stat}"

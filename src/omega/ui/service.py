@@ -1252,6 +1252,7 @@ class ConsoleService:
             context_slice=profile.context_slice,
             status=_profile_status_str(profile.status),
             is_active=profile.profile_id in active_ids,
+            binding_status=profile.binding_status().value,
             sample_size=profile.sample_size,
             brier=_as_float(metrics.get("brier_score")),
             calibration_error=_as_float(metrics.get("calibration_error")),

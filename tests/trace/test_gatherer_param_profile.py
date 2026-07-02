@@ -119,6 +119,24 @@ def test_gatherer_merges_param_profile_even_when_rho_pre_supplied(monkeypatch):
         store.close()
 
 
+def test_gatherer_skips_param_profile_ref_when_structural_knob_overridden(monkeypatch):
+    """Do not claim the production parameter profile priced a request when the
+    caller supplied a different structural knob."""
+    monkeypatch.delenv("OMEGA_REPLAY_MODE", raising=False)
+    store = _store()
+    try:
+        _promote_rho(store)
+        _promote_param_profile(store, {"home_advantage": 0.5, "lambda_scale": 1.1})
+        merged, event = build_game_prior_payload("EPL", {"rho": -0.05, "lambda_scale": 0.9}, store)
+        assert merged["rho"] == -0.05
+        assert merged["lambda_scale"] == 0.9
+        assert "home_advantage" not in merged
+        assert "parameter_profile_ref" not in merged
+        assert event is None
+    finally:
+        store.close()
+
+
 def test_gatherer_replay_mode_skips_live_param_lookup(monkeypatch):
     """Under OMEGA_REPLAY_MODE the live parameter_profiles table is never read, so a
     post-hoc promotion cannot leak into a historical replay."""

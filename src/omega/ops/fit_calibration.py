@@ -47,9 +47,13 @@ from omega.core.calibration.context_slices import (  # noqa: E402
 )
 from omega.core.calibration.fitter import CalibrationFitter  # noqa: E402
 from omega.core.calibration.market import calibration_market_for_plane  # noqa: E402
-from omega.core.calibration.profiles import CalibrationProfile  # noqa: E402
+from omega.core.calibration.profiles import (  # noqa: E402
+    CalibrationBackendBinding,
+    CalibrationProfile,
+)
 from omega.core.calibration.registry import CalibrationRegistry  # noqa: E402
 from omega.core.calibration.sport_family import sport_family_for_league  # noqa: E402
+from omega.trace.parameter_profiles import substrate_ref_for_trace  # noqa: E402
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("fit_calibration")
@@ -117,6 +121,59 @@ def _unique_profile_id(
     return f"{prefix}_{league.lower()}_{market_tag}{slice_tag}v{version}_{dataset_hash[:16]}"
 
 
+def binding_for_traces(
+    fitter: CalibrationFitter,
+    traces: list[dict[str, Any]],
+    plane: str,
+) -> tuple[CalibrationBackendBinding | None, str | None]:
+    """Derive the (single) raw-probability substrate of a fit dataset (P8.3).
+
+    Returns ``(binding, error)``. Only traces that contribute at least one
+    ``(prediction, outcome)`` pair on the requested plane count — a game trace in
+    a prop-plane fit constrains nothing. Each contributing trace's substrate is
+    read strictly from its recorded provenance (``substrate_ref_for_trace``);
+    nothing is guessed or synthesized:
+
+    - all contributing traces share ONE substrate -> that binding (an
+      all-None substrate is the explicit ``unpinned`` declaration: the dataset
+      carried no backend identity);
+    - more than one distinct substrate -> ``(None, error)``: the dataset mixes
+      raw probabilities produced by different backends / parameter profiles, and
+      a single calibration profile fit across them would be attributed to none of
+      them. FAIL CLOSED — there is no safe legacy mode for a mixed fit; window
+      the dataset (``--train-start``/``--train-end``) to one substrate instead.
+    """
+    substrates: dict[tuple[Any, Any, Any], int] = {}
+    for trace in traces:
+        preds, _, _ = _extract_plane_pairs(fitter, [trace], plane)
+        if not preds:
+            continue
+        ref = substrate_ref_for_trace(trace)
+        key = (
+            ref.get("backend_name"),
+            ref.get("backend_component_version"),
+            ref.get("param_profile_id"),
+        )
+        substrates[key] = substrates.get(key, 0) + len(preds)
+    if not substrates:
+        return None, None
+    if len(substrates) > 1:
+        detail = "; ".join(
+            f"backend={k[0]!r} version={k[1]!r} param_profile={k[2]!r} ({v} pairs)"
+            for k, v in sorted(substrates.items(), key=lambda item: str(item[0]))
+        )
+        return None, f"dataset mixes {len(substrates)} raw-probability substrates: {detail}"
+    (backend_name, component_version, param_profile_id), _ = next(iter(substrates.items()))
+    return (
+        CalibrationBackendBinding(
+            backend_name=backend_name,
+            backend_component_version=component_version,
+            param_profile_id=param_profile_id,
+        ),
+        None,
+    )
+
+
 def fit_and_register(
     fitter: CalibrationFitter,
     registry: CalibrationRegistry,
@@ -130,6 +187,7 @@ def fit_and_register(
     market: str = "game",
     context_slice: str | None = None,
     training_window: str | None = None,
+    backend_binding: CalibrationBackendBinding | None = None,
 ) -> CalibrationProfile:
     """Fit one method, evaluate on holdout, register as CANDIDATE. Returns profile."""
     if method == "isotonic":
@@ -157,6 +215,9 @@ def fit_and_register(
     metrics.update(cv)
     profile.metrics = metrics
     profile.context_slice = context_slice
+    # P8.3: declare the raw-probability substrate the candidate was fit against
+    # (already verified homogeneous by binding_for_traces before this call).
+    profile.backend_binding = backend_binding
     if training_window:
         # Date-windowed fit: record the train window for auditability (AGENTS.md:
         # every calibration fit attributable to a specific dataset + window).
@@ -491,6 +552,20 @@ def main(argv: list[str] | None = None) -> int:
         if n < args.min_samples:
             logger.info("Fitting slice %r as shadow profile (%d pairs).", slice_name, n)
 
+        # P8.3 fail-closed: a candidate must be attributable to ONE raw-probability
+        # substrate (backend + component version + governed param profile). A
+        # dataset mixing substrates is refused — no legacy bypass exists; window
+        # the fit (--train-start/--train-end) to a single substrate instead.
+        binding_traces = (train_traces + hold_traces) if date_window else slice_traces
+        backend_binding, binding_error = binding_for_traces(fitter, binding_traces, args.plane)
+        if binding_error:
+            logger.error(
+                "Skipping slice %r: %s — refusing to fit (P8.3 fail-closed).",
+                slice_name,
+                binding_error,
+            )
+            continue
+
         if date_window:
             if not train_p or not hold_p:
                 logger.warning(
@@ -531,15 +606,19 @@ def main(argv: list[str] | None = None) -> int:
                     market=market,
                     context_slice=slice_name,
                     training_window=train_window,
+                    backend_binding=backend_binding,
                 )
                 registered.append(profile)
                 logger.info(
-                    "Registered candidate %s: brier=%.4f ece=%.4f log_loss=%.4f n_eval=%d",
+                    "Registered candidate %s: brier=%.4f ece=%.4f log_loss=%.4f n_eval=%d "
+                    "binding=%s param_profile=%s",
                     profile.profile_id,
                     profile.metrics.get("brier_score", -1),
                     profile.metrics.get("calibration_error", -1),
                     profile.metrics.get("log_loss", -1),
                     profile.metrics.get("n_eval", 0),
+                    profile.binding_status().value,
+                    getattr(profile.backend_binding, "param_profile_id", None),
                 )
             except ValueError as exc:
                 logger.error("Failed to fit %s for slice %r: %s", method, slice_name, exc)

@@ -60,7 +60,7 @@ resolves for that league / slice / market. Read-only.</p>
   <thead>
     <tr>
       <th>profile_id</th><th>league</th><th>market</th><th>slice</th><th>method</th><th>ver</th>
-      <th>status</th><th>samples</th><th>brier</th><th>cal. err</th><th>log loss</th><th>promoted</th>
+      <th>status</th><th>binding</th><th>samples</th><th>brier</th><th>cal. err</th><th>log loss</th><th>promoted</th>
     </tr>
   </thead>
   <tbody>
@@ -73,6 +73,7 @@ resolves for that league / slice / market. Read-only.</p>
       <td>{{ r.method }}</td>
       <td>{{ r.version }}</td>
       <td><span class="pstatus pstatus-{{ r.status }}">{{ r.status }}</span></td>
+      <td>{{ r.binding_status or '—' }}</td>
       <td>{{ r.sample_size }}</td>
       <td>{{ '%.4f' % r.brier if r.brier is not none else '—' }}</td>
       <td>{{ '%.4f' % r.calibration_error if r.calibration_error is not none else '—' }}</td>
@@ -80,7 +81,7 @@ resolves for that league / slice / market. Read-only.</p>
       <td class="nowrap">{{ r.promoted_at[:10] if r.promoted_at else '—' }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="12" class="empty">
+    <tr><td colspan="13" class="empty">
       {% if data.registry_available %}No calibration profiles{% if data.filters.league or data.filters.status %} match these filters{% endif %}.{% else %}Calibration registry unavailable or unreadable.{% endif %}
     </td></tr>
     {% endfor %}

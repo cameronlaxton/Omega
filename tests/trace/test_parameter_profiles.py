@@ -19,7 +19,6 @@ from omega.core.simulation.parameter_profile import (
     ParameterProfileStatus,
     make_parameter_profile_id,
 )
-from omega.trace.schema import CURRENT_VERSION
 from omega.trace.parameter_profiles import (
     extract_parameter_profile_ref,
     get_parameter_profile,
@@ -30,7 +29,9 @@ from omega.trace.parameter_profiles import (
     promote_parameter_profile,
     register_parameter_profile,
     reject_parameter_profile,
+    substrate_ref_for_trace,
 )
+from omega.trace.schema import CURRENT_VERSION
 from omega.trace.store import TraceStore
 
 _CONFIRMS = {
@@ -299,6 +300,38 @@ def test_persist_stamps_explicit_parameter_profile_ref():
         store.close()
 
 
+def test_persist_stamps_game_prior_payload_parameter_profile_ref():
+    """Game traces can carry the governed backend ref only on the request snapshot.
+
+    GameAnalysisResponse does not expose ``parameter_profile_ref``, so the V20
+    trace column and calibration binding extractor must read the gatherer-stamped
+    ``input_snapshot.prior_payload.parameter_profile_ref``.
+    """
+    store = _store()
+    try:
+        ref = _profile().trace_ref()
+        _persist_trace(
+            store,
+            "t-game-prior-ref",
+            result={
+                "status": "success",
+                "simulation_backend": "soccer_bivariate_poisson_dc",
+                "component_version": "soccer_bvp_dc_v1",
+            },
+            input_snapshot={"prior_payload": {"parameter_profile_ref": ref}},
+        )
+        got = get_parameter_profile_ref(store, "t-game-prior-ref")
+        assert got is not None
+        assert got["param_profile_id"] == ref["param_profile_id"]
+        trace = store.get_trace("t-game-prior-ref")
+        substrate = substrate_ref_for_trace(trace)
+        assert substrate["backend_name"] == "soccer_bivariate_poisson_dc"
+        assert substrate["backend_component_version"] == "soccer_bvp_dc_v1"
+        assert substrate["param_profile_id"] == ref["param_profile_id"]
+    finally:
+        store.close()
+
+
 def test_persist_synthesizes_legacy_soccer_rho_ref():
     """Today's soccer rho provenance (echoed onto the sim result) becomes a
     queryable ref with no backend change."""
@@ -360,6 +393,10 @@ def test_extract_parameter_profile_ref_pure():
     assert extract_parameter_profile_ref({"result": {"status": "success"}}) is None
     explicit = {"param_profile_id": "p1", "backend_name": "b"}
     assert extract_parameter_profile_ref({"parameter_profile_ref": explicit}) == explicit
+    assert (
+        extract_parameter_profile_ref({"input_snapshot": {"prior_payload": {"parameter_profile_ref": explicit}}})
+        == explicit
+    )
     legacy = extract_parameter_profile_ref(
         {"result": {"rho_profile_id": "epl_v1", "component_version": "soccer_bvp_dc_v1"}}
     )

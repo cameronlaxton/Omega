@@ -359,3 +359,142 @@ class TestBacktestResultFields:
         assert result.artifact_schema_version == 1
         assert result.calibration_policy == "static_v1"
         assert result.trace_ids == []
+
+
+# -----------------------------------------------------------------------
+# FrozenPropArtifact — prop-plane frozen inputs (structural sweep)
+# -----------------------------------------------------------------------
+
+
+def _make_prop_trace_dict():
+    """A graded prop trace dict as returned by TraceStore.query_traces()."""
+    return {
+        "trace_id": "prop-trace-1",
+        "kind": "prop",
+        "timestamp": "2026-06-17T10:00:00+00:00",  # replay RUN date, not the game
+        "decision_time": "2025-11-09T18:00:00+00:00",
+        "league": "NFL",
+        "simulation_seed": 4242,
+        "input_snapshot": {
+            "player_name": "D. Runner",
+            "prop_type": "rushing_yards",
+            "line": 74.5,
+            "league": "NFL",
+        },
+        "predictions": {"over_prob": 0.55, "under_prob": 0.43},
+        "simulation_distributions": [
+            {
+                "target": "player_stat",
+                "market": "player_prop",
+                "stat_key": "rushing_yards",
+                "distribution_type": "negative_binomial_exact",
+                "distribution_params": {"mu": 78.2, "k": 22.5, "p": 0.22},
+                "sample_std": 19.4,
+                "n_iterations": 2000,
+                "seed": 4242,
+            }
+        ],
+        "_prop_outcomes": [
+            {"side": "over", "result": "win", "stat_value": 91.0, "line": 74.5},
+            {"side": "under", "result": "loss", "stat_value": 91.0, "line": 74.5},
+            {"side": "over", "result": "push", "stat_value": 74.5, "line": 74.5},
+        ],
+    }
+
+
+class TestFrozenPropArtifact:
+    """FrozenPropArtifact round-trip + the single prop-trace builder."""
+
+    def test_builder_recovers_sim_param_point(self):
+        from omega.strategy.artifacts import (
+            compute_prop_artifact_id,
+            prop_trace_to_frozen_artifact,
+        )
+
+        art = prop_trace_to_frozen_artifact(_make_prop_trace_dict())
+        assert art is not None
+        assert art.player_name == "D. Runner"
+        assert art.stat_type == "rushing_yards"
+        assert art.line == 74.5
+        assert art.projection_mean == 78.2
+        assert art.nb_dispersion_k == 22.5
+        assert art.projection_std == 19.4
+        assert art.simulation_seed == 4242
+        assert art.source_trace_id == "prop-trace-1"
+        # Dated by decision_time (no-leak split key), NOT the replay run day.
+        assert art.date == "2025-11-09"
+        assert art.artifact_id == compute_prop_artifact_id(
+            "D. Runner", "NFL", "rushing_yards", 74.5, "2025-11-09"
+        )
+        # One-to-many outcome rows survive intact (push excluded only at grading).
+        assert len(art.prop_outcomes) == 3
+
+    def test_builder_falls_back_to_timestamp_date(self):
+        from omega.strategy.artifacts import prop_trace_to_frozen_artifact
+
+        trace = _make_prop_trace_dict()
+        del trace["decision_time"]
+        art = prop_trace_to_frozen_artifact(trace)
+        assert art is not None and art.date == "2026-06-17"
+
+    def test_builder_canonicalizes_stat_aliases(self):
+        from omega.strategy.artifacts import prop_trace_to_frozen_artifact
+
+        trace = _make_prop_trace_dict()
+        trace["input_snapshot"]["prop_type"] = "rush_yds"
+        art = prop_trace_to_frozen_artifact(trace)
+        assert art is not None and art.stat_type == "rushing_yards"
+
+    def test_builder_reads_store_attached_distribution_rows(self):
+        from omega.strategy.artifacts import prop_trace_to_frozen_artifact
+
+        trace = _make_prop_trace_dict()
+        trace["_simulation_distributions"] = trace.pop("simulation_distributions")
+        art = prop_trace_to_frozen_artifact(trace)
+        assert art is not None and art.nb_dispersion_k == 22.5
+
+    def test_builder_divides_out_echoed_production_scale(self):
+        """A trace priced under a promoted profile persists the POST-scale k plus
+        the echoed nb_k_scale; the builder recovers the PRE-scale base so a future
+        sweep never layers a candidate scale on top of production's."""
+        from omega.strategy.artifacts import prop_trace_to_frozen_artifact
+
+        trace = _make_prop_trace_dict()
+        params = trace["simulation_distributions"][0]["distribution_params"]
+        params["k"] = 22.5 * 1.5  # final k the production sim ran with
+        params["nb_k_scale"] = 1.5  # echoed by the backend when the profile applied
+        art = prop_trace_to_frozen_artifact(trace)
+        assert art is not None
+        assert abs(art.nb_dispersion_k - 22.5) < 1e-9
+
+    def test_builder_fails_closed_without_resim_inputs(self):
+        from omega.strategy.artifacts import prop_trace_to_frozen_artifact
+
+        # No NB distribution params -> cannot re-simulate faithfully.
+        no_params = _make_prop_trace_dict()
+        no_params["simulation_distributions"][0]["distribution_params"] = {}
+        assert prop_trace_to_frozen_artifact(no_params) is None
+        # Non-positive k is unusable for the NB backend.
+        bad_k = _make_prop_trace_dict()
+        bad_k["simulation_distributions"][0]["distribution_params"]["k"] = 0.0
+        assert prop_trace_to_frozen_artifact(bad_k) is None
+        # No line -> no market to price.
+        no_line = _make_prop_trace_dict()
+        del no_line["input_snapshot"]["line"]
+        assert prop_trace_to_frozen_artifact(no_line) is None
+        # Only push/void rows -> no calibration signal.
+        no_grade = _make_prop_trace_dict()
+        no_grade["_prop_outcomes"] = [{"side": "over", "result": "push"}]
+        assert prop_trace_to_frozen_artifact(no_grade) is None
+        # No outcome rows at all.
+        ungraded = _make_prop_trace_dict()
+        ungraded["_prop_outcomes"] = []
+        assert prop_trace_to_frozen_artifact(ungraded) is None
+
+    def test_round_trip_serialization(self):
+        from omega.strategy.artifacts import FrozenPropArtifact, prop_trace_to_frozen_artifact
+
+        art = prop_trace_to_frozen_artifact(_make_prop_trace_dict())
+        assert art is not None
+        restored = FrozenPropArtifact.model_validate_json(art.model_dump_json())
+        assert restored == art

@@ -13,6 +13,7 @@ Legacy HistoricalGame dicts can be converted via ``compat_dict_to_artifact()``.
 from __future__ import annotations
 
 import hashlib
+import math
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -150,6 +151,166 @@ def trace_to_artifact(
         odds=odds,
         simulation_seed=seed if seed is not None else 42,
         outcome=outcome,
+    )
+
+
+class FrozenPropArtifact(BaseModel):
+    """A historically valid, typed prop-plane input for the variant sweep.
+
+    The prop analogue of :class:`FrozenArtifact`: everything needed to
+    re-simulate one graded prop decision at an alternative structural knob
+    (``nb_k_scale``) is decision-time data recovered from the persisted trace —
+    the projection mean and base NB dispersion ``k`` come from the trace's own
+    ``distribution_params`` (mu, k), the line/player/stat from the input
+    snapshot. Outcomes (the attached ``prop_outcomes`` rows) are one-to-many and
+    carry no calibration signal until grading pairs them with a prediction.
+
+    ``nb_dispersion_k`` is the PRE-scale base ``k``. The persisted
+    ``distribution_params.k`` is the FINAL ``k`` the production sim ran with;
+    when a promoted prop profile applied an ``nb_k_scale`` the backend echoes
+    the applied scale into ``distribution_params``, and the builder divides it
+    back out — so re-simulating at a candidate scale never double-applies the
+    production one. Traces with no echoed scale ran at the 1.0 identity
+    (ungoverned, or persisted before the prop consumption path existed).
+    """
+
+    # Identity
+    artifact_id: str = Field(description="Deterministic hash of prop decision identity")
+    schema_version: int = 1
+    source_trace_id: str | None = Field(
+        default=None, description="Links back to the originating ExecutionTrace"
+    )
+
+    # Event
+    player_name: str
+    league: str
+    stat_type: str = Field(description="Canonical prop stat key (e.g. rushing_yards)")
+    line: float
+    date: str = Field(description="YYYY-MM-DD decision date")
+
+    # Simulation inputs (decision-time, recovered from the persisted sim result)
+    projection_mean: float = Field(description="NB mu the production sim ran with")
+    nb_dispersion_k: float = Field(
+        description=(
+            "Base (pre-scale) NB dispersion k: the persisted final k with any "
+            "echoed production nb_k_scale divided back out"
+        )
+    )
+    projection_std: float | None = None
+    n_iter: int = 2000
+    simulation_seed: int | None = None
+
+    # Outcomes (attached only at grading time; one-to-many rows of side/result)
+    prop_outcomes: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Attached prop_outcomes rows (side, result, ...); push/void excluded at grading",
+    )
+
+
+def compute_prop_artifact_id(
+    player_name: str, league: str, stat_type: str, line: float, date: str
+) -> str:
+    """Derive a deterministic artifact ID from prop decision identity."""
+    raw = f"{player_name}|{league}|{stat_type}|{line}|{date}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _finite(value: Any) -> float | None:
+    """Parse a finite float or None (never raises)."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
+
+def prop_trace_to_frozen_artifact(trace: dict[str, Any]) -> FrozenPropArtifact | None:
+    """Convert one graded prop trace dict into a :class:`FrozenPropArtifact`.
+
+    The single builder (mirrors :func:`trace_to_artifact` — do not rebuild this
+    shape elsewhere). Fail-closed: returns None when the trace cannot support a
+    faithful re-simulation — no NB ``distribution_params`` (mu, k), no line, no
+    date, or no gradeable (non-push/void over/under) outcome row.
+
+    The artifact date prefers the match ``decision_time`` over the trace
+    ``timestamp``: a historical-replay batch stamps every trace with the single
+    RUN day, which would defeat the sweep's no-leak validation/holdout split.
+    """
+    from omega.core.simulation.backends import canonical_prop_stat_type
+
+    snap = trace.get("input_snapshot") or {}
+    player_name = snap.get("player_name") or trace.get("player_name") or ""
+    stat_type = snap.get("prop_type") or snap.get("stat_type") or ""
+    league = trace.get("league") or snap.get("league") or ""
+    line = _finite(snap.get("line"))
+    if not player_name or not stat_type or not league or line is None:
+        return None
+    # Canonicalize market-key aliases (pass_yds -> passing_yards) so loader
+    # filtering and bucket naming see one stat key per market family.
+    stat_type = canonical_prop_stat_type(league, stat_type)
+
+    date = str(trace.get("decision_time") or "")[:10] or str(trace.get("timestamp") or "")[:10]
+    if not date:
+        return None
+
+    # The persisted sim result is the source of truth for the param point the
+    # production run actually used (post context-adjustment mean, injected or
+    # moment-matched k) — re-deriving it from the raw request would duplicate
+    # analyze_player_prop's prior-building logic.
+    params: dict[str, Any] = {}
+    n_iter = None
+    seed = trace.get("simulation_seed")
+    projection_std = None
+    # full_trace carries the rows inline; store queries also attach the V10 table
+    # rows as _simulation_distributions (same shape, params JSON-decoded).
+    dist_rows = trace.get("simulation_distributions") or trace.get("_simulation_distributions")
+    for row in dist_rows or []:
+        if not isinstance(row, dict):
+            continue
+        row_params = row.get("distribution_params")
+        if isinstance(row_params, dict) and row_params.get("mu") is not None:
+            params = row_params
+            n_iter = row.get("n_iterations")
+            projection_std = _finite(row.get("sample_std"))
+            if seed is None:
+                seed = row.get("seed")
+            break
+    mu = _finite(params.get("mu"))
+    k = _finite(params.get("k"))
+    if mu is None or mu < 0 or k is None or k <= 0:
+        return None
+    # distribution_params.k is the FINAL k the sim ran with. When a promoted prop
+    # profile applied an nb_k_scale, the backend echoed the applied scale next to
+    # it — divide it back out so nb_dispersion_k is always the PRE-scale base the
+    # sweep layers candidate scales onto (never double-applying production's).
+    applied_scale = _finite(params.get("nb_k_scale"))
+    if applied_scale is not None and applied_scale > 0:
+        k /= applied_scale
+
+    outcomes = [dict(r) for r in trace.get("_prop_outcomes") or [] if isinstance(r, dict)]
+    gradeable = any(
+        (r.get("side") or "").lower() in ("over", "under")
+        and r.get("result") not in ("push", "void")
+        for r in outcomes
+    )
+    if not gradeable:
+        return None
+
+    trace_id = trace.get("trace_id")
+    return FrozenPropArtifact(
+        artifact_id=compute_prop_artifact_id(player_name, league, stat_type, line, date),
+        source_trace_id=str(trace_id) if trace_id is not None else None,
+        player_name=player_name,
+        league=league,
+        stat_type=stat_type,
+        line=line,
+        date=date,
+        projection_mean=mu,
+        nb_dispersion_k=k,
+        projection_std=projection_std,
+        n_iter=int(n_iter) if n_iter else 2000,
+        simulation_seed=int(seed) if seed is not None else None,
+        prop_outcomes=outcomes,
     )
 
 

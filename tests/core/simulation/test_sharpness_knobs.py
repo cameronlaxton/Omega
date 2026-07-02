@@ -189,6 +189,13 @@ def test_prop_nb_k_scale_sharpens_distribution():
     assert sharp["std"] < base["std"]
 
 
+def test_prop_nb_k_scale_none_raises_value_error():
+    import pytest
+
+    with pytest.raises(ValueError, match="nb_k_scale must be a finite positive number"):
+        _prop({"nb_k_scale": None})
+
+
 def _nfl(prior: dict | None) -> dict:
     req = GameSimulationInput(
         home_team="H",

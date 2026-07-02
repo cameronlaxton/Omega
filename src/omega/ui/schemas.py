@@ -713,6 +713,7 @@ class CalibrationProfileRow(BaseModel):
     context_slice: str | None = None
     status: str  # candidate | production | archived | rejected
     is_active: bool = False  # matches registry.get_production() for its (league, slice, market)
+    binding_status: str | None = None  # bound | unpinned | legacy
     sample_size: int = 0
     brier: float | None = None
     calibration_error: float | None = None

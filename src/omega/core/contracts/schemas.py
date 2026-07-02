@@ -502,6 +502,24 @@ class CalibrationAudit(BaseModel):
         description="Hierarchical level the profile came from: league|sport_family|global. "
         "None on static paths.",
     )
+    binding_status: str | None = Field(
+        default=None,
+        description=(
+            "Backend-binding status of the APPLIED profile (P8.3): 'bound' (its "
+            "recorded substrate matched the live one), 'unpinned' (fit dataset "
+            "carried no substrate identity), 'legacy' (profile predates binding). "
+            "None on static paths."
+        ),
+    )
+    binding_mismatch: str | None = Field(
+        default=None,
+        description=(
+            "Why a fitted profile was SKIPPED during selection because its backend "
+            "binding rejected the live raw-probability substrate (P8.3 fail-closed), "
+            "e.g. 'iso_nfl_prop_v2_...: param_profile_id_mismatch:fit=...,live=...'. "
+            "None when nothing was skipped."
+        ),
+    )
 
     @property
     def static_identity_used(self) -> bool:
@@ -622,6 +640,15 @@ class PlayerPropResponse(BaseModel):
     context_source: str | None = None
     baseline_used: bool = False
     simulation_distributions: list[dict[str, Any]] = Field(default_factory=list)
+    parameter_profile_ref: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Provenance ref of the promoted BackendParameterProfile whose structural "
+            "knobs priced this prop (echoed by the backend from prior_payload); "
+            "None when the pair is ungoverned. Persisted into the V20 "
+            "traces.parameter_profile_ref column so replay/lab runs can pin params."
+        ),
+    )
 
 
 class ErrorResponse(BaseModel):

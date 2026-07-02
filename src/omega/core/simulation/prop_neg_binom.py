@@ -48,7 +48,12 @@ class NegBinomPropBackend:
         # distribution (sharper over/under); <1 widens. Default 1.0 -> bit-identical.
         # This is the prop-plane raw-ECE lever omega-fit-backend-structure tunes; it
         # rides prior_payload so the variant sweep reaches it without a seam change.
-        nb_k_scale = float(prior.get("nb_k_scale", 1.0))
+        try:
+            nb_k_scale = float(prior.get("nb_k_scale", 1.0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("nb_k_scale must be a finite positive number") from exc
+        if not np.isfinite(nb_k_scale) or nb_k_scale <= 0:
+            raise ValueError("nb_k_scale must be a finite positive number")
         if nb_k_scale != 1.0:
             k *= nb_k_scale
 
@@ -66,32 +71,44 @@ class NegBinomPropBackend:
         market_line = request.line
 
         if request.exact:
-            return self._run_exact(mean, k, p, market_line)
+            result = self._run_exact(mean, k, p, market_line)
+        else:
+            samples = rng.negative_binomial(k, p, size=request.n_iter)
 
-        samples = rng.negative_binomial(k, p, size=request.n_iter)
+            over_hits = (samples > market_line).sum()
+            under_hits = (samples < market_line).sum()
+            push_hits = (np.abs(samples - market_line) < 0.5).sum()
+            p10, p50, p90 = np.percentile(samples, [10, 50, 90])
 
-        over_hits = (samples > market_line).sum()
-        under_hits = (samples < market_line).sum()
-        push_hits = (np.abs(samples - market_line) < 0.5).sum()
-        p10, p50, p90 = np.percentile(samples, [10, 50, 90])
+            result = {
+                "over_prob": float(over_hits / request.n_iter),
+                "under_prob": float(under_hits / request.n_iter),
+                "push_prob": float(push_hits / request.n_iter),
+                "mean": float(samples.mean()),
+                "std": float(samples.std()),
+                "p10": float(p10),
+                "p50": float(p50),
+                "p90": float(p90),
+                "distribution_type": "negative_binomial",
+                "distribution_params": {
+                    "mu": mean,
+                    "k": float(k),
+                    "p": float(p),
+                },
+                "samples": samples[:100].tolist(),
+            }
 
-        return {
-            "over_prob": float(over_hits / request.n_iter),
-            "under_prob": float(under_hits / request.n_iter),
-            "push_prob": float(push_hits / request.n_iter),
-            "mean": float(samples.mean()),
-            "std": float(samples.std()),
-            "p10": float(p10),
-            "p50": float(p50),
-            "p90": float(p90),
-            "distribution_type": "negative_binomial",
-            "distribution_params": {
-                "mu": mean,
-                "k": float(k),
-                "p": float(p),
-            },
-            "samples": samples[:100].tolist(),
-        }
+        # Persisted distribution_params.k is the POST-scale k the sim actually ran
+        # with, so echo the applied structural scale next to it — the frozen prop
+        # artifact builder divides it back out to recover the pre-scale base a
+        # future sweep layers candidate scales onto. Echo the governed profile ref
+        # for trace provenance (P8.0.3), mirroring the soccer DC backend. Both keys
+        # are absent at the 1.0/ungoverned identity -> bit-identical persistence.
+        if nb_k_scale != 1.0:
+            result["distribution_params"]["nb_k_scale"] = nb_k_scale
+        if prior.get("parameter_profile_ref") is not None:
+            result["parameter_profile_ref"] = prior["parameter_profile_ref"]
+        return result
 
     @staticmethod
     def _run_exact(mean: float, k: float, p: float, market_line: float) -> dict[str, Any]:

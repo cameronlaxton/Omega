@@ -687,6 +687,7 @@ def _section_pending_candidates(
                 "league": p.league,
                 "market": p.market or "game",
                 "method": p.method,
+                "binding_status": p.binding_status().value,
                 "sample_size": p.sample_size,
                 "metrics": p.metrics,
                 "created_at": p.created_at,
@@ -711,6 +712,7 @@ def _section_production_profiles(
                 "market": p.market or "game",
                 "context_slice": p.context_slice,
                 "method": p.method,
+                "binding_status": p.binding_status().value,
                 "sample_size": p.sample_size,
                 "metrics": p.metrics,
                 "promoted_at": p.promoted_at,
@@ -981,15 +983,15 @@ def _render(
         lines.append("**None** â€” calibration is using the static fallback policy.")
     else:
         lines.append(
-            "| league | market | context_slice | profile_id | method | n | brier | ece | promoted |"
+            "| league | market | context_slice | profile_id | method | binding | n | brier | ece | promoted |"
         )
-        lines.append("|---|---|---|---|---|---:|---:|---:|---|")
+        lines.append("|---|---|---|---|---|---|---:|---:|---:|---|")
         for p in production_profiles:
             m = p["metrics"]
             promoted = (p.get("promoted_at") or "?")[:10]
             lines.append(
                 f"| {p['league']} | {p['market']} | {p.get('context_slice') or 'base'} | `{p['profile_id']}` | "
-                f"{p['method']} | {p['sample_size']} | "
+                f"{p['method']} | {p['binding_status']} | {p['sample_size']} | "
                 f"{m.get('brier_score', float('nan')):.4f} | "
                 f"{m.get('calibration_error', float('nan')):.4f} | {promoted} |"
             )
@@ -1103,13 +1105,14 @@ def _render(
         lines.append("_No pending candidates._")
     else:
         lines.append(
-            "| league | market | profile_id | method | n | brier | ece | log_loss | created |"
+            "| league | market | profile_id | method | binding | n | brier | ece | log_loss | created |"
         )
-        lines.append("|---|---|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---:|---:|---:|---:|---|")
         for c in candidates:
             m = c["metrics"]
             lines.append(
-                f"| {c['league']} | {c['market']} | `{c['profile_id']}` | {c['method']} | {c['sample_size']} | "
+                f"| {c['league']} | {c['market']} | `{c['profile_id']}` | {c['method']} | "
+                f"{c['binding_status']} | {c['sample_size']} | "
                 f"{m.get('brier_score', float('nan')):.4f} | "
                 f"{m.get('calibration_error', float('nan')):.4f} | "
                 f"{m.get('log_loss', float('nan')):.4f} | {c['created_at'][:10]} |"
