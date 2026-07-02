@@ -347,6 +347,36 @@ def extract_parameter_profile_ref(trace: dict[str, Any]) -> dict[str, Any] | Non
     return None
 
 
+def substrate_ref_for_trace(trace: dict[str, Any]) -> dict[str, Any]:
+    """Raw-probability substrate identity of one trace or simulation-result dict (P8.3).
+
+    The identity a calibration profile binds to: which backend (name + component
+    version) ran, and which governed :class:`BackendParameterProfile` shaped its
+    raw probabilities. Read strictly from recorded provenance — the result's own
+    ``simulation_backend`` / ``component_version`` fields (searched at the same
+    nesting points as :func:`extract_parameter_profile_ref`), falling back to the
+    governed ``parameter_profile_ref`` echo for backends (props) whose responses
+    carry no backend fields. Never guesses: fields absent from provenance stay
+    None. Works on a persisted trace dict AND on a live ``sim_result`` dict, so
+    the fit side and the runtime side derive the identical identity for the same
+    simulation.
+    """
+    ref = extract_parameter_profile_ref(trace) or {}
+    backend_name: Any = None
+    component_version: Any = None
+    if isinstance(trace, dict):
+        for d in _candidate_result_dicts(trace):
+            if backend_name is None and d.get("simulation_backend"):
+                backend_name = d["simulation_backend"]
+            if component_version is None and d.get("component_version"):
+                component_version = d["component_version"]
+    return {
+        "backend_name": backend_name or ref.get("backend_name"),
+        "backend_component_version": component_version or ref.get("backend_component_version"),
+        "param_profile_id": ref.get("param_profile_id"),
+    }
+
+
 def get_parameter_profile_ref(store: TraceStore, trace_id: str) -> dict[str, Any] | None:
     """Return the stored parameter_profile_ref for a trace, or None (unpinned)."""
     row = store.conn.execute(

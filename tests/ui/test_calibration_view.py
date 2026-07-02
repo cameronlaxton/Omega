@@ -6,7 +6,11 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from omega.core.calibration.profiles import CalibrationProfile, ProfileStatus
+from omega.core.calibration.profiles import (
+    CalibrationBackendBinding,
+    CalibrationProfile,
+    ProfileStatus,
+)
 from omega.core.calibration.registry import CalibrationRegistry
 from omega.ops.console_server import build_console_app
 from omega.trace.store import TraceStore
@@ -22,6 +26,7 @@ def _profile(
     context_slice: str | None = None,
     metrics: dict | None = None,
     promoted_at: str | None = None,
+    backend_binding: CalibrationBackendBinding | None = None,
 ) -> CalibrationProfile:
     return CalibrationProfile(
         profile_id=pid,
@@ -36,6 +41,7 @@ def _profile(
         dataset_hash="h",
         metrics=metrics or {},
         promoted_at=promoted_at,
+        backend_binding=backend_binding,
     )
 
 
@@ -69,6 +75,11 @@ def test_calibration_lists_profiles_and_marks_active(tmp_path):
                     "n_eval": 400,
                 },
                 promoted_at="2026-05-01T00:00:00Z",
+                backend_binding=CalibrationBackendBinding(
+                    backend_name="fast_score",
+                    backend_component_version="fast_score_v1",
+                    param_profile_id="nba_params_v3",
+                ),
             ),
             _profile(
                 "iso_nba_v2",
@@ -86,6 +97,8 @@ def test_calibration_lists_profiles_and_marks_active(tmp_path):
     assert rows["iso_nba_v3"]["calibration_error"] == 0.03
     assert rows["iso_nba_v3"]["log_loss"] == 0.55
     assert rows["iso_nba_v3"]["n_eval"] == 400
+    assert rows["iso_nba_v3"]["binding_status"] == "bound"
+    assert rows["iso_nba_v2"]["binding_status"] == "legacy"
     assert rows["iso_nba_v3"]["field_sources"]["profile"] == "calibration_registry"
 
 
@@ -139,6 +152,7 @@ def test_calibration_page_renders_and_escapes(tmp_path):
     assert "<h1>Calibration Cockpit</h1>" in html
     assert "badge-prod" in html  # active badge rendered
     assert "pstatus-production" in html
+    assert "legacy" in html
     # Injected HTML in a profile_id is escaped.
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html

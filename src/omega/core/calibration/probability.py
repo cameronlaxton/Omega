@@ -268,6 +268,7 @@ def apply_calibration(
     context_hints: dict[str, Any] | None = None,
     market: str = "game",
     market_prob: float | None = None,
+    substrate_ref: dict[str, Any] | None = None,
 ) -> float:
     """Apply the canonical calibration policy. Used by both service and backtest.
 
@@ -301,9 +302,20 @@ def apply_calibration(
     audited paths share ONE selection + damping implementation (the drift rule):
     hierarchical fallback (league → sport_family → global → static) and maturity
     damping apply identically here.
+
+    ``substrate_ref`` identifies the live raw-probability substrate (backend
+    name/component version + governed param_profile_id) so profiles with a
+    backend binding (P8.3) are only applied on the substrate they were fit
+    against; None means the substrate is unknown, and bound profiles then fail
+    closed (skipped). Unbound/legacy profiles are unaffected.
     """
     calibrated, _audit = apply_calibration_audited(
-        raw_prob, league=league, context_hints=context_hints, market=market, market_prob=market_prob
+        raw_prob,
+        league=league,
+        context_hints=context_hints,
+        market=market,
+        market_prob=market_prob,
+        substrate_ref=substrate_ref,
     )
     return calibrated
 
@@ -314,6 +326,7 @@ def apply_calibration_audited(
     context_hints: dict[str, Any] | None = None,
     market: str = "game",
     market_prob: float | None = None,
+    substrate_ref: dict[str, Any] | None = None,
 ) -> tuple[float, dict[str, Any]]:
     """Like apply_calibration() but also returns an audit dict.
 
@@ -325,13 +338,18 @@ def apply_calibration_audited(
       method_resolved: str | None
       raw_prob: float
       calibrated_prob: float
+      binding_status: "bound" | "unpinned" | "legacy" | None (P8.3; None on static paths)
+      binding_mismatch: str | None — why a more-specific bound profile was
+        SKIPPED during the hierarchical walk (fail-closed on substrate
+        mismatch); None when nothing was skipped.
     """
     raw = max(0.0, min(1.0, raw_prob))
     context_slice = _derive_context_slice(context_hints, league) if context_hints else None
 
+    binding_mismatches: list[str] = []
     if league is not None:
-        profile, fallback_level = _get_applicable_profile(
-            league, context_slice=context_slice, market=market
+        profile, fallback_level, binding_mismatches = _get_applicable_profile(
+            league, context_slice=context_slice, market=market, substrate_ref=substrate_ref
         )
         if profile is not None:
             maturity = profile.effective_maturity().value
@@ -372,10 +390,15 @@ def apply_calibration_audited(
                 "brier": profile.brier,
                 "fallback_level": fallback_level,
                 "maturity_damped": maturity_damped,
+                "binding_status": profile.binding_status().value,
+                "binding_mismatch": binding_mismatches[0] if binding_mismatches else None,
             }
 
     # No applicable profile -> static policy. None for all profile-provenance
-    # keys so the audit dict shape is identical to the profile path.
+    # keys so the audit dict shape is identical to the profile path. A binding
+    # mismatch recorded during the walk stays visible: it explains why a fitted
+    # profile did NOT apply (P8.3 fail-closed), which downgrade/output-mode
+    # logic and reports must be able to see.
     static_provenance = {
         "profile_id": None,
         "resolved_slice": None,
@@ -386,6 +409,8 @@ def apply_calibration_audited(
         "brier": None,
         "fallback_level": None,
         "maturity_damped": False,
+        "binding_status": None,
+        "binding_mismatch": binding_mismatches[0] if binding_mismatches else None,
     }
 
     # Static fallback: if within threshold, return raw unchanged
@@ -452,11 +477,36 @@ def _get_active_profile(league: str, context_slice: str | None = None, market: s
         return None
 
 
-def _get_applicable_profile(league: str, context_slice: str | None = None, market: str = "game"):
+def _binding_mismatch(profile: Any, substrate_ref: dict[str, Any] | None) -> str | None:
+    """Why a profile's backend binding rejects the live substrate, or None.
+
+    Legacy profiles (no ``backend_binding``) and unpinned bindings apply as they
+    always have (the audit flags them); a pinned binding is checked against the
+    live substrate ref and fails closed on any mismatch — including an unknown
+    (None) substrate — so a profile fit on one backend/parameter-profile is
+    never silently applied to raw probabilities produced by another (P8.3).
+    """
+    binding = getattr(profile, "backend_binding", None)
+    if binding is None:
+        return None
+    return binding.mismatch_reason(substrate_ref)
+
+
+def _get_applicable_profile(
+    league: str,
+    context_slice: str | None = None,
+    market: str = "game",
+    substrate_ref: dict[str, Any] | None = None,
+):
     """Highest-trust applicable profile + fallback level (hierarchical walk).
 
-    Returns ``(profile, level)`` where level is one of league|sport_family|global,
-    or ``(None, None)`` when no profile applies (caller uses the static policy).
+    Returns ``(profile, level, binding_mismatches)`` where level is one of
+    league|sport_family|global, or ``(None, None, mismatches)`` when no profile
+    applies (caller uses the static policy). ``binding_mismatches`` records, in
+    walk order, every production profile that WAS resolved for a rung but was
+    skipped because its backend binding rejected the live ``substrate_ref``
+    (P8.3 fail-closed): the walk then continues to the next rung rather than
+    silently applying a profile fit on a different raw-probability substrate.
 
     This is the single shared selection path consumed by both the production
     service and the backtest engine (via apply_calibration / _audited). It walks
@@ -465,10 +515,26 @@ def _get_applicable_profile(league: str, context_slice: str | None = None, marke
     patchable in tests; the registry owns only the exact-key ``get_production``
     each rung composes from.
     """
+    mismatches: list[str] = []
+
+    def _check(profile: Any) -> Any:
+        reason = _binding_mismatch(profile, substrate_ref)
+        if reason is None:
+            return profile
+        mismatches.append(f"{profile.profile_id}: {reason}")
+        logger.info(
+            "Skipping calibration profile %s: backend binding mismatch (%s)",
+            profile.profile_id,
+            reason,
+        )
+        return None
+
     try:
         profile = _get_active_profile(league, context_slice=context_slice, market=market)
         if profile is not None:
-            return profile, "league"
+            profile = _check(profile)
+        if profile is not None:
+            return profile, "league", mismatches
 
         from omega.core.calibration.registry import GLOBAL_BUCKET
         from omega.core.calibration.sport_family import sport_family_for_league
@@ -479,14 +545,18 @@ def _get_applicable_profile(league: str, context_slice: str | None = None, marke
                 family.upper(), context_slice=context_slice, market=market
             )
             if profile is not None:
-                return profile, "sport_family"
+                profile = _check(profile)
+            if profile is not None:
+                return profile, "sport_family", mismatches
 
         profile = _get_active_profile(GLOBAL_BUCKET, context_slice=context_slice, market=market)
         if profile is not None:
-            return profile, "global"
+            profile = _check(profile)
+        if profile is not None:
+            return profile, "global", mismatches
     except Exception:
-        return None, None
-    return None, None
+        return None, None, mismatches
+    return None, None, mismatches
 
 
 # Maturity-based correction damping: a low-trust profile may only move the

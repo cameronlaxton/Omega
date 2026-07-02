@@ -25,6 +25,21 @@ Default is ``--dry-run`` (print the grid + sealed metrics, write nothing). The k
 defaults to identity, so a backend with no promoted profile is bit-identical to the
 pre-knob engine; this tool only ever produces CANDIDATEs.
 
+The **prop plane** (``--plane prop``) tunes a PROP backend's structural knob
+(``prop_neg_binom``'s ``nb_k_scale``) the same way: graded prop traces are frozen
+as :class:`FrozenPropArtifact`s (the per-decision NB ``mu``/``k``/line the
+production sim actually ran with), re-simulated per candidate through
+``sweep_prop_backend_variants`` (exact NB CDF — zero MC selection noise), scored
+on raw PROP ECE via the shared ``prop_pairs_for_trace`` grading rule, and sealed
+identically. Prop profiles are bucketed per (league, stat) via
+``resolve_prop_calibration_bucket`` (e.g. ``NFL__RUSHING_YARDS``) and CONSUMED at
+analysis time: the gatherer (``inject_prop_priors`` ->
+``_merge_prop_parameter_profile``) merges the PRODUCTION profile's knobs +
+``parameter_profile_ref`` into ``player_context``, ``analyze_player_prop``
+forwards them to the backend's prior_payload, and the backend echoes the applied
+``nb_k_scale`` into ``distribution_params`` so ``prop_trace_to_frozen_artifact``
+can divide the pre-scale base ``k`` back out for future sweeps.
+
 Usage:
     omega-fit-backend-structure --backend soccer_bivariate_poisson_dc --league EPL \\
         --historical-db var/historical/replay_epl.db \\
@@ -34,6 +49,9 @@ Usage:
         --knob margin_sd_scale --grid 0.9,1.0,1.1,1.2,1.3 \\
         --db var/omega_traces.db --validation-start 2025-01-01 --holdout-start 2025-04-01 \\
         --register
+    omega-fit-backend-structure --plane prop --backend prop_neg_binom --league NFL \\
+        --stat rushing_yards --db var/omega_traces.db \\
+        --validation-start 2025-09-01 --holdout-start 2025-12-01
 
 Exit codes:
     0 — completed (dry-run or registered); 1 — fatal error / no winner.
@@ -57,8 +75,15 @@ from omega.core.calibration.fitter import (  # noqa: E402
     _adaptive_calibration_error,
     stratified_folds,
 )
-from omega.core.calibration.league_buckets import resolve_calibration_bucket  # noqa: E402
-from omega.core.simulation.backends import resolve_game_backend  # noqa: E402
+from omega.core.calibration.league_buckets import (  # noqa: E402
+    resolve_calibration_bucket,
+    resolve_prop_calibration_bucket,
+)
+from omega.core.simulation.backends import (  # noqa: E402
+    canonical_prop_stat_type,
+    resolve_game_backend,
+    resolve_prop_backend,
+)
 from omega.core.simulation.engine import OmegaSimulationEngine  # noqa: E402
 from omega.core.simulation.parameter_profile import (  # noqa: E402
     BackendParameterProfile,
@@ -67,13 +92,18 @@ from omega.core.simulation.parameter_profile import (  # noqa: E402
 from omega.historical.contracts import stable_hash  # noqa: E402
 from omega.strategy.artifacts import (  # noqa: E402
     FrozenArtifact,
+    FrozenPropArtifact,
     compute_artifact_id,
+    prop_trace_to_frozen_artifact,
     trace_to_artifact,
 )
 from omega.strategy.backtest.variant_sweep import (  # noqa: E402
     _artifact_records,
+    _prop_artifact_records,
     _simulate_pairs,
+    _simulate_prop_pairs,
     sweep_backend_variants,
+    sweep_prop_backend_variants,
 )
 from omega.trace.parameter_profiles import (  # noqa: E402
     get_production_parameter_profile,
@@ -87,9 +117,12 @@ logger = logging.getLogger("fit_backend_structure")
 # Normal (NBA -> margin_sd_scale) and Poisson (MLB/NHL -> lambda_gap_scale)
 # archetypes, so its knob is intentionally absent here and must be passed via
 # --knob (the league's archetype decides which one is the calibration lever).
+# prop_neg_binom is the prop-plane entry (--plane prop): its NB dispersion-k
+# scale is the same lever nfl_neg_binom exposes on the game plane.
 _BACKEND_DEFAULT_KNOB: dict[str, str] = {
     "soccer_bivariate_poisson_dc": "lambda_gap_scale",
     "nfl_neg_binom": "nb_k_scale",
+    "prop_neg_binom": "nb_k_scale",
 }
 
 # Natural sweep range per knob. The three sharpness knobs are mean-preserving and
@@ -314,6 +347,119 @@ def tune_backend_structure(
     return report, winner
 
 
+def tune_prop_backend_structure(
+    artifacts: list[FrozenPropArtifact],
+    *,
+    backend_name: str,
+    competition_bucket: str,
+    knob: str,
+    grid: tuple[float, ...],
+    base_params: dict,
+    validation_start: str,
+    holdout_start: str,
+    n_iterations: int = 2000,
+    seed: int = 42,
+    cv_folds: int = 5,
+    cv_repeats: int = 5,
+    dataset_manifest_id: str | None = None,
+    priors_as_of_date: str | None = None,
+):
+    """Prop-plane twin of :func:`tune_backend_structure` — same shape, prop seam.
+
+    Sweeps a structural knob on a PROP backend over frozen prop artifacts
+    (``sweep_prop_backend_variants``: exact where the backend supports it, raw
+    prop ECE selection, sealed holdout), then attaches the winner's no-leak raw
+    CV-ECE computed over the sealed holdout only — the identical metrics contract
+    the fail-closed promotion gate reads. Returns ``(report, winner_or_None)``.
+
+    ``base_params`` must NOT carry ``nb_dispersion_k``: that prior is per-decision
+    (each artifact froze the k its production sim ran with) and injecting a global
+    one would silently override every artifact's — fail closed instead.
+    """
+    grid = _grid_for_knob(knob, grid)
+    backend = resolve_prop_backend(backend_name)
+    if backend is None:
+        raise ValueError(f"prop backend {backend_name!r} is not registered; cannot tune")
+    if "nb_dispersion_k" in base_params:
+        raise ValueError(
+            "base_params must not set nb_dispersion_k: it is a per-decision prior frozen "
+            "on each artifact, not a structural knob; a global value would override them all"
+        )
+
+    dataset_hash = stable_hash(
+        {
+            "artifacts": sorted(a.artifact_id for a in artifacts),
+            "backend": backend_name,
+            "bucket": competition_bucket,
+            "knob": knob,
+            "grid": list(grid),
+            "base_params": base_params,
+            "windows": [validation_start, holdout_start],
+        }
+    )
+
+    candidates = build_candidates(
+        backend_name=backend_name,
+        backend_component_version=getattr(backend, "component_version", "unknown"),
+        competition_bucket=competition_bucket,
+        knob=knob,
+        grid=grid,
+        base_params=base_params,
+        dataset_hash=dataset_hash,
+        priors_as_of_date=priors_as_of_date,
+        dataset_manifest_id=dataset_manifest_id,
+    )
+
+    report = sweep_prop_backend_variants(
+        artifacts,
+        candidates,
+        validation_start=validation_start,
+        holdout_start=holdout_start,
+        n_iterations=n_iterations,
+        seed=seed,
+        exact=True,
+        selection_metric="raw_ece",
+        dataset_manifest_id=dataset_manifest_id,
+        dataset_hash=dataset_hash,
+    )
+    if report.winner_profile_id is None:
+        return report, None
+
+    winner = next(c for c in candidates if c.profile_id == report.winner_profile_id)
+    winner_score = next(s for s in report.scores if s.profile_id == report.winner_profile_id)
+
+    # Raw CV-ECE over the sealed holdout only (the validation window selected the
+    # knob). Re-simulating via the sweep's own primitive keeps the probabilities
+    # identical to the selection run.
+    holdout_records = _prop_artifact_records(artifacts, holdout_start)
+    pairs = _simulate_prop_pairs(
+        backend,
+        winner.params,
+        holdout_records,
+        n_iterations=n_iterations,
+        seed=seed,
+        exact=True,
+    )
+    preds = [pairs[i][0] for i in sorted(pairs)]
+    outs = [pairs[i][1] for i in sorted(pairs)]
+    cv = _raw_cv_ece(
+        preds, outs, folds=cv_folds, repeats=cv_repeats, seed=int(dataset_hash[:8], 16)
+    )
+
+    hold = winner_score.holdout
+    metrics: dict = {
+        "brier_score": hold.raw_brier if hold else None,
+        "calibration_error": hold.raw_ece if hold else None,
+        "log_loss": hold.raw_log_loss if hold else None,
+        "n_eval": winner_score.n_holdout,
+        "selection_metric": report.selection_metric,
+        "validation_raw_ece": winner_score.validation.raw_ece,
+        **cv,
+    }
+    winner = winner.model_copy(update={"metrics": metrics, "sample_size": winner_score.n_holdout})
+    return report, winner
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -383,6 +529,66 @@ def load_graded_artifacts(
         )
         hstore.close()
     return _artifacts_from_traces(graded)
+
+
+def load_graded_prop_records(
+    *,
+    league: str,
+    stat: str,
+    db: str | None = None,
+    historical_db: str | None = None,
+    historical_only: bool = False,
+    include_historical: bool = False,
+) -> list[FrozenPropArtifact]:
+    """Graded prop traces for one (league, stat) as FrozenPropArtifacts.
+
+    Mirrors :func:`load_graded_artifacts`' source discipline (live graded traces
+    unless ``historical_only``, plus the dedicated ``historical_db``), keeps only
+    prop traces of the requested canonical stat, and freezes each through the
+    single builder ``prop_trace_to_frozen_artifact`` (which drops traces that
+    cannot support a faithful re-simulation: no NB distribution_params, no line,
+    no gradeable outcome row).
+    """
+    graded: list[dict] = []
+    if not historical_only:
+        store = TraceStore(db_path=db, read_only=True)
+        log_effective_db(store, logger)
+        graded.extend(store.get_graded_traces(league=league, limit=100_000))
+        store.close()
+    if historical_only or include_historical:
+        hstore = TraceStore(db_path=historical_db, read_only=True)
+        logger.info("historical DB: %s", historical_db)
+        graded.extend(
+            hstore.query_traces(
+                league=league,
+                execution_mode="historical_replay",
+                has_outcome=True,
+                calibration_eligible_only=True,
+                limit=1_000_000,
+            )
+        )
+        hstore.close()
+    return _prop_artifacts_from_traces(graded, league, stat)
+
+
+def _prop_artifacts_from_traces(
+    graded: list[dict], league: str, stat: str
+) -> list[FrozenPropArtifact]:
+    """Freeze graded prop traces for one canonical stat (drops everything else).
+
+    Non-prop traces, traces the single builder rejects (no NB params / line /
+    gradeable rows), and other stats are silently skipped. Stat matching is on
+    the canonical key, so market aliases (``pass_yds``) reach the same sweep.
+    """
+    canonical_stat = canonical_prop_stat_type(league, stat)
+    artifacts: list[FrozenPropArtifact] = []
+    for t in graded:
+        if t.get("kind") != "prop" and not t.get("_prop_outcomes"):
+            continue
+        art = prop_trace_to_frozen_artifact(t)
+        if art is not None and art.stat_type == canonical_stat:
+            artifacts.append(art)
+    return artifacts
 
 
 def _load_artifacts(args: argparse.Namespace) -> list[FrozenArtifact]:
@@ -498,7 +704,7 @@ def _register_candidate(
 def _print_report(report, winner) -> None:
     print(
         f"\n{report.backend_name} / {report.competition_bucket}  "
-        f"selection={report.selection_metric}  "
+        f"plane={report.plane}  selection={report.selection_metric}  "
         f"val_events={report.n_validation_events} holdout_events={report.n_holdout_events}"
     )
     print(f"{'profile_id':<52}{'val_raw_ece':>12}{'n_val':>7}{'eligible':>9}")
@@ -531,9 +737,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--backend", required=True, help="Registered backend name")
     p.add_argument("--league", required=True, help="League to load traces for (e.g. EPL)")
     p.add_argument(
+        "--plane",
+        choices=("game", "prop"),
+        default="game",
+        help="Decision plane: sweep a game backend (default) or a prop backend",
+    )
+    p.add_argument(
+        "--stat",
+        default=None,
+        help="Prop stat key (required with --plane prop), e.g. rushing_yards",
+    )
+    p.add_argument(
         "--bucket",
         default=None,
-        help="competition_bucket (default: resolve_calibration_bucket(league))",
+        help=(
+            "competition_bucket (default: resolve_calibration_bucket(league), or "
+            "resolve_prop_calibration_bucket(league, stat) on the prop plane)"
+        ),
     )
     p.add_argument("--knob", default=None, help="Knob to sweep (default per backend)")
     p.add_argument("--grid", default=None, help="Comma-separated knob values (default per knob)")
@@ -569,6 +789,12 @@ def main(argv: list[str] | None = None) -> int:
     if (args.historical_only or args.include_historical) and not args.historical_db:
         logger.error("--historical-only/--include-historical require --historical-db.")
         return 1
+    if args.plane == "prop" and not args.stat:
+        logger.error("--plane prop requires --stat (e.g. rushing_yards).")
+        return 1
+    if args.plane == "game" and args.stat:
+        logger.error("--stat only applies to --plane prop.")
+        return 1
 
     knob = args.knob or _BACKEND_DEFAULT_KNOB.get(args.backend)
     if knob is None:
@@ -600,9 +826,24 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("--base-params is not a JSON object: %s", exc)
         return 1
 
-    bucket = (args.bucket or resolve_calibration_bucket(args.league)).upper()
+    if args.bucket:
+        bucket = args.bucket.upper()
+    elif args.plane == "prop":
+        bucket = resolve_prop_calibration_bucket(args.league, args.stat)
+    else:
+        bucket = resolve_calibration_bucket(args.league).upper()
 
-    artifacts = _load_artifacts(args)
+    if args.plane == "prop":
+        artifacts = load_graded_prop_records(
+            league=args.league,
+            stat=args.stat,
+            db=args.db,
+            historical_db=args.historical_db,
+            historical_only=args.historical_only,
+            include_historical=args.include_historical,
+        )
+    else:
+        artifacts = _load_artifacts(args)
     if not artifacts:
         logger.error("No graded artifacts loaded for league=%s.", args.league)
         return 1
@@ -610,8 +851,9 @@ def main(argv: list[str] | None = None) -> int:
         "Loaded %d graded artifacts for %s (bucket=%s).", len(artifacts), args.league, bucket
     )
 
+    tune = tune_prop_backend_structure if args.plane == "prop" else tune_backend_structure
     try:
-        report, winner = tune_backend_structure(
+        report, winner = tune(
             artifacts,
             backend_name=args.backend,
             competition_bucket=bucket,

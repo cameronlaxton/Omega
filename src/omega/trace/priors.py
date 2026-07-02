@@ -807,28 +807,92 @@ def inject_game_priors(
             store.close()
 
 
+def _merge_prop_parameter_profile(
+    league: str, stat_type: str, ctx: dict[str, Any], store: TraceStore
+) -> dict[str, Any] | None:
+    """Merge the production PROP backend parameter profile's params into *ctx*.
+
+    The prop analogue of :func:`_merge_parameter_profile` (the P8.5 sweep's
+    missing consumer). Looks up the production :class:`BackendParameterProfile`
+    for the pair's default prop backend + per-(league, stat) calibration bucket
+    (``resolve_prop_calibration_bucket``, e.g. ``NFL__RUSHING_YARDS``). When
+    present, merges its ``params`` (structural knobs such as ``nb_k_scale``)
+    WITHOUT overwriting any caller-supplied value, stamps ``parameter_profile_ref``
+    for trace provenance, and returns that ref. When absent, *ctx* is unchanged
+    and None is returned — the backend runs at its identity defaults, so this is
+    purely additive and bit-identical until a prop profile is promoted.
+
+    *ctx* is the request's ``player_context`` (``PlayerPropRequest`` carries no
+    prior_payload field): ``analyze_player_prop`` forwards the knobs + ref from
+    player_context into the backend's prior_payload, so merging here at the
+    gatherer layer embeds them in the recorded input snapshot and a replayed
+    request reproduces the exact production knobs without any live-table read.
+
+    Replay-safe exactly like the game path: a recorded request that already
+    carries ``parameter_profile_ref`` is left untouched, and in replay mode
+    (``OMEGA_REPLAY_MODE=1``) the live table is never read at all.
+
+    Contract: a profile is found only if it was promoted with
+    ``competition_bucket == resolve_prop_calibration_bucket(league, stat)``.
+    Router-backed pairs (``prop_distribution_router``) are ungoverned — the
+    router is a dispatcher, not a parametric backend — so no lookup happens.
+    """
+    from omega.core.calibration.league_buckets import resolve_prop_calibration_bucket
+    from omega.core.simulation.backends import resolve_default_prop_backend
+    from omega.trace.parameter_profiles import get_production_parameter_profile
+
+    if ctx.get("parameter_profile_ref") is not None:
+        return ctx["parameter_profile_ref"]
+    if os.environ.get("OMEGA_REPLAY_MODE") == "1":
+        return None
+    backend_name = resolve_default_prop_backend(league.upper(), stat_type)
+    if backend_name == "prop_distribution_router":
+        return None
+    prof = get_production_parameter_profile(
+        store, backend_name, resolve_prop_calibration_bucket(league, stat_type)
+    )
+    if prof is None:
+        return None
+    for key, value in prof.params.items():
+        ctx.setdefault(key, value)
+    ref = prof.trace_ref()
+    ctx["parameter_profile_ref"] = ref
+    return ref
+
+
 def inject_prop_priors(
     payload: dict[str, Any], store: TraceStore | None = None
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Gatherer prior injection for a raw player-prop request dict.
 
-    For ``(league, prop_type)`` pairs routed to the ``prop_neg_binom`` backend
-    (NFL yardage), merge the fitted/shrunk Negative-Binomial dispersion ``k`` from
-    ``priors_nfl_dispersion`` (+ ``nb_k_source`` / ``nb_k_shrinkage_weight``
-    provenance) into ``player_context``. Mirrors :func:`inject_game_priors`:
-    injection lives at the gatherer layer — outside ``service.analyze`` — so a
-    recorded request replays deterministically regardless of live table state.
+    Mirrors :func:`inject_game_priors`: injection lives at the gatherer layer —
+    outside ``service.analyze`` — so a recorded request replays deterministically
+    regardless of live table state. Two independent merges into
+    ``player_context``:
 
-    Behavior:
+    1. **NB dispersion prior** — for ``(league, prop_type)`` pairs routed to the
+       ``prop_neg_binom`` backend (NFL yardage), the fitted/shrunk
+       Negative-Binomial dispersion ``k`` from ``priors_nfl_dispersion``
+       (+ ``nb_k_source`` / ``nb_k_shrinkage_weight`` provenance):
 
-    * non-NB ``(league, prop_type)`` (NBA pts, ...) -> payload unchanged, no event,
-      no store opened;
-    * caller already supplied ``player_context.nb_dispersion_k`` (recorded/replayed
-      request) -> unchanged, no event;
-    * no fitted dispersion row -> unchanged + ``warn`` event; the service then
-      derives ``k`` from the per-request projection std (the documented
-      fail-open fallback), never a hard skip;
-    * fitted row found -> merged ``nb_dispersion_k`` + provenance + ``ok`` event.
+       * caller already supplied ``player_context.nb_dispersion_k``
+         (recorded/replayed request) -> unchanged, no event;
+       * no fitted dispersion row -> unchanged + ``warn`` event; the service then
+         derives ``k`` from the per-request projection std (the documented
+         fail-open fallback), never a hard skip;
+       * fitted row found -> merged ``nb_dispersion_k`` + provenance + ``ok``
+         event.
+
+    2. **Backend parameter profile (P8.5 prop consumer)** — for any pair routed
+       to a governed (non-router) prop backend, the PRODUCTION
+       :class:`BackendParameterProfile`'s structural knobs (``nb_k_scale``, ...)
+       + ``parameter_profile_ref`` via :func:`_merge_prop_parameter_profile`.
+       Deliberately independent of (1) — a live request that pre-supplies
+       ``nb_dispersion_k`` still receives the promoted knobs, exactly like the
+       game path's pre-supplied-rho fix. No promoted profile -> unchanged
+       (bit-identical).
+
+    Router-backed pairs (NBA pts, ...) return unchanged with no store opened.
     """
     league = str(payload.get("league") or "")
     player = str(payload.get("player_name") or "")
@@ -839,36 +903,48 @@ def inject_prop_priors(
 
     from omega.core.simulation.backends import resolve_default_prop_backend
 
-    if resolve_default_prop_backend(league.upper(), stat) != "prop_neg_binom":
-        return payload, None
-
+    backend_name = resolve_default_prop_backend(league.upper(), stat)
     player_ctx = payload.get("player_context") or {}
-    if player_ctx.get("nb_dispersion_k") is not None:
-        return payload, None  # recorded/replayed request: never re-read live table
+    needs_nb_k = backend_name == "prop_neg_binom" and player_ctx.get("nb_dispersion_k") is None
+    # Pre-check the merge's own replay/embedded-ref guards so no store is opened
+    # for a recorded/replayed request or an ungoverned router pair.
+    needs_profile = (
+        backend_name != "prop_distribution_router"
+        and player_ctx.get("parameter_profile_ref") is None
+        and os.environ.get("OMEGA_REPLAY_MODE") != "1"
+    )
+    if not needs_nb_k and not needs_profile:
+        return payload, None
 
     own_store = store is None
     if own_store:
         from omega.trace.store import TraceStore
 
         store = TraceStore()
+    ctx = dict(player_ctx)
+    prior = None
+    param_ref: dict[str, Any] | None = None
     try:
-        lookup_players, lookup_stats = _nfl_prior_lookup_candidates(player, stat)
-        prior = None
-        for lookup_player in lookup_players:
-            for lookup_stat in lookup_stats:
-                prior = get_nfl_dispersion(
-                    store, lookup_player, lookup_stat, as_of_date=request_as_of
-                )
+        if needs_profile:
+            param_ref = _merge_prop_parameter_profile(league, stat, ctx, store)
+        if needs_nb_k:
+            lookup_players, lookup_stats = _nfl_prior_lookup_candidates(player, stat)
+            for lookup_player in lookup_players:
+                for lookup_stat in lookup_stats:
+                    prior = get_nfl_dispersion(
+                        store, lookup_player, lookup_stat, as_of_date=request_as_of
+                    )
+                    if prior is not None:
+                        break
                 if prior is not None:
                     break
-            if prior is not None:
-                break
     finally:
         if own_store:
             store.close()
 
-    if prior is None:
-        return payload, {
+    event: dict[str, Any] | None = None
+    if needs_nb_k and prior is None:
+        event = {
             "ts": _utc_now_iso(),
             "event_type": "data_provenance",
             "step": "nfl_dispersion_prior:inject",
@@ -880,25 +956,45 @@ def inject_prop_priors(
                 "Fit via omega-fit-nfl-dispersion."
             ),
         }
+    elif needs_nb_k:
+        ctx["nb_dispersion_k"] = prior.nb_dispersion_k
+        ctx["nb_k_source"] = prior.nb_k_source
+        ctx["nb_k_shrinkage_weight"] = prior.nb_k_shrinkage_weight
+        event = {
+            "ts": _utc_now_iso(),
+            "event_type": "data_provenance",
+            "step": "nfl_dispersion_prior:inject",
+            "status": "ok",
+            "notes": (
+                f"injected NB dispersion for {player} {stat} from "
+                f"{prior.entity} {prior.stat_type} ({prior.nb_k_source})"
+            ),
+            "outputs": {
+                "nb_dispersion_k": prior.nb_dispersion_k,
+                "nb_k_source": prior.nb_k_source,
+                "nb_k_shrinkage_weight": prior.nb_k_shrinkage_weight,
+            },
+        }
 
+    if param_ref is not None:
+        if event is None:
+            event = {
+                "ts": _utc_now_iso(),
+                "event_type": "data_provenance",
+                "step": "prop_parameter_profile:inject",
+                "status": "ok",
+                "notes": (
+                    f"injected prop backend params for {league.upper()} {stat} "
+                    f"from {param_ref.get('param_profile_id')}"
+                ),
+                "outputs": {"parameter_profile_ref": param_ref},
+            }
+        else:
+            event["notes"] += f"; backend params from {param_ref.get('param_profile_id')}"
+            event.setdefault("outputs", {})["parameter_profile_ref"] = param_ref
+
+    if prior is None and param_ref is None:
+        return payload, event
     out = dict(payload)
-    ctx = dict(player_ctx)
-    ctx["nb_dispersion_k"] = prior.nb_dispersion_k
-    ctx["nb_k_source"] = prior.nb_k_source
-    ctx["nb_k_shrinkage_weight"] = prior.nb_k_shrinkage_weight
     out["player_context"] = ctx
-    return out, {
-        "ts": _utc_now_iso(),
-        "event_type": "data_provenance",
-        "step": "nfl_dispersion_prior:inject",
-        "status": "ok",
-        "notes": (
-            f"injected NB dispersion for {player} {stat} from "
-            f"{prior.entity} {prior.stat_type} ({prior.nb_k_source})"
-        ),
-        "outputs": {
-            "nb_dispersion_k": prior.nb_dispersion_k,
-            "nb_k_source": prior.nb_k_source,
-            "nb_k_shrinkage_weight": prior.nb_k_shrinkage_weight,
-        },
-    }
+    return out, event

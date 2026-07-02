@@ -13,6 +13,7 @@ import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any
 
 from omega.core.betting.kelly import recommend_stake
@@ -79,6 +80,7 @@ from omega.core.simulation.validation import validate_sim_context
 from omega.trace.eligibility import (
     calibration_exclusion_reasons as compute_calibration_exclusion_reasons,
 )
+from omega.trace.parameter_profiles import substrate_ref_for_trace
 from omega.trace.quality import aggregate_quality
 
 UTC = timezone.utc
@@ -267,6 +269,21 @@ def _result_calibration_path(result: Any) -> str | None:
     top = max(counts.values())
     tied = [p for p, c in counts.items() if c == top]
     return min(tied, key=lambda p: _PATH_TRUST.get(p, 3))
+
+
+def _result_binding_mismatch(result: Any) -> str | None:
+    """First calibration backend-binding mismatch recorded on a result (P8.3).
+
+    Non-None means at least one fitted profile was skipped during selection
+    because the live raw-probability substrate did not match its binding —
+    surfaced into trace_quality so downgrade/output-mode logic and reports see
+    WHY the trace fell back instead of a silent static path.
+    """
+    for audit in _collect_calibration_audits(result):
+        mismatch = getattr(audit, "binding_mismatch", None)
+        if mismatch:
+            return mismatch
+    return None
 
 
 def _result_imputed_fraction(result: Any) -> float | None:
@@ -507,6 +524,7 @@ def analyze(
     # stub. No QA verdict exists at analyze time (no sidecar yet); ingest folds a
     # failed trace-scoped verdict into the weights/cap later via the same module.
     calibration_path = _result_calibration_path(result)
+    calibration_binding_mismatch = _result_binding_mismatch(result)
     imputed_fraction = _result_imputed_fraction(result)
     quality = aggregate_quality(
         evidence_status=evidence_status,
@@ -551,6 +569,7 @@ def analyze(
         "calibration_eligible": calibration_eligible,
         "calibration_exclusion_reasons": calibration_exclusion_reasons,
         "calibration_path": calibration_path,
+        "calibration_binding_mismatch": calibration_binding_mismatch,
         **quality.as_dict(),
     }
     if trace_quality:
@@ -567,6 +586,7 @@ def analyze(
             "calibration_eligible": calibration_eligible,
             "calibration_exclusion_reasons": calibration_exclusion_reasons,
             "calibration_path": calibration_path,
+            "calibration_binding_mismatch": calibration_binding_mismatch,
             # Engine-computed graded quality; caller cannot override.
             **quality.as_dict(),
         }
@@ -613,8 +633,16 @@ def _calibrate_audited(
     plane: str = "game",
     market: str = "home",
     market_prob: float | None = None,
+    substrate_ref: dict[str, Any] | None = None,
 ) -> tuple[float, CalibrationAudit]:
-    """Like _calibrate() but also returns a CalibrationAudit recording the path taken."""
+    """Like _calibrate() but also returns a CalibrationAudit recording the path taken.
+
+    ``substrate_ref`` is the live raw-probability substrate identity (backend
+    name/component version + governed param_profile_id) of the simulation whose
+    probability is being calibrated; profiles carrying a backend binding (P8.3)
+    are only applied when it matches, and fail closed (skip -> static fallback)
+    when it does not or is unknown.
+    """
     # Derive the calibration profile market from the plane in one shared policy.
     cal_market = calibration_market_for_plane(plane, market=market)
     calibrated, d = apply_calibration_audited(
@@ -623,6 +651,7 @@ def _calibrate_audited(
         context_hints=context_hints,
         market=cal_market,
         market_prob=market_prob,
+        substrate_ref=substrate_ref,
     )
     audit = CalibrationAudit(
         raw_prob=d["raw_prob"],
@@ -641,6 +670,8 @@ def _calibrate_audited(
         ece=d.get("ece"),
         brier=d.get("brier"),
         fallback_level=d.get("fallback_level"),
+        binding_status=d.get("binding_status"),
+        binding_mismatch=d.get("binding_mismatch"),
     )
     return calibrated, audit
 
@@ -1356,6 +1387,13 @@ def analyze_game(
         competition_strength_adjustment=sim_result.get("competition_strength_adjustment"),
     )
 
+    # P8.3: the live raw-probability substrate of THIS simulation (backend name/
+    # component version + the governed parameter_profile_ref the backend echoed).
+    # Threaded into every calibration call below so a backend-bound calibration
+    # profile is only applied to probabilities produced by the substrate it was
+    # fit against, and fails closed (static fallback + audit reason) otherwise.
+    substrate = substrate_ref_for_trace(sim_result)
+
     # Edge analysis -- requires odds
     edges: list[EdgeDetail] = []
     data_sources = ["simulation"]
@@ -1388,6 +1426,7 @@ def analyze_game(
                 plane="game",
                 market="home",
                 market_prob=implied_probability(home_odds),
+                substrate_ref=substrate,
             )
             home_edge = _build_edge(
                 "home",
@@ -1410,6 +1449,7 @@ def analyze_game(
                 plane="game",
                 market="away",
                 market_prob=implied_probability(away_odds),
+                substrate_ref=substrate,
             )
             edges.append(
                 _build_edge(
@@ -1438,6 +1478,7 @@ def analyze_game(
                     plane="game",
                     market="cover",
                     market_prob=implied_probability(home_spread_odds),
+                    substrate_ref=substrate,
                 )
                 home_edge = _build_edge(
                     "home",
@@ -1461,6 +1502,7 @@ def analyze_game(
                     plane="game",
                     market="cover",
                     market_prob=implied_probability(away_spread_odds),
+                    substrate_ref=substrate,
                 )
                 away_edge = _build_edge(
                     "away",
@@ -1492,6 +1534,7 @@ def analyze_game(
                     plane="game",
                     market="over",
                     market_prob=implied_probability(over_odds),
+                    substrate_ref=substrate,
                 )
                 edges.append(
                     _build_edge(
@@ -1516,6 +1559,7 @@ def analyze_game(
                     plane="game",
                     market="under",
                     market_prob=implied_probability(under_odds),
+                    substrate_ref=substrate,
                 )
                 edges.append(
                     _build_edge(
@@ -1541,6 +1585,7 @@ def analyze_game(
                 plane="game",
                 market="draw",
                 market_prob=implied_probability(request.odds.moneyline_draw),
+                substrate_ref=substrate,
             )
             edges.append(
                 _build_edge(
@@ -1603,6 +1648,7 @@ def analyze_game(
                 plane="game",
                 market=market_name,
                 market_prob=implied_probability(price),
+                substrate_ref=substrate,
             )
             edges.append(
                 _build_edge(
@@ -1632,7 +1678,9 @@ def analyze_game(
                     sim_result,
                     request,
                     bankroll,
-                    _calibrate_audited,
+                    # Pre-bind the substrate so derivative markets enforce the
+                    # same P8.3 backend binding as the co-located markets above.
+                    partial(_calibrate_audited, substrate_ref=substrate),
                     _build_edge,
                 )
             )
@@ -1654,6 +1702,7 @@ def analyze_game(
                     plane="game",
                     market="correct_score",
                     market_prob=implied_probability(price),
+                    substrate_ref=substrate,
                 )
                 edges.append(
                     _build_edge(
@@ -2019,6 +2068,14 @@ def analyze_player_prop(
     for prior_key in ("ace_rate", "serve_win_pct", "match_format", "expected_total_games"):
         if player_ctx.get(prior_key) is not None:
             prior_payload[prior_key] = player_ctx[prior_key]
+    # Promoted prop BackendParameterProfile knobs + provenance ref travel the
+    # same way (the gatherer's inject_prop_priors merges them into
+    # player_context, so a recorded request embeds them and replays
+    # byte-faithful with no live-table read here). The backend reads the knobs
+    # from prior_payload and echoes the ref onto its result for the trace.
+    for prior_key in ("nb_k_scale", "parameter_profile_ref"):
+        if player_ctx.get(prior_key) is not None:
+            prior_payload[prior_key] = player_ctx[prior_key]
 
     sim_input = PropSimulationInput(
         player_name=request.player_name,
@@ -2103,6 +2160,18 @@ def analyze_player_prop(
     else:
         imputed_fraction = 0.0
 
+    # P8.3: live prop raw-probability substrate — the resolved backend's own
+    # identity attributes plus the governed param profile ref it echoed (if the
+    # gatherer injected one). Backend-bound prop calibration profiles apply only
+    # when this matches their recorded fit substrate.
+    prop_substrate = {
+        "backend_name": getattr(prop_backend, "backend_name", backend_name),
+        "backend_component_version": getattr(prop_backend, "component_version", None),
+        "param_profile_id": (sim_result.get("parameter_profile_ref") or {}).get(
+            "param_profile_id"
+        ),
+    }
+
     # B4: single-side odds -- "implied opposite" is forbidden. If only one
     # side is sourced, compute that side's edge only and annotate the other.
     edge_over: float | None = None
@@ -2124,6 +2193,7 @@ def analyze_player_prop(
             plane="prop",
             market="over",
             market_prob=market_over,
+            substrate_ref=prop_substrate,
         )
         edge_over = round(edge_percentage(cal_over, market_over), 2)
     else:
@@ -2138,6 +2208,7 @@ def analyze_player_prop(
             plane="prop",
             market="under",
             market_prob=market_under,
+            substrate_ref=prop_substrate,
         )
         edge_under = round(edge_percentage(cal_under, market_under), 2)
     else:
@@ -2252,6 +2323,7 @@ def analyze_player_prop(
         context_source="provided",
         baseline_used=False,
         simulation_distributions=[sim_distribution],
+        parameter_profile_ref=sim_result.get("parameter_profile_ref"),
     )
 
 

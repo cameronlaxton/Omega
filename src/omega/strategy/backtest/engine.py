@@ -32,6 +32,7 @@ from omega.core.calibration.probability import apply_calibration
 from omega.core.simulation.engine import OmegaSimulationEngine
 from omega.strategy.artifacts import FrozenArtifact, compat_dict_to_artifact
 from omega.strategy.models import BacktestResult, StrategyEntry
+from omega.trace.parameter_profiles import substrate_ref_for_trace
 
 UTC = timezone.utc
 
@@ -342,6 +343,14 @@ class BacktestEngine:
 
         bets = []
 
+        # P8.3: substrate identity of THIS backtest simulation, threaded into the
+        # shared calibration selection exactly like production. The re-sim runs
+        # ungoverned (FrozenArtifact carries no prior_payload), so its substrate
+        # honestly reports no param_profile_id — a calibration profile bound to a
+        # governed parameter profile is then skipped here too, never silently
+        # applied to raw probabilities from a different substrate.
+        substrate = substrate_ref_for_trace(sim_result)
+
         # Evaluate moneyline edges
         ml_home = odds.get("moneyline_home")
         ml_away = odds.get("moneyline_away")
@@ -354,12 +363,14 @@ class BacktestEngine:
             league=league,
             context_hints=game_ctx or None,
             market_prob=implied_probability(ml_home) if ml_home is not None else None,
+            substrate_ref=substrate,
         )
         cal_away = apply_calibration(
             away_prob,
             league=league,
             context_hints=game_ctx or None,
             market_prob=implied_probability(ml_away) if ml_away is not None else None,
+            substrate_ref=substrate,
         )
 
         # Home ML
@@ -403,6 +414,7 @@ class BacktestEngine:
                 context_hints=game_ctx or None,
                 market="draw",
                 market_prob=implied_probability(ml_draw),
+                substrate_ref=substrate,
             )
             bet = self._evaluate_side(
                 side="draw",
@@ -462,6 +474,7 @@ class BacktestEngine:
                 league=league,
                 context_hints=game_ctx or None,
                 market_prob=implied_probability(price),
+                substrate_ref=substrate,
             )
             bet = self._evaluate_side(
                 side=side,
@@ -491,6 +504,7 @@ class BacktestEngine:
                 league=league,
                 context_hints=game_ctx or None,
                 market_prob=implied_probability(price),
+                substrate_ref=substrate,
             )
             bet = self._evaluate_side(
                 side=scoreline,
@@ -524,6 +538,7 @@ class BacktestEngine:
                     context_hints=game_ctx or None,
                     market="cover",
                     market_prob=implied_probability(price),
+                    substrate_ref=substrate,
                 )
                 bet = self._evaluate_side(
                     side=side,
@@ -557,6 +572,7 @@ class BacktestEngine:
                     context_hints=game_ctx or None,
                     market=cal_market,
                     market_prob=implied_probability(price),
+                    substrate_ref=substrate,
                 )
                 bet = self._evaluate_side(
                     side=side,

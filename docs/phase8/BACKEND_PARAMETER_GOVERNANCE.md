@@ -107,6 +107,60 @@ existing pieces and adds the missing lever.
   not structure; **OVER-FIT / CALIBRATED** → identity profile + calibration
   `method=none` (the diagnostic's own OVER-FIT guard prevents adding noise).
 
+## P8.3 — calibration/backend binding, closed
+
+A calibration profile corrects the residual miscalibration of ONE raw-probability
+substrate: a backend (name + component version) running one governed
+`BackendParameterProfile`. Before P8.3 nothing recorded which substrate a
+`CalibrationProfile` was fit against, so promoting a new backend parameter
+profile (or bumping a backend version) silently left a stale calibration map
+applying to probabilities it was never fit on. P8.3 makes the binding explicit
+and enforced:
+
+- **Declaration** — `CalibrationProfile.backend_binding`
+  (`CalibrationBackendBinding`: `backend_name`, `backend_component_version`,
+  `param_profile_id`). Three statuses (`binding_status()`):
+  - `bound` — the fit recorded at least one substrate identity field; applied
+    only when the live substrate matches every recorded field.
+  - `unpinned` — the fit checked its source traces and found NO substrate
+    identity (homogeneously unpinned dataset); declared explicitly, applies
+    anywhere, flagged in the audit.
+  - `legacy` — the profile predates P8.3; applies as before, flagged in the
+    audit. Existing registry profiles keep working; refit to earn a binding.
+- **Fit-side recording** — `omega-fit-calibration` derives the substrate of every
+  trace that contributes a pair on the requested plane
+  (`substrate_ref_for_trace`: the result's own `simulation_backend` /
+  `component_version` plus the governed `parameter_profile_ref` echo — recorded
+  provenance only, nothing guessed). One substrate → the candidate carries it.
+  **Mixed substrates → the slice is refused (fail-closed, no bypass)**; window
+  the fit (`--train-start`/`--train-end`) to a single substrate instead. This is
+  the strict-ordering contract made mechanical: promote backend params first,
+  then fit calibration bound to that exact version.
+- **Runtime enforcement** — the single shared selection walk
+  (`_get_applicable_profile`, used by production `analyze()` AND the backtest
+  engine) checks the binding against the live substrate threaded from the
+  simulation that produced the probability (game plane: `sim_result` identity +
+  echoed ref, including derivative-market EdgeConsumers; prop plane: the resolved
+  prop backend's identity + the echoed ref). A bound profile that mismatches —
+  including an *unknown* substrate — is skipped and the walk continues
+  (league → sport_family → global → static), so the existing output-mode/
+  downgrade policy takes over exactly as if no profile existed. A profile fit on
+  one parameter profile is never silently applied on another.
+- **Honesty surface** — every `CalibrationAudit` now carries `binding_status`
+  (of the applied profile) and `binding_mismatch` (which profile was skipped and
+  why, e.g. `param_profile_id_mismatch:fit=...,live=...`); the trace-quality
+  payload mirrors the first mismatch as
+  `trace_quality.calibration_binding_mismatch` for reports and triage.
+- **Market separation unchanged** — binding checks happen after market routing;
+  game/prop/draw profiles stay distinct and P8.3 introduces no cross-market
+  authorization. Prop-plane profiles produced by the P8.5 prop structural sweep
+  bind via the ref `prop_neg_binom` echoes and are consumed end-to-end (tested).
+
+Enforcement lives at *application* time (the registry/selection seam), not as a
+new promotion gate: promotion-time cannot know the future live substrate, and the
+application check also protects every already-promoted profile the moment the
+substrate changes underneath it.
+
 ## The boundary: backend tuning ⊥ calibration fitting
 
 1. **Different objectives.** Backend-parameter tuning minimizes RAW
@@ -161,24 +215,50 @@ traces), the diagnostic-picked target.
    no-incumbent improvement gates; promotion still requires operator
    backtest-parity + CLV evidence artifacts — the structural fix is proven on
    calibration grounds, awaiting that evidence (exactly the fail-closed contract).
-4. **Calibrate the residual** bound to the promoted backend version (P8.3): with the
+4. **Calibrate the residual** bound to the promoted backend version (P8.3,
+   now automatic): re-run `omega-fit-calibration` on traces produced by the
+   promoted params — the candidate records that substrate as its
+   `backend_binding`, and runtime selection will only apply it there. With the
    raw output already under the floor, the calibration map is gentle or
    `method=none`.
 
 ## Deferred
 
-- **P8.3** — bind calibration profiles to `backend_component_version` /
-  `param_profile_id`; calibration promotion fails closed on backend mismatch
-  (turns today's after-the-fact audit into a gate).
+- ~~P8.3~~ — **done** (see "P8.3 — calibration/backend binding, closed" above).
+  Follow-ups that stay open:
+  - `FrozenArtifact` does not carry `prior_payload`, so the strategy backtest
+    re-simulates ungoverned and honestly reports no `param_profile_id` — bound
+    profiles are (correctly) skipped there. Pinning artifact-level params
+    (the lab's `parameter_pin_status` machinery is the seam) would let
+    backtests replay the governed substrate.
+  - Sport-family / GLOBAL bucket fits span leagues and will usually mix
+    substrates → they refuse to fit under P8.3 and stay legacy until someone
+    decides what a multi-substrate bucket binding should mean.
+  - `omega-report-calibration` / console views could surface
+    `binding_status` per profile (the data is in the registry + audits).
 - **P8.4** — tennis (`priors_tennis*` status + pressure/SPW structure profile) and
   NFL (`nfl_nb_v2`: score correlation + team/context dispersion) adopt the rail.
 - Fold soccer `rho` into the parameter profile (it stays on the live Dixon-Coles
   path for mid-tournament safety). The dedicated convenience CLI is **done** as of
   P8.5 — `omega-fit-backend-structure`, backend-generic.
-- **Prop-plane structural sweep.** `sweep_backend_variants` scores the game plane
-  (home-win); a prop-plane analogue would let `omega-fit-backend-structure` tune
-  `nb_k_scale` against raw prop ECE directly (today the prop knob is reachable and
-  unit-tested, but the calibration-scored prop sweep harness is not built).
+- ~~Prop-plane structural sweep~~ — **done**. `sweep_prop_backend_variants`
+  (same selection/seal skeleton as the game sweep, prop-backend seam, shared
+  `prop_pairs_for_trace` grading, exact NB CDF) + `omega-fit-backend-structure
+  --plane prop --stat <stat>` tune `nb_k_scale` against raw prop ECE and register
+  CANDIDATEs bucketed per (league, stat) via `resolve_prop_calibration_bucket`
+  (e.g. `prop_neg_binom` / `NFL__RUSHING_YARDS`).
+- ~~Prop-plane consumption path~~ — **done**. `_merge_prop_parameter_profile`
+  (the prop analogue of `_merge_parameter_profile`) runs inside
+  `inject_prop_priors` at the gatherer layer: it merges the PRODUCTION profile's
+  knobs + `parameter_profile_ref` into `player_context` (never overwriting
+  caller-supplied values; skipped under `OMEGA_REPLAY_MODE=1` or an embedded
+  ref), `analyze_player_prop` forwards `nb_k_scale`/`parameter_profile_ref` into
+  the backend's `prior_payload`, and `prop_neg_binom` echoes the ref onto its
+  result (V20 trace column) **and** the applied `nb_k_scale` into
+  `distribution_params` — persisted `k` is post-scale once a profile is live, so
+  `prop_trace_to_frozen_artifact` divides the echoed scale back out to keep the
+  frozen base `k` pre-scale for future sweeps. Bit-identical while no prop
+  profile is promoted.
 
 ## Hard-constraint compliance
 

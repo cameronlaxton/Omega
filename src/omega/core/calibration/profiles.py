@@ -61,6 +61,83 @@ APPLYING_MATURITIES: frozenset[ProfileMaturity] = frozenset(
 STATIC_FALLBACK_ID = "__static_v1__"
 
 
+class BindingStatus(str, Enum):
+    """How a profile's raw-probability substrate identity was declared (P8.3).
+
+    bound    -> the fit recorded at least one substrate identity field; the
+                profile is applied only when the live substrate matches.
+    unpinned -> the fit checked its source traces and found NO substrate
+                identity (homogeneously unpinned dataset); declared explicitly,
+                applies anywhere but is flagged in the calibration audit.
+    legacy   -> the profile predates P8.3 (no backend_binding recorded);
+                applies anywhere, flagged in the calibration audit.
+    """
+
+    BOUND = "bound"
+    UNPINNED = "unpinned"
+    LEGACY = "legacy"
+
+
+# Identity fields a binding may constrain; also the keys of a live substrate ref
+# (see omega.trace.parameter_profiles.substrate_ref_for_trace).
+BINDING_FIELDS = ("backend_name", "backend_component_version", "param_profile_id")
+
+
+class CalibrationBackendBinding(BaseModel):
+    """Raw-probability substrate a calibration profile was fit against (P8.3).
+
+    A calibration profile corrects the residual miscalibration of one specific
+    probability-producing substrate: a backend (name + component version) running
+    one governed :class:`BackendParameterProfile` (``param_profile_id``). Fields
+    left None were unknown in the source traces' provenance and constrain
+    nothing — the fitter never guesses or synthesizes identity beyond what the
+    traces recorded.
+    """
+
+    backend_name: str | None = Field(
+        default=None, description="Simulation backend the fit traces ran, e.g. 'prop_neg_binom'."
+    )
+    backend_component_version: str | None = Field(
+        default=None, description="Backend component version of the fit traces, e.g. 'prop_nb_v1'."
+    )
+    param_profile_id: str | None = Field(
+        default=None,
+        description=(
+            "profile_id of the governed BackendParameterProfile whose structural "
+            "knobs produced the fit traces' raw probabilities; None when the fit "
+            "dataset was (homogeneously) unpinned."
+        ),
+    )
+
+    def is_pinned(self) -> bool:
+        """True when at least one identity field constrains application."""
+        return any(getattr(self, f) is not None for f in BINDING_FIELDS)
+
+    def mismatch_reason(self, substrate: dict[str, Any] | None) -> str | None:
+        """Why this binding rejects a live substrate ref, or None if compatible.
+
+        ``substrate`` uses the BINDING_FIELDS keys. Fail-closed semantics: a
+        pinned binding never applies against an unknown (None) substrate or one
+        missing a constrained field — a mismatch is returned rather than
+        silently applying a profile fit on a different raw-probability
+        substrate. Unconstrained (None) binding fields match anything.
+        """
+        if not self.is_pinned():
+            return None
+        if substrate is None:
+            return "substrate_unknown"
+        for field in BINDING_FIELDS:
+            want = getattr(self, field)
+            if want is None:
+                continue
+            live = substrate.get(field)
+            if live is None:
+                return f"substrate_missing:{field}"
+            if str(live) != str(want):
+                return f"{field}_mismatch:fit={want},live={live}"
+        return None
+
+
 class CalibrationProfile(BaseModel):
     """A versioned, attributable calibration configuration.
 
@@ -131,6 +208,19 @@ class CalibrationProfile(BaseModel):
     rejected_at: str | None = None
     reject_reason: str | None = None
 
+    # Backend binding (P8.3): the raw-probability substrate this profile was fit
+    # against. None on profiles persisted (or fitted by paths not yet threading a
+    # binding) before P8.3 -> BindingStatus.LEGACY, applied as before but flagged.
+    backend_binding: CalibrationBackendBinding | None = Field(
+        default=None,
+        description=(
+            "Substrate identity (backend name/component version + governed "
+            "param_profile_id) of the traces this profile was fit on. Runtime "
+            "selection skips the profile when the live substrate does not match "
+            "(fail-closed); None = legacy/undeclared (applies, flagged)."
+        ),
+    )
+
     # Promotion lineage
     incumbent_id: str | None = Field(
         default=None,
@@ -144,6 +234,14 @@ class CalibrationProfile(BaseModel):
             "promoted via the fail-closed CalibrationRegistry.promote()."
         ),
     )
+
+    def binding_status(self) -> BindingStatus:
+        """Substrate-declaration status of this profile (see BindingStatus)."""
+        if self.backend_binding is None:
+            return BindingStatus.LEGACY
+        if self.backend_binding.is_pinned():
+            return BindingStatus.BOUND
+        return BindingStatus.UNPINNED
 
     def effective_maturity(self) -> ProfileMaturity:
         """Maturity to use, deriving a default for legacy profiles.
