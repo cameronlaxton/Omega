@@ -48,7 +48,10 @@ class NegBinomPropBackend:
         # distribution (sharper over/under); <1 widens. Default 1.0 -> bit-identical.
         # This is the prop-plane raw-ECE lever omega-fit-backend-structure tunes; it
         # rides prior_payload so the variant sweep reaches it without a seam change.
-        nb_k_scale = float(prior.get("nb_k_scale", 1.0))
+        try:
+            nb_k_scale = float(prior.get("nb_k_scale", 1.0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("nb_k_scale must be a finite positive number") from exc
         if not np.isfinite(nb_k_scale) or nb_k_scale <= 0:
             raise ValueError("nb_k_scale must be a finite positive number")
         if nb_k_scale != 1.0:

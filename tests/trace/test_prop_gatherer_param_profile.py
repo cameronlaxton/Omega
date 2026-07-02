@@ -154,6 +154,25 @@ def test_prop_gatherer_merges_profile_even_when_k_pre_supplied(monkeypatch):
         store.close()
 
 
+def test_prop_gatherer_skips_profile_ref_when_structural_knob_overridden(monkeypatch):
+    """Do not stamp a production profile ref when caller-supplied structural
+    knobs mean the backend will price a different raw substrate."""
+    monkeypatch.delenv("OMEGA_REPLAY_MODE", raising=False)
+    store = _store()
+    try:
+        _promote_prop_profile(store, {"nb_k_scale": 1.5})
+        payload = _payload()
+        payload["player_context"].update(nb_dispersion_k=9.9, nb_k_scale=0.9)
+        out, event = inject_prop_priors(payload, store=store)
+        ctx = out["player_context"]
+        assert ctx["nb_dispersion_k"] == 9.9
+        assert ctx["nb_k_scale"] == 0.9
+        assert "parameter_profile_ref" not in ctx
+        assert event is None
+    finally:
+        store.close()
+
+
 def test_prop_gatherer_replay_mode_skips_live_lookup(monkeypatch):
     """Under OMEGA_REPLAY_MODE the live parameter_profiles table is never read, so
     a post-hoc promotion cannot leak into a historical replay."""

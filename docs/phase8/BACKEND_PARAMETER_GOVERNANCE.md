@@ -234,8 +234,6 @@ traces), the diagnostic-picked target.
   - Sport-family / GLOBAL bucket fits span leagues and will usually mix
     substrates → they refuse to fit under P8.3 and stay legacy until someone
     decides what a multi-substrate bucket binding should mean.
-  - `omega-report-calibration` / console views could surface
-    `binding_status` per profile (the data is in the registry + audits).
 - **P8.4** — tennis (`priors_tennis*` status + pressure/SPW structure profile) and
   NFL (`nfl_nb_v2`: score correlation + team/context dispersion) adopt the rail.
 - Fold soccer `rho` into the parameter profile (it stays on the live Dixon-Coles

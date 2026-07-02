@@ -85,6 +85,16 @@ class TestBindingForTraces:
         assert binding.backend_component_version == "fs_v1"
         assert binding.param_profile_id is None
 
+    def test_game_traces_bind_request_snapshot_parameter_profile_ref(self):
+        trace = _game_trace(0.6, "home_win", ref=None)
+        trace["input_snapshot"] = {"prior_payload": {"parameter_profile_ref": _PROP_REF}}
+        binding, err = fit_calibration.binding_for_traces(CalibrationFitter(), [trace], "game")
+        assert err is None
+        assert binding is not None
+        assert binding.backend_name == "fast_score"
+        assert binding.backend_component_version == "fs_v1"
+        assert binding.param_profile_id == _PROP_REF["param_profile_id"]
+
     def test_homogeneous_pinned_prop_traces_bind_to_param_profile(self):
         traces = [
             _prop_trace(0.6, ["win", "loss"], ref=_PROP_REF),

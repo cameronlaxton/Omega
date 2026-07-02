@@ -299,17 +299,26 @@ def _candidate_result_dicts(trace: dict[str, Any]):
     """Yield dicts within a trace that may carry simulation provenance fields.
 
     The persisted simulation result can sit at a few nesting points depending on
-    the caller (top level, ``result``, ``simulation``, ``result.simulation``), so
-    the extractor searches each rather than assuming one shape.
+    the caller (top level, ``result``, ``simulation``, ``result.simulation``).
+    Gatherer-stamped backend-parameter provenance for game requests can also live
+    under ``input_snapshot.prior_payload`` because the game response itself does
+    not expose ``parameter_profile_ref``. Search each rather than assuming one
+    shape.
     """
-    yield trace
-    for key in ("result", "simulation"):
+    def _yield_with_prior(d: dict[str, Any]):
+        yield d
+        prior = d.get("prior_payload")
+        if isinstance(prior, dict):
+            yield prior
+
+    yield from _yield_with_prior(trace)
+    for key in ("result", "simulation", "input_snapshot"):
         val = trace.get(key)
         if isinstance(val, dict):
-            yield val
+            yield from _yield_with_prior(val)
             inner = val.get("simulation")
             if isinstance(inner, dict):
-                yield inner
+                yield from _yield_with_prior(inner)
 
 
 def extract_parameter_profile_ref(trace: dict[str, Any]) -> dict[str, Any] | None:

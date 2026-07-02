@@ -510,6 +510,16 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _has_profile_param_override(payload: dict[str, Any], params: dict[str, Any]) -> bool:
+    """True when caller-supplied structural knobs differ from the production profile.
+
+    In that case do not stamp the profile ref: the backend would not actually run
+    the profile's raw-probability substrate, so binding a calibration profile to
+    that ref would be dishonest.
+    """
+    return any(key in payload and payload[key] != value for key, value in params.items())
+
+
 def _merge_parameter_profile(
     league: str, payload: dict[str, Any], store: TraceStore
 ) -> dict[str, Any] | None:
@@ -518,11 +528,13 @@ def _merge_parameter_profile(
     Looks up the production :class:`BackendParameterProfile` for the league's
     default game backend + calibration bucket (Phase 8). When present, merges its
     ``params`` (structural knobs the backend reads with safe defaults) WITHOUT
-    overwriting any caller-supplied value, stamps ``parameter_profile_ref`` for
-    trace provenance, and returns that ref. When absent, *payload* is unchanged and
+    overwriting any caller-supplied value. If the caller already supplied a
+    different structural knob value, the profile is skipped entirely and no
+    ``parameter_profile_ref`` is stamped: the backend did not actually run that
+    governed substrate. When no profile applies, *payload* is unchanged and
     ``None`` is returned — the backend falls back to its historical-constant
-    defaults, so this injection is purely additive and bit-identical until a profile
-    is promoted.
+    defaults, so this injection is purely additive and bit-identical until a
+    profile is promoted.
 
     Replay-safe: a recorded request that already carries ``parameter_profile_ref``
     is left untouched (never re-read from the live table), and in replay mode
@@ -550,6 +562,8 @@ def _merge_parameter_profile(
         store, str(backend_name), resolve_calibration_bucket(league)
     )
     if prof is None:
+        return None
+    if _has_profile_param_override(payload, prof.params):
         return None
     for key, value in prof.params.items():
         payload.setdefault(key, value)
@@ -817,10 +831,12 @@ def _merge_prop_parameter_profile(
     for the pair's default prop backend + per-(league, stat) calibration bucket
     (``resolve_prop_calibration_bucket``, e.g. ``NFL__RUSHING_YARDS``). When
     present, merges its ``params`` (structural knobs such as ``nb_k_scale``)
-    WITHOUT overwriting any caller-supplied value, stamps ``parameter_profile_ref``
-    for trace provenance, and returns that ref. When absent, *ctx* is unchanged
-    and None is returned — the backend runs at its identity defaults, so this is
-    purely additive and bit-identical until a prop profile is promoted.
+    WITHOUT overwriting any caller-supplied value. If the caller already supplied
+    a different structural knob value, the profile is skipped entirely and no
+    ``parameter_profile_ref`` is stamped: the backend did not actually run that
+    governed substrate. When no profile applies, *ctx* is unchanged and None is
+    returned — the backend runs at its identity defaults, so this is purely
+    additive and bit-identical until a prop profile is promoted.
 
     *ctx* is the request's ``player_context`` (``PlayerPropRequest`` carries no
     prior_payload field): ``analyze_player_prop`` forwards the knobs + ref from
@@ -852,6 +868,8 @@ def _merge_prop_parameter_profile(
         store, backend_name, resolve_prop_calibration_bucket(league, stat_type)
     )
     if prof is None:
+        return None
+    if _has_profile_param_override(ctx, prof.params):
         return None
     for key, value in prof.params.items():
         ctx.setdefault(key, value)
