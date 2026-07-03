@@ -837,11 +837,11 @@ class TestReasoningSurfaceRoundTrip:
                 "signal_type": "usage_role_change",
                 "category": "situational",
                 "plane": "game",
-                "value": "key_absence:out",
+                "value": "bench",
                 "source": "injury_report",
                 "confidence": 0.9,
                 "window": "matchup",
-                "direction": "away",
+                "direction": "home",
                 "note": "RSVG key absence: Star A (out, Miami Heat)",
             }
         ]

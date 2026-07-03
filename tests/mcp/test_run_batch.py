@@ -452,7 +452,8 @@ def test_rsvg_key_absence_merges_evidence_and_stamps_trace(tmp_path: Path) -> No
     evidence = seen_requests[0]["evidence"]
     assert len(evidence) == 1
     assert evidence[0]["signal_type"] == "usage_role_change"
-    assert evidence[0]["direction"] == "away"
+    assert evidence[0]["value"] == "bench"
+    assert evidence[0]["direction"] == "home"
     # And the export block carries the audit + no downgrade for a pass.
     import json
 

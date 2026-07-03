@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from omega.core.calibration.adjustment_policy import AdjustmentPolicyRegistry
 from omega.core.contracts.evidence import EvidenceSignal
 from omega.core.contracts.schemas import BatchAnalysisEntry, ReasoningPresentation
 from omega.core.gates.rsvg import (
@@ -19,6 +20,8 @@ from omega.core.gates.rsvg import (
     _assert_no_protected_fields,
     evaluate_roster_context,
 )
+from omega.core.simulation.evidence_handlers import compute_game_adjustment
+from omega.core.simulation.evidence_to_modifier import signals_to_transition_modifiers
 
 _NOW = datetime(2026, 7, 3, 15, 0, 0, tzinfo=timezone.utc)
 
@@ -84,7 +87,7 @@ def test_non_key_absences_pass_with_notes() -> None:
 # --- Key absence emits usage_role_change --------------------------------------
 
 
-def test_one_key_absence_emits_usage_role_change_favoring_opponent() -> None:
+def test_one_key_absence_emits_usage_role_change_for_absent_team() -> None:
     payload = _payload(
         absences=[
             {
@@ -104,12 +107,32 @@ def test_one_key_absence_emits_usage_role_change_favoring_opponent() -> None:
     assert sig.signal_type == "usage_role_change"
     assert sig.category == "situational"
     assert sig.plane == "game"
-    assert sig.direction == "away"  # home absence favors the away side
-    assert sig.value == "key_absence:out"
+    assert sig.direction == "home"
+    assert sig.value == "bench"
     assert sig.source == "injury_report"
     assert sig.confidence == pytest.approx(0.9)
     assert "Nikola Jokic" in (sig.note or "")
     assert "starting center" in (sig.note or "")
+
+
+def test_key_absence_targets_absent_team_in_deterministic_handlers() -> None:
+    payload = _payload(
+        absences=[_absence("Nikola Jokic", side="home", status="out", key=True)]
+    )
+    sig = evaluate_roster_context(payload, evaluated_at=_NOW).evidence[0]
+
+    game_adjustment = compute_game_adjustment(
+        evidence=[sig],
+        league="NBA",
+        policy=AdjustmentPolicyRegistry().get_production_policy(),
+        evidence_mode="bounded_live",
+    )
+    assert game_adjustment.home_factor < 1.0
+    assert game_adjustment.away_factor == 1.0
+
+    markov_modifiers = signals_to_transition_modifiers([sig], home_team="Denver Nuggets")
+    assert markov_modifiers["home_score_rate_scalar"] == pytest.approx(0.93)
+    assert "away_score_rate_scalar" not in markov_modifiers
 
 
 def test_away_key_absence_direction_and_doubtful_confidence() -> None:
@@ -118,7 +141,7 @@ def test_away_key_absence_direction_and_doubtful_confidence() -> None:
     )
     result = evaluate_roster_context(payload, evaluated_at=_NOW)
     sig = result.evidence[0]
-    assert sig.direction == "home"
+    assert sig.direction == "away"
     assert sig.confidence == pytest.approx(0.6)
 
 

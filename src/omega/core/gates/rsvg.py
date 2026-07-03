@@ -366,17 +366,17 @@ def evaluate_roster_context(
         if absence.role_note:
             note += f" — {absence.role_note}"
         # Each missing key player becomes a typed, retrospectively-scoreable
-        # usage_role_change signal favoring the opponent at the game plane.
+        # usage_role_change signal targeting the depleted side at the game plane.
         evidence.append(
             EvidenceSignal(
                 signal_type="usage_role_change",
                 category="situational",
                 plane="game",
-                value=f"key_absence:{absence.status}",
+                value="bench",
                 source="injury_report" if statuses[side].injury_report_checked else "agent_reasoning",
                 confidence=_KEY_ABSENCE_CONFIDENCE[absence.status],
                 window="matchup",
-                direction="away" if side == "home" else "home",
+                direction=side,
                 note=note,
             )
         )
