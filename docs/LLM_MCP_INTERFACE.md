@@ -6,14 +6,22 @@ Omega's standard LLM interface is a local MCP server that exposes typed tools ov
 
 The LLM may plan, route, gather evidence, arbitrate sources, explain results, and decide when to downgrade or refuse.
 
-The deterministic Omega engine owns simulation, probability calibration, fair-price conversion, edge, EV, Kelly staking, confidence tiers, backtesting, grading, and calibration fitting math.
+The deterministic Omega engine owns simulation, probability calibration, fair-price conversion, edge, EV, Kelly staking, confidence tiers, trace ID generation, backtesting, grading, and calibration fitting math.
+
+The boundary is enforced mechanically at every LLM-facing seam, not just by prompt discipline:
+
+- `reasoning_presentation` is a strict schema (`thesis`/`market_read`/`why`/`risks`/`verdict`, `extra="forbid"`) — numeric or unknown fields are rejected.
+- Caller-supplied `trace_quality` on the analyze tools is quality metadata only; protected engine field names (edge/EV/Kelly/units/confidence tier/probabilities — canonical set in `omega/core/contracts/protected_fields.py`) are rejected with an actionable error.
+- Session-sidecar audit events reject protected keys (`ProtectedValueError`).
+- RSVG `roster_context` payloads are strict schemas; the gate scans everything it emits and fails closed on protected fields.
+- Output-mode authorization (which values may be *shown*) is owned by [`prompts/reference/output_modes.md`](../prompts/reference/output_modes.md); response shape by [`prompts/reference/presentation_contract.md`](../prompts/reference/presentation_contract.md).
 
 ## Tool Surface
 
 - `omega_analyze_game`: validates a single-game request and delegates to `omega.core.contracts.service.analyze`.
 - `omega_analyze_prop`: validates a player-prop request and delegates to `omega.core.contracts.service.analyze`.
 - `omega_analyze_slate`: validates a slate request and delegates to `omega.core.contracts.service.analyze`.
-- `omega_run_batch`: accepts a list of `BatchAnalysisEntry` dicts (mixed game/prop), resolves odds per-entry via `omega_resolve_odds` (with prop_type fallback chain if a list is supplied), calls `analyze()` per entry, and writes each export block to `var/inbox/traces/<trace_id>.json`. Use for sessions producing more than 3 analyses — replaces the need for manual looping or scratch scripts. Returns a summary with per-entry status (ok/skipped/error), all trace_ids, and export paths.
+- `omega_run_batch`: accepts a list of `BatchAnalysisEntry` dicts (mixed game/prop), resolves odds per-entry via `omega_resolve_odds` (with prop_type fallback chain if a list is supplied), calls `analyze()` per entry, and writes each export block to `var/inbox/traces/<trace_id>.json`. Use for sessions producing more than 3 analyses — replaces the need for manual looping or scratch scripts. Returns a summary with per-entry status (ok/skipped/error), all trace_ids, and export paths. Entries carry the structured reasoning surface: `evidence` (typed `EvidenceSignal` dicts), `reasoning_presentation` (strict qualitative schema), `reasoning_narrative`/`reasoning_sources`, and optionally `roster_context` — the typed RSVG roster gate payload (`omega/core/gates/rsvg.py`), evaluated before odds resolution: `blocked` entries are skipped without running `analyze()`, `research_candidate` stamps `reasoning_downgrade_rationale` + `trace_quality.rsvg` on the persisted trace, and verified key-absence `usage_role_change` signals merge into the entry's evidence.
 - `omega_chat_orchestrate`: returns an explicit unsupported response until a real chat orchestrator exists.
 - `omega_replay_bundle`: performs replay-plane audit over a frozen `ReplayBundle`; live fetching is disabled.
 - `omega_trace_get`: retrieves a persisted trace through `TraceStore`.
@@ -25,6 +33,11 @@ The deterministic Omega engine owns simulation, probability calibration, fair-pr
 - `omega_calibration_fit_preview`: previews calibration fitting without writing profiles or promoting candidates.
 - `omega_evidence_retrieve`: returns a no-live-fetch skipped response in this adapter.
 - `omega_resolve_odds`: resolves current Odds API markets into engine-ready input fields and provenance. For terminal slate discovery before a specific matchup is known, use `omega-resolve-odds --list-events --league <LEAGUE>`; repeated identical event-list calls are locally cached for 5 minutes, and Odds API budget exhaustion is a hard-stop CLI error.
+- `omega_list_events`: lists upcoming provider events for a league (slate discovery without leaving the tool surface).
+- `omega_record_flat_bet`: records a confirmed wager against an existing engine trace into `bet_ledger` (never mints a new trace or recomputes engine values).
+- `omega_get_portfolio_summary`: read-only bet-ledger summary (counts, staked, PnL, ROI) with optional league/sport/date filters.
+- `omega_get_game_context`: read-only helper assembling schedule-derived context (e.g. rest days) for a matchup.
+- `omega_propose_signal`: files a typed feature-combo signal proposal (issue #28 WS3) for operator-gated evaluation; proposals enter at `probation` and never self-activate.
 
 Analyze tools require explicit `session_id` and `bankroll`. Callers must not rely on default bankroll values for formal recommendations.
 

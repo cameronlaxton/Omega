@@ -199,6 +199,40 @@ def _maybe_inject_prop_priors(payload: dict[str, Any], session_id: str | None) -
     return payload
 
 
+def _reject_protected_trace_quality(tool: str, trace_quality: dict[str, Any] | None) -> None:
+    """Fail closed when caller-supplied trace_quality carries engine-owned quant keys.
+
+    ``trace_quality`` is orchestrator QUALITY metadata (aggregate_quality,
+    downgrades, exclusion reasons). The engine owns edge/EV/Kelly/units/
+    confidence-tier/probability values; an LLM-facing caller must never smuggle
+    them into the persisted quality block. Mirrors the sidecar's
+    ``ProtectedValueError`` discipline at the MCP seam.
+    """
+    from omega.core.contracts.protected_fields import find_protected_key
+
+    found = find_protected_key(trace_quality)
+    if found:
+        raise ValueError(
+            f"{tool}: caller-supplied trace_quality contains protected engine field "
+            f"{found!r}. trace_quality carries quality metadata only "
+            "(e.g. aggregate_quality, downgrades); engine-owned values are computed "
+            "by analyze() and live in the trace result."
+        )
+
+
+def _reject_protected_reasoning_inputs(tool: str, reasoning_inputs: dict[str, Any]) -> None:
+    """Fail closed when batch provenance/context metadata carries engine-owned keys."""
+    from omega.core.contracts.protected_fields import find_protected_key
+
+    found = find_protected_key(reasoning_inputs)
+    if found:
+        raise ValueError(
+            f"{tool}: synthesized reasoning_inputs contains protected engine field "
+            f"{found!r}. reasoning_inputs carries source/context provenance only; "
+            "engine-owned values are computed by analyze() and stay in the trace result."
+        )
+
+
 def _merge_mcp_trace_quality(
     trace_quality: dict[str, Any] | None,
     mcp_defaults: dict[str, Any],
@@ -302,12 +336,19 @@ def omega_analyze_game(
         registry.
 
         Cumulative cap: no single transition attribute shifts by more than ±15%
-        regardless of stacked signals.
+        regardless of stacked signals. Canonical vocabulary reference:
+        prompts/reference/markov_evidence_vocab.md (that file wins on conflict).
+
+    trace_quality : dict, optional
+        Orchestrator QUALITY metadata only (e.g. aggregate_quality, downgrades).
+        Engine-owned values (edge/EV/Kelly/units/confidence tier/probabilities)
+        are rejected — analyze() computes those.
     """
     from omega.core.contracts.schemas import GameAnalysisRequest
     from omega.core.contracts.service import analyze
 
     try:
+        _reject_protected_trace_quality("omega_analyze_game", trace_quality)
         request_payload, mcp_defaults = _request_with_mcp_defaults(request, kind="game")
         request_payload = _maybe_inject_game_priors(request_payload, session_id)
         effective_trace_quality = _merge_mcp_trace_quality(trace_quality, mcp_defaults)
@@ -361,11 +402,17 @@ def omega_analyze_prop(
           plane     one of: player, game
           window    one of: last_1, last_3, last_5, last_10, season, series, h2h, matchup
           direction optional; one of: over, under, home, away, neutral
+
+    trace_quality : dict, optional
+        Orchestrator QUALITY metadata only (e.g. aggregate_quality, downgrades).
+        Engine-owned values (edge/EV/Kelly/units/confidence tier/probabilities)
+        are rejected — analyze() computes those.
     """
     from omega.core.contracts.schemas import PlayerPropRequest
     from omega.core.contracts.service import analyze
 
     try:
+        _reject_protected_trace_quality("omega_analyze_prop", trace_quality)
         request_payload, mcp_defaults = _request_with_mcp_defaults(request, kind="prop")
         effective_trace_quality = _merge_mcp_trace_quality(trace_quality, mcp_defaults)
         request_payload = _maybe_inject_prop_priors(request_payload, session_id)
@@ -414,6 +461,7 @@ def omega_analyze_slate(
     from omega.core.contracts.service import analyze
 
     try:
+        _reject_protected_trace_quality("omega_analyze_slate", trace_quality)
         typed = SlateAnalysisRequest(**request)
         gate_failures = _formal_output_gate_failures()
         if gate_failures:
@@ -440,6 +488,18 @@ def omega_run_batch(
     Each entry is a BatchAnalysisEntry dict.  If odds fields are absent the tool
     resolves them via omega_resolve_odds before calling analyze().  For props,
     prop_type may be a list — the first market that resolves successfully is used.
+
+    Per entry, supply the structured reasoning fields rather than prose-only output:
+
+    - ``evidence`` — typed EvidenceSignal dicts (see omega/core/contracts/evidence.py);
+      the engine applies known types deterministically and persists all for scoring.
+    - ``reasoning_presentation`` — analyst-note prose keyed thesis/market_read/why/
+      risks/verdict. Qualitative only; protected engine values are rejected.
+    - ``roster_context`` — RSVG (Roster & Situational Verification Gate) payload, a
+      RosterContextPayload dict (omega/core/gates/rsvg.py). The gate runs BEFORE odds
+      resolution/analyze(): ``blocked`` entries are skipped, ``research_candidate``
+      stamps ``reasoning_downgrade_rationale`` + ``trace_quality.rsvg`` on the trace,
+      and verified key-absence ``usage_role_change`` signals merge into evidence.
 
     Export blocks are written to ``var/inbox/traces/<trace_id>.json`` in the
     standard shape required by ``omega-ingest-traces``.
@@ -505,6 +565,47 @@ def omega_run_batch(
         identifier = (
             entry.player_name if entry.kind == "prop" else f"{entry.away_team} @ {entry.home_team}"
         )
+
+        # --- RSVG pre-analysis gate (roster & situational verification) ---
+        # Runs BEFORE odds resolution so blocked entries never touch providers or
+        # analyze(). The gate only validates structured facts the operator/LLM
+        # already gathered; it computes no engine values.
+        rsvg = None
+        if entry.roster_context is not None:
+            from omega.core.gates.rsvg import RosterContextPayload, evaluate_roster_context
+
+            try:
+                rsvg = evaluate_roster_context(RosterContextPayload(**entry.roster_context))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(
+                    {"index": idx, "identifier": identifier, "error": f"rsvg_invalid: {exc}"}
+                )
+                results.append(
+                    {
+                        "index": idx,
+                        "status": "error",
+                        "identifier": identifier,
+                        "error": f"rsvg_invalid: {exc}",
+                    }
+                )
+                continue
+            if rsvg.status == "blocked":
+                results.append(
+                    {
+                        "index": idx,
+                        "status": "skipped",
+                        "identifier": identifier,
+                        "reason": "rsvg_blocked",
+                        "rsvg": rsvg.gate_audit.model_dump(),
+                    }
+                )
+                continue
+
+        # Typed usage_role_change signals for verified key absences merge into the
+        # entry's evidence so the engine can apply them deterministically.
+        entry_evidence: list[dict[str, Any]] = list(entry.evidence)
+        if rsvg is not None:
+            entry_evidence.extend(rsvg.evidence_dicts())
 
         # --- Odds resolution ---
         if entry.kind == "prop":
@@ -575,7 +676,7 @@ def omega_run_batch(
                 "player_context": entry.player_context or {},
                 "game_context": entry.game_context or {},
                 "n_iterations": entry.n_iterations,
-                "evidence": entry.evidence,
+                "evidence": entry_evidence,
             }
 
         else:  # game
@@ -618,7 +719,7 @@ def omega_run_batch(
                 "game_context": entry.game_context or {},
                 "odds": game_odds,
                 "n_iterations": entry.n_iterations,
-                "evidence": entry.evidence,
+                "evidence": entry_evidence,
             }
 
         # --- Seed derivation ---
@@ -659,18 +760,41 @@ def omega_run_batch(
         elif game_odds:
             market_context = {"odds": game_odds}
 
+        reasoning_sources = list(entry.reasoning_sources)
+        if rsvg is not None:
+            reasoning_sources.extend(
+                s for s in rsvg.reasoning_sources if s not in reasoning_sources
+            )
         reasoning_inputs = {
-            "sources": entry.reasoning_sources,
+            "sources": reasoning_sources,
             "fields_gathered": list(request_dict.keys()),
             "missing_fields": [],
             "market_context": market_context,
         }
+        try:
+            _reject_protected_reasoning_inputs("omega_run_batch", reasoning_inputs)
+        except ValueError as exc:
+            errors.append({"index": idx, "identifier": identifier, "error": str(exc)})
+            results.append(
+                {"index": idx, "status": "error", "identifier": identifier, "error": str(exc)}
+            )
+            continue
         trace["reasoning_inputs"] = reasoning_inputs
-        trace["reasoning_downgrade_rationale"] = None
+        trace["reasoning_downgrade_rationale"] = (
+            rsvg.reasoning_downgrade_rationale if rsvg is not None else None
+        )
         trace["reasoning_narrative"] = entry.reasoning_narrative or f"Batch analysis: {identifier}"
-        trace["trace_quality"] = trace.get("trace_quality") or {}
+        # Copy before mutating: the analyze() return may share nested dicts.
+        trace_quality = dict(trace.get("trace_quality") or {})
+        if rsvg is not None:
+            trace_quality.update(rsvg.trace_quality_fragment())
+        trace["trace_quality"] = trace_quality
         if entry.reasoning_presentation is not None:
             trace["reasoning_presentation"] = entry.reasoning_presentation.model_dump(exclude_none=True)
+        elif rsvg is not None:
+            trace["reasoning_presentation"] = rsvg.reasoning_presentation.model_dump(
+                exclude_none=True
+            )
 
         export_block = {
             "export_schema_version": 2,
@@ -704,15 +828,16 @@ def omega_run_batch(
 
         trace_ids.append(trace_id)
         export_paths.append(str(dest))
-        results.append(
-            {
-                "index": idx,
-                "status": "ok",
-                "identifier": identifier,
-                "trace_id": trace_id,
-                "export_path": str(dest),
-            }
-        )
+        ok_row: dict[str, Any] = {
+            "index": idx,
+            "status": "ok",
+            "identifier": identifier,
+            "trace_id": trace_id,
+            "export_path": str(dest),
+        }
+        if rsvg is not None:
+            ok_row["rsvg_status"] = rsvg.status
+        results.append(ok_row)
 
     ok_count = sum(1 for r in results if r["status"] == "ok")
     skipped_count = sum(1 for r in results if r["status"] == "skipped")

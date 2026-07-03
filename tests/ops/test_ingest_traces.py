@@ -816,3 +816,66 @@ class TestPrePersistExportGate:
         assert "re-wrap" in msg or "re-drop" in msg
         assert "do not re-run analyze" in msg
         store.close()
+
+
+# ---------------------------------------------------------------------------
+# LLM interface contract: reasoning surface survives export -> ingest -> store
+# ---------------------------------------------------------------------------
+
+
+class TestReasoningSurfaceRoundTrip:
+    def test_reasoning_fields_survive_ingest_into_full_trace(self, workspace, monkeypatch):
+        """reasoning_presentation, downgrade rationale, evidence, and the RSVG
+        gate verdict must ride the export block through ingest into the stored
+        full_trace unchanged — typed and trace-persisted, not prompt-only."""
+        inbox, db_path = workspace
+        block = _make_export_block("sandbox-reason-rt", with_bet=False)
+        trace = block["trace"]
+        trace["session_id"] = "sess-reason-rt"
+        trace["input_snapshot"]["evidence"] = [
+            {
+                "signal_type": "usage_role_change",
+                "category": "situational",
+                "plane": "game",
+                "value": "key_absence:out",
+                "source": "injury_report",
+                "confidence": 0.9,
+                "window": "matchup",
+                "direction": "away",
+                "note": "RSVG key absence: Star A (out, Miami Heat)",
+            }
+        ]
+        trace["reasoning_presentation"] = {
+            "thesis": "RSVG-verified matchup.",
+            "market_read": None,
+            "why": "Lineups confirmed; one key absence verified.",
+            "risks": "Late scratch risk.",
+            "verdict": "RESEARCH_CANDIDATE — no formal actionable output.",
+        }
+        trace["reasoning_downgrade_rationale"] = "RSVG research_candidate: context stale"
+        trace["reasoning_inputs"] = {
+            "sources": ["espn.com"],
+            "fields_gathered": ["evidence"],
+            "missing_fields": [],
+        }
+        trace["trace_quality"] = {
+            "aggregate_quality": 0.7,
+            "rsvg": {"gate": "rsvg", "status": "research_candidate", "schema_version": 1},
+        }
+
+        _write_file(inbox, "sandbox-reason-rt.json", block)
+        monkeypatch.setattr(
+            sys, "argv", ["ingest_traces.py", "--inbox", str(inbox), "--db", str(db_path)]
+        )
+        assert ingest_traces.main() == 0
+
+        store = TraceStore(db_path=str(db_path))
+        stored = store.get_trace("sandbox-reason-rt")
+        assert stored is not None
+        assert stored["reasoning_presentation"]["verdict"].startswith("RESEARCH_CANDIDATE")
+        assert stored["reasoning_presentation"]["thesis"] == "RSVG-verified matchup."
+        assert stored["reasoning_downgrade_rationale"] == "RSVG research_candidate: context stale"
+        assert stored["reasoning_inputs"]["sources"] == ["espn.com"]
+        assert stored["trace_quality"]["rsvg"]["status"] == "research_candidate"
+        assert stored["input_snapshot"]["evidence"][0]["signal_type"] == "usage_role_change"
+        store.close()

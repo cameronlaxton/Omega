@@ -177,6 +177,23 @@ class TestResearchPlusBlockedPhrases:
         assert "engine-confirmed" in contains_blocked_phrase_research_plus("ENGINE-CONFIRMED edge")
 
 
+class TestBannedHypeWords:
+    """AGENTS.md bans 'lock' and 'smash' as betting-output hype; the runtime
+    matchers enforce them with word boundaries so ordinary words never trip."""
+
+    def test_lock_and_smash_flagged_in_both_modes(self):
+        assert "lock" in contains_blocked_phrase("This one is a LOCK tonight")
+        assert "smash" in contains_blocked_phrase("Smash the over here")
+        assert "lock" in contains_blocked_phrase_research_plus("an absolute lock")
+        assert "smash" in contains_blocked_phrase_research_plus("a smash spot")
+
+    def test_word_boundaries_prevent_false_positives(self):
+        assert contains_blocked_phrase("output was blocked by the gate") == []
+        assert contains_blocked_phrase("unlock the profile; check the lockfile") == []
+        assert contains_blocked_phrase("Celtics locked up the 2 seed") == []
+        assert contains_blocked_phrase_research_plus("gate blocked; taint lockfile written") == []
+
+
 class TestFormatResearchPlusBlock:
     def test_header_and_disclaimer_present(self):
         result = format_research_plus_block("Edge +3.2%.")

@@ -7,6 +7,7 @@ decisions centralized and out of ad hoc agent logic.
 
 from __future__ import annotations
 
+import re
 from enum import Enum
 
 # Phrases that must not appear in Research Candidate output (numbers fully hidden).
@@ -32,6 +33,14 @@ _BLOCKED_RESEARCH_PLUS_PHRASES: frozenset[str] = frozenset(
         "engine-confirmed",
         "actionable bet",
     }
+)
+
+# Single-word hype terms banned by AGENTS.md ("lock", "smash") in ANY output
+# mode. Matched with word boundaries, not substrings, so "blocked" / "unlock" /
+# "locksmith" never false-positive. Applied by both matchers below.
+_BLOCKED_HYPE_WORDS: tuple[str, ...] = ("lock", "smash")
+_BLOCKED_HYPE_WORDS_RE = re.compile(
+    r"\b(" + "|".join(re.escape(w) for w in _BLOCKED_HYPE_WORDS) + r")\b"
 )
 
 RESEARCH_CANDIDATE_DISCLAIMER = (
@@ -202,6 +211,7 @@ def contains_blocked_phrase(text: str) -> list[str]:
     """
     normalized = text.casefold()
     found = [phrase for phrase in _BLOCKED_FORMAL_PHRASES if phrase in normalized]
+    found.extend(set(_BLOCKED_HYPE_WORDS_RE.findall(normalized)))
     return sorted(found)
 
 
@@ -214,6 +224,7 @@ def contains_blocked_phrase_research_plus(text: str) -> list[str]:
     """
     normalized = text.casefold()
     found = [phrase for phrase in _BLOCKED_RESEARCH_PLUS_PHRASES if phrase in normalized]
+    found.extend(set(_BLOCKED_HYPE_WORDS_RE.findall(normalized)))
     return sorted(found)
 
 

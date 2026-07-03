@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from omega.ops.output_modes import contains_blocked_phrase
 from omega.trace.session_report.models import (
     AuditRow,
     ContextBullet,
     IntakeReportData,
     TraceReportCard,
 )
+
+
+class SessionReportLanguageError(ValueError):
+    """Raised when rendered report Markdown contains banned betting language."""
 
 
 def _clean(value: object) -> str:
@@ -272,6 +277,15 @@ def _zero_evidence_block(data: IntakeReportData) -> list[str]:
     ]
 
 
+def _assert_no_blocked_language(markdown: str) -> None:
+    blocked = contains_blocked_phrase(markdown)
+    if blocked:
+        phrases = ", ".join(repr(p) for p in blocked)
+        raise SessionReportLanguageError(
+            f"session report contains blocked betting language: {phrases}"
+        )
+
+
 def render_intake_markdown(data: IntakeReportData) -> str:
     """Render an intake report without DB access or recomputation."""
     lines: list[str] = [_frontmatter(data)]
@@ -335,4 +349,6 @@ def render_intake_markdown(data: IntakeReportData) -> str:
         lines.append("_No appendix issues._")
         lines.append("")
 
-    return "\n".join(lines).rstrip() + "\n"
+    markdown = "\n".join(lines).rstrip() + "\n"
+    _assert_no_blocked_language(markdown)
+    return markdown

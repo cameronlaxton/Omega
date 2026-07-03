@@ -170,7 +170,31 @@ class TestMarkovLifecycleGate:
         )
 
     def test_active_signal_applies(self):
+        # rest_advantage: declared active, no markov-plane probation -> applies.
+        sig = _signal(
+            signal_type="rest_advantage",
+            category="situational",
+            plane="game",
+            value=1.0,
+            direction="home",
+        )
+        out = compute_transition_modifier_adjustment([sig], home_team="A")
+        assert "home_score_rate_scalar" in out.modifiers
+
+    def test_markov_plane_probation_withholds_pace_until_graduated(self):
+        # pace_up maps to a mechanism that was dead until 2026-07-02; it is
+        # scored but NOT applied until an operator lifecycle override of
+        # "active" graduates it (plan 5.3 gate).
         out = compute_transition_modifier_adjustment([self._pace_signal()], home_team="A")
+        assert "pace_scalar" not in out.modifiers
+        rec = out.applications[0]
+        assert rec["applied"] is False
+        assert "markov_plane_probation" in rec["reason"]
+
+        graduated = _POLICY.model_copy(update={"signal_lifecycle": {"pace_up": "active"}})
+        out = compute_transition_modifier_adjustment(
+            [self._pace_signal()], home_team="A", policy=graduated
+        )
         assert "pace_scalar" in out.modifiers
 
     def test_deprecated_signal_not_applied(self):

@@ -29,14 +29,21 @@ from omega.core.betting.odds import (
     implied_probability,
 )
 from omega.core.calibration.probability import apply_calibration
+from omega.core.simulation.backends import resolve_game_backend
 from omega.core.simulation.engine import OmegaSimulationEngine
 from omega.strategy.artifacts import FrozenArtifact, compat_dict_to_artifact
+from omega.strategy.backtest.acceleration import SimulationOutputCache, crn_seed
 from omega.strategy.models import BacktestResult, StrategyEntry
 from omega.trace.parameter_profiles import substrate_ref_for_trace
 
 UTC = timezone.utc
 
 logger = logging.getLogger("omega.strategy.backtest")
+
+# Versions the backtest re-sim contract for the output-cache key (Issue #27):
+# bump when the meaning of a cached raw sim output changes (inputs threaded,
+# markets priced, etc.) so older in-process entries can never be reused.
+_RESIM_MODEL_VERSION = "backtest_resim_v1"
 
 
 def _grade_selection(
@@ -136,6 +143,8 @@ class BacktestEngine:
         n_iterations: int = 1000,
         seed: int = 42,
         exact_eval: bool = False,
+        output_cache: SimulationOutputCache | None = None,
+        crn_salt: str | None = None,
     ) -> None:
         self._sim = OmegaSimulationEngine()
         self._n_iterations = n_iterations
@@ -146,6 +155,15 @@ class BacktestEngine:
         # making backtest probabilities — and the calibration pairs derived from
         # them — noise-free. Non-parametric backends ignore the flag.
         self._exact_eval = exact_eval
+        # Issue #27 acceleration (both opt-in; None = behavior unchanged):
+        # output_cache reuses RAW outputs of identical deterministic sims within
+        # this process; crn_salt switches MC seeding to common-random-number
+        # streams (crn_seed(artifact_id, crn_salt)) so paired engines sharing a
+        # salt sample identical streams per row, while different salts (e.g. two
+        # model versions under independent evaluation) decorrelate. Neither
+        # displaces exact_eval, which stays the preferred substrate.
+        self._output_cache = output_cache
+        self._crn_salt = crn_salt
 
     def run(
         self,
@@ -324,19 +342,91 @@ class BacktestEngine:
         spread_line = odds.get("spread_home")
         total_line = odds.get("over_under")
 
+        # Governed substrate (schema-v2 artifacts, plan 5.4): re-run on the SAME
+        # backend + prior_payload production used, so the re-sim echoes the same
+        # governed parameter_profile_ref and bound calibration profiles apply
+        # here exactly as in production. Fail-closed on every degraded case —
+        # v1 artifact (fields None), substrate_unresolved, or an unregistered
+        # backend name — the re-sim falls back to today's ungoverned default
+        # rather than guessing a substrate.
+        backend = None
+        prior_payload = None
+        if not artifact.substrate_unresolved:
+            prior_payload = artifact.prior_payload or None
+            if artifact.simulation_backend:
+                backend = resolve_game_backend(artifact.simulation_backend)
+                if backend is None:
+                    logger.info(
+                        "artifact %s names unregistered backend %r; re-simulating on "
+                        "the default backend (ungoverned)",
+                        artifact.artifact_id,
+                        artifact.simulation_backend,
+                    )
+                    prior_payload = None
+
+        # Deterministic seed: the artifact's recorded seed (engine default as the
+        # last resort), unless CRN mode is on — then a per-row stream derived from
+        # the artifact identity + this engine's salt. Only MC sampling consumes
+        # the seed; exact_eval is unaffected and stays preferred.
+        seed = artifact.simulation_seed if artifact.simulation_seed is not None else self._seed
+        if self._crn_salt is not None:
+            seed = crn_seed(artifact.artifact_id, model_key=self._crn_salt)
+
+        # Issue #27 output cache (opt-in): reuse RAW outputs of an identical
+        # deterministic simulation. The key covers backend/component identity, the
+        # re-sim contract version, the full input payload (teams, contexts, seed,
+        # lines, priors, iteration count, exact flag), the evidence policy
+        # (backtest replay is evidence-free), and the artifact's calibration
+        # policy ref — changing any of them is a miss, so stale reuse across
+        # backend/calibration/evidence-policy changes is impossible. Only raw
+        # outputs are cached; calibration/edges/stakes are re-derived downstream
+        # through the shared production policy on every read.
+        cache_key: str | None = None
+        sim_result: dict[str, Any] | None = None
+        if self._output_cache is not None:
+            cache_key = self._output_cache.make_key(
+                backend_name=artifact.simulation_backend or "engine_default",
+                component_version=getattr(backend, "component_version", "engine_default"),
+                model_version=_RESIM_MODEL_VERSION,
+                league=league,
+                market="game_raw_sim",
+                line={"spread_home": spread_line, "over_under": total_line},
+                context_hash=self._output_cache.context_hash(
+                    {
+                        "home_team": home_team,
+                        "away_team": away_team,
+                        "home_context": home_ctx,
+                        "away_context": away_ctx,
+                        "seed": seed,
+                        "n_iterations": self._n_iterations,
+                        "exact": self._exact_eval,
+                        "prior_payload": prior_payload,
+                    }
+                ),
+                evidence_policy="replay_no_evidence",
+                calibration_ref=artifact.calibration_policy,
+            )
+            sim_result = self._output_cache.get(cache_key)
+
         # Simulate
-        sim_result = self._sim.run_fast_game_simulation(
-            home_team=home_team,
-            away_team=away_team,
-            league=league,
-            n_iterations=self._n_iterations,
-            home_context=home_ctx or None,
-            away_context=away_ctx or None,
-            seed=artifact.simulation_seed if artifact.simulation_seed is not None else self._seed,
-            spread_home=spread_line,
-            over_under=total_line,
-            exact=self._exact_eval,
-        )
+        if sim_result is None:
+            sim_result = self._sim.run_fast_game_simulation(
+                home_team=home_team,
+                away_team=away_team,
+                league=league,
+                n_iterations=self._n_iterations,
+                home_context=home_ctx or None,
+                away_context=away_ctx or None,
+                seed=seed,
+                spread_home=spread_line,
+                over_under=total_line,
+                exact=self._exact_eval,
+                prior_payload=prior_payload,
+                backend=backend,
+            )
+            # Cache only deterministic outputs: exact evaluation or seeded MC.
+            if cache_key is not None and (self._exact_eval or seed is not None):
+                self._output_cache.put(cache_key, sim_result)
 
         if not sim_result.get("success"):
             return []
@@ -344,11 +434,12 @@ class BacktestEngine:
         bets = []
 
         # P8.3: substrate identity of THIS backtest simulation, threaded into the
-        # shared calibration selection exactly like production. The re-sim runs
-        # ungoverned (FrozenArtifact carries no prior_payload), so its substrate
-        # honestly reports no param_profile_id — a calibration profile bound to a
-        # governed parameter profile is then skipped here too, never silently
-        # applied to raw probabilities from a different substrate.
+        # shared calibration selection exactly like production. A governed re-sim
+        # (schema-v2 artifact) echoes its parameter_profile_ref, so the substrate
+        # carries the param_profile_id and bound profiles apply; an ungoverned
+        # re-sim honestly reports no param_profile_id and bound profiles are
+        # skipped — never silently applied to raw probabilities from a different
+        # substrate.
         substrate = substrate_ref_for_trace(sim_result)
 
         # Evaluate moneyline edges

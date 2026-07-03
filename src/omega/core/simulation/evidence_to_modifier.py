@@ -58,6 +58,22 @@ _SIGNAL_TO_MODIFIER: dict[str, tuple[str, float]] = {
 # Exported for introspection (e.g. champion/challenger reporting).
 MAPPED_SIGNAL_TYPES: frozenset[str] = frozenset(_SIGNAL_TO_MODIFIER)
 
+# Markov-plane probation. These signal types map to mechanisms that were dead
+# code until 2026-07-02 (``pace_scalar`` was produced here but consumed by
+# nothing in MarkovSimulator; the momentum-scalar branches were unreachable
+# because the alternating possession loop overwrote the cross-team momentum
+# marker every possession). The mechanisms are now wired, but no CLV evidence
+# exists for their Markov-plane effect, so they are recorded/scored and NOT
+# applied to the transition matrix. Graduation is operator-gated through the
+# existing issue-28 channel: an explicit ``signal_lifecycle`` override of
+# "active" in the production AdjustmentPolicy lifts a type out of this set.
+# The declared registry lifecycle stays "active" because the same signals have
+# working (and long-applied) fast_score plane handlers — this probation is
+# scoped to the Markov transition path only.
+MARKOV_PLANE_PROBATION_SIGNALS: frozenset[str] = frozenset(
+    {"pace_up", "pace_down", "blowout_risk"}
+)
+
 # ---------------------------------------------------------------------------
 # Public vocabulary table — single source of truth for prompt generation.
 # ---------------------------------------------------------------------------
@@ -65,8 +81,8 @@ MAPPED_SIGNAL_TYPES: frozenset[str] = frozenset(_SIGNAL_TO_MODIFIER)
 # Used by omega_markov_evidence_guide() in the MCP server and by the cowork
 # prompt section so the LLM's vocabulary is always in sync with this dict.
 MARKOV_SIGNAL_VOCABULARY: tuple[tuple[str, str, float, str], ...] = (
-    ("pace_up", "pace_scalar", 1.06, "+6% pace; matchup faster than league baseline"),
-    ("pace_down", "pace_scalar", 0.92, "-8% pace; matchup slower than league baseline"),
+    ("pace_up", "pace_scalar", 1.06, "+6% total possessions; matchup faster than baseline"),
+    ("pace_down", "pace_scalar", 0.92, "-8% total possessions; matchup slower than baseline"),
     (
         "rest_advantage",
         "home_score_rate_scalar",
@@ -101,7 +117,7 @@ MARKOV_SIGNAL_VOCABULARY: tuple[tuple[str, str, float, str], ...] = (
         "blowout_risk",
         "home_momentum_scalar",
         0.98,
-        "-2% momentum acceleration; suppresses runaway variance",
+        "-2% hot-hand follow-up scoring; suppresses runaway variance",
     ),
 )
 
@@ -133,7 +149,14 @@ def build_markov_vocabulary_table(lifecycle_overrides: dict[str, str] | None = N
         lifecycle = effective_lifecycle(sig, lifecycle_overrides)
         if not is_vocabulary_visible(lifecycle):
             continue  # deprecated / rejected — dropped from the agent vocabulary
-        tag = "" if lifecycle == "active" else "   [probation: scored, NOT applied]"
+        if lifecycle != "active":
+            tag = "   [probation: scored, NOT applied]"
+        elif sig in MARKOV_PLANE_PROBATION_SIGNALS and not (
+            (lifecycle_overrides or {}).get(sig) == "active"
+        ):
+            tag = "   [markov probation: scored, NOT applied on this backend]"
+        else:
+            tag = ""
         lines.append(f"  {sig:<24} {mod:<26} {scalar:>6.2f}  {desc}{tag}")
     lines += [
         "",
@@ -236,6 +259,30 @@ def compute_transition_modifier_adjustment(
                     "confidence_defaulted": confidence_defaulted,
                     "reason": f"lifecycle={effective_lifecycle(signal_type, overrides)}: "
                     "not applied to Markov transition",
+                    "policy_version": "markov_state_v1",
+                    "evidence_mode": "markov_transition",
+                }
+            )
+            continue
+        # Markov-plane probation: mechanism newly wired, no CLV evidence yet.
+        # Recorded (CLV scoring needs the data) but not applied, unless an
+        # operator override explicitly graduates the type to "active".
+        if (
+            signal_type in MARKOV_PLANE_PROBATION_SIGNALS
+            and not (overrides or {}).get(signal_type) == "active"
+        ):
+            confidence, confidence_defaulted = resolve_confidence(getattr(sig, "confidence", None))
+            applications.append(
+                {
+                    "signal_type": signal_type,
+                    "target": "skip",
+                    "applied": False,
+                    "factor": 1.0,
+                    "effective_scalar": 1.0,
+                    "confidence": confidence,
+                    "confidence_defaulted": confidence_defaulted,
+                    "reason": "markov_plane_probation: mechanism newly wired, not applied "
+                    "until an operator graduates it (signal_lifecycle override 'active')",
                     "policy_version": "markov_state_v1",
                     "evidence_mode": "markov_transition",
                 }

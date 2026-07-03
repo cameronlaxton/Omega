@@ -21,11 +21,13 @@ Analyze calls:
 
 Structured evidence:
 - **Roster & Situational Verification Gate (RSVG):** Before running any analyze call, perform a targeted `search_web` query for the matchup: `"<Team A> vs <Team B> lineup OR injury OR motivation OR matchup context <Date>"`.
-- **Absent Player Penalties:**
-  - Non-key player absences: use baseline averages without alteration (our defaults are correct).
-  - Key player absences (starting pitchers/slots 1-4 for MLB, starting XI key contributors for soccer, superstars for NBA): emit a `usage_role_change` signal per absent key player (favoring the opponent).
-  - More than 2 key player absences: trigger a mandatory downgrade to `RESEARCH_CANDIDATE` (qualitative lean only).
-- **Persistence:** Roster context, lineup summaries, and situational news must be persisted in the trace under `reasoning_presentation` (carrying `thesis`, `market_read`, `why`, `risks`, and `verdict`) so they are archived in the session intake and audit reports.
+- **RSVG is typed code, not prose discipline (`src/omega/core/gates/rsvg.py`).** Condense the search findings into a structured `RosterContextPayload` dict (matchup identity, source summaries, per-team lineup status + injury-report-checked flags, absences with key-player flags, motivation notes, `gathered_at`, `roster_context_complete`) and pass it as `roster_context` on each `omega_run_batch` entry. The gate runs before odds resolution/analyze() and deterministically enforces:
+  - Non-key player absences: pass with notes (baseline averages stay correct; no signal).
+  - Key player absences (starting pitchers/slots 1-4 for MLB, starting XI key contributors for soccer, superstars for NBA): one typed `usage_role_change` signal per absent key player (favoring the opponent), merged into the entry's evidence.
+  - More than 2 key player absences on one team: forced `RESEARCH_CANDIDATE` with `reasoning_downgrade_rationale` set (qualitative lean only).
+  - Missing/unverifiable lineup or injury context: downgrade with explicit rationale, or `blocked` (entry skipped, analyze() never runs) when a team is fully dark.
+  For non-batch single analyze calls, call `evaluate_roster_context()` and splice `RsvgResult.to_batch_entry_fields()` into the request/export yourself. Do not re-implement the thresholds in prose.
+- **Persistence:** the gate stamps `trace_quality.rsvg` (auditable verdict) and fills `reasoning_presentation` (carrying `thesis`, `market_read`, `why`, `risks`, and `verdict` — roster context, lineup summaries, and situational news) so they are archived in the session intake and audit reports.
 - Express qualitative reasoning (defensive matchup, recent form, situational, game/matchup context) as typed `evidence` signals on the analyze request, not as free text. Each signal carries `signal_type`, `category`, `plane`, `value`, `source`, `confidence`, `window`, and optional `direction`/`stat_key`. See `omega/core/contracts/evidence.py` for the full signal taxonomy.
 - `window` must be one of `last_1`, `last_3`, `last_5`, `last_10`, `season`, `series`, `h2h`, `matchup`. `direction` must be one of `over`, `under`, `home`, `away`, `neutral`. Do not invent values like `away_favored` — encode market lean in the agent's narrative or in `value`, not in `direction`. Pydantic will hard-reject anything else and abort the analyze call.
 - The deterministic engine applies known signal types itself; never bake a reasoning adjustment into a hand-tuned mean. Evidence values may come from you; how the engine applies them may not.
@@ -33,18 +35,21 @@ Structured evidence:
 - Weight your evidence by the "Evidence signal performance" section (§6B) of the latest calibration report: trust signal types/sources marked `predictive`, discount `noise`, treat `insufficient_n` as unproven. A positive `cal_gap` means past confidence on that signal was too high.
 
 Markov backend evidence vocabulary:
-- When using simulation_backend="markov_state", only 8 signal_type values adjust the possession-level transition matrix; all other types are audited but have no Markov effect. The canonical list (exact string keys, effects, and the Â±15% cumulative cap) is `prompts/reference/markov_evidence_vocab.md`. Use the exact keys from that file.
+- When using simulation_backend="markov_state", only 8 signal_type values adjust the possession-level transition matrix; all other types are audited but have no Markov effect. The canonical list (exact string keys, effects, and the ±15% cumulative cap) is `prompts/reference/markov_evidence_vocab.md`. Use the exact keys from that file.
 - Call omega_markov_evidence_guide for the full table with modifier keys and cumulative cap rules.
-- Evidence routing note: handler-based evidence follows `AdjustmentPolicy.mode`
-  (`shadow` records only; `live` applies). Markov evidence uses backend-specific
-  transition modifiers instead of handler `off_rating` scaling; do not emit the
-  same logical signal on both game and player planes.
+- Evidence routing note: handler-based evidence follows the graduated
+  `AdjustmentPolicy.mode` ladder (`disabled`/`observe`/`score_only`/`bounded_live`/`live`;
+  the seed policy ships at `bounded_live` with reliability-weighted application —
+  canonical table in `prompts/reference/output_modes.md`, "Graduated evidence
+  application modes"; legacy `shadow` normalizes to `score_only`). Markov evidence
+  uses backend-specific transition modifiers instead of handler `off_rating`
+  scaling; do not emit the same logical signal on both game and player planes.
 
 Output mode vs engine execution (canonical: `prompts/reference/output_modes.md`):
 - `RESEARCH_CANDIDATE` is an output-authorization mode, not an execution mode, and is resolved per market. Read the `output_modes` map (`output_modes.game`, `output_modes.prop`) from the `var/reports/latest.md` frontmatter and authorize games and props off their own market's mode; the scalar `output_mode` is a conservative fallback only.
-- Two distinct scenarios â€” do not conflate them:
+- Two distinct scenarios — do not conflate them:
   - Engine UNAVAILABLE (no Python/MCP path, preflight failed): the engine does not run; output is qualitative-only; no trace, no fabricated trace_id.
-  - Engine AVAILABLE but `RESEARCH_CANDIDATE` / quality < 0.7 / no fitted profile: the engine STILL runs, a `sandbox-` trace_id is STILL minted, and the trace STILL persists to var/omega_traces.db. Only the user-facing betting numbers are withheld. Never skip `analyze()` just because output is research-only â€” that starves the calibration loop.
+  - Engine AVAILABLE but `RESEARCH_CANDIDATE` / quality < 0.7 / no fitted profile: the engine STILL runs, a `sandbox-` trace_id is STILL minted, and the trace STILL persists to var/omega_traces.db. Only the user-facing betting numbers are withheld. Never skip `analyze()` just because output is research-only — that starves the calibration loop.
 
 Presentation contract (canonical: `prompts/reference/presentation_contract.md`):
 - Every user-facing betting response is narrative-first in both ACTIONABLE and RESEARCH_CANDIDATE modes: slate snapshot, ranked recommendations/watchlist, per-matchup narrative (match context, market read, Omega read, risks, verdict), and an honesty block per item.
@@ -94,5 +99,5 @@ Current odds:
 - The odds resolver prepares inputs and provenance only; it does not compute protected Omega outputs.
 
 Batch analysis (N > 3 analyses):
-- MCP available: use `omega_run_batch`. One call resolves odds (with prop_type fallback chain), derives seeds, enforces the formal gate, runs analyze() per entry, and writes all export blocks to `var/inbox/traces/`. Do not loop individual analyze tools and do not write a Python script.
+- MCP available: use `omega_run_batch`. One call resolves odds (with prop_type fallback chain), derives seeds, enforces the formal gate, runs the RSVG gate on entries carrying `roster_context`, runs analyze() per entry, and writes all export blocks to `var/inbox/traces/`. Do not loop individual analyze tools and do not write a Python script.
 - MCP unavailable: a batch Python script is authorized. It must call `cowork_preflight.run_formal_output_gate()` before any `analyze()`, derive every seed as `int.from_bytes(hashlib.sha256(f"{prompt}|{date}".encode("utf-8")).digest()[:4], "big")`, include at least one `EvidenceSignal` per trace (or document why evidence is empty), and must not hardcode `trace_quality.aggregate_quality` or mutate shared state (e.g. clearing the odds cache) as a side effect. Scripts violating these rules contaminate the calibration loop.

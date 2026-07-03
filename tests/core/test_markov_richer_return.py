@@ -75,11 +75,11 @@ class TestModifierParity:
         ).modifiers
         assert flags_off == no_policy
 
-    def test_two_pace_down_clamped_when_off(self):
-        signals = [_sig("pace_down"), _sig("pace_down")]
+    def test_two_usage_signals_clamped_when_off(self):
+        signals = [_sig("usage_role_change"), _sig("usage_role_change")]
         mods = compute_transition_modifier_adjustment(signals, "Lakers").modifiers
-        # 0.92*0.92 = 0.8464 below the floor 1/1.15 -> clamped
-        assert mods["pace_scalar"] == pytest.approx(1.0 / 1.15, abs=1e-9)
+        # 0.93*0.93 = 0.8649 below the floor 1/1.15 -> clamped
+        assert mods["home_score_rate_scalar"] == pytest.approx(1.0 / 1.15, abs=1e-9)
 
 
 # ---------------------------------------------------------------------------
@@ -110,14 +110,14 @@ class TestApplications:
 
     def test_aggregation_records_describe_each_key(self):
         adj = compute_transition_modifier_adjustment(
-            [_sig("pace_down"), _sig("pace_down")], "Lakers"
+            [_sig("usage_role_change"), _sig("usage_role_change")], "Lakers"
         )
         assert len(adj.aggregation_records) == 1
         rec = adj.aggregation_records[0]
-        assert rec["modifier_key"] == "pace_scalar"
+        assert rec["modifier_key"] == "home_score_rate_scalar"
         assert rec["family_size"] == 2
         assert rec["damped"] is False
-        assert rec["raw_value"] == pytest.approx(0.92 * 0.92)
+        assert rec["raw_value"] == pytest.approx(0.93 * 0.93)
         assert rec["clamped_value"] == pytest.approx(1.0 / 1.15, abs=1e-9)
 
 
@@ -138,22 +138,22 @@ class TestFlagsEnabled:
         assert adj.applications[0]["effective_scalar"] == pytest.approx(1.02)
 
     def test_damping_replaces_product_for_same_key(self):
-        signals = [_sig("pace_down"), _sig("pace_down")]
+        signals = [_sig("usage_role_change"), _sig("usage_role_change")]
         adj = compute_transition_modifier_adjustment(
             signals, "Lakers", policy=_policy(damping=True)
         )
-        # damp_family: 1 + (-0.08) + (-0.08*0.5) = 0.88 (above the 0.8696 floor)
-        assert adj.modifiers["pace_scalar"] == pytest.approx(0.88)
+        # damp_family: 1 + (-0.07) + (-0.07*0.5) = 0.895 (above the 0.8696 floor)
+        assert adj.modifiers["home_score_rate_scalar"] == pytest.approx(0.895)
         rec = adj.aggregation_records[0]
         assert rec["damped"] is True
-        assert rec["raw_value"] == pytest.approx(0.88)
+        assert rec["raw_value"] == pytest.approx(0.895)
 
     def test_damping_preserves_sign(self):
-        signals = [_sig("pace_up"), _sig("pace_up")]  # 1.06 each
+        signals = [_sig("def_matchup_weak"), _sig("def_matchup_weak")]  # 1.05 each
         adj = compute_transition_modifier_adjustment(
             signals, "Lakers", policy=_policy(damping=True)
         )
-        assert adj.modifiers["pace_scalar"] > 1.0
+        assert adj.modifiers["away_score_rate_scalar"] > 1.0
 
 
 # ---------------------------------------------------------------------------

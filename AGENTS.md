@@ -136,6 +136,13 @@ Do not loosen `context_source="provided"` to mean "the LLM thought about it." It
   - If **key** players (starting pitchers/slots 1-4 for MLB, starting XI key contributors for soccer, superstars for NBA/WNBA) are missing/resting, the agent must apply a cumulative `usage_role_change` signal per missing key player.
   - If **more than 2 key players** are out of the lineup for a team, formal output is blocked; the market must be downgraded to `RESEARCH_CANDIDATE` (qualitative lean only).
 - **Persistence:** Roster context, list of absent players, and news summaries must be persisted under `reasoning_presentation` inside the trace.
+- **Typed implementation (do not re-implement in prose):** the gate is code —
+  [`src/omega/core/gates/rsvg.py`](src/omega/core/gates/rsvg.py). Condense the web search into a
+  `RosterContextPayload` dict and pass it as `roster_context` on each `omega_run_batch` entry: the
+  batch tool runs the gate before odds resolution/`analyze()`, skips `blocked` entries, merges the
+  emitted `usage_role_change` signals into evidence, and stamps `reasoning_downgrade_rationale` +
+  `trace_quality.rsvg` onto the trace. Standalone callers: `evaluate_roster_context()` +
+  `RsvgResult.to_batch_entry_fields()`.
 - **Hard fail / block formal output when:** required context is missing, evidence is empty with no downgrade rationale, odds are stale and unreplaced, engine status is skipped/error but output presents a play, identity fields are missing, no trace is emitted for a model-backed recommendation, or RSVG key-player thresholds are violated without downgrade.
 - **Warning-only when:** optional CLV metadata is missing, no bet record exists because no bet was taken, reasoning narrative is missing but structured trace/evidence is present, evidence sample size is thin, identity is metadata-recovered but marked.
 - Warnings become hard failures only when the issue is repairable, the schema/contract is stable, and failing prevents bad picks, calibration, or audit data.

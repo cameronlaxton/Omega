@@ -60,18 +60,27 @@ def test_directional_flip_away_rest_advantage():
 
 
 def test_cumulative_cap_prevents_compounding_exploits():
-    """Three pace_down signals (0.92^3 ≈ 0.779) must be clamped to ~0.870 (1/1.15)."""
-    sigs = [_sig("pace_down"), _sig("pace_down"), _sig("pace_down")]
+    """Three usage_role_change signals (0.93^3 ≈ 0.804) clamp to ~0.870 (1/1.15)."""
+    sigs = [_sig("usage_role_change"), _sig("usage_role_change"), _sig("usage_role_change")]
     result = signals_to_transition_modifiers(sigs, home_team="Lakers")
-    # Raw product would be 0.92^3 ≈ 0.779, below the floor of 1/1.15 ≈ 0.870
-    assert result["pace_scalar"] == pytest.approx(1.0 / 1.15, abs=1e-6)
+    # Raw product would be 0.93^3 ≈ 0.804, below the floor of 1/1.15 ≈ 0.870
+    assert result["home_score_rate_scalar"] == pytest.approx(1.0 / 1.15, abs=1e-6)
 
 
 def test_cumulative_boost_cap():
-    """Three pace_up signals (1.06^3 ≈ 1.191) must be clamped to 1.15."""
-    sigs = [_sig("pace_up"), _sig("pace_up"), _sig("pace_up")]
+    """Three def_matchup_weak signals (1.05^3 ≈ 1.158) must be clamped to 1.15."""
+    sigs = [_sig("def_matchup_weak"), _sig("def_matchup_weak"), _sig("def_matchup_weak")]
     result = signals_to_transition_modifiers(sigs, home_team="Lakers")
-    assert result["pace_scalar"] == pytest.approx(1.15, abs=1e-6)
+    assert result["away_score_rate_scalar"] == pytest.approx(1.15, abs=1e-6)
+
+
+def test_markov_plane_probation_withholds_pace_and_blowout():
+    """pace_up/pace_down/blowout_risk map to mechanisms that were dead until
+    2026-07-02; they are scored but NOT applied until an operator graduates
+    them (markov-plane probation)."""
+    for signal_type in ("pace_up", "pace_down", "blowout_risk"):
+        result = signals_to_transition_modifiers([_sig(signal_type)], home_team="Lakers")
+        assert result == {}, signal_type
 
 
 def test_two_signals_same_key_multiply():
@@ -84,11 +93,11 @@ def test_two_signals_same_key_multiply():
 
 def test_different_keys_are_independent():
     """Signals targeting different modifier keys must not interfere."""
-    sigs = [_sig("pace_up"), _sig("def_matchup_weak")]
+    sigs = [_sig("rest_advantage", direction="home"), _sig("def_matchup_weak")]
     result = signals_to_transition_modifiers(sigs, home_team="Lakers")
-    assert "pace_scalar" in result
+    assert "home_score_rate_scalar" in result
     assert "away_score_rate_scalar" in result
-    assert result["pace_scalar"] == pytest.approx(1.06, abs=1e-9)
+    assert result["home_score_rate_scalar"] == pytest.approx(1.04, abs=1e-9)
     assert result["away_score_rate_scalar"] == pytest.approx(1.05, abs=1e-9)
 
 
