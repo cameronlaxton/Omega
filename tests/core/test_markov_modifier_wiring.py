@@ -29,6 +29,16 @@ def _sim(modifiers: dict[str, float] | None = None) -> MarkovSimulator:
     )
 
 
+def _fallback_sim(modifiers: dict[str, float] | None = None) -> MarkovSimulator:
+    return MarkovSimulator(
+        league="TENNIS",
+        players=[],
+        home_context={"pace": 65.0},
+        away_context={"pace": 65.0},
+        transition_modifiers=modifiers,
+    )
+
+
 def _mean_scores(sim: MarkovSimulator, n: int, seed: int) -> tuple[float, float]:
     random.seed(seed)
     home, away = 0.0, 0.0
@@ -55,6 +65,11 @@ class TestPaceScalarMechanism:
     def test_pace_scalar_moves_expected_total(self):
         lo = _mean_scores(_sim({"pace_scalar": 0.8}), 200, seed=7)
         hi = _mean_scores(_sim({"pace_scalar": 1.2}), 200, seed=7)
+        assert sum(hi) > sum(lo)
+
+    def test_pace_scalar_moves_fallback_archetype_expected_total(self):
+        lo = _mean_scores(_fallback_sim({"pace_scalar": 0.8}), 200, seed=17)
+        hi = _mean_scores(_fallback_sim({"pace_scalar": 1.2}), 200, seed=17)
         assert sum(hi) > sum(lo)
 
 

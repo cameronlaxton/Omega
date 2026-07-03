@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from omega.mcp.server import TOOL_NAMES, omega_run_batch
 
@@ -157,9 +157,10 @@ def test_batch_reasoning_presentation_rejects_extra_or_numeric_fields() -> None:
 def test_batch_reasoning_inputs_rejects_protected_market_context(tmp_path: Path) -> None:
     trace = _make_trace("sandbox-game-protected-ri")
     trace["kind"] = "game"
+    analyze = Mock(return_value=trace)
     with (
         patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
-        patch("omega.core.contracts.service.analyze", return_value=trace),
+        patch("omega.core.contracts.service.analyze", analyze),
         patch("omega.paths.repo_root", return_value=tmp_path),
     ):
         result = omega_run_batch(
@@ -181,6 +182,7 @@ def test_batch_reasoning_inputs_rejects_protected_market_context(tmp_path: Path)
     assert result["export_paths"] == []
     assert "reasoning_inputs" in result["errors"][0]["error"]
     assert "edge_pct" in result["errors"][0]["error"]
+    analyze.assert_not_called()
 
 
 def test_happy_path_game_writes_export_block(tmp_path: Path) -> None:

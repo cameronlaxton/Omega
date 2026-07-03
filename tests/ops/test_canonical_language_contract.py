@@ -42,7 +42,7 @@ BANNED_PHRASES = [
 def _quoted_spans(line: str) -> list[tuple[int, int]]:
     """Character ranges inside straight double quotes or backtick code spans."""
     spans: list[tuple[int, int]] = []
-    for pattern in (r'"[^"]*"', r"`[^`]*`", r"'[^']*'"):
+    for pattern in (r'"[^"]*"', r"`[^`]*`"):
         spans.extend(m.span() for m in re.finditer(pattern, line))
     return spans
 

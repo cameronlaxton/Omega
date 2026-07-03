@@ -71,6 +71,10 @@ def _assert_pre_decision(mapping: dict[str, Any], where: str) -> None:
             )
         if isinstance(value, dict):
             _assert_pre_decision(value, f"{where}.{key}")
+        elif isinstance(value, list):
+            for idx, item in enumerate(value):
+                if isinstance(item, dict):
+                    _assert_pre_decision(item, f"{where}.{key}[{idx}]")
 
 
 class HistoricalReplayRow(BaseModel):
@@ -203,7 +207,7 @@ def replay_rows_from_artifact(
                 line=line,
                 offered_odds=float(price),
                 closing_odds=(float(closing[price_key]) if closing.get(price_key) is not None else None),
-                model_inputs=model_inputs,
+                model_inputs=copy.deepcopy(model_inputs),
                 odds_snapshot=dict(artifact.odds),
                 closing_snapshot=dict(artifact.closing_odds) if artifact.closing_odds else None,
                 simulation_seed=artifact.simulation_seed,

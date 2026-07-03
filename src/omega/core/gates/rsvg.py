@@ -35,7 +35,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from omega.core.contracts.evidence import EvidenceSignal
 from omega.core.contracts.protected_fields import PROTECTED_QUANT_FIELDS, find_protected_key
@@ -214,6 +214,16 @@ class RsvgResult(BaseModel):
     reasoning_downgrade_rationale: str | None
     reasoning_sources: list[str]
     gate_audit: RsvgGateAudit
+
+    @model_validator(mode="after")
+    def _no_protected_fields(self) -> RsvgResult:
+        """Enforce the no-engine-values contract on every construction path."""
+        _assert_no_protected_fields("gate_audit", self.gate_audit.model_dump())
+        _assert_no_protected_fields(
+            "reasoning_presentation", self.reasoning_presentation.model_dump()
+        )
+        _assert_no_protected_fields("evidence", self.evidence_dicts())
+        return self
 
     @property
     def formal_output_allowed(self) -> bool:
@@ -488,8 +498,4 @@ def evaluate_roster_context(
         gate_audit=audit,
     )
 
-    # Fail closed: nothing this gate emits may carry engine-owned quant fields.
-    _assert_no_protected_fields("gate_audit", result.gate_audit.model_dump())
-    _assert_no_protected_fields("reasoning_presentation", result.reasoning_presentation.model_dump())
-    _assert_no_protected_fields("evidence", result.evidence_dicts())
     return result

@@ -734,20 +734,7 @@ def omega_run_batch(
         else:
             request_dict = _maybe_inject_prop_priors(request_dict, session_id)
 
-        # --- Analyze ---
-        try:
-            trace = analyze(request_dict, bankroll=bankroll, session_id=session_id)
-        except Exception as exc:  # noqa: BLE001
-            errors.append({"index": idx, "identifier": identifier, "error": str(exc)})
-            results.append(
-                {"index": idx, "status": "error", "identifier": identifier, "error": str(exc)}
-            )
-            continue
-
-        trace = dict(trace)
-        trace_id = trace["trace_id"]
-
-        # --- Build export block in the current nested trace-export shape. ---
+        # --- Reasoning/provenance payload (validated BEFORE analyze) ---
         market_context: dict[str, Any] = {}
         if entry.kind == "prop":
             market_context = {
@@ -779,6 +766,21 @@ def omega_run_batch(
                 {"index": idx, "status": "error", "identifier": identifier, "error": str(exc)}
             )
             continue
+
+        # --- Analyze ---
+        try:
+            trace = analyze(request_dict, bankroll=bankroll, session_id=session_id)
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"index": idx, "identifier": identifier, "error": str(exc)})
+            results.append(
+                {"index": idx, "status": "error", "identifier": identifier, "error": str(exc)}
+            )
+            continue
+
+        trace = dict(trace)
+        trace_id = trace["trace_id"]
+
+        # --- Build export block in the current nested trace-export shape. ---
         trace["reasoning_inputs"] = reasoning_inputs
         trace["reasoning_downgrade_rationale"] = (
             rsvg.reasoning_downgrade_rationale if rsvg is not None else None

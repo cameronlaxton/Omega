@@ -101,6 +101,9 @@ class MarkovSimulator:
         self.config = get_league_config(self.league)
         self.archetype = get_archetype(self.league)
         self.archetype_name = get_archetype_name(self.league)
+        self._base_n_possessions_unscaled = self._resolve_base_possessions(
+            apply_pace_scalar=False
+        )
         self._base_n_possessions = self._resolve_base_possessions()
         self.transition_matrix_ids = {
             "home": f"{COMPONENT_VERSION}:{self.league}:home_score_outcome",
@@ -134,7 +137,7 @@ class MarkovSimulator:
                 clamped[key] = fval
         return clamped
 
-    def _resolve_base_possessions(self) -> int:
+    def _resolve_base_possessions(self, *, apply_pace_scalar: bool = True) -> int:
         """Compute total simulation loop iterations.
 
         ``pace`` in team context (and ``avg_pace`` in league config) represents
@@ -158,7 +161,7 @@ class MarkovSimulator:
         # this key was produced by evidence_to_modifier but consumed by nothing —
         # a silent no-op; see the markov-plane probation gate there.)
         pace_scalar = self.transition_modifiers.get("pace_scalar", 1.0)
-        if pace_scalar != 1.0:
+        if apply_pace_scalar and pace_scalar != 1.0:
             possessions *= pace_scalar
         if self.archetype_name == "american_football":
             # NFL context paces are expressed in a different unit; halve to
@@ -193,7 +196,7 @@ class MarkovSimulator:
         else:
             expected = _as_float(self.config.get("avg_total"), 2.0) / max(
                 1.0,
-                self._base_n_possessions,
+                self._base_n_possessions_unscaled,
             )
 
         if side == "home":

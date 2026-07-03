@@ -169,6 +169,14 @@ class TestHistoricalReplayRow:
             assert "home_score" not in dumped
             assert "outcome" not in dumped
 
+    def test_sibling_rows_get_independent_model_inputs(self):
+        rows = replay_rows_from_artifact(_artifact())
+        assert len(rows) > 1
+
+        rows[0].model_inputs["home_context"]["off_rating"] = 999.0
+
+        assert rows[1].model_inputs["home_context"]["off_rating"] == 118.0
+
 
 class TestLookaheadGuards:
     def test_missing_odds_fails_closed(self):
@@ -198,6 +206,13 @@ class TestLookaheadGuards:
     def test_contamination_check_is_recursive(self):
         artifact = _artifact(home_context={"recent_form": {"result": "W-L-W"}})
         with pytest.raises(LookaheadContamination, match="result"):
+            replay_rows_from_artifact(artifact)
+
+    def test_contamination_check_recurses_into_lists(self):
+        artifact = _artifact(
+            home_context={"recent_games": [{"opponent": "A", "winner": "Celtics"}]}
+        )
+        with pytest.raises(LookaheadContamination, match="winner"):
             replay_rows_from_artifact(artifact)
 
 

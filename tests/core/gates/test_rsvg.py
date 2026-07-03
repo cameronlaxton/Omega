@@ -15,6 +15,7 @@ from omega.core.gates.rsvg import (
     MAX_KEY_ABSENCES_PER_TEAM,
     RosterContextPayload,
     RsvgProtectedFieldError,
+    RsvgResult,
     _assert_no_protected_fields,
     evaluate_roster_context,
 )
@@ -315,6 +316,21 @@ def test_emitted_payloads_are_free_of_protected_fields() -> None:
 def test_protected_scan_fails_closed() -> None:
     with pytest.raises(RsvgProtectedFieldError):
         _assert_no_protected_fields("test", {"nested": [{"edge_pct": 4.2}]})
+
+
+def test_result_model_rejects_protected_fields_on_direct_construction() -> None:
+    result = evaluate_roster_context(_payload(), evaluated_at=_NOW)
+    audit = result.gate_audit.model_copy(update={"policy": {"edge_pct": 4.2}})
+
+    with pytest.raises(ValidationError, match="edge_pct"):
+        RsvgResult(
+            status=result.status,
+            evidence=result.evidence,
+            reasoning_presentation=result.reasoning_presentation,
+            reasoning_downgrade_rationale=result.reasoning_downgrade_rationale,
+            reasoning_sources=result.reasoning_sources,
+            gate_audit=audit,
+        )
 
 
 def test_protected_set_superset_of_sidecar_set() -> None:

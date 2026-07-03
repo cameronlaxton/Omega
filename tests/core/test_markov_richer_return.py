@@ -68,7 +68,7 @@ class TestModifierParity:
         assert rich == legacy
 
     def test_flags_off_policy_is_bit_identical_to_no_policy(self):
-        signals = [_sig("pace_down"), _sig("pace_down")]
+        signals = [_sig("usage_role_change"), _sig("usage_role_change")]
         no_policy = compute_transition_modifier_adjustment(signals, "Lakers").modifiers
         flags_off = compute_transition_modifier_adjustment(
             signals, "Lakers", policy=_policy()

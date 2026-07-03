@@ -697,12 +697,6 @@ def _phase_closeout(
         "session_run": "closed",
         "phases": {phase: ("ok" if rc == 0 else "fail") for phase, rc in ctx.phase_rcs.items()},
     }
-    ctx.append_event(
-        event_type="step",
-        step="session_close",
-        status="ok",
-        notes="all requested phases succeeded; closing sidecar",
-    )
     try:
         close_sidecar(
             ctx.sidecar_path,
@@ -713,6 +707,12 @@ def _phase_closeout(
     except (OSError, ValueError) as exc:
         print(f"[FAIL] could not close sidecar: {exc}")
         return 1
+    ctx.append_event(
+        event_type="step",
+        step="session_close",
+        status="ok",
+        notes="all requested phases succeeded; sidecar closed",
+    )
     print(f"[OK] Sidecar closed (session={ctx.session_id}).")
     return 0
 

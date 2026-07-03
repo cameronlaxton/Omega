@@ -337,6 +337,18 @@ class TestPhaseOrderingAndCloseout:
         steps = [e["step"] for e in sc["audit_events"]]
         assert "session_close" in steps
 
+    def test_close_sidecar_failure_does_not_audit_success(self, tmp_path):
+        with patch("omega.ops.session_run.close_sidecar", side_effect=OSError("boom")):
+            rc, _ = _run(tmp_path, ingest=True, render_report=True, close=True)
+
+        assert rc == 1
+        sc = _read_sidecar(tmp_path / f"{_SID}.json")
+        assert sc["closed_at"] is None
+        assert not any(
+            e["step"] == "session_close" and e["status"] == "ok"
+            for e in sc["audit_events"]
+        )
+
     def test_validation_and_ingest_outcomes_audited(self, tmp_path):
         rc, _ = _run(tmp_path, ingest=True)
         assert rc == 0
