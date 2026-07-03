@@ -85,7 +85,12 @@ class TestFrozenArtifact:
             simulation_seed=42,
         )
         assert artifact.artifact_id == "test123"
-        assert artifact.schema_version == 1
+        # Schema v2 (plan 5.4): governed-substrate fields default to None so
+        # v1-shaped construction stays valid and behavior-identical.
+        assert artifact.schema_version == 2
+        assert artifact.simulation_backend is None
+        assert artifact.prior_payload is None
+        assert artifact.substrate_unresolved is False
         assert artifact.calibration_policy == "static_v1"
         assert artifact.outcome is None
 

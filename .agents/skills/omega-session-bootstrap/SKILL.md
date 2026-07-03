@@ -200,10 +200,19 @@ Default $1000 unless user specifies otherwise. Record in sidecar `bankroll` and 
 
 ## Session Close Checklist
 
+Preferred closeout path (reopen the already-open session and let the lifecycle
+wrapper run the typed closeout phases):
+
+```bash
+omega-session-run --session-id <session_id> --reopen --ingest --render-report --close
+```
+
+Manual fallback:
+
 ```bash
 omega-ingest-traces --db "$OMEGA_TRACE_DB" --verbose
 omega-validate-session-sidecars
-omega-render-session-audits --session-id <session_id>
+omega-render-session-audits --session-ids <session_id>
 omega-fetch-closing-lines --dry-run   # if bets placed
 ```
 

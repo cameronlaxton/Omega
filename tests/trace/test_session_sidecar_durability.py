@@ -14,6 +14,7 @@ from omega.trace.session_sidecar import (
     append_audit_events,
     append_null_data_audit,
     bootstrap_payload,
+    close_sidecar,
     create_sidecar,
     load_sidecar_safe,
     quality_gate_status,
@@ -579,3 +580,64 @@ class TestSessionIdCollision:
                 bootstrap_payload("sess-y", model_version="m", purpose="p", bankroll=1.0),
                 allow_reopen=True,
             )
+
+
+class TestCloseSidecar:
+    """close_sidecar(): the locked closeout write used by omega-session-run."""
+
+    def test_close_sets_closeout_fields_and_survives_reload(self, tmp_path):
+        path = tmp_path / "sess-close.json"
+        _open(path)
+        append_audit_events(path, [_event()])
+
+        closed = close_sidecar(
+            path,
+            exec_stats={"phases": {"ingest-traces": 0}},
+            pipeline_status={"session_run": "closed"},
+            next_required_action="none",
+        )
+        assert closed.closed_at is not None and closed.closed_at.endswith("Z")
+
+        reloaded = load_sidecar_safe(path)
+        assert reloaded is not None
+        assert reloaded.closed_at == closed.closed_at
+        assert reloaded.exec_stats == {"phases": {"ingest-traces": 0}}
+        assert reloaded.pipeline_status == {"session_run": "closed"}
+        assert reloaded.next_required_action == "none"
+        # Closing must not lose or duplicate audit events (mirror stays a superset).
+        assert len(reloaded.audit_events) == 1
+        jsonl = path.with_suffix(".events.jsonl")
+        lines = [ln for ln in jsonl.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        assert len(lines) == 1
+
+    def test_double_close_rejected(self, tmp_path):
+        import pytest
+
+        path = tmp_path / "sess-close-twice.json"
+        _open(path)
+        close_sidecar(path, exec_stats={"phases": {}})
+        with pytest.raises(ValueError, match="already closed"):
+            close_sidecar(path, exec_stats={"phases": {}})
+
+    def test_close_rejects_protected_engine_fields(self, tmp_path):
+        import pytest
+
+        path = tmp_path / "sess-close-protected.json"
+        _open(path)
+        with pytest.raises(ProtectedValueError, match="protected engine field"):
+            close_sidecar(path, exec_stats={"summary": {"edge_pct": 0.05}})
+        with pytest.raises(ProtectedValueError, match="protected engine field"):
+            close_sidecar(
+                path,
+                exec_stats={"phases": {}},
+                pipeline_status={"best": {"kelly_fraction": 0.1}},
+            )
+        # Fail-closed means nothing was written.
+        reloaded = load_sidecar_safe(path)
+        assert reloaded is not None and reloaded.closed_at is None
+
+    def test_close_missing_sidecar_raises(self, tmp_path):
+        import pytest
+
+        with pytest.raises(FileNotFoundError):
+            close_sidecar(tmp_path / "sess-nope.json", exec_stats={"phases": {}})

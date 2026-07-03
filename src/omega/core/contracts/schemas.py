@@ -301,6 +301,18 @@ class BatchAnalysisEntry(BaseModel):
     reasoning_sources: list[str] = Field(
         default_factory=list, description="Sources consulted, e.g. espn.com"
     )
+    roster_context: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "RSVG (Roster & Situational Verification Gate) payload — a "
+            "RosterContextPayload dict (see omega/core/gates/rsvg.py). When present "
+            "the batch tool runs the gate BEFORE odds resolution/analyze(): "
+            "'blocked' skips the entry, 'research_candidate' stamps "
+            "reasoning_downgrade_rationale + trace_quality.rsvg on the trace, and "
+            "emitted usage_role_change signals are merged into evidence. Structured "
+            "facts only — the gate never browses and never computes engine values."
+        ),
+    )
     # prop-only
     player_name: str | None = Field(default=None, description="Player name (kind='prop' only)")
     prop_type: str | list[str] | None = Field(

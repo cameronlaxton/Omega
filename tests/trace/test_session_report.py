@@ -13,7 +13,10 @@ from omega.trace.session_report.context_bundle import (
     load_context_bundle,
 )
 from omega.trace.session_report.extractors import extract_intake_report
-from omega.trace.session_report.markdown import render_intake_markdown
+from omega.trace.session_report.markdown import (
+    SessionReportLanguageError,
+    render_intake_markdown,
+)
 from omega.trace.store import TraceStore
 
 
@@ -246,6 +249,18 @@ def test_card_renders_analyst_sections_from_reasoning_presentation(store):
     assert "Verdict: Lean Comets ML" in rendered
     # Honesty block is always-on in both modes — analyst prose supplements it, never replaces it.
     assert "**Honesty**" in rendered
+
+
+def test_renderer_blocks_banned_language_in_markdown(store):
+    trace = _trace()
+    trace["reasoning_presentation"] = {
+        "thesis": "Comets have the cleaner context.",
+        "verdict": "This is the best bet on the slate.",
+    }
+    store.persist(trace)
+
+    with pytest.raises(SessionReportLanguageError, match="best bet"):
+        render_intake_markdown(extract_intake_report(store, session_id="sess-report"))
 
 
 def test_card_analyst_thesis_falls_back_to_reasoning_narrative(store):

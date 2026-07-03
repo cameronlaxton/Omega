@@ -31,7 +31,9 @@ exact string keys below:
   present.
 - Call `omega_markov_evidence_guide` (MCP prompt) for the full modifier table with scalar values.
 - **Evidence routing:** Markov transition modifiers are the Markov evidence path. Handler-based
-  shadow/live mode applies to fast-score game and player-prop adjustments.
+  evidence (fast-score game and player-prop adjustments) follows the graduated
+  `AdjustmentPolicy.mode` ladder — canonical table in
+  [`output_modes.md`](output_modes.md), "Graduated evidence application modes".
 
 ## Example (evidence on an analyze() request)
 

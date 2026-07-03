@@ -4,9 +4,12 @@ This module owns possession-level stochastic state transitions. It is deliberate
 input-driven: callers provide contexts, players, and optional scalar modifiers;
 the simulator performs no network or evidence gathering.
 
-Momentum note: momentum is a single-possession hot-hand signal, not a cumulative
-streak counter. After each possession it is reset to ±1 (scored) or 0 (no score).
-Callers should not expect multi-possession momentum accumulation.
+Momentum note: momentum is a per-side single-possession hot-hand signal, not a
+cumulative streak counter. A side is "hot" iff it scored on its own previous
+possession; the ``home_momentum_scalar`` / ``away_momentum_scalar`` transition
+modifiers multiply that side's next-possession scoring rate only while hot, and
+only when explicitly supplied (identity default 1.0). Callers should not expect
+multi-possession momentum accumulation.
 """
 
 from __future__ import annotations
@@ -98,6 +101,9 @@ class MarkovSimulator:
         self.config = get_league_config(self.league)
         self.archetype = get_archetype(self.league)
         self.archetype_name = get_archetype_name(self.league)
+        self._base_n_possessions_unscaled = self._resolve_base_possessions(
+            apply_pace_scalar=False
+        )
         self._base_n_possessions = self._resolve_base_possessions()
         self.transition_matrix_ids = {
             "home": f"{COMPONENT_VERSION}:{self.league}:home_score_outcome",
@@ -131,7 +137,7 @@ class MarkovSimulator:
                 clamped[key] = fval
         return clamped
 
-    def _resolve_base_possessions(self) -> int:
+    def _resolve_base_possessions(self, *, apply_pace_scalar: bool = True) -> int:
         """Compute total simulation loop iterations.
 
         ``pace`` in team context (and ``avg_pace`` in league config) represents
@@ -150,13 +156,30 @@ class MarkovSimulator:
         # Sum both teams' per-team possession counts so the alternating loop
         # gives each team its full allocation (fixes the previous /2 halving bug).
         possessions = home_pace + away_pace
+        # pace_up / pace_down evidence scales total possessions. Identity (1.0)
+        # when absent, so unmodified runs are bit-identical. (Before 2026-07-02
+        # this key was produced by evidence_to_modifier but consumed by nothing —
+        # a silent no-op; see the markov-plane probation gate there.)
+        pace_scalar = self.transition_modifiers.get("pace_scalar", 1.0)
+        if apply_pace_scalar and pace_scalar != 1.0:
+            possessions *= pace_scalar
         if self.archetype_name == "american_football":
             # NFL context paces are expressed in a different unit; halve to
             # avoid doubling the existing calibration until NFL sweep validates.
             possessions = possessions / 2.0
         return max(1, int(round(possessions)))
 
-    def _expected_ppp(self, side: str, momentum: int) -> float:
+    def _expected_ppp(self, side: str, hot: bool) -> float:
+        """Expected points per possession for *side*.
+
+        ``hot`` is that side's own last-possession memory (True when the team
+        scored on its previous possession). The momentum scalars only apply
+        when explicitly supplied (identity default), so runs without momentum
+        modifiers are bit-identical to the pre-momentum engine. Before
+        2026-07-02 momentum was a single cross-team marker that the strictly
+        alternating loop overwrote every possession, making both scalar
+        branches unreachable — the mechanism was dead code.
+        """
         if side == "home":
             off = _as_float(self.home_context.get("off_rating"), 100.0)
             opp_def = _as_float(self.away_context.get("def_rating"), 100.0)
@@ -173,19 +196,20 @@ class MarkovSimulator:
         else:
             expected = _as_float(self.config.get("avg_total"), 2.0) / max(
                 1.0,
-                self._base_n_possessions,
+                self._base_n_possessions_unscaled,
             )
 
         if side == "home":
             expected += _as_float(self.config.get("home_advantage"), 0.0) / 100.0
-        if momentum > 0 and side == "home":
-            expected *= self.transition_modifiers.get("home_momentum_scalar", 1.03)
-        elif momentum < 0 and side == "away":
-            expected *= self.transition_modifiers.get("away_momentum_scalar", 1.03)
+        if hot:
+            momentum_key = "home_momentum_scalar" if side == "home" else "away_momentum_scalar"
+            momentum_scalar = self.transition_modifiers.get(momentum_key, 1.0)
+            if momentum_scalar != 1.0:
+                expected *= momentum_scalar
         return max(0.01, expected * scalar)
 
-    def _sample_points(self, side: str, momentum: int) -> int:
-        probs = _points_probabilities(self._expected_ppp(side, momentum))
+    def _sample_points(self, side: str, hot: bool) -> int:
+        probs = _points_probabilities(self._expected_ppp(side, hot))
         outcome = _weighted_choice({str(points): prob for points, prob in probs.items()})
         return int(outcome)
 
@@ -248,26 +272,31 @@ class MarkovSimulator:
             "mean_total": round(mean_t, 2),
             "std_total": round(var_t**0.5, 2),
             "mean_spread": round(mean_s, 2),
-            "expected_ppp_home": round(self._expected_ppp("home", 0), 4),
-            "expected_ppp_away": round(self._expected_ppp("away", 0), 4),
+            "expected_ppp_home": round(self._expected_ppp("home", False), 4),
+            "expected_ppp_away": round(self._expected_ppp("away", False), 4),
         }
 
     def simulate_game(self, n_possessions: int | None = None) -> MarkovGameState:
         possessions = max(1, int(n_possessions or self._base_n_possessions))
         home_score = 0.0
         away_score = 0.0
-        momentum = 0
+        # Per-side single-possession memory: a side is "hot" iff it scored on
+        # its own previous possession (see the momentum note in the module
+        # docstring — this is a hot-hand signal, not a streak counter).
+        home_hot = False
+        away_hot = False
         side = "home" if random.random() < 0.5 else "away"
 
         for _ in range(possessions):
-            points = self._sample_points(side, momentum)
             if side == "home":
+                points = self._sample_points("home", home_hot)
                 home_score += points
-                momentum = 1 if points > 0 else 0
+                home_hot = points > 0
                 side = "away"
             else:
+                points = self._sample_points("away", away_hot)
                 away_score += points
-                momentum = -1 if points > 0 else 0
+                away_hot = points > 0
                 side = "home"
 
         return MarkovGameState(

@@ -28,7 +28,7 @@ class FrozenArtifact(BaseModel):
 
     # Identity
     artifact_id: str = Field(description="Deterministic hash of event identity")
-    schema_version: int = 1
+    schema_version: int = 2
     source_trace_id: str | None = Field(
         default=None, description="Links back to the originating ExecutionTrace"
     )
@@ -38,6 +38,32 @@ class FrozenArtifact(BaseModel):
     away_team: str
     league: str
     date: str = Field(description="YYYY-MM-DD")
+
+    # Governed substrate (schema v2, plan 5.4 — closes the P8.3 follow-up).
+    # Both default to None so v1 artifacts load unchanged and the backtest
+    # re-sim stays bit-identical for them. When present, the backtest threads
+    # them through the per-call backend/prior seam so the re-sim runs on the
+    # SAME substrate production did — the re-sim then echoes the governed
+    # parameter_profile_ref and param-bound calibration profiles apply in the
+    # backtest exactly as in production (shared selection policy invariant).
+    simulation_backend: str | None = Field(
+        default=None,
+        description="Registered game-backend name the production analysis ran on "
+        "(request.simulation_backend); None = default fast_score.",
+    )
+    prior_payload: dict[str, Any] | None = Field(
+        default=None,
+        description="Decision-time game-level priors the production sim ran with "
+        "(request.prior_payload: rho, structural knobs, parameter_profile_ref, ...).",
+    )
+    substrate_unresolved: bool = Field(
+        default=False,
+        description="True when the trace's execution echoed governed provenance but "
+        "the request prior could not be recovered (or conflicts with the echo). "
+        "Fail-closed: the backtest then ignores simulation_backend/prior_payload "
+        "and keeps the ungoverned default re-sim (bound profiles stay skipped) "
+        "rather than guessing a prior.",
+    )
 
     # Contexts (as used by the sim at decision time)
     home_context: dict[str, Any] = Field(default_factory=dict)
@@ -138,6 +164,10 @@ def trace_to_artifact(
 
     artifact_id = compute_artifact_id(home_team, away_team, league, date)
 
+    simulation_backend, prior_payload, substrate_unresolved = _recover_substrate(
+        trace, input_snapshot, exec_result
+    )
+
     return FrozenArtifact(
         artifact_id=artifact_id,
         source_trace_id=trace_id,
@@ -151,7 +181,64 @@ def trace_to_artifact(
         odds=odds,
         simulation_seed=seed if seed is not None else 42,
         outcome=outcome,
+        simulation_backend=simulation_backend,
+        prior_payload=prior_payload,
+        substrate_unresolved=substrate_unresolved,
     )
+
+
+def _prior_profile_ids(prior: dict[str, Any]) -> set[str]:
+    """Governed profile ids recoverable from a request prior_payload."""
+    ids: set[str] = set()
+    ref = prior.get("parameter_profile_ref")
+    if isinstance(ref, dict) and ref.get("param_profile_id"):
+        ids.add(str(ref["param_profile_id"]))
+    if prior.get("rho_profile_id"):
+        ids.add(str(prior["rho_profile_id"]))
+    return ids
+
+
+def _recover_substrate(
+    trace: dict[str, Any],
+    input_snapshot: dict[str, Any],
+    exec_result: dict[str, Any],
+) -> tuple[str | None, dict[str, Any] | None, bool]:
+    """Recover ``(simulation_backend, prior_payload, substrate_unresolved)``.
+
+    The request-level ``input_snapshot.prior_payload`` is the primary prior
+    source (it is exactly what production's sim ran with); the sim-result echo
+    (``parameter_profile_ref`` / legacy dc-rho provenance, via
+    :func:`extract_parameter_profile_ref`) cross-checks it. The backend comes
+    from the EXECUTED provenance (``substrate_ref_for_trace``'s recorded-
+    provenance walk) rather than the request field — service routing can run a
+    league-specific backend (e.g. soccer DC) even when the request said
+    ``fast_score``, and the artifact must reproduce what actually ran.
+    Fail-closed: when the execution echoes a governed profile id that the
+    recovered prior cannot reproduce — prior missing, or carrying a different
+    id — the substrate is marked unresolved and no prior is carried, so the
+    backtest keeps the ungoverned default re-sim rather than guessing.
+    """
+    from omega.trace.parameter_profiles import (
+        extract_parameter_profile_ref,
+        substrate_ref_for_trace,
+    )
+
+    executed = substrate_ref_for_trace(trace) if isinstance(trace, dict) else {}
+    simulation_backend = (
+        executed.get("backend_name")
+        or exec_result.get("simulation_backend")
+        or input_snapshot.get("simulation_backend")
+        or None
+    )
+    raw_prior = input_snapshot.get("prior_payload")
+    prior_payload = dict(raw_prior) if isinstance(raw_prior, dict) and raw_prior else None
+
+    echo_ref = extract_parameter_profile_ref(trace) or None
+    echo_id = str(echo_ref["param_profile_id"]) if echo_ref and echo_ref.get("param_profile_id") else None
+    if echo_id is not None:
+        if prior_payload is None or echo_id not in _prior_profile_ids(prior_payload):
+            return simulation_backend, None, True
+    return simulation_backend, prior_payload, False
 
 
 class FrozenPropArtifact(BaseModel):

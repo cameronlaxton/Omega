@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from omega.mcp.server import TOOL_NAMES, omega_run_batch
 
@@ -152,6 +152,37 @@ def test_batch_reasoning_presentation_rejects_extra_or_numeric_fields() -> None:
     assert result["status"] == "error"
     assert result["entries_error"] == 1
     assert "reasoning_presentation" in result["errors"][0]["error"]
+
+
+def test_batch_reasoning_inputs_rejects_protected_market_context(tmp_path: Path) -> None:
+    trace = _make_trace("sandbox-game-protected-ri")
+    trace["kind"] = "game"
+    analyze = Mock(return_value=trace)
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.core.contracts.service.analyze", analyze),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[
+                _game_entry(
+                    odds={
+                        "moneyline_home": -120,
+                        "moneyline_away": 100,
+                        "edge_pct": 4.2,
+                    }
+                )
+            ],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["status"] == "error"
+    assert result["entries_error"] == 1
+    assert result["export_paths"] == []
+    assert "reasoning_inputs" in result["errors"][0]["error"]
+    assert "edge_pct" in result["errors"][0]["error"]
+    analyze.assert_not_called()
 
 
 def test_happy_path_game_writes_export_block(tmp_path: Path) -> None:
@@ -327,6 +358,220 @@ def test_invalid_entry_captured_as_error(tmp_path: Path) -> None:
 
     assert result["entries_error"] == 1
     assert len(result["errors"]) == 1
+
+
+# --- RSVG roster gate ---
+
+
+def _rsvg_context(**overrides: Any) -> dict[str, Any]:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    base: dict[str, Any] = {
+        "home_team": "New York Yankees",
+        "away_team": "Cleveland Guardians",
+        "league": "MLB",
+        "game_date": "2026-06-03",
+        "source_summaries": [{"source": "espn.com", "summary": "Lineups posted.", "retrieved_at": now}],
+        "home_status": {"lineup_status": "confirmed", "injury_report_checked": True},
+        "away_status": {"lineup_status": "confirmed", "injury_report_checked": True},
+        "absences": [],
+        "gathered_at": now,
+        "roster_context_complete": True,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_rsvg_blocked_entry_skips_before_analyze(tmp_path: Path) -> None:
+    analyze_calls: list[Any] = []
+
+    def _analyze(request: Any, **kwargs: Any) -> dict[str, Any]:
+        analyze_calls.append(request)
+        return _make_trace("sandbox-rsvg-blocked")
+
+    blocked_context = _rsvg_context(
+        home_status={"lineup_status": "unknown", "injury_report_checked": False},
+        roster_context_complete=False,
+    )
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.integrations.odds_resolver.resolve_odds", side_effect=_mock_resolve_odds_ok),
+        patch("omega.core.contracts.service.analyze", side_effect=_analyze),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[_game_entry(roster_context=blocked_context)],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["entries_skipped"] == 1
+    assert result["entries_ok"] == 0
+    assert analyze_calls == []  # blocked entries never reach analyze()
+    row = result["results"][0]
+    assert row["reason"] == "rsvg_blocked"
+    assert row["rsvg"]["status"] == "blocked"
+    assert row["rsvg"]["gate"] == "rsvg"
+
+
+def test_rsvg_key_absence_merges_evidence_and_stamps_trace(tmp_path: Path) -> None:
+    seen_requests: list[dict[str, Any]] = []
+
+    def _analyze(request: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        seen_requests.append(dict(request))
+        trace = _make_trace("sandbox-rsvg-pass")
+        trace["kind"] = "game"
+        return trace
+
+    context = _rsvg_context(
+        absences=[
+            {
+                "player": "Aaron Judge",
+                "team_side": "home",
+                "status": "out",
+                "is_key_player": True,
+            }
+        ]
+    )
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.integrations.odds_resolver.resolve_odds", side_effect=_mock_resolve_odds_ok),
+        patch("omega.core.contracts.service.analyze", side_effect=_analyze),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[_game_entry(roster_context=context)],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["entries_ok"] == 1
+    assert result["results"][0]["rsvg_status"] == "pass"
+    # The usage_role_change signal reached the analyze() request.
+    evidence = seen_requests[0]["evidence"]
+    assert len(evidence) == 1
+    assert evidence[0]["signal_type"] == "usage_role_change"
+    assert evidence[0]["value"] == "bench"
+    assert evidence[0]["direction"] == "home"
+    # And the export block carries the audit + no downgrade for a pass.
+    import json
+
+    block = json.loads(Path(result["export_paths"][0]).read_text())
+    assert block["trace"]["trace_quality"]["rsvg"]["status"] == "pass"
+    assert block["trace"]["trace_quality"]["rsvg"]["key_absences"]["home"] == ["Aaron Judge"]
+    assert block["trace"]["reasoning_downgrade_rationale"] is None
+    # RSVG presentation fills in when the entry supplied none.
+    assert block["trace"]["reasoning_presentation"]["verdict"].startswith("PASS")
+    assert "espn.com" in block["trace"]["reasoning_inputs"]["sources"]
+
+
+def test_rsvg_research_candidate_stamps_downgrade_rationale(tmp_path: Path) -> None:
+    context = _rsvg_context(
+        absences=[
+            {"player": p, "team_side": "home", "status": "out", "is_key_player": True}
+            for p in ("Star A", "Star B", "Star C")
+        ]
+    )
+    trace = _make_trace("sandbox-rsvg-research")
+    trace["kind"] = "game"
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.integrations.odds_resolver.resolve_odds", side_effect=_mock_resolve_odds_ok),
+        patch("omega.core.contracts.service.analyze", return_value=trace),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[_game_entry(roster_context=context)],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["entries_ok"] == 1
+    assert result["results"][0]["rsvg_status"] == "research_candidate"
+    import json
+
+    block = json.loads(Path(result["export_paths"][0]).read_text())
+    assert block["trace"]["trace_quality"]["rsvg"]["status"] == "research_candidate"
+    assert block["trace"]["trace_quality"]["rsvg"]["formal_output_allowed"] is False
+    rationale = block["trace"]["reasoning_downgrade_rationale"]
+    assert rationale is not None and "RSVG research_candidate" in rationale
+
+
+def test_rsvg_export_block_passes_export_validator(tmp_path: Path) -> None:
+    """No top-level shape drift: RSVG-stamped exports (trace_quality.rsvg,
+    reasoning_presentation, downgrade rationale) stay valid for the shared
+    export validator that guards ingest."""
+    context = _rsvg_context(
+        absences=[
+            {"player": p, "team_side": "home", "status": "out", "is_key_player": True}
+            for p in ("Star A", "Star B", "Star C")
+        ]
+    )
+    trace = _make_trace("sandbox-rsvg-shape")
+    trace["kind"] = "game"
+    # A real analyze() return carries timestamp + identity; the minimal mock
+    # doesn't, and those gaps are what the validator would (correctly) flag.
+    trace["ran_at"] = "2026-07-03T18:00:00Z"
+    trace["input_snapshot"] = {
+        "home_team": "New York Yankees",
+        "away_team": "Cleveland Guardians",
+        "league": "MLB",
+        "game_date": "2026-06-03",
+        "seed": 42,
+    }
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.integrations.odds_resolver.resolve_odds", side_effect=_mock_resolve_odds_ok),
+        patch("omega.core.contracts.service.analyze", return_value=trace),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[_game_entry(roster_context=context)],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    import json
+
+    from omega.trace.export_validator import validate_export_block
+
+    block = json.loads(Path(result["export_paths"][0]).read_text())
+    report = validate_export_block(block, strict=False)
+    assert report.ok, f"export validator errors: {report.errors}"
+    # And the reasoning surface survived intact inside the inner trace.
+    assert block["trace"]["reasoning_presentation"]["verdict"].startswith("RESEARCH_CANDIDATE")
+    assert block["trace"]["trace_quality"]["rsvg"]["output_mode_ceiling"] == "research_candidate"
+
+
+def test_rsvg_invalid_payload_is_entry_error(tmp_path: Path) -> None:
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[_game_entry(roster_context={"home_team": "Only"})],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["entries_error"] == 1
+    assert "rsvg_invalid" in result["errors"][0]["error"]
+
+
+def test_rsvg_payload_with_protected_field_is_rejected(tmp_path: Path) -> None:
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[_game_entry(roster_context=_rsvg_context(edge_pct=4.2))],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["entries_error"] == 1
+    assert "rsvg_invalid" in result["errors"][0]["error"]
 
 
 # --- Tool registered ---

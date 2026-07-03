@@ -106,14 +106,17 @@ class TestReplayParityFlagsOff:
         assert seed == legacy
 
     def test_seed_prior_damps_unscored_markov_signal(self, seed_policy):
-        # pace_down is unscored in the seed, so the graduated-apply prior damps its
-        # modifier toward the 1.0 no-op; curated signals (reliability_weight=1.0)
-        # still match legacy. This is the intended live change, not a flag effect.
-        sigs = [_game_sig("pace_down")]
+        # usage_role_change is unscored in the seed, so the graduated-apply prior
+        # damps its modifier toward the 1.0 no-op; curated signals
+        # (reliability_weight=1.0) still match legacy. This is the intended live
+        # change, not a flag effect. (pace_down previously played this role but
+        # now sits in markov-plane probation — withheld entirely on this path.)
+        sigs = [_game_sig("usage_role_change")]
         legacy = signals_to_transition_modifiers(sigs, home_team="Lakers")
         seed = compute_transition_modifier_adjustment(sigs, "Lakers", policy=seed_policy).modifiers
-        assert seed["pace_scalar"] != pytest.approx(legacy["pace_scalar"])
-        assert abs(seed["pace_scalar"] - 1.0) < abs(legacy["pace_scalar"] - 1.0)
+        key = "home_score_rate_scalar"
+        assert seed[key] != pytest.approx(legacy[key])
+        assert abs(seed[key] - 1.0) < abs(legacy[key] - 1.0)
 
     def test_handler_factor_ignores_confidence_under_seed_policy(self, seed_policy):
         adj = compute_player_adjustment(

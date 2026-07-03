@@ -514,6 +514,54 @@ def append_audit_events(path: Path, events: list[dict[str, Any]]) -> None:
         _mirror_events_jsonl(path, [e.model_dump(mode="json") for e in validated])
 
 
+def close_sidecar(
+    path: Path,
+    *,
+    exec_stats: dict[str, Any],
+    pipeline_status: dict[str, Any] | None = None,
+    next_required_action: str | None = None,
+    agent_notes: str | None = None,
+) -> SessionSidecar:
+    """Atomically finalize an open session sidecar (locked read-modify-write).
+
+    Sets ``closed_at`` plus the closeout summary fields. Fails closed: a missing
+    sidecar raises FileNotFoundError via ``from_path``, an already-closed one
+    raises ValueError (``create_sidecar`` refuses to reopen closed sessions, so
+    a double close is always a caller bug), and engine-owned quant fields in
+    ``exec_stats``/``pipeline_status`` raise ProtectedValueError — closeout
+    stats are execution accounting, never model numbers.
+    """
+    for label, mapping in (("exec_stats", exec_stats), ("pipeline_status", pipeline_status)):
+        if mapping:
+            found = _find_protected_key(mapping)
+            if found:
+                raise ProtectedValueError(
+                    f"close_sidecar {label} contains protected engine field {found!r}. "
+                    "Engine-owned quant values must stay in var/omega_traces.db."
+                )
+    with _sidecar_lock(path):
+        sidecar = SessionSidecar.from_path(path)
+        if sidecar.closed_at is not None:
+            raise ValueError(
+                f"Session sidecar {path} is already closed (closed_at={sidecar.closed_at})."
+            )
+        sidecar.closed_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        sidecar.exec_stats = dict(exec_stats)
+        if pipeline_status is not None:
+            sidecar.pipeline_status = dict(pipeline_status)
+        if next_required_action is not None:
+            sidecar.next_required_action = next_required_action
+        if agent_notes is not None:
+            sidecar.agent_notes = agent_notes
+        _write_sidecar_unlocked(path, sidecar)
+        return sidecar
+
+
 def load_sidecar_safe(path: Path) -> SessionSidecar | None:
     """Read a sidecar, returning None on any parse/validation error.
 

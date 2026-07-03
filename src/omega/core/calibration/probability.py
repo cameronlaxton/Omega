@@ -234,6 +234,11 @@ def should_apply_calibration(raw_prob: float, strict_cap: bool = False) -> bool:
     """
     Determines if calibration should be applied based on raw probability.
 
+    Legacy: the static fallback no longer gates on this (v1's gate-then-shrink
+    made the static map non-monotone at the activation boundaries; v2 applies
+    the monotone :func:`static_tail_compress` unconditionally, which is
+    identity in the mid-range). Kept for external callers/diagnostics.
+
     Args:
         raw_prob: Raw model probability
         strict_cap: If True, always apply calibration if outside [0.15, 0.85]
@@ -252,14 +257,45 @@ def should_apply_calibration(raw_prob: float, strict_cap: bool = False) -> bool:
 # ---------------------------------------------------------------------------
 # INVARIANT: Both production (service.py) and backtest (engine.py) MUST call
 # apply_calibration(). Do not duplicate these parameters in other call sites.
-# Phase 6 will replace this with profile-driven selection; until then this
-# function is the canonical policy.
+# Profiles own fitted calibration; this static policy is only the no-profile
+# fallback.
 # ---------------------------------------------------------------------------
+# v1 ("combined") activated shrink(0.7)+cap only when raw fell outside
+# [0.10, 0.90], which made the raw→calibrated map non-monotone at both
+# activation boundaries (raw 0.905 → 0.784 while 0.890 → 0.890; raw 0.095 →
+# 0.217 while 0.110 → 0.110), so edge/EV/tier rankings could invert between
+# two candidates. v2 ("combined_v2") is a monotone, continuous tail
+# compression: identity on [_POLICY_TAIL_LO, _POLICY_TAIL_HI], linear with
+# slope _POLICY_TAIL_SLOPE beyond, so a higher raw probability can never
+# calibrate lower. Old traces carry method_resolved="combined" and keep their
+# persisted values; the "combined" method itself remains available to fitted
+# profiles unchanged.
 
-_POLICY_METHOD = "combined"
-_POLICY_SHRINK_FACTOR = 0.7
-_POLICY_CAP_MAX = 0.90
-_POLICY_CAP_MIN = 0.10
+_POLICY_METHOD = "combined_v2"
+_POLICY_TAIL_LO = 0.10
+_POLICY_TAIL_HI = 0.90
+_POLICY_TAIL_SLOPE = 0.3
+
+
+def static_tail_compress(
+    raw_prob: float,
+    lo: float = _POLICY_TAIL_LO,
+    hi: float = _POLICY_TAIL_HI,
+    slope: float = _POLICY_TAIL_SLOPE,
+) -> float:
+    """Monotone static-policy map: identity on ``[lo, hi]``, linear tails.
+
+    ``p > hi`` maps to ``hi + slope*(p - hi)`` and ``p < lo`` to
+    ``lo - slope*(lo - p)``, so the map is continuous, strictly increasing,
+    and softens extremes without ever ranking a higher raw probability below
+    a lower one (the v1 defect). With the defaults, 1.0 → 0.93 and 0.0 → 0.07.
+    """
+    p = max(0.0, min(1.0, raw_prob))
+    if p > hi:
+        return hi + slope * (p - hi)
+    if p < lo:
+        return lo - slope * (lo - p)
+    return p
 
 
 def apply_calibration(
@@ -413,8 +449,10 @@ def apply_calibration_audited(
         "binding_mismatch": binding_mismatches[0] if binding_mismatches else None,
     }
 
-    # Static fallback: if within threshold, return raw unchanged
-    if not should_apply_calibration(raw, strict_cap=False):
+    # Static fallback: monotone tail compression (identity in the mid-range,
+    # so the audit still distinguishes untouched values as static_identity).
+    calibrated = static_tail_compress(raw)
+    if calibrated == raw:
         return raw, {
             "path": "static_identity",
             "context_slice": context_slice,
@@ -424,14 +462,6 @@ def apply_calibration_audited(
             **static_provenance,
         }
 
-    result = calibrate_probability(
-        raw,
-        method=_POLICY_METHOD,
-        shrink_factor=_POLICY_SHRINK_FACTOR,
-        cap_max=_POLICY_CAP_MAX,
-        cap_min=_POLICY_CAP_MIN,
-    )
-    calibrated = result["calibrated"]
     return calibrated, {
         "path": "static_calibrated",
         "context_slice": context_slice,

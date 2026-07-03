@@ -206,6 +206,15 @@ game_context = {"is_playoff": False, "rest_days": 60}
 
 ## Step 4 — Minimal Evidence
 
+Roster/injury/lineup verification is typed context, not a manual note. For each
+`omega_run_batch` game entry, populate `roster_context` from the lightweight
+source pass using `src/omega/core/gates/rsvg.py`'s payload shape: matchup
+identity, source summaries, lineup/injury status per side, key absences,
+motivation notes, `gathered_at`, and `roster_context_complete`. The batch seam
+runs RSVG before odds resolution/analyze(), merges verified key-absence
+`usage_role_change` signals into `evidence`, stamps `trace_quality.rsvg`, and
+records downgrade rationale when formal output is not allowed.
+
 For each game, add at least one `EvidenceSignal` if a clear directional factor is
 present (rest advantage, home/away form differential, known injury impact). If none
 is evident from the lightweight context pass, use `evidence=[]` and set
@@ -241,6 +250,7 @@ omega_run_batch(
             "game_context": {"is_playoff": False, "rest_days": <N>},
             "odds": {...},           # from Step 2; empty dict if unavailable
             "evidence": [...],
+            "roster_context": {...}, # typed RSVG payload from Step 4
         },
         # ... all discovered games
     ],

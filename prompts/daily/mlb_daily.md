@@ -115,7 +115,7 @@ board, keep it research-only. Do not pass guessed or narrative-only lines to
 
 ---
 
-## Step 4 - League Context
+## Step 4 - League Context And RSVG
 
 Gather one shared MLB context pack:
 - confirmed/probable starters
@@ -127,6 +127,16 @@ Gather one shared MLB context pack:
 - team run rates
 - rest/travel where relevant
 - sportsbook line source and timestamp
+
+Do not leave roster verification as a manual checklist. Condense starters,
+lineup availability, key absences, motivation, and source summaries into
+`roster_context` on each `omega_run_batch` entry using the typed RSVG payload
+(`src/omega/core/gates/rsvg.py`). The batch tool runs that gate before odds
+resolution/analyze(), merges verified key-absence `usage_role_change` signals
+into `evidence`, stamps `trace_quality.rsvg`, and applies any required downgrade
+rationale. For standalone analyze calls, run `evaluate_roster_context()` and
+splice `RsvgResult.to_batch_entry_fields()` into the request/export; do not
+re-implement RSVG thresholds in prose.
 
 Structured predictive fields must go into team contexts, not prose:
 

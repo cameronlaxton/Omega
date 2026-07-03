@@ -258,7 +258,10 @@ MCP analyze tools call `omega.core.contracts.service.analyze()` directly. MCP is
 When MCP is available, use `omega_run_batch` for any session producing more than 3 traces.
 One tool call handles odds resolution (with prop_type fallback chain), seed derivation,
 formal gate enforcement, and export-block writing to `var/inbox/traces/` — no manual
-looping, no round-trips, no scratch scripts required.
+looping, no round-trips, no scratch scripts required. Entries may carry a
+`roster_context` payload to run the typed RSVG roster gate per entry (see §6b),
+plus `evidence` (typed EvidenceSignal dicts) and `reasoning_presentation`
+(qualitative analyst prose; protected engine values rejected).
 
 ```python
 # Example: 2 props + 1 game in one call
@@ -463,6 +466,16 @@ entries such as `usage_role_change`. If the impact cannot be quantified from
 pre-decision sources, append a `quality_gate/null_data_audit` event and
 downgrade to research-only rather than emitting a Bet Card.
 
+For roster/lineup/motivation context specifically, use the typed **RSVG gate**
+(`src/omega/core/gates/rsvg.py`) instead of hand-applying the thresholds:
+condense the pre-analysis web search into a `RosterContextPayload` dict and pass
+it as `roster_context` on `omega_run_batch` entries (or call
+`evaluate_roster_context()` directly for a single analyze). The gate emits the
+key-absence `usage_role_change` signals, sets `reasoning_downgrade_rationale`,
+fills `reasoning_presentation`, and stamps the auditable verdict under
+`trace_quality.rsvg`. Policy statement: AGENTS.md "Actionability gates & Roster
+Verification (RSVG)".
+
 **Engine output nullability check (immediate post-analyze):**
 After each `analyze()` call returns, validate the response payload for NULL,
 `0.0`, or undefined values. Build a `null_fields` list if any of these are
@@ -499,7 +512,11 @@ If the user explicitly confirms they took a bet, include `bet_record` with actua
 ### 6c. Structured evidence (recommended)
 
 Evidence routing is backend-specific. Handler-based game and player adjustments
-follow `AdjustmentPolicy.mode` (`shadow` records only; `live` applies). Markov
+follow the graduated `AdjustmentPolicy.mode` ladder — `disabled` / `observe` /
+`score_only` / `bounded_live` / `live`; the seed policy ships at `bounded_live`
+with reliability-weighted application, and legacy `shadow` normalizes to
+`score_only` (canonical table: [`prompts/reference/output_modes.md`](prompts/reference/output_modes.md),
+"Graduated evidence application modes"). Markov
 game analysis uses transition modifiers instead of handler `off_rating` scaling.
 Do not emit the same logical signal on both `plane="game"` and `plane="player"`
 in one request; the service suppresses player-plane duplicates when a matching
@@ -507,7 +524,7 @@ game-plane signal is present.
 
 Express qualitative reasoning as typed `evidence` signals on the `analyze()` request â€” not as free text inside `player_context` / `game_context`, which the engine ignores. The `evidence` field is a list of `EvidenceSignal` objects (see `omega/core/contracts/evidence.py`); each carries `signal_type`, `category`, `plane` (`player`/`game`), `value`, `source`, `confidence` (0â€“1), `window`, and optional `direction`/`stat_key`. The signal taxonomy is multi-sport â€” `SIGNAL_REGISTRY` declares which sport archetypes each signal type applies to.
 
-The deterministic engine applies known signal types itself. Handler-based evidence is controlled by the versioned `AdjustmentPolicy` (currently `mode=shadow`, which records but does not apply handler factors). Markov game evidence uses backend transition modifiers. Every signal is persisted to the `evidence_signals` table and scored retrospectively by `src/omega/ops/score_evidence_signals.py`. Set `confidence` honestly; it is measured against realized outcomes.
+The deterministic engine applies known signal types itself. Handler-based evidence is controlled by the versioned `AdjustmentPolicy` on the graduated mode ladder above (seed default `bounded_live`: active signals apply under hard caps, scaled by fitted `reliability_weight`; see `output_modes.md`). Markov game evidence uses backend transition modifiers. Every signal is persisted to the `evidence_signals` table and scored retrospectively by `src/omega/ops/score_evidence_signals.py`. Set `confidence` honestly; it is measured against realized outcomes.
 
 At session start, read the "Evidence signal performance" section (Â§6B) of the calibration report and weight your evidence accordingly. **CLV is the trust driver** (issue #28): trust signals marked `clv_aligned`, discount `clv_misaligned` (they merely restate the closing line); where CLV coverage is thin the verdict falls back to realized direction (`predictive`/`noise`/`insufficient_n`).
 
