@@ -2101,6 +2101,184 @@
       "reject_reason": null,
       "incumbent_id": null,
       "promotion_gate_report": null
+    },
+    {
+      "profile_id": "iso_wnba_v1_d814109afdd7673f",
+      "schema_version": 1,
+      "version": 1,
+      "method": "isotonic",
+      "league": "WNBA",
+      "context_slice": null,
+      "market": "game",
+      "status": "candidate",
+      "maturity": null,
+      "params": {
+        "calibration_map": {
+          "0.05": 0.583333,
+          "0.15": 0.583333,
+          "0.25": 0.583333,
+          "0.35": 0.583333,
+          "0.45": 0.583333,
+          "0.55": 0.733333,
+          "0.65": 0.85,
+          "0.75": 0.85,
+          "0.85": 0.85,
+          "0.95": 0.85
+        }
+      },
+      "training_window": "fitted_2026-07-03",
+      "sample_size": 28,
+      "dataset_hash": "d814109afdd7673f",
+      "metrics": {
+        "brier_score": 0.237764,
+        "calibration_error": 0.075976,
+        "log_loss": 0.665943,
+        "n_eval": 7,
+        "cv_calibration_error": 0.044396,
+        "cv_ece_ci_low": 0.03269,
+        "cv_ece_ci_high": 0.056101,
+        "cv_brier_score": 0.234405,
+        "cv_n_folds": 25
+      },
+      "created_at": "2026-07-03T16:15:28.807990+00:00",
+      "promoted_at": null,
+      "rejected_at": null,
+      "reject_reason": null,
+      "backend_binding": {
+        "backend_name": "markov_state_wnba",
+        "backend_component_version": "markov_wnba_v1",
+        "param_profile_id": null
+      },
+      "incumbent_id": null,
+      "promotion_gate_report": null
+    },
+    {
+      "profile_id": "shrink_wnba_v1_d814109afdd7673f",
+      "schema_version": 1,
+      "version": 1,
+      "method": "shrinkage",
+      "league": "WNBA",
+      "context_slice": null,
+      "market": "game",
+      "status": "candidate",
+      "maturity": null,
+      "params": {
+        "shrink_factor": 0.6
+      },
+      "training_window": "fitted_2026-07-03",
+      "sample_size": 28,
+      "dataset_hash": "d814109afdd7673f",
+      "metrics": {
+        "brier_score": 0.251582,
+        "calibration_error": 0.092086,
+        "log_loss": 0.69652,
+        "n_eval": 7,
+        "cv_calibration_error": 0.169667,
+        "cv_ece_ci_low": 0.156305,
+        "cv_ece_ci_high": 0.183028,
+        "cv_brier_score": 0.257466,
+        "cv_n_folds": 25
+      },
+      "created_at": "2026-07-03T16:15:28.818319+00:00",
+      "promoted_at": null,
+      "rejected_at": null,
+      "reject_reason": null,
+      "backend_binding": {
+        "backend_name": "markov_state_wnba",
+        "backend_component_version": "markov_wnba_v1",
+        "param_profile_id": null
+      },
+      "incumbent_id": null,
+      "promotion_gate_report": null
+    },
+    {
+      "profile_id": "iso_fifa_world_cup_2026_v1_9d1c012f391c9334",
+      "schema_version": 1,
+      "version": 1,
+      "method": "isotonic",
+      "league": "FIFA_WORLD_CUP_2026",
+      "context_slice": null,
+      "market": "game",
+      "status": "candidate",
+      "maturity": null,
+      "params": {
+        "calibration_map": {
+          "0.05": 0.15,
+          "0.15": 0.15,
+          "0.25": 0.411765,
+          "0.35": 0.411765,
+          "0.45": 0.56,
+          "0.55": 0.56,
+          "0.65": 0.56,
+          "0.75": 0.56,
+          "0.85": 0.85,
+          "0.95": 0.85
+        }
+      },
+      "training_window": "fitted_2026-07-03",
+      "sample_size": 48,
+      "dataset_hash": "9d1c012f391c9334",
+      "metrics": {
+        "brier_score": 0.275892,
+        "calibration_error": 0.235149,
+        "log_loss": 0.748711,
+        "n_eval": 12,
+        "cv_calibration_error": 0.025905,
+        "cv_ece_ci_low": 0.016229,
+        "cv_ece_ci_high": 0.03558,
+        "cv_brier_score": 0.243288,
+        "cv_n_folds": 25
+      },
+      "created_at": "2026-07-03T16:16:47.615826+00:00",
+      "promoted_at": null,
+      "rejected_at": null,
+      "reject_reason": null,
+      "backend_binding": {
+        "backend_name": "soccer_bivariate_poisson_dc",
+        "backend_component_version": "soccer_bvp_dc_v1",
+        "param_profile_id": "fifa_intl_v1"
+      },
+      "incumbent_id": null,
+      "promotion_gate_report": null
+    },
+    {
+      "profile_id": "shrink_fifa_world_cup_2026_v1_9d1c012f391c9334",
+      "schema_version": 1,
+      "version": 1,
+      "method": "shrinkage",
+      "league": "FIFA_WORLD_CUP_2026",
+      "context_slice": null,
+      "market": "game",
+      "status": "candidate",
+      "maturity": null,
+      "params": {
+        "shrink_factor": 0.39999999999999997
+      },
+      "training_window": "fitted_2026-07-03",
+      "sample_size": 48,
+      "dataset_hash": "9d1c012f391c9334",
+      "metrics": {
+        "brier_score": 0.267381,
+        "calibration_error": 0.220867,
+        "log_loss": 0.728288,
+        "n_eval": 12,
+        "cv_calibration_error": 0.02264,
+        "cv_ece_ci_low": 0.017311,
+        "cv_ece_ci_high": 0.02797,
+        "cv_brier_score": 0.250819,
+        "cv_n_folds": 25
+      },
+      "created_at": "2026-07-03T16:16:47.649922+00:00",
+      "promoted_at": null,
+      "rejected_at": null,
+      "reject_reason": null,
+      "backend_binding": {
+        "backend_name": "soccer_bivariate_poisson_dc",
+        "backend_component_version": "soccer_bvp_dc_v1",
+        "param_profile_id": "fifa_intl_v1"
+      },
+      "incumbent_id": null,
+      "promotion_gate_report": null
     }
   ]
 }

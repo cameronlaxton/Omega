@@ -361,6 +361,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Override sport family for context resolution",
     )
+    parser.add_argument(
+        "--param-profile-id",
+        type=str,
+        default=None,
+        help="Fit only traces with this parameter profile ID in their substrate reference",
+    )
     parser.add_argument("--db", type=str, default=None, help="SQLite path (live trace DB)")
     parser.add_argument(
         "--historical-db",
@@ -450,6 +456,20 @@ def main(argv: list[str] | None = None) -> int:
                 "Pass --include-backfilled to include them.",
                 excluded,
             )
+
+    if args.param_profile_id:
+        pre_filter = len(graded)
+        graded = [
+            t
+            for t in graded
+            if substrate_ref_for_trace(t).get("param_profile_id") == args.param_profile_id
+        ]
+        logger.info(
+            "Filtered to %d traces matching param_profile_id=%r (from %d total graded)",
+            len(graded),
+            args.param_profile_id,
+            pre_filter,
+        )
 
     if not graded:
         logger.error("No graded traces found for league=%s", args.league)
