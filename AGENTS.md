@@ -148,6 +148,13 @@ Do not loosen `context_source="provided"` to mean "the LLM thought about it." It
   emitted `usage_role_change` signals into evidence, and stamps `reasoning_downgrade_rationale` +
   `trace_quality.rsvg` onto the trace. Standalone callers: `evaluate_roster_context()` +
   `RsvgResult.to_batch_entry_fields()`.
+- **`source_summaries` must be genuinely per-matchup, not boilerplate.** A live QA audit found a
+  batch where the identical `{"source": "espn.com", "summary": "Verified lineups and injuries on
+  ESPN."}` was injected into every entry — a non-empty list that satisfied the gate mechanically
+  while verifying nothing. `omega_run_batch` now detects exact `(source, summary)` text reused
+  across different matchups in the same batch call and forces those later entries to
+  `research_candidate` via `evaluate_roster_context(..., duplicate_summary_detected=True)`. Write a
+  distinct, matchup-specific summary for every entry; do not reuse the same sentence across a slate.
 - **Hard fail / block formal output when:** required context is missing, evidence is empty with no downgrade rationale, odds are stale and unreplaced, engine status is skipped/error but output presents a play, identity fields are missing, no trace is emitted for a model-backed recommendation, or RSVG key-player thresholds are violated without downgrade.
 - **Warning-only when:** optional CLV metadata is missing, no bet record exists because no bet was taken, reasoning narrative is missing but structured trace/evidence is present, evidence sample size is thin, identity is metadata-recovered but marked.
 - Warnings become hard failures only when the issue is repairable, the schema/contract is stable, and failing prevents bad picks, calibration, or audit data.

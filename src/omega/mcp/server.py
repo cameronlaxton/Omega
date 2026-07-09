@@ -531,6 +531,13 @@ def omega_run_batch(
     trace_ids: list[str] = []
     export_paths: list[str] = []
     errors: list[dict[str, Any]] = []
+    # RSVG content-quality: evaluate_roster_context sees only one matchup and
+    # cannot itself notice the same source_summaries text reused verbatim
+    # across different entries in this batch (a live QA audit found exactly
+    # this: identical boilerplate injected into 68 entries to mechanically
+    # satisfy the non-empty-list check). Track signatures across the batch
+    # here, where cross-entry visibility actually exists.
+    _seen_rsvg_summary_signatures: dict[tuple[tuple[str, str], ...], int] = {}
 
     for idx, raw in enumerate(entries):
         try:
@@ -575,7 +582,22 @@ def omega_run_batch(
             from omega.core.gates.rsvg import RosterContextPayload, evaluate_roster_context
 
             try:
-                rsvg = evaluate_roster_context(RosterContextPayload(**entry.roster_context))
+                summaries = entry.roster_context.get("source_summaries") or []
+                signature = tuple(
+                    sorted(
+                        (str(s.get("source", "")), str(s.get("summary", ""))) for s in summaries
+                    )
+                )
+                is_duplicate = False
+                if signature:
+                    if signature in _seen_rsvg_summary_signatures:
+                        is_duplicate = True
+                    else:
+                        _seen_rsvg_summary_signatures[signature] = idx
+                rsvg = evaluate_roster_context(
+                    RosterContextPayload(**entry.roster_context),
+                    duplicate_summary_detected=is_duplicate,
+                )
             except Exception as exc:  # noqa: BLE001
                 errors.append(
                     {"index": idx, "identifier": identifier, "error": f"rsvg_invalid: {exc}"}

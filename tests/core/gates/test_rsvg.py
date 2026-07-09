@@ -71,6 +71,37 @@ def test_complete_roster_context_passes() -> None:
     assert "no late scratches" in (result.reasoning_presentation.why or "")
 
 
+# --- Duplicate-summary content-quality downgrade ------------------------------
+
+
+def test_duplicate_summary_detected_forces_research_candidate() -> None:
+    """A caller (omega_run_batch) that detects the exact same source_summaries
+    text reused across different matchups must be able to downgrade an
+    otherwise-passing entry -- boilerplate reused verbatim was never
+    independently verified for this specific matchup."""
+    result = evaluate_roster_context(_payload(), evaluated_at=_NOW, duplicate_summary_detected=True)
+    assert result.status == "research_candidate"
+    assert result.formal_output_allowed is False
+    assert "reused verbatim" in (result.reasoning_downgrade_rationale or "")
+    assert result.gate_audit.output_mode_ceiling == "research_candidate"
+
+
+def test_duplicate_flag_false_by_default_does_not_downgrade() -> None:
+    result = evaluate_roster_context(_payload(), evaluated_at=_NOW)
+    assert result.status == "pass"
+
+
+def test_duplicate_flag_irrelevant_when_source_summaries_already_empty() -> None:
+    """Empty source_summaries is already caught by the missing-context check;
+    the duplicate flag must not double-count or change that verdict's shape."""
+    result = evaluate_roster_context(
+        _payload(source_summaries=[]), evaluated_at=_NOW, duplicate_summary_detected=True
+    )
+    assert result.status == "research_candidate"
+    assert "source_summaries" in result.gate_audit.missing_context
+    assert "reused verbatim" not in (result.reasoning_downgrade_rationale or "")
+
+
 # --- Non-key absences warn but do not block -----------------------------------
 
 

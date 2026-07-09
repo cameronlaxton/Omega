@@ -275,12 +275,25 @@ def evaluate_roster_context(
     evaluated_at: datetime | None = None,
     max_key_absences_per_team: int = MAX_KEY_ABSENCES_PER_TEAM,
     max_context_age_hours: float = DEFAULT_MAX_CONTEXT_AGE_HOURS,
+    duplicate_summary_detected: bool = False,
 ) -> RsvgResult:
     """Evaluate structured roster/situational context and return the gate verdict.
 
     Pure and deterministic given ``evaluated_at`` (defaults to now-UTC, used only
     for freshness checks). Raises :class:`RsvgProtectedFieldError` if any emitted
     payload would carry an engine-owned quant field.
+
+    ``duplicate_summary_detected``: this function only sees ONE matchup's
+    payload and cannot itself notice that the exact same ``source_summaries``
+    text was reused across different matchups in the same batch call (the
+    concrete failure mode a live QA audit found: an identical boilerplate
+    summary injected into 68 different entries to mechanically satisfy the
+    non-empty-list check below). The caller orchestrating multiple gate calls
+    (``omega_run_batch``) is the one with cross-entry visibility; it detects
+    the reuse and passes this flag in. True forces at least
+    ``research_candidate`` even if every other check would have passed --
+    boilerplate reused verbatim was never independently verified for this
+    specific matchup.
     """
     now = evaluated_at or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -307,6 +320,11 @@ def evaluate_roster_context(
         missing_context.append("roster_context_complete")
     if not payload.source_summaries:
         missing_context.append("source_summaries")
+    elif duplicate_summary_detected:
+        downgrade_reasons.append(
+            "source_summaries reused verbatim from another entry in this batch "
+            "(not independently verified for this matchup)"
+        )
 
     # --- Freshness -----------------------------------------------------------
     context_age_hours: float | None = None

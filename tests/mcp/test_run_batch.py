@@ -498,6 +498,103 @@ def test_rsvg_research_candidate_stamps_downgrade_rationale(tmp_path: Path) -> N
     assert rationale is not None and "RSVG research_candidate" in rationale
 
 
+def test_rsvg_duplicate_summary_across_entries_downgrades_second_entry(tmp_path: Path) -> None:
+    """A live QA audit found identical boilerplate source_summaries injected
+    into every entry of a 68-entry batch to mechanically satisfy the
+    non-empty-list check. The first entry to use a given summary text passes
+    normally; a later entry reusing the exact same text for a DIFFERENT
+    matchup must be downgraded -- it was never independently verified."""
+    context_a = _rsvg_context()  # default identical source_summaries text
+    context_b = _rsvg_context(
+        home_team="Boston Red Sox", away_team="Baltimore Orioles", game_date="2026-06-04"
+    )  # same default source_summaries text, different matchup
+
+    def _analyze(request: Any, **kwargs: Any) -> dict[str, Any]:
+        trace = _make_trace(f"sandbox-rsvg-dup-{len(_analyze.calls)}")  # type: ignore[attr-defined]
+        trace["kind"] = "game"
+        _analyze.calls.append(request)  # type: ignore[attr-defined]
+        return trace
+
+    _analyze.calls = []  # type: ignore[attr-defined]
+
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.integrations.odds_resolver.resolve_odds", side_effect=_mock_resolve_odds_ok),
+        patch("omega.core.contracts.service.analyze", side_effect=_analyze),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[
+                _game_entry(roster_context=context_a),
+                _game_entry(
+                    home_team="Boston Red Sox",
+                    away_team="Baltimore Orioles",
+                    game_date="2026-06-04",
+                    roster_context=context_b,
+                ),
+            ],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["entries_ok"] == 2
+    assert result["results"][0]["rsvg_status"] == "pass"
+    assert result["results"][1]["rsvg_status"] == "research_candidate"
+    import json
+
+    block = json.loads(Path(result["export_paths"][1]).read_text())
+    downgrade_reasons = block["trace"]["trace_quality"]["rsvg"]["downgrade_reasons"]
+    assert any("reused verbatim" in reason for reason in downgrade_reasons)
+
+
+def test_rsvg_duplicate_summary_not_flagged_across_distinct_content(tmp_path: Path) -> None:
+    """Two entries with genuinely distinct source_summaries text must not be
+    flagged as duplicates -- only exact reuse trips the check."""
+    context_a = _rsvg_context()
+    context_b = _rsvg_context(
+        home_team="Boston Red Sox",
+        away_team="Baltimore Orioles",
+        game_date="2026-06-04",
+        source_summaries=[
+            {
+                "source": "espn.com",
+                "summary": "Red Sox activate closer off IL; Orioles rotation unchanged.",
+            }
+        ],
+    )
+
+    def _analyze(request: Any, **kwargs: Any) -> dict[str, Any]:
+        trace = _make_trace(f"sandbox-rsvg-distinct-{len(_analyze.calls)}")  # type: ignore[attr-defined]
+        trace["kind"] = "game"
+        _analyze.calls.append(request)  # type: ignore[attr-defined]
+        return trace
+
+    _analyze.calls = []  # type: ignore[attr-defined]
+
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.integrations.odds_resolver.resolve_odds", side_effect=_mock_resolve_odds_ok),
+        patch("omega.core.contracts.service.analyze", side_effect=_analyze),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[
+                _game_entry(roster_context=context_a),
+                _game_entry(
+                    home_team="Boston Red Sox",
+                    away_team="Baltimore Orioles",
+                    game_date="2026-06-04",
+                    roster_context=context_b,
+                ),
+            ],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["results"][0]["rsvg_status"] == "pass"
+    assert result["results"][1]["rsvg_status"] == "pass"
+
+
 def test_rsvg_export_block_passes_export_validator(tmp_path: Path) -> None:
     """No top-level shape drift: RSVG-stamped exports (trace_quality.rsvg,
     reasoning_presentation, downgrade rationale) stay valid for the shared
