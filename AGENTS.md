@@ -341,6 +341,26 @@ For each substantial task, return:
 - Rollback plan
 - Ordered implementation steps
 
+## Canonical Tools and Daily Flow (Transition Guidelines)
+
+All legacy scratch scripts (e.g. `get_todays_mlb_events.py`, `summarize_today_events.py`, `get_all_mlb_props.py`, `extract_mlb_player_contexts.py`, etc.) are deprecated. They predate or ignore canonical tooling and must not be used or refined. Instead, use the canonical replacements from the `tools/` directory:
+
+| Scratch Script / Pattern | Canonical Replacement Tool |
+|---|---|
+| `get_todays_mlb_events.py`, `summarize_today_events.py` | `omega_list_events` MCP tool |
+| `get_all_mlb_props.py`, `parse_mlb_props.py`, `check_odds_price.py` | `omega_resolve_odds` MCP tool or command line (pairs Over/Under, filters books) |
+| `extract_mlb_player_contexts.py`, `extract_wnba_contexts.py` | `tools/extract_contexts.py` (`--league MLB` writes context packs to `var/context_packs/` using read-only `TraceStore` and stamps provenance/age) |
+| `query_results.py`, `read_*_traces.py`, `query_db*.py` | `omega_trace_query` / `omega_trace_get` MCP tools or read-only SQL console |
+| `close_sidecar_*.py`, `consolidate_sidecars.py` | `omega-session-run` session lifecycle closeout command |
+| Hand-rolled daily-slate Python scripts (`run_batch_slate.py`, `run_mlb_batch.py`, etc.) | `tools/build_slate_entries.py` (parameterized slate runner, builds and validates entries from researched JSON facts and context packs) & `tools/run_slate.py` (runs entries through `omega_run_batch` with sidecar audits) |
+
+### Daily Operating Flow
+1. **Extract Contexts:** Run `tools/extract_contexts.py` to compile team/player context packs to `var/context_packs/`.
+2. **Build Slate Entries:** Run `tools/build_slate_entries.py` with researched facts template (starters, injuries, roster_context) + context packs to generate `entries.json`.
+3. **Run Slate:** Run `tools/run_slate.py` to execute batch simulations and produce traces.
+4. **Session Closeout:** Run `omega-session-run` to validate, ingest, render reports, and close the session cleanly.
+5. **Query Results:** Run `tools/query_session_results.py` to view read-only session summary tables.
+
 ## Local runtime contract
 
 See [OMEGA_RUNTIME.md](OMEGA_RUNTIME.md) for the local VM / MCP runtime instructions — engine invocation, hard-wall enforcement, session lifecycle, paid Odds API closing-line capture, trace export, and action-plan automation.
