@@ -419,21 +419,26 @@ def ingest_file(
         )
         _warn_drift(adapted["trace_id"], adapted.get("input_snapshot") or {}, bet_block)
 
-    # P5: reject manual traces with no engine run and no model predictions.
-    # These cannot contribute calibration pairs and inflate the graded-count metric.
-    # Exception: sandbox_parlay traces are intentionally engine-less â€” they are
-    # still ingested for bet-record purposes but noted here for clarity.
+    # P5: reject manual traces with no engine run, no model predictions, and no
+    # bet_record. These cannot contribute calibration pairs and carry no
+    # bet-record audit value either, so they'd only inflate the graded-count
+    # metric. Exception: any trace carrying a real bet_record (sandbox_parlay
+    # included) is intentionally engine-less but still ingested for
+    # bet-record/ledger purposes -- the calibration-ineligibility is already
+    # enforced separately via predictions being None.
     downgrades = adapted.get("downgrades") or []
     if (
         "manual:no_engine_run" in downgrades
         and adapted.get("predictions") is None
         and adapted.get("execution_mode") != "sandbox_parlay"
+        and not isinstance(bet_block, dict)
     ):
         raise ValueError(
-            f"Trace {adapted['trace_id']} has 'manual:no_engine_run' downgrade and no "
-            "model predictions. Manual traces without predictions cannot contribute "
-            "calibration pairs. Use analyze() to produce engine-run traces, or attach "
-            "this trace to a bet_record manually via backfill_outcomes_manual.py."
+            f"Trace {adapted['trace_id']} has 'manual:no_engine_run' downgrade, no "
+            "model predictions, and no bet_record. Manual traces without predictions "
+            "cannot contribute calibration pairs and carry no bet-record audit value. "
+            "Use analyze() to produce an engine-run trace, or add a bet_record so this "
+            "can still be ingested for ledger/audit purposes."
         )
 
     if dry_run:

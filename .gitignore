@@ -99,3 +99,7 @@ data/cc_phase3d_out.json
 
 # Scratch scripts used by LLM for session processes
 scratch/
+
+# Ad hoc recommendation-table dumps written by scratch session scripts directly
+# to the repo root instead of scratch/ or var/. Root-anchored; do not regenerate.
+/scratch_recs.json

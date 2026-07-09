@@ -50,6 +50,19 @@ def test_session_sidecar_validates_required_schema(tmp_path):
     assert sidecar.to_report_dict()["exec_stats"]["traces_emitted"] == 1
 
 
+def test_session_sidecar_from_path_strips_trailing_null_pad(tmp_path):
+    """BUG-sess-20260524-nba1: a fixed-size write buffer left valid JSON
+    followed by a run of null bytes, which json.load rejected as 'Extra
+    data'. from_path must strip the pad and parse the valid content."""
+    path = tmp_path / "padded.json"
+    raw = json.dumps(_valid_sidecar()).encode("utf-8") + b"\x00" * 255
+    path.write_bytes(raw)
+
+    sidecar = SessionSidecar.from_path(path)
+
+    assert sidecar.session_id == "sess-20260521-test"
+
+
 def test_session_sidecar_rejects_legacy_timestamp_keys():
     payload = _valid_sidecar()
     payload.pop("opened_at")

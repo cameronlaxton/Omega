@@ -74,7 +74,15 @@ class PersistableTrace(BaseModel):
     def from_analyze_output(cls, analyze_out: dict[str, Any]) -> PersistableTrace:
         """Build a persistable trace from the canonical service `analyze()` output."""
         trace_id = str(analyze_out.get("trace_id", ""))
-        ran_at = str(analyze_out.get("ran_at") or analyze_out.get("analyzed_at") or "")
+        # Fall back to the legacy top-level `timestamp` key for pre-Phase-6h
+        # direct-analyze() exports that predate the ran_at/analyzed_at fields
+        # (see docs/bugs/ export-wrapper timestamp gap).
+        ran_at = str(
+            analyze_out.get("ran_at")
+            or analyze_out.get("analyzed_at")
+            or analyze_out.get("timestamp")
+            or ""
+        )
         kind = str(analyze_out.get("kind", "unknown"))
         if kind not in {"game", "prop", "slate"}:
             kind = "unknown"

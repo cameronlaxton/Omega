@@ -279,8 +279,12 @@ class SessionSidecar(BaseModel):
 
     @classmethod
     def from_path(cls, path: Path) -> SessionSidecar:
-        with path.open("r", encoding="utf-8") as fh:
-            return cls.model_validate(json.load(fh))
+        # Strip a trailing null-byte pad before parsing (BUG-sess-20260524-nba1):
+        # a fixed-size write buffer not truncated to content length on flush left
+        # valid JSON followed by a run of \x00, which json.load rejects as "Extra
+        # data". Valid JSON never ends with \x00, so stripping is safe.
+        raw = path.read_bytes().rstrip(b"\x00")
+        return cls.model_validate(json.loads(raw))
 
     def to_report_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

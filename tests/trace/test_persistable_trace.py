@@ -73,6 +73,28 @@ def test_persistable_trace_from_game_analyze_output_carries_query_fields():
     assert record["calibration_audit"] == [{"profile_id": "b2b-v1"}]
 
 
+def test_from_analyze_output_falls_back_to_legacy_timestamp_key():
+    """Pre-Phase-6h direct-analyze() exports carry a top-level `timestamp`
+    instead of `ran_at`/`analyzed_at`; the adapter must not treat that as
+    missing (see docs/bugs/ export-wrapper timestamp gap)."""
+    analyze_out = _analyze_trace("game")
+    del analyze_out["ran_at"]
+    analyze_out["timestamp"] = "2026-06-25T22:05:32.476657+00:00"
+
+    trace = PersistableTrace.from_analyze_output(analyze_out)
+
+    assert trace.timestamp == "2026-06-25T22:05:32.476657+00:00"
+
+
+def test_from_analyze_output_prefers_ran_at_over_legacy_timestamp():
+    analyze_out = _analyze_trace("game")
+    analyze_out["timestamp"] = "2020-01-01T00:00:00Z"  # should be ignored
+
+    trace = PersistableTrace.from_analyze_output(analyze_out)
+
+    assert trace.timestamp == "2026-05-21T12:00:00Z"
+
+
 def test_trace_store_accepts_persistable_trace_model(tmp_path):
     store = TraceStore(db_path=str(tmp_path / "traces.db"))
     trace = PersistableTrace.from_analyze_output(_analyze_trace("prop"))

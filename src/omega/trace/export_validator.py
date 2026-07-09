@@ -173,11 +173,17 @@ def validate_export_block(
                 )
             )
 
+    # Mirrors the ingest-side exception in ingest_traces.ingest_file(): a manual/
+    # engine-less trace with no predictions is only rejected when it ALSO has no
+    # bet_record. A bet_record means it still has bet-record/ledger audit value
+    # even though it can never contribute a calibration pair (sandbox_parlay is
+    # a strict subset of "carries a bet_record", kept explicit for clarity).
     downgrades = adapted.get("downgrades") or []
     if (
         "manual:no_engine_run" in downgrades
         and adapted.get("predictions") is None
         and adapted.get("execution_mode") != "sandbox_parlay"
+        and not isinstance(bet, dict)
     ):
         issues.append(
             ValidationIssue(

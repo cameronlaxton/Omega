@@ -144,6 +144,68 @@ class TestBug4Validation:
         assert (inbox / "failed" / "bad.json.error.txt").exists()
 
 
+class TestManualNoEngineRunBetRecord:
+    """A manual/no-engine-run trace with a bet_record ingests for ledger/audit
+    purposes even though it can never contribute a calibration pair; the same
+    shape with no bet_record at all stays rejected."""
+
+    def _manual_export(self, trace_id: str, *, with_bet_record: bool) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "trace": {
+                "trace_id": trace_id,
+                "ran_at": "2026-05-15T03:57:36Z",
+                "kind": "prop",
+                "input_snapshot": {
+                    "player_name": "De'Aaron Fox",
+                    "league": "NBA",
+                    "prop_type": "ast",
+                    "line": 6.5,
+                    "home_team": "Minnesota Timberwolves",
+                    "away_team": "San Antonio Spurs",
+                    "game_date": "2026-05-15",
+                },
+                "result": {"status": "skipped", "skip_reason": "manual:no_engine_run"},
+                "downgrades": ["manual:no_engine_run"],
+            },
+            "bet_record": None,
+        }
+        if with_bet_record:
+            payload["bet_record"] = {
+                "book": "other:thescore",
+                "market": "player_prop:ast",
+                "selection": "De'Aaron Fox Under 6.5 Assists",
+                "selection_descriptor": "fox_ast_under_6.5",
+                "line_taken": 6.5,
+                "odds_taken": -200,
+                "stake_units": 45.0,
+                "decision_timestamp": "2026-05-15T21:30:00Z",
+            }
+        return payload
+
+    def test_manual_trace_with_bet_record_ingests(self, workspace):
+        inbox, db = workspace
+        path = _write(
+            inbox, "manual_bet.json", self._manual_export("sandbox-manual-1", with_bet_record=True)
+        )
+        store = TraceStore(db_path=str(db))
+        trace_id, bet_id = ingest_traces.ingest_file(path, store)
+        assert trace_id == "sandbox-manual-1"
+        assert bet_id is not None
+        store.close()
+
+    def test_manual_trace_without_bet_record_still_rejected(self, workspace):
+        inbox, db = workspace
+        path = _write(
+            inbox,
+            "manual_no_bet.json",
+            self._manual_export("sandbox-manual-2", with_bet_record=False),
+        )
+        store = TraceStore(db_path=str(db))
+        with pytest.raises(ValueError, match="cannot contribute calibration pairs"):
+            ingest_traces.ingest_file(path, store)
+        store.close()
+
+
 class TestBug5DriftWarnings:
     def test_line_drift_logs_warning(self, workspace, caplog):
         inbox, db = workspace

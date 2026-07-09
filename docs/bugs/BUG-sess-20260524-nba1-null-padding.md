@@ -1,6 +1,13 @@
 # BUG: sess-20260524-nba1.json — null-byte tail causes sidecar parse failure
 
-**Reported:** 2026-05-26  
+**Reported:** 2026-05-26
+**Status:** CLOSED 2026-07-09 — Option B applied (`src/omega/trace/session_sidecar.py`
+`SessionSidecar.from_path` now strips a trailing `\x00` pad before `json.loads`;
+regression test `test_session_sidecar_from_path_strips_trailing_null_pad` in
+`tests/trace/test_session_sidecar.py`). The original `sess-20260524-nba1.json`
+file no longer exists on disk (superseded by later session-lifecycle cleanup);
+the hardening remains valuable for any future recurrence of the write pattern
+described below, so it was kept.
 **Detected by:** weekly shadow calibration run (`run_action_plan.py weekly_shadow_review.json`)  
 **Severity:** Low (data not lost; session excluded from calibration report only)  
 **File:** `var/inbox/sessions/sess-20260524-nba1.json`
@@ -81,9 +88,20 @@ Recommended sequence: apply Option B now (one-line change, zero risk), then inve
 
 ## Bugs also logged in this sidecar's agent_notes
 
-The `agent_notes` field records two additional issues from the 2026-05-24 session that warrant separate tickets:
+The `agent_notes` field records two additional issues from the 2026-05-24 session
+that were flagged as warranting separate tickets. Investigated 2026-07-09, six
+weeks and several phases (6h/7/8) after the report; **neither reproduces against
+current code, so no new bug docs were filed:**
 
 1. `markov_state backend fails AttributeError on evidence_signals at service.py:619`
+   — current `service.py:619` is `_calibrate()`, unrelated code; the codebase has
+   moved on substantially since Phase 5. The evidence-signal extraction site
+   (now `service.py:487`) reads `getattr(typed_req, "evidence", None) or []`,
+   which is defensive and cannot raise `AttributeError` on a missing attribute.
+   Most likely fixed as a side effect of later hardening; if it recurs, it will
+   need a fresh trace/repro since the original code path no longer exists.
 2. `fetch_closing_lines skipping 4 prior-session bets with no league on trace`
-
-These are unrelated to the null-padding defect and should be filed independently.
+   — current `fetch_closing_lines.py:504-507` explicitly buckets bets with no
+   `league` on their trace and logs each one via `logger.warning("Skipped bets:
+   ... (no league on trace)")` at the end of the run (`:518-522`). This is
+   working as designed (a visible warning, not a silent drop), not a bug.
