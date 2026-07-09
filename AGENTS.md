@@ -13,7 +13,12 @@ that points here and carries no independent rules.
   raw-SQL scratch writes) that repeated audits have flagged.
 - [`docs/TRACE_QUERY_COOKBOOK.md`](docs/TRACE_QUERY_COOKBOOK.md) — typed `TraceStore` recipes for
   read-only trace inspection, so you don't hand-roll raw `sqlite3` schema-guessing. Reads only;
-  all mutations stay on the typed MCP/CLI paths.
+  all mutations stay on the typed MCP/CLI paths. **Need to purge/rerun a session's traces**
+  (bad roster context, a gate fix, a duplicate run)? Use `omega-session-void --session-id <sid>
+  --reason "..." --apply` (`src/omega/ops/session_void.py`) — it exports every affected row to
+  `var/void_archive/` before deleting and records a `session_void` audit event on the sidecar.
+  **Never write an ad hoc script that opens `sqlite3.connect` and runs `DELETE`** — that has no
+  export, no audit trail, and is exactly the pattern past sessions have been flagged for.
 - **[`prompts/reference/output_modes.md`](prompts/reference/output_modes.md)** — output-mode
   semantics (`RESEARCH_CANDIDATE` vs `ACTIONABLE`), downgrade discipline, and the engine-execution
   rule. **Single source of truth; do not restate it elsewhere.**

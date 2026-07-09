@@ -19,8 +19,9 @@ from omega.trace.session_sidecar import SessionSidecar, quarantine_sidecar  # no
 logger = logging.getLogger("validate_session_sidecars")
 
 # Canonical session-sidecar inbox. The sidecars live under ``var/`` (see
-# docs/phase6/ARTIFACT_AUTHORITY.md); a default missing the ``var/`` segment
-# silently validates an empty/stale directory and lets bad sidecars through.
+# archive/historical/phase6/ARTIFACT_AUTHORITY.md); a default missing the
+# ``var/`` segment silently validates an empty/stale directory and lets bad
+# sidecars through.
 _DEFAULT_SESSIONS_INBOX = _REPO_ROOT / "var" / "inbox" / "sessions"
 
 
