@@ -51,7 +51,7 @@ from omega.integrations.odds_api import (  # noqa: E402
 )
 from omega.integrations.odds_resolver import provider_market_for_prop  # noqa: E402
 from omega.trace.db import require_sqlite_backend  # noqa: E402
-from omega.trace.store import TraceStore  # noqa: E402
+from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("backfill_closing_lines")
 
@@ -538,6 +538,7 @@ def main() -> int:
     require_sqlite_backend("backfill_closing_lines.py")
 
     store = TraceStore(db_path=args.db)
+    log_effective_db(store, logger)
     pending = _pending_bets_needing_close(
         store,
         league_filter=args.league,

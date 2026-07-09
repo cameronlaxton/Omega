@@ -59,7 +59,6 @@ from omega.trace.eligibility import (  # noqa: E402
 )
 from omega.trace.store import TraceStore  # noqa: E402
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("backfill_trace_quality")
 
 _ELIGIBILITY_SOURCE = "backfill_v1"
@@ -195,8 +194,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Report changes without writing.")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
-    if args.verbose:
-        logging.getLogger("backfill_trace_quality").setLevel(logging.DEBUG)
+    # F15 (SIDECAR_LOGGING_AUDIT_2026-06-07): basicConfig used to run at import
+    # time hardcoded to INFO, before --verbose was even parsed; setLevel(DEBUG)
+    # on just this module's named logger afterward raised the threshold for
+    # this script's own log calls but left every other omega.* logger's
+    # inherited effective level at the stale import-time INFO, so --verbose
+    # silently did not surface DEBUG diagnostics from TraceStore/eligibility
+    # code this script calls into. Configure the root logger's level here,
+    # after parsing args, matching the pattern the other ops/ CLIs already use.
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     require_sqlite_backend("backfill_trace_quality.py")
     run(db=args.db, league=args.league, dry_run=args.dry_run)
     return 0

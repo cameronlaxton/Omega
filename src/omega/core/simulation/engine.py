@@ -23,9 +23,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import random
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     import numpy as np
@@ -1427,9 +1430,7 @@ def _soccer_score_params(
     _SOCCER_ARCHETYPE_AVG_TOTAL = 2.5
     config_avg_total = config.get("avg_total", _SOCCER_ARCHETYPE_AVG_TOTAL)
     if config_avg_total > _SOCCER_AVG_TOTAL_CEILING:
-        import logging as _logging
-
-        _logging.getLogger("omega.core.simulation.engine").warning(
+        logger.warning(
             "Soccer league %s has avg_total=%.1f (>%.0f); clamping to archetype "
             "default %.1f — check leagues.py for a missing config entry",
             league,

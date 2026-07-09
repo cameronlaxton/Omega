@@ -68,6 +68,29 @@ class TestSafeLoadAndQuarantine:
         # Idempotent: quarantining something already under invalid/ is a no-op.
         assert quarantine_sidecar(dst, "again") is None
 
+    def test_quarantine_survives_reason_file_write_failure(self, tmp_path, monkeypatch):
+        """F10: the move already happened and is not repeatable (source gone),
+        so a failure writing reason.txt must not raise -- it must log and still
+        report the move succeeded."""
+        path = tmp_path / "sess.json"
+        path.write_text("{ broken", encoding="utf-8")
+
+        original_write_text = Path.write_text
+
+        def _flaky_write_text(self, *args, **kwargs):
+            if self.name.endswith(".reason.txt"):
+                raise OSError("disk full (simulated)")
+            return original_write_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", _flaky_write_text)
+
+        dst = quarantine_sidecar(path, "JSONDecodeError: boom")
+
+        assert dst is not None and dst.exists()  # move still succeeded
+        assert not path.exists()
+        reason = dst.with_suffix(dst.suffix + ".reason.txt")
+        assert not reason.exists()  # reason write failed, as simulated
+
 
 class TestQualityGateStatus:
     def test_unknown_for_unreadable(self):

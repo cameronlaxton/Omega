@@ -27,7 +27,7 @@ from omega.trace.session_sidecar import (
     bootstrap_payload,
     load_sidecar_safe,
 )
-from omega.trace.store import TraceStore
+from omega.trace.store import TraceStore, log_effective_db
 
 logger = logging.getLogger("omega.trace.audit_renderer")
 
@@ -70,6 +70,7 @@ def render_session_audit(
         )
 
     store = TraceStore(db_path=str(db_path) if db_path else None, read_only=False)
+    log_effective_db(store, logger)
     try:
         rows = store.query_by_session(session_id)
         # Derived-artifact front-matter, built from the live store so the audit

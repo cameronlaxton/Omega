@@ -946,9 +946,10 @@ def omega_replay_bundle(bundle: dict[str, Any], strict: bool = False) -> dict[st
 
 def omega_trace_get(trace_id: str, db_path: str | None = None) -> dict[str, Any]:
     """Retrieve a persisted trace via TraceStore."""
-    from omega.trace.store import TraceStore
+    from omega.trace.store import TraceStore, log_effective_db
 
     store = TraceStore(db_path=db_path)
+    log_effective_db(store, logger)
     try:
         trace = store.get_trace(trace_id)
         if trace is None:
@@ -970,7 +971,7 @@ def omega_trace_query(
     limit: int = 100,
 ) -> dict[str, Any]:
     """Query persisted traces with versioned filters."""
-    from omega.trace.store import TraceStore
+    from omega.trace.store import TraceStore, log_effective_db
 
     try:
         req = TraceQueryRequest(
@@ -986,6 +987,7 @@ def omega_trace_query(
         return _error("omega_trace_query", "invalid_request", exc.errors())
 
     store = TraceStore(db_path=req.db_path)
+    log_effective_db(store, logger)
     try:
         traces = store.query_traces(
             league=req.league,
@@ -1014,7 +1016,7 @@ def omega_trace_attach_outcome(
     db_path: str | None = None,
 ) -> dict[str, Any]:
     """Attach an outcome after initial trace persistence."""
-    from omega.trace.store import TraceStore
+    from omega.trace.store import TraceStore, log_effective_db
 
     try:
         req = TraceAttachOutcomeRequest(
@@ -1028,6 +1030,7 @@ def omega_trace_attach_outcome(
         return _error("omega_trace_attach_outcome", "invalid_request", exc.errors())
 
     store = TraceStore(db_path=req.db_path)
+    log_effective_db(store, logger)
     try:
         outcome_id = store.attach_outcome(
             req.trace_id,
@@ -1059,7 +1062,7 @@ def omega_trace_void_prop(
     it as a loss. Post-decision, like outcome attachment — computes no protected
     betting output.
     """
-    from omega.trace.store import TraceStore
+    from omega.trace.store import TraceStore, log_effective_db
 
     try:
         req = TraceVoidPropRequest(
@@ -1075,6 +1078,7 @@ def omega_trace_void_prop(
         return _error("omega_trace_void_prop", "invalid_request", exc.errors())
 
     store = TraceStore(db_path=req.db_path)
+    log_effective_db(store, logger)
     try:
         # attach_prop_outcome is idempotent on (trace_id, player_name, stat_type):
         # if a row already exists it returns that row's id WITHOUT changing its
@@ -1187,7 +1191,7 @@ def omega_settle_bets(
     grading math itself.
     """
     from omega.trace.ledger_settlement import settle_pending_ledger
-    from omega.trace.store import TraceStore
+    from omega.trace.store import TraceStore, log_effective_db
 
     try:
         req = SettleBetsRequest(
@@ -1205,6 +1209,7 @@ def omega_settle_bets(
 
     provenance_filter = None if req.provenance == "all" else req.provenance
     store = TraceStore(db_path=req.db_path)
+    log_effective_db(store, logger)
     try:
         summary = settle_pending_ledger(
             store,
@@ -1247,7 +1252,7 @@ def omega_calibration_fit_preview(
     from omega.core.calibration.fitter import CalibrationFitter
     from omega.core.calibration.market import calibration_market_for_plane
     from omega.core.calibration.registry import CalibrationRegistry
-    from omega.trace.store import TraceStore
+    from omega.trace.store import TraceStore, log_effective_db
 
     try:
         req = CalibrationFitPreviewRequest(
@@ -1261,6 +1266,7 @@ def omega_calibration_fit_preview(
         return _error("omega_calibration_fit_preview", "invalid_request", exc.errors())
 
     store = TraceStore(db_path=req.db_path)
+    log_effective_db(store, logger)
     try:
         graded = store.get_graded_traces(league=req.league, limit=req.limit)
         fitter = CalibrationFitter()
@@ -1443,7 +1449,7 @@ def omega_record_flat_bet(
     """
     from omega.trace.bet_settlement import build_selection_descriptor, coerce_american_odds
     from omega.trace.ledger_bet import BetProvenance, LedgerBet, LedgerStatus
-    from omega.trace.store import TraceStore
+    from omega.trace.store import TraceStore, log_effective_db
 
     try:
         req = FlatBetRequest(
@@ -1481,6 +1487,7 @@ def omega_record_flat_bet(
     )
 
     store = TraceStore(db_path=req.db_path)
+    log_effective_db(store, logger)
     try:
         trace = store.get_trace(req.trace_id)
         if trace is None:
@@ -1552,7 +1559,7 @@ def omega_get_portfolio_summary(
     ROI, net PnL, win%. Read-only aggregation over stored dollar PnL — computes
     no protected betting output."""
     from omega.trace.portfolio import summarize_ledger
-    from omega.trace.store import TraceStore
+    from omega.trace.store import TraceStore, log_effective_db
 
     try:
         req = PortfolioSummaryRequest(
@@ -1567,6 +1574,7 @@ def omega_get_portfolio_summary(
         return _error("omega_get_portfolio_summary", "invalid_request", exc.errors())
 
     store = TraceStore(db_path=req.db_path)
+    log_effective_db(store, logger)
     try:
         rows = store.query_ledger(
             league=req.league,

@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from omega.integrations._etl import SourceSchemaDriftError, validate_records
+from omega.integrations._etl import SourceSchemaDriftError, _emit_provenance_event, validate_records
 from omega.trace.session_sidecar import SessionSidecar, bootstrap_payload
 
 
@@ -71,3 +71,17 @@ def test_drift_writes_fail_status_provenance_event(tmp_path):
     ]
     assert len(drift_events) == 1
     assert "sackmann" in drift_events[0].step
+
+
+def test_provenance_write_failure_is_logged_not_silent(tmp_path, caplog):
+    """F11 (SIDECAR_LOGGING_AUDIT_2026-06-07): a total failure of the
+    provenance audit write (e.g. an unreadable/nonexistent sidecar) must not
+    raise past this best-effort helper, but it must not be a silent
+    `except: pass` either -- it needs to log so the lost QA signal is visible."""
+    nonexistent = tmp_path / "does_not_exist" / "sess-ghost.json"
+
+    with caplog.at_level("WARNING"):
+        _emit_provenance_event(nonexistent, source="sackmann", status="fail", notes="test")
+
+    assert any("data_provenance" in r.message for r in caplog.records)
+    assert any(str(nonexistent) in r.message for r in caplog.records)

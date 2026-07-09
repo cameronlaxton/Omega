@@ -67,7 +67,7 @@ if str(_SRC_ROOT) not in sys.path:
 
 from omega.paths import closing_lines_inbox_dir  # noqa: E402
 from omega.trace.db import require_sqlite_backend  # noqa: E402
-from omega.trace.store import TraceStore  # noqa: E402
+from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("ingest_closing_lines")
 
@@ -213,6 +213,7 @@ def main() -> int:
         return 0
 
     store = TraceStore(db_path=args.db)
+    log_effective_db(store, logger)
     ok = 0
     failed = 0
     total_attached = 0

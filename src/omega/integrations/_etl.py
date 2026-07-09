@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import os
 import time
 from collections.abc import Callable
@@ -40,6 +41,8 @@ from typing import Any, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from omega.integrations._guards import assert_not_replay_mode
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_CACHE_ROOT = Path("data/cache")
 _DEFAULT_ALIAS_ROOT = Path("data/aliases")
@@ -193,8 +196,19 @@ def _emit_provenance_event(
     }
     try:
         append_audit_events(Path(session_path), [event])
-    except Exception:  # pragma: no cover - audit write must never mask the cause
-        pass
+    except Exception as exc:  # noqa: BLE001 - audit write must never mask the cause
+        # F11 (SIDECAR_LOGGING_AUDIT_2026-06-07): a total failure of the
+        # provenance audit write was previously silent -- a lost QA signal
+        # with no trace. The caller's original schema-drift/resolution error
+        # (this function is always called right before a raise, or as a
+        # fire-and-forget warn) is never masked by logging here.
+        logger.warning(
+            "Failed to write data_provenance event to sidecar %s (source=%s, status=%s): %s",
+            session_path,
+            source,
+            status,
+            exc,
+        )
 
 
 def validate_records(

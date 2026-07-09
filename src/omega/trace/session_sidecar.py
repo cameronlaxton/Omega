@@ -17,6 +17,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from collections.abc import Iterator
@@ -355,6 +356,36 @@ def _check_protected_fields(event: AuditEvent) -> None:
                     f"audit_events '{field_name}' contains protected engine field {found_key!r}. "
                     "Engine-owned quant values must stay in var/omega_traces.db."
                 )
+    _check_protected_value_leaks(event)
+
+
+# F5 (SIDECAR_LOGGING_AUDIT_2026-06-07): inputs/outputs are structurally scanned
+# above, but free-text notes/assumptions/bugs could still smuggle a protected
+# quant value as prose, e.g. notes="edge_pct=5.2 kelly_fraction=0.03". Matches a
+# protected field name immediately followed by `=` or `:` and a numeric-looking
+# value. Deliberately narrow (name[=:]value only, not "name is value" or other
+# phrasing) so it does not false-positive on append_null_data_audit's own
+# `notes="NULL detected: result.edge_pct"` (the field name there is a dotted
+# path with no `=`/`:` immediately after it) or on ordinary narrative prose.
+_PROTECTED_VALUE_LEAK_RE = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in sorted(_PROTECTED_QUANT_FIELDS)) + r")\s*[:=]\s*[+-]?\d"
+)
+
+
+def _check_protected_value_leaks(event: AuditEvent) -> None:
+    texts: list[str] = []
+    if event.notes:
+        texts.append(event.notes)
+    texts.extend(event.assumptions)
+    texts.extend(event.bugs)
+    for text in texts:
+        match = _PROTECTED_VALUE_LEAK_RE.search(text)
+        if match:
+            raise ProtectedValueError(
+                f"audit_events free-text field contains a protected engine value "
+                f"pattern {match.group(0)!r}. Engine-owned quant values must stay "
+                "in var/omega_traces.db, not sidecar prose."
+            )
 
 
 def _events_jsonl_path(path: Path) -> Path:
@@ -593,6 +624,14 @@ def quality_gate_status(sidecar: SessionSidecar | None) -> str:
 
     An unreadable sidecar (None) is 'unknown' — never implied-clean. Callers must
     not let 'unknown' silently pass as 'no failure'.
+
+    DEPRECATED (F18, SIDECAR_LOGGING_AUDIT_2026-06-07): this is the blunt
+    session-wide verdict -- one failed gate condemns every trace in the
+    session. It has zero production callers (only this module's own tests use
+    it); kept only so a future caller doesn't reach for it by accident without
+    seeing this note. Use ``quality_gate_verdict_for_trace`` instead, which
+    scopes the verdict to a single trace and is what ``ingest_traces.py``
+    actually calls.
     """
     if sidecar is None:
         return "unknown"
@@ -705,6 +744,16 @@ def quality_gate_verdict_for_trace(
     ``session_fallback`` is the conservative catch-all for legacy/unstructured
     sidecars: it marks the trace calibration-ineligible but, like every fail
     here, never blocks ledger ingest.
+
+    NOTE (F9, SIDECAR_LOGGING_AUDIT_2026-06-07): step 4's ``window_tolerance``
+    does NOT spare traces outside the window -- an unscoped failed gate always
+    fails the trace (step 7 catches everything step 4 doesn't). ``timestamp_window``
+    vs. ``session_fallback`` is purely a diagnostic distinction (was this specific
+    unscoped fail close in time to the trace, or generically unscoped) for
+    post-hoc triage; it does not change the verdict. This is intentionally
+    conservative -- an unscoped fail with no positive evidence of unrelatedness
+    should not calibration-eligible a trace -- but do not read ``scope`` as
+    "this trace escaped tainting because it was far away in time."
     """
     if sidecar is None:
         return TraceQaVerdict(
@@ -853,9 +902,23 @@ def quarantine_sidecar(
     import shutil
 
     shutil.move(str(path), str(dst))
+    # F10 (SIDECAR_LOGGING_AUDIT_2026-06-07): the move already happened and is
+    # not repeatable (the source is gone), so a failure writing the reason file
+    # must not raise and leave the caller unsure whether quarantine succeeded.
+    # Log and continue -- a quarantined file with no reason.txt is recoverable
+    # by inspection; a raised exception here masking a completed move is not.
     reason_path = dst.with_suffix(dst.suffix + ".reason.txt")
     ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    reason_path.write_text(f"{ts}\n{reason}\n", encoding="utf-8")
+    try:
+        reason_path.write_text(f"{ts}\n{reason}\n", encoding="utf-8")
+    except OSError as exc:
+        logger.warning(
+            "Quarantined sidecar %s -> %s but failed to write reason file %s: %s",
+            path.name,
+            dst,
+            reason_path,
+            exc,
+        )
     logger.warning("Quarantined malformed sidecar %s -> %s", path.name, dst)
     return dst
 
@@ -899,16 +962,28 @@ def rebuild_sidecar_from_jsonl(jsonl_path: Path) -> dict[str, Any]:
             .replace("+00:00", "Z")
         )
 
+    # F14 (SIDECAR_LOGGING_AUDIT_2026-06-07): model_version/purpose/bankroll are
+    # not recoverable from the JSONL event mirror at all -- these are sentinel
+    # placeholders, not a plausible-looking guess. bankroll_confirmed=False is
+    # the schema's own signal that this bankroll must not be trusted; purpose
+    # is deliberately loud so a caller can't mistake a recovered sidecar for a
+    # normal one at a glance. Still latent (no production caller as of
+    # 2026-07-09) -- gating this behind an explicit operator flag remains
+    # backlog if a caller is ever wired up.
     return {
         "session_id": session_id,
         "opened_at": opened_at,
         "closed_at": None,
-        "model_version": "unknown",
-        "purpose": "recovered_session",
+        "model_version": "UNVERIFIED_RECOVERED",
+        "purpose": "UNVERIFIED_RECOVERED_SESSION_REQUIRES_OPERATOR_REVIEW",
         "bankroll": 1000.0,
         "bankroll_confirmed": False,
         "exec_stats": {},
-        "agent_notes": "Recovered from mirror JSONL file.",
+        "agent_notes": (
+            "Recovered from mirror JSONL file. model_version/purpose/bankroll "
+            "above are UNVERIFIED placeholders, not real session state -- do "
+            "not treat this sidecar's bankroll as authoritative."
+        ),
         "audit_events": events,
     }
 

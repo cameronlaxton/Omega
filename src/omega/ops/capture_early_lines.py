@@ -46,7 +46,7 @@ from omega.integrations.odds_api import (  # noqa: E402
     sport_key_for,
 )
 from omega.trace.market_snapshot import EarlyMarketSnapshot  # noqa: E402
-from omega.trace.store import TraceStore  # noqa: E402
+from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("capture_early_lines")
 
@@ -167,6 +167,7 @@ def main() -> int:
         return 2
 
     store = TraceStore(db_path=args.db)
+    log_effective_db(store, logger)
     client = OddsApiClient()
     total_recorded = 0
     total_skipped: list[str] = []

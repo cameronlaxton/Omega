@@ -198,6 +198,42 @@ def test_append_audit_events_rejects_protected_inputs_key(tmp_path):
     assert sidecar.audit_events == []
 
 
+def test_append_audit_events_rejects_protected_value_leak_in_notes(tmp_path):
+    path = tmp_path / "sess.json"
+    path.write_text(json.dumps(_valid_sidecar()), encoding="utf-8")
+
+    bad_event = _valid_event()
+    bad_event["notes"] = "edge_pct=5.2 kelly_fraction=0.03"
+
+    with pytest.raises(ProtectedValueError, match="edge_pct"):
+        append_audit_events(path, [bad_event])
+
+
+def test_append_audit_events_rejects_protected_value_leak_in_assumptions(tmp_path):
+    path = tmp_path / "sess.json"
+    path.write_text(json.dumps(_valid_sidecar()), encoding="utf-8")
+
+    bad_event = _valid_event()
+    bad_event["assumptions"] = ["edge_pct: 5.2"]
+
+    with pytest.raises(ProtectedValueError, match="edge_pct"):
+        append_audit_events(path, [bad_event])
+
+
+def test_append_null_data_audit_notes_do_not_false_positive_on_leak_scan(tmp_path):
+    """append_null_data_audit's own notes format ('NULL detected: result.edge_pct')
+    must not trip the F5 value-leak scan -- the field name there is a dotted
+    path with no '='/':' immediately after it, i.e. no value is present."""
+    path = tmp_path / "sess.json"
+    path.write_text(json.dumps(_valid_sidecar()), encoding="utf-8")
+
+    append_null_data_audit(path, ["result.edge_pct", "result.kelly_fraction"])
+
+    sidecar = SessionSidecar.from_path(path)
+    assert len(sidecar.audit_events) == 1
+    assert "edge_pct" in sidecar.audit_events[0].notes
+
+
 def test_append_audit_events_rejects_protected_outputs_key(tmp_path):
     path = tmp_path / "sess.json"
     path.write_text(json.dumps(_valid_sidecar()), encoding="utf-8")
