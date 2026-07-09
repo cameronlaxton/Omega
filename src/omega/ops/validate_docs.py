@@ -203,6 +203,11 @@ _BACKTICK_ROOT_MD_RE = re.compile(r"`([A-Za-z0-9_.-]+\.[Mm][Dd])`")
 # explicitly historical and easy to forget when a root doc is renamed.
 _BACKTICK_SCAN_DOCS = [*_OPERATIONAL_DOCS, _REPO_ROOT / "docs" / "history" / "PHASE_HISTORY.MD"]
 
+# Filenames that are legitimately backtick-referenced but never exist in THIS
+# repo -- they belong to an external tool's per-session convention
+# (Antigravity's task.md/walkthrough.md), not a renamed/missing Omega doc.
+_EXTERNAL_TOOL_FILENAMES: frozenset[str] = frozenset({"task.md", "walkthrough.md"})
+
 # Directories skipped when building the "does this filename exist anywhere"
 # index. archive/ is intentionally INCLUDED (not skipped): AGENTS.md/README.md
 # legitimately backtick-cite retired docs like OMEGA_RUN_RECIPE.md as archived
@@ -232,7 +237,7 @@ def check_backtick_root_doc_references() -> bool:
         content = doc.read_text(encoding="utf-8")
         for name in _BACKTICK_ROOT_MD_RE.findall(content):
             key = f"{doc}:{name}"
-            if key in seen:
+            if key in seen or name in _EXTERNAL_TOOL_FILENAMES:
                 continue
             seen.add(key)
             if name not in all_md_basenames:

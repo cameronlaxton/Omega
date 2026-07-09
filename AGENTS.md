@@ -374,6 +374,38 @@ All legacy scratch scripts (e.g. `get_todays_mlb_events.py`, `summarize_today_ev
 4. **Session Closeout:** Run `omega-session-run` to validate, ingest, render reports, and close the session cleanly.
 5. **Query Results:** Run `tools/query_session_results.py` to view read-only session summary tables.
 
+### Before writing a new scratch script, check `tools/` first
+
+A QA audit found 819 scratch scripts across 71 Antigravity/Cowork sessions —
+most re-deriving the exact same "list today's events" / "build a slate" /
+"query what happened" shape the table above already covers. Before writing a
+new one-off script for inspection, querying, or slate-building, check whether
+`tools/` or an `omega_*` MCP tool already does it. A scratch script is for
+something genuinely one-off (debugging a single specific trace, a throwaway
+data check) — not a second implementation of an existing canonical tool.
+
+### Session closeout artifacts (Antigravity/Cowork sessions)
+
+Every session working in this repo through an environment that supports it
+(Antigravity's `task.md` / `walkthrough.md` convention) must leave both
+before the session ends, not just when convenient. A QA audit of the
+`~/.gemini/antigravity/brain/` session history found only 29/146 sessions had
+a `task.md` and 44/146 a `walkthrough.md` — most sessions left no reviewable
+record beyond raw transcripts and scratch files, which is exactly what makes
+drift (raw-SQL cleanup, boilerplate satisfying a gate, duplicate scratch
+tooling) hard to catch after the fact.
+
+- **`task.md`** — the checklist of what this session set out to do, kept
+  current as items complete (not written retroactively at the end).
+- **`walkthrough.md`** — a short narrative of what actually happened: what
+  changed, what was verified, what's left. This is the artifact a human
+  reviews without re-reading the transcript.
+
+Write these as you go, not as a final step tacked on after `omega-session-run
+--close`. If a session genuinely has nothing to report (a pure read-only
+Q&A with no state change), a one-line `task.md` saying so is still cheaper
+than leaving no record at all.
+
 ## Local runtime contract
 
 See [OMEGA_RUNTIME.md](OMEGA_RUNTIME.md) for the local VM / MCP runtime instructions — engine invocation, hard-wall enforcement, session lifecycle, paid Odds API closing-line capture, trace export, and action-plan automation.
