@@ -522,3 +522,62 @@ def test_formal_output_gate_clean_after_taint_cleared(monkeypatch, tmp_path):
 
     assert failures == []
     assert smoke_called == [True]
+
+
+class TestBudgetTelemetry:
+    """F-budget-telemetry: preflight surfaces current-month Odds API usage vs.
+    cap so there is something between 'normal day' and 'runaway loop' to
+    notice before the hard OddsApiBudgetExceeded cap."""
+
+    def test_normal_usage_has_no_warn_marker(self, monkeypatch, tmp_path):
+        from omega.integrations.odds_api import OddsApiClient
+
+        monkeypatch.setattr(
+            OddsApiClient, "budget_status", lambda self: {"current_usage": 300, "monthly_cap": 20000}
+        )
+
+        line = cowork_preflight._budget_telemetry_line(tmp_path)
+
+        assert line is not None
+        assert "used=300 cap=20000" in line
+        assert "SOFT-WARN" not in line
+
+    def test_usage_past_soft_warn_threshold_is_flagged(self, monkeypatch, tmp_path):
+        from omega.integrations.odds_api import OddsApiClient
+
+        monkeypatch.setattr(
+            OddsApiClient,
+            "budget_status",
+            lambda self: {"current_usage": 88455, "monthly_cap": 100000},
+        )
+
+        line = cowork_preflight._budget_telemetry_line(tmp_path)
+
+        assert line is not None
+        assert "SOFT-WARN" in line
+
+    def test_telemetry_failure_is_non_fatal(self, monkeypatch, tmp_path):
+        from omega.integrations.odds_api import OddsApiClient
+
+        def _raise(self):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(OddsApiClient, "budget_status", _raise)
+
+        assert cowork_preflight._budget_telemetry_line(tmp_path) is None
+
+    def test_preflight_ready_banner_includes_budget_line(self, monkeypatch, tmp_path, capsys):
+        from omega.integrations.odds_api import OddsApiClient
+
+        monkeypatch.setattr(cowork_preflight, "run_checks", lambda **_kwargs: [])
+        monkeypatch.setattr(cowork_preflight, "_tracked_python_files", lambda _repo: ([], []))
+        monkeypatch.setattr(
+            OddsApiClient, "budget_status", lambda self: {"current_usage": 42, "monthly_cap": 450}
+        )
+
+        rc = cowork_preflight.main(["--direct-only"])
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "cowork_preflight_ready" in out
+        assert "odds_api_budget: used=42 cap=450" in out

@@ -717,6 +717,36 @@ def run_formal_output_gate(
     return []
 
 
+# Soft-warn threshold as a fraction of the monthly cap. Purely informational --
+# preflight never fails on this; OddsApiBudgetExceeded is still the hard stop
+# at the cap itself. Exists because the cap has been raised as high as 100000
+# (222x the 450 default) with nothing between "normal day" (~300 calls) and
+# "runaway loop" (tens of thousands) to notice the difference before the cap.
+_BUDGET_SOFT_WARN_FRACTION = 0.5
+
+
+def _budget_telemetry_line(repo_root: Path) -> str | None:
+    """One-line current-month Odds API usage vs. cap, or None if unavailable.
+
+    Best-effort and non-fatal: budget telemetry must never block or fail
+    preflight, only inform it. Reads the local budget file directly; makes no
+    network call.
+    """
+    try:
+        from omega.integrations.odds_api import OddsApiClient
+
+        client = OddsApiClient(budget_file=str(repo_root / "omega_odds_api_budget.json"))
+        status = client.budget_status()
+    except Exception:  # noqa: BLE001 - telemetry is best-effort, never fatal
+        return None
+    used, cap = status["current_usage"], status["monthly_cap"]
+    if cap <= 0:
+        return None
+    fraction = used / cap
+    marker = " [SOFT-WARN: approaching cap]" if fraction >= _BUDGET_SOFT_WARN_FRACTION else ""
+    return f"odds_api_budget: used={used} cap={cap} ({fraction:.0%}){marker}"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verify Omega Cowork runtime dependencies before engine execution.",
@@ -791,9 +821,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{_version_text(tuple(sys.version_info[:3]))} "
                 f"({'  '.join(dirty_parts)})"
             )
+            budget_line = _budget_telemetry_line(repo_root)
+            if budget_line:
+                print(budget_line)
             return 0
 
     print(f"cowork_preflight_ready: python={_version_text(tuple(sys.version_info[:3]))}")
+    budget_line = _budget_telemetry_line(repo_root)
+    if budget_line:
+        print(budget_line)
     return 0
 
 
