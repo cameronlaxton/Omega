@@ -182,6 +182,16 @@ Never put engine-owned values in audit event fields — `ProtectedValueError` wi
 
 ---
 
+## Step 4.5 — Known-Bug Sentinel
+
+Before any formal analysis, run the `omega-known-bug-sentinel` skill
+(`.agents/skills/omega-known-bug-sentinel/SKILL.md`) against
+[`docs/bugs/README.md`](../../../docs/bugs/README.md). It's fast when the
+catalog has no active critical bugs (the current steady state) — the point is
+that a future active S1 bug gets caught here, not discovered mid-session.
+
+---
+
 ## Step 5 — Calibration Health (when data exists)
 
 ```bash

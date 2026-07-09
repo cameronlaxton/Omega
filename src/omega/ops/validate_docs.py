@@ -36,6 +36,7 @@ _CANONICAL_REFS = [
 ]
 
 _PLUGIN_SKILL_POINTERS = {
+    "omega-known-bug-sentinel": ".agents/skills/omega-known-bug-sentinel/SKILL.md",
     "omega-mcp-operator": ".agents/skills/omega-mcp-operator/SKILL.md",
     "omega-replay-qa": ".agents/skills/omega-replay-qa/SKILL.md",
     "omega-session-bootstrap": ".agents/skills/omega-session-bootstrap/SKILL.md",
