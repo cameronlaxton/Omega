@@ -7,6 +7,7 @@ rows, fetch outcomes, or duplicate the pure grading math in bet_settlement.py.
 
 from __future__ import annotations
 
+import datetime
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
@@ -148,5 +149,63 @@ def settle_pending_ledger(
             summary.total_net += net
         if apply:
             store.grade_ledger_bet(row["ledger_id"], status, payout, net)
+
+    return summary
+
+
+def auto_void_aged_pending(
+    store: TraceStore,
+    *,
+    older_than_days: int,
+    apply: bool = False,
+    league: str | None = None,
+    sport: str | None = None,
+    provenance: str | None = None,
+    limit: int = 100000,
+) -> SettlementSummary:
+    """VOID pending bet_ledger rows older than ``older_than_days`` that have
+    no attached outcome to grade against.
+
+    Scoped to the *ungradeable* subset only: a pending row that
+    ``grade_ledger_fields`` CAN grade (an outcome/prop_outcome row already
+    exists) is settled normally by ``settle_pending_ledger``, never voided
+    here -- this function is for rows that have sat unsettled long enough
+    that the event has almost certainly already happened and outcome data is
+    simply missing, not for rows merely awaiting a routine settlement pass.
+    VOID (not delete) preserves the row; ``compute_pnl`` returns the stake
+    with net=0, the correct accounting treatment for "could not be graded."
+    """
+    summary = SettlementSummary()
+    cutoff = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=older_than_days)
+    ).isoformat()
+    rows = _pending_rows(
+        store,
+        league=league,
+        sport=sport,
+        provenance=provenance,
+        start=None,
+        end=cutoff,
+        limit=limit,
+    )
+    for row in rows:
+        graded = grade_ledger_fields(
+            store,
+            trace_id=row["trace_id"],
+            market=row["market"],
+            selection_descriptor=row["selection_descriptor"],
+            line=row["line"],
+            odds=row["odds"],
+            stake=row["stake_amount"],
+        )
+        if graded is not None:
+            continue  # gradeable -- settle_pending_ledger's job, not ours
+
+        summary.pending_scanned += 1
+        payout, net = compute_pnl(LedgerStatus.VOID, row["odds"], row["stake_amount"])
+        summary.settled[LedgerStatus.VOID.value] += 1
+        summary.total_staked += row["stake_amount"]
+        if apply:
+            store.grade_ledger_bet(row["ledger_id"], LedgerStatus.VOID, payout, net)
 
     return summary

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import datetime
 import tempfile
 
 import pytest
 
 from omega.trace.ledger_bet import BetProvenance, LedgerBet, LedgerStatus
-from omega.trace.ledger_settlement import settle_pending_ledger
+from omega.trace.ledger_settlement import auto_void_aged_pending, settle_pending_ledger
 from omega.trace.store import TraceStore
 
 
@@ -47,6 +48,7 @@ def _bet(
     odds: float = -110,
     provenance: BetProvenance = BetProvenance.USER_CONFIRMED,
     status: LedgerStatus = LedgerStatus.PENDING,
+    decision_timestamp: str = "2026-05-01T00:00:00Z",
 ) -> LedgerBet:
     return LedgerBet(
         ledger_id=ledger_id,
@@ -63,7 +65,15 @@ def _bet(
         odds=odds,
         status=status,
         provenance=provenance,
-        decision_timestamp="2026-05-01T00:00:00Z",
+        decision_timestamp=decision_timestamp,
+    )
+
+
+def _days_ago(n: int) -> str:
+    return (
+        (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=n))
+        .isoformat()
+        .replace("+00:00", "Z")
     )
 
 
@@ -187,3 +197,58 @@ def test_ungradeable_rows_remain_pending(store):
     assert summary.pending_scanned == 1
     assert summary.ungradeable == 1
     assert store.get_ledger_bets("bad")[0]["status"] == "pending"
+
+
+class TestAutoVoidAgedPending:
+    def test_old_ungradeable_row_is_voided(self, store):
+        _persist_trace(store, "old-stuck")
+        store.record_ledger_bet(
+            _bet("old-stuck", ledger_id="v1", decision_timestamp=_days_ago(30))
+        )
+        # No outcome attached -- genuinely ungradeable.
+
+        summary = auto_void_aged_pending(store, older_than_days=14, apply=True)
+
+        assert summary.settled["void"] == 1
+        row = store.get_ledger_bets("old-stuck")[0]
+        assert row["status"] == "void"
+        assert row["net_pnl"] == 0.0
+        assert row["payout_amount"] == row["stake_amount"]
+
+    def test_recent_ungradeable_row_is_not_voided(self, store):
+        _persist_trace(store, "recent-stuck")
+        store.record_ledger_bet(
+            _bet("recent-stuck", ledger_id="v2", decision_timestamp=_days_ago(2))
+        )
+
+        summary = auto_void_aged_pending(store, older_than_days=14, apply=True)
+
+        assert summary.settled.get("void", 0) == 0
+        assert store.get_ledger_bets("recent-stuck")[0]["status"] == "pending"
+
+    def test_old_gradeable_row_is_settled_not_voided(self, store):
+        """A row that CAN be graded (outcome exists) is settle_pending_ledger's
+        job even if it's old -- auto_void_aged_pending must not steal it."""
+        _persist_trace(store, "old-gradeable")
+        store.record_ledger_bet(
+            _bet("old-gradeable", ledger_id="v3", decision_timestamp=_days_ago(30))
+        )
+        store.attach_outcome("old-gradeable", home_score=110, away_score=104)
+
+        void_summary = auto_void_aged_pending(store, older_than_days=14, apply=True)
+
+        assert void_summary.settled.get("void", 0) == 0
+        assert store.get_ledger_bets("old-gradeable")[0]["status"] == "pending"
+
+        settle_summary = settle_pending_ledger(store, apply=True)
+        assert settle_summary.settled["won"] == 1
+        assert store.get_ledger_bets("old-gradeable")[0]["status"] == "won"
+
+    def test_dry_run_does_not_write(self, store):
+        _persist_trace(store, "dry-old")
+        store.record_ledger_bet(_bet("dry-old", ledger_id="v4", decision_timestamp=_days_ago(30)))
+
+        summary = auto_void_aged_pending(store, older_than_days=14, apply=False)
+
+        assert summary.settled["void"] == 1  # reported
+        assert store.get_ledger_bets("dry-old")[0]["status"] == "pending"  # not written

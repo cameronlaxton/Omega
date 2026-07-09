@@ -19,7 +19,11 @@ _SRC_ROOT = _REPO_ROOT / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from omega.trace.ledger_settlement import SettlementSummary, settle_pending_ledger  # noqa: E402
+from omega.trace.ledger_settlement import (  # noqa: E402
+    SettlementSummary,
+    auto_void_aged_pending,
+    settle_pending_ledger,
+)
 from omega.trace.store import TraceStore, log_effective_db  # noqa: E402
 
 logger = logging.getLogger("settle_bets")
@@ -67,6 +71,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--start", type=str, default=None, help="Min decision timestamp")
     parser.add_argument("--end", type=str, default=None, help="Max decision timestamp")
     parser.add_argument("--limit", type=int, default=100000, help="Max pending rows to scan")
+    parser.add_argument(
+        "--auto-void-older-than-days",
+        type=int,
+        default=None,
+        help=(
+            "After the normal settle pass, VOID any still-pending rows with no "
+            "attached outcome that are older than N days (event has almost "
+            "certainly happened; the gap is missing outcome data). Rows that "
+            "ARE gradeable are settled normally above, never voided."
+        ),
+    )
     parser.add_argument("--apply", action="store_true", help="Write settled rows")
     parser.add_argument("--dry-run", action="store_true", help="Scan only (default)")
     parser.add_argument("--verbose", action="store_true")
@@ -99,6 +114,26 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
         )
         _print_summary(summary, apply=apply, provenance=provenance)
+
+        if args.auto_void_older_than_days is not None:
+            void_summary = auto_void_aged_pending(
+                store,
+                older_than_days=args.auto_void_older_than_days,
+                apply=apply,
+                league=args.league,
+                sport=args.sport,
+                provenance=provenance,
+                limit=args.limit,
+            )
+            logger.info("")
+            logger.info(
+                "Auto-void pass (pending, no outcome, older than %dd)",
+                args.auto_void_older_than_days,
+            )
+            logger.info("-----------------------------------------------------")
+            logger.info("Mode:                         %s", "APPLY" if apply else "DRY-RUN")
+            logger.info("Voided rows:                  %d", void_summary.settled.get("void", 0))
+            logger.info("Total staked (voided):        $%.2f", void_summary.total_staked)
     finally:
         store.close()
     return 0
