@@ -22,7 +22,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _OPERATIONAL_DOCS = [
     _REPO_ROOT / "AGENTS.md",
     _REPO_ROOT / "README.md",
-    _REPO_ROOT / "OMEGA_COWORK.md",
+    _REPO_ROOT / "OMEGA_RUNTIME.md",
     _REPO_ROOT / "prompts" / "system_prompt.txt",
     _REPO_ROOT / "prompts" / "daily" / "mlb_daily.md",
     _REPO_ROOT / "prompts" / "daily" / "nba_daily.md",
@@ -195,6 +195,57 @@ def check_plugin_skill_pointers() -> bool:
     return success
 
 
+_BACKTICK_ROOT_MD_RE = re.compile(r"`([A-Za-z0-9_.-]+\.[Mm][Dd])`")
+
+# Docs scanned for dangling bare-filename backtick references, in addition to
+# _OPERATIONAL_DOCS. PHASE_HISTORY.MD is a common source of these because it is
+# explicitly historical and easy to forget when a root doc is renamed.
+_BACKTICK_SCAN_DOCS = [*_OPERATIONAL_DOCS, _REPO_ROOT / "docs" / "history" / "PHASE_HISTORY.MD"]
+
+# Directories skipped when building the "does this filename exist anywhere"
+# index. archive/ is intentionally INCLUDED (not skipped): AGENTS.md/README.md
+# legitimately backtick-cite retired docs like OMEGA_RUN_RECIPE.md as archived
+# material, and that's a correct reference, not drift. This check deliberately
+# does not try to distinguish "cited as archived" (fine) from "cited as
+# canonical" (not fine) -- it only catches references to filenames that do not
+# exist ANYWHERE in the repo (the actual OMEGA_COWORK.md-style failure mode:
+# a rename that leaves stale references pointing at nothing at all).
+_SKIP_DIR_NAMES = {".git", "node_modules", ".venv", "venv"}
+
+
+def check_backtick_root_doc_references() -> bool:
+    print("Checking backtick-referenced root docs still exist...")
+    success = True
+    seen: set[str] = set()
+
+    all_md_basenames: set[str] = set()
+    for pattern in ("*.md", "*.MD"):
+        for path in _REPO_ROOT.rglob(pattern):
+            if any(part in _SKIP_DIR_NAMES for part in path.parts):
+                continue
+            all_md_basenames.add(path.name)
+
+    for doc in _BACKTICK_SCAN_DOCS:
+        if not doc.is_file():
+            continue
+        content = doc.read_text(encoding="utf-8")
+        for name in _BACKTICK_ROOT_MD_RE.findall(content):
+            key = f"{doc}:{name}"
+            if key in seen:
+                continue
+            seen.add(key)
+            if name not in all_md_basenames:
+                print(
+                    f"  [FAIL] {doc.relative_to(_REPO_ROOT)} references `{name}` via backtick, "
+                    "but no file with that name exists in the repo (outside archive/)."
+                )
+                success = False
+
+    if success:
+        print("  [PASS] All backtick-referenced root docs resolve to an existing file.")
+    return success
+
+
 def main() -> int:
     checks = [
         check_canonical_refs_exist(),
@@ -203,6 +254,7 @@ def main() -> int:
         check_relative_links(),
         check_no_duplicate_definitions(),
         check_plugin_skill_pointers(),
+        check_backtick_root_doc_references(),
     ]
 
     if not all(checks):

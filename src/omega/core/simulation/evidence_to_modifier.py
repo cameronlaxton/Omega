@@ -126,7 +126,7 @@ def build_markov_vocabulary_table(lifecycle_overrides: dict[str, str] | None = N
     """Return a formatted text table of Markov-eligible signal types for prompt injection.
 
     Called by the MCP server's omega_markov_evidence_guide prompt and by
-    OMEGA_COWORK.md section generation so the LLM vocabulary is always derived
+    OMEGA_RUNTIME.md section generation so the LLM vocabulary is always derived
     from the single source of truth here, never hand-edited in prompts.
 
     Lifecycle filtering (issue #28 WS3): ``deprecated``/``rejected`` signals drop

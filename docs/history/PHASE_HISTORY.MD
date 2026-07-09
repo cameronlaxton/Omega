@@ -8,7 +8,7 @@ Core model:
 - the LLM controls reasoning, planning, arbitration, and explanation
 - the deterministic engine owns simulation, calibration, edge logic, staking, and backtesting
 
-This document is historical reference, not the canonical operating contract. The FastAPI service (`omega/api/`), all external-API collectors (`omega/evidence/`), and the orchestrator-based reasoning pipeline (`omega/reasoning/orchestrator.py` and friends) referenced below have since been retired. See `prompts/system_prompt.txt`, `OMEGA_RUN_RECIPE.md`, and `CURRENT_HANDOFF.md` for the current runtime model.
+This document is historical reference, not the canonical operating contract. The FastAPI service (`omega/api/`), all external-API collectors (`omega/evidence/`), and the orchestrator-based reasoning pipeline (`omega/reasoning/orchestrator.py` and friends) referenced below have since been retired. See `AGENTS.md` (cross-agent entrypoint), `prompts/system_prompt.txt` (no-local-access agents), and `OMEGA_RUNTIME.md` (local VM / MCP runtime) for the current runtime model.
 
 ## Architecture baseline
 
@@ -264,6 +264,7 @@ They did not directly prevent bad sim inputs, bad recommendations, bad replay, o
 ## Notes for future readers
 
 - this file is historical context
-- `CLAUDE.md` is the canonical operating contract
-- `CURRENT_HANDOFF.md` is the current-phase execution brief
+- `AGENTS.md` is the canonical operating contract (`CLAUDE.md` is a thin shim to it)
+- there is no separate current-phase execution brief; `AGENTS.md` plus this file's
+  "Upcoming and Current Phases" table above are the current-state sources
 - update this file when a phase closes instead of creating overlapping handoff files

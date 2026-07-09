@@ -125,7 +125,7 @@ def _validate_bet_with_prop_identity(
     MUST carry home_team/away_team/game_date so fetch_outcomes_props.py can
     resolve the box score.
 
-    Enforces the OMEGA_COWORK.md Â§6 single-trace policy at the ingest seam.
+    Enforces the OMEGA_RUNTIME.md Â§6a single-trace policy at the ingest seam.
     """
     if kind != "prop":
         return
@@ -133,7 +133,7 @@ def _validate_bet_with_prop_identity(
     if missing:
         raise ValueError(
             f"prop trace {trace_id} carries a bet_record but is missing "
-            f"input_snapshot fields {missing}. Per OMEGA_COWORK.md Â§6 the "
+            f"input_snapshot fields {missing}. Per OMEGA_RUNTIME.md Â§6a the "
             "bet must attach to the original analysis trace (single-trace "
             "policy); do not mint a stripped-down confirmation trace."
         )

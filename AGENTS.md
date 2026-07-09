@@ -236,7 +236,8 @@ If no, defer it.
 - `src/omega/trace/*` owns trace persistence and retrieval
 - `src/omega/strategy/*` owns backtest artifacts, historical grading, and benchmark execution
 - `src/omega/core/calibration/*` owns calibration fit logic, profiles, and selection policy
-- `docs/phase6/*` owns phase-specific design specifications
+- `docs/phase8/*` owns phase-specific design specifications for the active phase
+  (`docs/phase6/*` and `docs/phase7/*` are archived under `archive/historical/`)
 
 Prefer responsibility-based architecture over file-based sprawl.
 

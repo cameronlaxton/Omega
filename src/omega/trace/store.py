@@ -219,7 +219,7 @@ def _resolve_db_path(requested: str | None) -> tuple[str, str]:
             redirect.parent.mkdir(parents=True, exist_ok=True)
             logger.warning(
                 "TraceStore: default DB path %s is on a network/FUSE mount; "
-                "redirecting writes to %s. See OMEGA_COWORK.md §2c.",
+                "redirecting writes to %s. See OMEGA_RUNTIME.md §2b.",
                 default_path,
                 redirect,
             )
@@ -231,7 +231,7 @@ def _resolve_db_path(requested: str | None) -> tuple[str, str]:
         redirect.parent.mkdir(parents=True, exist_ok=True)
         logger.warning(
             "TraceStore: requested DB path %s is on a network/FUSE mount; "
-            "redirecting writes to %s. See OMEGA_COWORK.md §2c.",
+            "redirecting writes to %s. See OMEGA_RUNTIME.md §2b.",
             requested,
             redirect,
         )
