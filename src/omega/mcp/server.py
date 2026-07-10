@@ -672,9 +672,11 @@ def omega_run_batch(
                             odds_patch = res["request_patch"]
                             resolved_prop_type = pt
                             break
-                    if odds_patch is not None:
+                    if odds_patch is not None and "odds_over" in odds_patch and "odds_under" in odds_patch:
                         break
-            if odds_patch is None:
+                    else:
+                        odds_patch = None
+            if odds_patch is None or "odds_over" not in odds_patch or "odds_under" not in odds_patch:
                 results.append(
                     {
                         "index": idx,
