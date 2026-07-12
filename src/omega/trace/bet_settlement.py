@@ -24,9 +24,16 @@ from dataclasses import dataclass
 
 from omega.core.betting.odds import american_to_decimal
 from omega.core.config.leagues import get_league_config
+from omega.ops.output_modes import (
+    OutputMode,
+    cap_stake_for_research,
+    cap_stake_for_research_plus,
+    classify_market_output_mode,
+)
 from omega.trace.ledger_bet import (
     DEFAULT_BANKROLL,
     DEFAULT_STAKE_AMOUNT,
+    UNIT_BANKROLL_FRACTION,
     BetProvenance,
     LedgerBet,
     LedgerStatus,
@@ -250,6 +257,41 @@ def _best_game_edge(result: dict) -> dict | None:
     return max(actionable, key=lambda e: e.get("ev_pct") or float("-inf"))
 
 
+def engine_auto_stake_constraint(
+    calibration_audit: dict | None,
+) -> tuple[float, str] | None:
+    """Output-mode stake ceiling (units) for an ENGINE_AUTO ledger row, or None.
+
+    The autologged ledger stake must obey the same per-market authorization the
+    user-facing output does: a market whose applied calibration profile is
+    immature or below the quality floor is RESEARCH_PLUS (maturity-capped stake,
+    ``provisional`` <= 0.5u / ``probation`` <= 1u / else <= 0.5u), and a
+    genuinely uncalibrated selection (no profile, or a missing audit) is
+    RESEARCH_CANDIDATE (<= 1u). Classification reuses
+    ``classify_market_output_mode`` on the profile fields the trace's own
+    calibration audit recorded. The session-level inputs (in-window trace count,
+    sidecar validity) are unknowable at persist time, so only the
+    profile-derived component is enforced here — a conservative per-trace floor,
+    never a session-mode override.
+    """
+    audit = calibration_audit if isinstance(calibration_audit, dict) else {}
+    maturity = audit.get("profile_maturity")
+    mode, _reasons = classify_market_output_mode(
+        profile_id=audit.get("profile_id"),
+        sample_size=audit.get("sample_size"),
+        calibration_error=audit.get("ece"),
+        trace_count=1,
+        sidecar_valid=True,
+        maturity=maturity,
+    )
+    if mode is OutputMode.ACTIONABLE:
+        return None
+    if mode is OutputMode.RESEARCH_PLUS:
+        ceiling = cap_stake_for_research_plus(float("inf"), maturity)
+        return ceiling, f"research_plus:{maturity or 'unknown'}"
+    return cap_stake_for_research(float("inf")), "research_candidate"
+
+
 def extract_recommended_bet(
     trace: dict,
     *,
@@ -274,10 +316,26 @@ def extract_recommended_bet(
     league, sport, matchup, ts = _common_fields(trace)
     bankroll_val = bankroll if bankroll is not None else DEFAULT_BANKROLL
 
-    def _mk(market, selection, descriptor, line, odds, bookmaker) -> ExtractResult:
+    def _mk(
+        market, selection, descriptor, line, odds, bookmaker, calibration_audit=None
+    ) -> ExtractResult:
         american = coerce_american_odds(odds)
         if american is None:
             return ExtractResult(None, REASON_SKIP_BAD_ODDS)
+        # ENGINE_AUTO rows enforce the output-mode stake ceiling before persist:
+        # a RESEARCH_PLUS / RESEARCH_CANDIDATE market must never autolog at the
+        # full flat stake. User-confirmed and backfill rows record what actually
+        # happened and are never clamped here.
+        stake = stake_amount
+        sizing_reasons: list[str] | None = None
+        if provenance is BetProvenance.ENGINE_AUTO:
+            constraint = engine_auto_stake_constraint(calibration_audit)
+            if constraint is not None:
+                ceiling_units, mode_label = constraint
+                cap_dollars = round(ceiling_units * bankroll_val * UNIT_BANKROLL_FRACTION, 2)
+                if stake > cap_dollars:
+                    stake = cap_dollars
+                    sizing_reasons = [f"research_stake_cap:{mode_label}:{ceiling_units:g}u"]
         bet = LedgerBet(
             ledger_id=ledger_id or uuid.uuid4().hex[:12],
             trace_id=str(trace.get("trace_id") or ""),
@@ -291,11 +349,12 @@ def extract_recommended_bet(
             selection_descriptor=descriptor,
             line=line,
             odds=american,
-            stake_amount=stake_amount,
+            stake_amount=stake,
             bankroll_at_open=bankroll_val,
             status=LedgerStatus.PENDING,
             provenance=provenance,
             decision_timestamp=ts,
+            sizing_reasons=sizing_reasons,
         )
         return ExtractResult(bet, REASON_OK)
 
@@ -315,7 +374,15 @@ def extract_recommended_bet(
         descriptor, label = build_selection_descriptor(
             market, rec, line=line, player=player, stat=stat
         )
-        return _mk(market, label, descriptor, line, odds, _resolve_prop_book(trace))
+        return _mk(
+            market,
+            label,
+            descriptor,
+            line,
+            odds,
+            _resolve_prop_book(trace),
+            calibration_audit=result.get(f"{rec}_calibration_audit"),
+        )
 
     # kind == "game"
     edge = _best_game_edge(result)
@@ -333,6 +400,7 @@ def extract_recommended_bet(
                 return ExtractResult(None, REASON_SKIP_NO_EDGE)
             descriptor = _slug(sel) or "best_bet"
             book = _resolve_game_book(trace, market="moneyline", side="", team=sel, line=None)
+            # best_bet carries no calibration audit -> uncalibrated for capping.
             return _mk("moneyline", sel, descriptor, None, best_bet.get("odds"), book)
         return ExtractResult(None, REASON_SKIP_PASS)
 
@@ -348,7 +416,9 @@ def extract_recommended_bet(
     if isinstance(best_bet, dict) and best_bet.get("selection"):
         label = str(best_bet["selection"])
     book = _resolve_game_book(trace, market=market, side=side, team=team, line=line)
-    return _mk(market, label, descriptor, line, odds, book)
+    return _mk(
+        market, label, descriptor, line, odds, book, calibration_audit=edge.get("calibration_audit")
+    )
 
 
 # ---------------------------------------------------------------------------

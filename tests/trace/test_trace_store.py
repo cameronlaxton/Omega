@@ -567,6 +567,55 @@ class TestSchemaV4SessionId:
         assert row["session_id"] is None
         store.close()
 
+    def test_persist_autolog_enforces_research_plus_stake_cap(self, monkeypatch):
+        """An engine_auto dual-write for a RESEARCH_PLUS market lands stake-capped.
+
+        The prop's applied profile is provisional maturity + above the ECE
+        floor, so the autologged ledger row must carry the 0.5u ceiling
+        ($5 on the $1000 default bankroll), never the flat $25 default.
+        """
+        import json as _json
+
+        monkeypatch.setenv("OMEGA_BET_LEDGER_AUTOLOG", "1")
+        store = _tmp_store()
+        trace = _make_trace(
+            trace_id="t-rp-cap",
+            kind="prop",
+            input_snapshot={
+                "league": "MLB",
+                "player_name": "Cal Raleigh",
+                "prop_type": "hits",
+                "line": 1.5,
+                "odds_over": -110,
+                "odds_under": -110,
+            },
+            result={
+                "status": "success",
+                "recommendation": "over",
+                "confidence_tier": "B",
+                "bet_side_odds": -110,
+                "over_calibration_audit": {
+                    "profile_id": "shrink_mlb_prop_v7",
+                    "profile_maturity": "provisional",
+                    "sample_size": 268,
+                    "ece": 0.0746,
+                },
+            },
+        )
+        store.persist(trace)
+        row = store.conn.execute(
+            "SELECT stake_amount, provenance, sizing_reasons FROM bet_ledger "
+            "WHERE trace_id = ?",
+            ("t-rp-cap",),
+        ).fetchone()
+        assert row is not None
+        assert row["provenance"] == "engine_auto"
+        assert row["stake_amount"] == 5.0
+        assert _json.loads(row["sizing_reasons"]) == [
+            "research_stake_cap:research_plus:provisional:0.5u"
+        ]
+        store.close()
+
     def test_v3_to_v4_migration_idempotent(self):
         """Simulate an existing V3 DB (no session_id column), then run V4 migration
         twice and confirm: column exists, legacy rows have NULL session_id, second

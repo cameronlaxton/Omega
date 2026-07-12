@@ -28,6 +28,9 @@ UTC = timezone.utc
 # directly, not units.
 DEFAULT_STAKE_AMOUNT = 25.0
 DEFAULT_BANKROLL = 1000.0
+# The unit convention above, as a constant: 1 unit == 1% of bankroll. Used to
+# translate output-mode stake ceilings (expressed in units) into ledger dollars.
+UNIT_BANKROLL_FRACTION = 0.01
 
 
 class LedgerStatus(str, Enum):

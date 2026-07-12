@@ -11,6 +11,7 @@ from omega.trace.bet_settlement import (
     REASON_SKIP_SLATE,
     coerce_american_odds,
     compute_pnl,
+    engine_auto_stake_constraint,
     extract_recommended_bet,
     settle_game_bet,
     settle_prop_bet,
@@ -194,6 +195,106 @@ class TestExtractRecommendedBet:
             provenance=BetProvenance.BACKFILL,
         )
         assert res.reason == REASON_SKIP_SLATE
+
+
+def _audit(
+    maturity: str | None = "production",
+    sample_size: int | None = 130,
+    ece: float | None = 0.049,
+    profile_id: str | None = "iso_x_v1",
+) -> dict:
+    return {
+        "profile_id": profile_id,
+        "profile_maturity": maturity,
+        "sample_size": sample_size,
+        "ece": ece,
+    }
+
+
+class TestEngineAutoStakeCap:
+    """RESEARCH_PLUS / RESEARCH_CANDIDATE stake ceilings on the autolog seam.
+
+    1 unit == 1% of bankroll, so on the $1000 default bankroll the flat $25
+    default stake is 2.5u and the ceilings are provisional $5 (0.5u),
+    probation $10 (1u), research-candidate $10 (1u).
+    """
+
+    def test_constraint_none_for_actionable_profile(self):
+        assert engine_auto_stake_constraint(_audit()) is None
+
+    def test_constraint_provisional_is_half_unit(self):
+        units, label = engine_auto_stake_constraint(_audit(maturity="provisional", ece=0.0746))
+        assert units == 0.5
+        assert label == "research_plus:provisional"
+
+    def test_constraint_probation_is_one_unit(self):
+        units, label = engine_auto_stake_constraint(_audit(maturity="probation"))
+        assert units == 1.0
+        assert label == "research_plus:probation"
+
+    def test_constraint_below_floor_production_is_research_plus(self):
+        # A production profile that misses the ECE floor is RESEARCH_PLUS.
+        units, label = engine_auto_stake_constraint(_audit(ece=0.075))
+        assert units == 0.5
+        assert label == "research_plus:production"
+
+    def test_constraint_missing_audit_is_research_candidate(self):
+        units, label = engine_auto_stake_constraint(None)
+        assert units == 1.0
+        assert label == "research_candidate"
+
+    def test_prop_research_plus_capped_before_persistable_row(self):
+        trace = _prop_trace()
+        trace["result"]["over_calibration_audit"] = _audit(maturity="provisional", ece=0.0746)
+        res = extract_recommended_bet(trace, provenance=BetProvenance.ENGINE_AUTO)
+        assert res.reason == REASON_OK
+        assert res.bet.stake_amount == 5.0
+        assert res.bet.sizing_reasons == ["research_stake_cap:research_plus:provisional:0.5u"]
+
+    def test_prop_actionable_not_capped(self):
+        trace = _prop_trace()
+        trace["result"]["over_calibration_audit"] = _audit()
+        res = extract_recommended_bet(trace, provenance=BetProvenance.ENGINE_AUTO)
+        assert res.bet.stake_amount == 25.0
+        assert res.bet.sizing_reasons is None
+
+    def test_prop_without_audit_gets_research_candidate_cap(self):
+        res = extract_recommended_bet(_prop_trace(), provenance=BetProvenance.ENGINE_AUTO)
+        assert res.bet.stake_amount == 10.0
+        assert res.bet.sizing_reasons == ["research_stake_cap:research_candidate:1u"]
+
+    def test_game_edge_audit_drives_cap(self):
+        trace = _game_trace()
+        trace["result"]["edges"][0]["calibration_audit"] = _audit(
+            maturity="probation", ece=0.06, profile_id="shrink_x_v2"
+        )
+        res = extract_recommended_bet(trace, provenance=BetProvenance.ENGINE_AUTO)
+        assert res.bet.stake_amount == 10.0
+        assert res.bet.sizing_reasons == ["research_stake_cap:research_plus:probation:1u"]
+
+    def test_backfill_provenance_never_capped(self):
+        trace = _prop_trace()
+        trace["result"]["over_calibration_audit"] = _audit(maturity="provisional", ece=0.0746)
+        res = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL)
+        assert res.bet.stake_amount == 25.0
+        assert res.bet.sizing_reasons is None
+
+    def test_stake_already_below_ceiling_unchanged(self):
+        trace = _prop_trace()
+        trace["result"]["over_calibration_audit"] = _audit(maturity="provisional", ece=0.0746)
+        res = extract_recommended_bet(
+            trace, provenance=BetProvenance.ENGINE_AUTO, stake_amount=3.0
+        )
+        assert res.bet.stake_amount == 3.0
+        assert res.bet.sizing_reasons is None
+
+    def test_cap_scales_with_bankroll(self):
+        trace = _prop_trace()
+        trace["result"]["over_calibration_audit"] = _audit(maturity="provisional", ece=0.0746)
+        res = extract_recommended_bet(
+            trace, provenance=BetProvenance.ENGINE_AUTO, bankroll=2000.0
+        )
+        assert res.bet.stake_amount == 10.0  # 0.5u of $2000
 
 
 class TestBookProvenance:
