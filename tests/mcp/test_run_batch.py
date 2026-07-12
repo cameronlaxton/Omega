@@ -547,6 +547,46 @@ def test_rsvg_duplicate_summary_across_entries_downgrades_second_entry(tmp_path:
     assert any("reused verbatim" in reason for reason in downgrade_reasons)
 
 
+def test_rsvg_same_matchup_shared_summary_not_flagged(tmp_path: Path) -> None:
+    """A prop entry legitimately inherits its own game's roster_context
+    (build_slate_entries.py does this per matchup), so the identical
+    source_summaries text for the SAME matchup must not trip the
+    duplicate-boilerplate downgrade. A 2026-07 audit found 240 prop traces
+    spuriously downgraded by the matchup-blind version of this check."""
+    shared_context = _rsvg_context()  # Yankees/Guardians, used by game AND prop
+
+    def _analyze(request: Any, **kwargs: Any) -> dict[str, Any]:
+        trace = _make_trace(f"sandbox-rsvg-samematch-{len(_analyze.calls)}")  # type: ignore[attr-defined]
+        trace["kind"] = "prop" if getattr(request, "player_name", None) else "game"
+        _analyze.calls.append(request)  # type: ignore[attr-defined]
+        return trace
+
+    _analyze.calls = []  # type: ignore[attr-defined]
+
+    with (
+        patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+        patch("omega.integrations.odds_resolver.resolve_odds", side_effect=_mock_resolve_odds_ok),
+        patch("omega.core.contracts.service.analyze", side_effect=_analyze),
+        patch("omega.paths.repo_root", return_value=tmp_path),
+    ):
+        result = omega_run_batch(
+            entries=[
+                _game_entry(roster_context=shared_context),
+                _prop_entry(
+                    home_team="New York Yankees",
+                    away_team="Cleveland Guardians",
+                    roster_context=dict(shared_context),
+                ),
+            ],
+            bankroll=1000.0,
+            session_id="sess-test",
+        )
+
+    assert result["entries_ok"] == 2
+    assert result["results"][0]["rsvg_status"] == "pass"
+    assert result["results"][1]["rsvg_status"] == "pass"
+
+
 def test_rsvg_duplicate_summary_not_flagged_across_distinct_content(tmp_path: Path) -> None:
     """Two entries with genuinely distinct source_summaries text must not be
     flagged as duplicates -- only exact reuse trips the check."""

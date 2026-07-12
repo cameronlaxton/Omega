@@ -325,6 +325,8 @@ class SlateBuilder:
                 self.skipped.extend(self.errors[errs_before:])
                 del self.errors[errs_before:]
 
+        self._check_matchup_specific_summaries(entries)
+
         # Contract gate: a slate that produces an invalid entry fails the build.
         for idx, entry in enumerate(entries):
             try:
@@ -332,6 +334,43 @@ class SlateBuilder:
             except Exception as exc:  # noqa: BLE001
                 self.errors.append(f"entry[{idx}] failed BatchAnalysisEntry validation: {exc}")
         return entries
+
+    def _check_matchup_specific_summaries(self, entries: list[dict[str, Any]]) -> None:
+        """Fail the build when source_summaries are reused across matchups.
+
+        RSVG requires roster/situational summaries independently verified per
+        matchup; omega_run_batch downgrades any entry whose exact summary text
+        was first seen for a DIFFERENT matchup (research_candidate — formal
+        output suppressed). Catch that boilerplate here, at build time, so the
+        operator researches each matchup instead of shipping a slate that can
+        never earn formal output. Same-matchup reuse (a prop inheriting its
+        game's roster_context) is legitimate and not flagged.
+        """
+        first_matchup_for_sig: dict[tuple[tuple[str, str], ...], str] = {}
+        flagged: set[tuple[str, str]] = set()
+        for entry in entries:
+            rc = entry.get("roster_context")
+            if not isinstance(rc, dict):
+                continue
+            summaries = rc.get("source_summaries") or []
+            signature = tuple(
+                sorted(
+                    (str(s.get("source", "")), str(s.get("summary", "")))
+                    for s in summaries
+                    if isinstance(s, dict)
+                )
+            )
+            if not signature:
+                continue
+            matchup = _matchup(entry)
+            first = first_matchup_for_sig.setdefault(signature, matchup)
+            if first != matchup and (first, matchup) not in flagged:
+                flagged.add((first, matchup))
+                self.errors.append(
+                    f"{matchup}: roster_context.source_summaries reused verbatim from "
+                    f"{first} — research each matchup separately (RSVG downgrades "
+                    "cross-matchup boilerplate to research_candidate)"
+                )
 
 
 def main(argv: list[str] | None = None) -> int:

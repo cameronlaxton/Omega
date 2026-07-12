@@ -536,8 +536,14 @@ def omega_run_batch(
     # across different entries in this batch (a live QA audit found exactly
     # this: identical boilerplate injected into 68 entries to mechanically
     # satisfy the non-empty-list check). Track signatures across the batch
-    # here, where cross-entry visibility actually exists.
-    _seen_rsvg_summary_signatures: dict[tuple[tuple[str, str], ...], int] = {}
+    # here, where cross-entry visibility actually exists. The signature is
+    # keyed to the matchup it was first seen for: a prop entry legitimately
+    # sharing its own game's roster_context (same matchup) is NOT boilerplate;
+    # only the same text reused for a DIFFERENT matchup is. (A 2026-07 audit
+    # found 240 prop traces spuriously downgraded by the matchup-blind check.)
+    _seen_rsvg_summary_signatures: dict[
+        tuple[tuple[str, str], ...], tuple[str, str, str]
+    ] = {}
 
     for idx, raw in enumerate(entries):
         try:
@@ -588,12 +594,18 @@ def omega_run_batch(
                         (str(s.get("source", "")), str(s.get("summary", ""))) for s in summaries
                     )
                 )
+                matchup_key = (
+                    str(entry.league or "").casefold(),
+                    str(entry.home_team or "").casefold(),
+                    str(entry.away_team or "").casefold(),
+                )
                 is_duplicate = False
                 if signature:
-                    if signature in _seen_rsvg_summary_signatures:
+                    first_matchup = _seen_rsvg_summary_signatures.get(signature)
+                    if first_matchup is None:
+                        _seen_rsvg_summary_signatures[signature] = matchup_key
+                    elif first_matchup != matchup_key:
                         is_duplicate = True
-                    else:
-                        _seen_rsvg_summary_signatures[signature] = idx
                 rsvg = evaluate_roster_context(
                     RosterContextPayload(**entry.roster_context),
                     duplicate_summary_detected=is_duplicate,
