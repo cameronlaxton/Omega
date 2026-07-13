@@ -21,7 +21,9 @@ from omega.historical.adapters.csv_odds import CsvOddsAdapter
 from omega.historical.adapters.csv_player_stats import CsvPlayerStatsAdapter
 from omega.historical.adapters.nba_csv import NbaCsvAdapter
 from omega.historical.adapters.nflfast_csv import NflfastCsvAdapter
+from omega.historical.adapters.retrosheet import RetrosheetGameLogAdapter
 from omega.historical.adapters.soccer_football_data import SoccerFootballDataAdapter
+from omega.historical.adapters.sportsdataverse import SportsDataverseScheduleAdapter
 from omega.historical.adapters.tennis_atp_csv import TennisAtpCsvAdapter
 from omega.historical.contracts import (
     HistoricalEvent,
@@ -38,7 +40,15 @@ from omega.historical.snapshots import TeamGameRow
 
 logger = logging.getLogger("omega.ops.ingest_historical_dataset")
 
-SOURCES = ("nflfast", "nba_csv", "football_data", "tennis_atp", "csv_games")
+SOURCES = (
+    "nflfast",
+    "nba_csv",
+    "football_data",
+    "tennis_atp",
+    "csv_games",
+    "sportsdataverse",
+    "retrosheet",
+)
 
 
 @dataclass
@@ -115,8 +125,25 @@ def _build_bundle(args: argparse.Namespace) -> IngestBundle:
             files=[games],
             row_counts={games: a.row_count(games)},
         )
+    if args.source == "sportsdataverse":
+        a = SportsDataverseScheduleAdapter(args.league)
+        return IngestBundle(
+            events=a.read_events(games),
+            outcomes=a.read_outcomes(games),
+            files=[games],
+            row_counts={games: a.row_count(games)},
+        )
+    if args.source == "retrosheet":
+        a = RetrosheetGameLogAdapter(args.league)
+        files = [str(path) for path in a.source_files(games)]
+        return IngestBundle(
+            events=a.read_events(games),
+            outcomes=a.read_outcomes(games),
+            files=files,
+            row_counts={path: a.row_count(path) for path in files},
+        )
 
-    # csv_games (+ optional generic odds)
+    # csv_games
     g = CsvGamesAdapter(args.league)
     bundle = IngestBundle(
         events=g.read_events(games),
@@ -124,11 +151,6 @@ def _build_bundle(args: argparse.Namespace) -> IngestBundle:
         files=[games],
         row_counts={games: g.row_count(games)},
     )
-    if args.odds:
-        o = CsvOddsAdapter(args.league)
-        bundle.odds = o.read_odds(args.odds)
-        bundle.files.append(args.odds)
-        bundle.row_counts[args.odds] = o.row_count(args.odds)
     return bundle
 
 
@@ -140,12 +162,17 @@ def _date_range(events: list[HistoricalEvent]) -> tuple[str | None, str | None]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Ingest a local historical CSV dataset.")
+    parser = argparse.ArgumentParser(description="Ingest a local historical dataset.")
     parser.add_argument("--source", required=True, choices=SOURCES)
     parser.add_argument("--league", required=True, help="League code, e.g. NFL, EPL, ATP")
-    parser.add_argument("--games", required=True, help="Path to the games/matches CSV")
+    parser.add_argument("--games", required=True, help="Path to games/matches data")
     parser.add_argument(
-        "--odds", default=None, help="Optional separate odds CSV (csv_games source)"
+        "--odds", default=None, help="Optional canonical separate odds CSV"
+    )
+    parser.add_argument(
+        "--odds-source",
+        default="csv_odds",
+        help="Odds provenance/timing source (use the_odds_api for paid historical exports)",
     )
     parser.add_argument(
         "--player-stats", default=None, help="Optional player-stats CSV (prop outcomes)"
@@ -193,6 +220,12 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("no events parsed from %s", args.games)
         return 1
 
+    if args.odds:
+        o = CsvOddsAdapter(args.league, source_name=args.odds_source)
+        bundle.odds.extend(o.read_odds(args.odds))
+        bundle.files.append(args.odds)
+        bundle.row_counts[args.odds] = o.row_count(args.odds)
+
     # Fail-soft: quarantine identity-missing + duplicate-key rows rather than
     # silently replaying them. Outcomes/odds for rejected events are dropped too.
     clean_events, rejected = partition_events(bundle.events)
@@ -228,7 +261,8 @@ def main(argv: list[str] | None = None) -> int:
         bundle.files.append(args.prop_context)
 
     family = sport_family_for(args.league)
-    timing = args.odds_timing_class or timing_class_for_source(args.source).value
+    timing_source = args.odds_source if args.odds else args.source
+    timing = args.odds_timing_class or timing_class_for_source(timing_source).value
     manifest = compute_manifest(
         bundle.files,
         source_name=args.source,

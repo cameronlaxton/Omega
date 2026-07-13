@@ -45,8 +45,8 @@ logger = logging.getLogger("omega.integrations.wehoop")
 # path; the operator should verify against the current release tag. Schema drift
 # (renamed columns / moved URL) fails loud rather than silently coercing.
 WEHOOP_TEAM_BOX_URL_TEMPLATE = (
-    "https://github.com/sportsdataverse/wehoop-wnba-data/releases/download/"
-    "wnba_team_box/team_box_{season}.parquet"
+    "https://github.com/sportsdataverse/sportsdataverse-data/releases/download/"
+    "espn_wnba_team_boxscores/team_box_{season}.parquet"
 )
 
 _CACHE_TTL_SECONDS = 7 * 24 * 3600  # weekly refresh cadence

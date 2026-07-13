@@ -114,6 +114,12 @@ def test_fetch_served_from_cache_without_network(tmp_path):
     assert len(out) == 2
 
 
+def test_release_url_uses_current_sportsdataverse_asset():
+    assert "sportsdataverse-data/releases/download/espn_wnba_team_boxscores" in (
+        wehoop.WEHOOP_TEAM_BOX_URL_TEMPLATE
+    )
+
+
 def test_cold_fetch_blocked_in_replay_mode(tmp_path, monkeypatch):
     monkeypatch.setenv("OMEGA_REPLAY_MODE", "1")
 

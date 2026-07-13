@@ -40,15 +40,25 @@ class FootballDataRow(BaseModel):
     B365H: Any | None = None
     B365D: Any | None = None
     B365A: Any | None = None
+    B365CH: Any | None = None
+    B365CD: Any | None = None
+    B365CA: Any | None = None
     b365_over25: Any | None = None
     b365_under25: Any | None = None
+    b365_closing_over25: Any | None = None
+    b365_closing_under25: Any | None = None
 
 
 class SoccerFootballDataAdapter(CsvAdapterBase):
     source_name = "soccer_football_data"
     ROW_MODEL = FootballDataRow
     # The over/under columns are not valid Python identifiers; map them.
-    COLUMN_MAP = {"B365>2.5": "b365_over25", "B365<2.5": "b365_under25"}
+    COLUMN_MAP = {
+        "B365>2.5": "b365_over25",
+        "B365<2.5": "b365_under25",
+        "B365C>2.5": "b365_closing_over25",
+        "B365C<2.5": "b365_closing_under25",
+    }
 
     def __init__(self, league: str) -> None:
         self.league = league.upper()
@@ -110,10 +120,13 @@ class SoccerFootballDataAdapter(CsvAdapterBase):
             assert isinstance(row, FootballDataRow)
             eid, _ident, _start = self._resolve(row, table)
 
-            for sel, raw in (
-                ("home", row.B365H),
-                ("draw", row.B365D),
-                ("away", row.B365A),
+            for sel, raw, tier in (
+                ("home", row.B365H, "opening"),
+                ("draw", row.B365D, "opening"),
+                ("away", row.B365A, "opening"),
+                ("home", row.B365CH, "closing"),
+                ("draw", row.B365CD, "closing"),
+                ("away", row.B365CA, "closing"),
             ):
                 american = decimal_to_american(to_float_or_none(raw))
                 if american is not None:
@@ -123,10 +136,17 @@ class SoccerFootballDataAdapter(CsvAdapterBase):
                             market="home_draw_away",
                             selection_descriptor=sel,
                             odds=american,
+                            book="bet365",
+                            tier_hint=tier,
                         )
                     )
 
-            for sel, raw in (("over_2.5", row.b365_over25), ("under_2.5", row.b365_under25)):
+            for sel, raw, tier in (
+                ("over_2.5", row.b365_over25, "opening"),
+                ("under_2.5", row.b365_under25, "opening"),
+                ("over_2.5", row.b365_closing_over25, "closing"),
+                ("under_2.5", row.b365_closing_under25, "closing"),
+            ):
                 american = decimal_to_american(to_float_or_none(raw))
                 if american is not None:
                     obs.append(
@@ -136,6 +156,8 @@ class SoccerFootballDataAdapter(CsvAdapterBase):
                             selection_descriptor=sel,
                             odds=american,
                             line=2.5,
+                            book="bet365",
+                            tier_hint=tier,
                         )
                     )
         return obs
