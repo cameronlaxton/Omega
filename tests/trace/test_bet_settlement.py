@@ -32,10 +32,22 @@ class TestCoerceOdds:
     def test_valid_american(self, value, expected):
         assert coerce_american_odds(value) == expected
 
-    @pytest.mark.parametrize("value", [None, 0, 1.91, 2.3, 50, -50, "abc"])
-    def test_rejects_invalid_or_decimal(self, value):
-        # Decimal-looking prices inside (-100, 100) are rejected, not mis-read.
+    @pytest.mark.parametrize("value", [None, 0, -50, 1.0, 0.5, "abc"])
+    def test_rejects_invalid(self, value):
+        # Junk, zero, negative sub-American, and decimal <= 1.0 are rejected.
         assert coerce_american_odds(value) is None
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (1.91, -110),
+            (2.3, 130),
+            (50, 4900),
+        ],
+    )
+    def test_converts_decimal_to_american(self, value, expected):
+        # Decimal prices inside (-100, 100) are converted, not dropped.
+        assert coerce_american_odds(value) == expected
 
 
 class TestSettleGameBet:
@@ -181,9 +193,18 @@ class TestExtractRecommendedBet:
         assert res.bet is None
         assert res.reason == REASON_SKIP_PASS
 
-    def test_bad_odds_skipped(self):
+    def test_decimal_odds_converted(self):
         trace = _game_trace()
         trace["result"]["edges"][0]["market_odds"] = 1.91  # decimal, not American
+        trace["result"].pop("best_bet")
+        res = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL)
+        assert res.bet is not None
+        assert res.bet.odds == -110
+        assert res.reason == REASON_OK
+
+    def test_unusable_odds_skipped(self):
+        trace = _game_trace()
+        trace["result"]["edges"][0]["market_odds"] = 0  # neither American nor decimal
         trace["result"].pop("best_bet")
         res = extract_recommended_bet(trace, provenance=BetProvenance.BACKFILL)
         assert res.bet is None

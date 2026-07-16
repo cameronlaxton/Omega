@@ -204,6 +204,13 @@ user-facing output is restricted as below, independently of the other market's m
   `probation` ≤ 1u, else ≤ 0.5u — `cap_stake_for_research_plus`) and the honesty block carries the
   maturity + confidence-cap reason.
 
+The same ceiling is enforced mechanically on the persisted ledger: the `engine_auto` bet-ledger
+dual-write (`extract_recommended_bet`) reads the recommended selection's own calibration audit,
+classifies the market with `classify_market_output_mode`, and caps `stake_amount` before the row is
+written (`sizing_reasons` records `research_stake_cap:...`). An uncalibrated selection (no
+profile / no audit) is capped at the 1u research ceiling. User-confirmed and backfill rows record
+what actually happened and are never clamped.
+
 **Forbidden:**
 
 - overclaiming hype: "best bet", "engine-confirmed", "actionable bet"

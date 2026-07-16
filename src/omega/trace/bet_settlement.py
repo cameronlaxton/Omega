@@ -72,7 +72,14 @@ def coerce_american_odds(value: object) -> float | None:
     if odds == 0:
         return None
     if -100.0 < odds < 100.0:
-        return None
+        # Convert decimal odds (assumed to be > 1.0) to American odds.
+        if odds <= 1.0:
+            return None
+        if odds >= 2.0:
+            odds = (odds - 1.0) * 100.0
+        else:
+            odds = -100.0 / (odds - 1.0)
+        return round(odds)
     return odds
 
 
@@ -244,9 +251,10 @@ def _resolve_game_book(
     return books.pop() if len(books) == 1 else CONSENSUS_BOOK
 
 
-def _best_game_edge(result: dict) -> dict | None:
+def _best_game_edge(edges: list) -> dict | None:
     """Pick the highest-EV edge whose confidence tier is actionable (not Pass)."""
-    edges = result.get("edges") or []
+    if not edges:
+        return None
     actionable = [
         e
         for e in edges
@@ -385,7 +393,8 @@ def extract_recommended_bet(
         )
 
     # kind == "game"
-    edge = _best_game_edge(result)
+    edges_list = trace.get("recommendations") or result.get("edges") or []
+    edge = _best_game_edge(edges_list)
     best_bet = result.get("best_bet")
     if edge is None:
         # No structured actionable edge. best_bet alone lacks side/line for safe
