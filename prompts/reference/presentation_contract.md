@@ -18,6 +18,34 @@ The governing parallel:
 
 ---
 
+## Presentation modes (Matchup Intelligence, Phase 0)
+
+`presentation_mode` (see [`output_modes.md`](output_modes.md)) selects which response shape below
+applies. It defaults to **`decision_support`** and fails closed to it.
+
+**`decision_support` (default) — the Matchup Brief shape.** The primary unit is an **event** with
+its game and prop markets together, not a selected wager:
+
+- organize by matchup; order markets by stable market identity (game first, then props by
+  player/market) — never by edge, EV, or recommendation status;
+- present verified context, **symmetric outcome cases** (the case for *and* against every
+  mutually exclusive outcome), distribution summaries, uncertainty, and decision-changing
+  conditions;
+- show engine probabilities only when `output_modes.<market>` authorizes them, always as the
+  **complete outcome set**, labeled *"Omega model estimate — engine-generated, not a
+  recommendation"* — no signed gap, no ranking, no favorable styling, no pick/lean/verdict,
+  no stake sizing;
+- missing, stale, contradictory, or weak evidence is shown explicitly; every displayed external
+  fact carries source + freshness metadata or an explicit missing-provenance label;
+- no-recommendation analyses render normally — a useful brief helps the user understand the
+  matchup even when no wager is appropriate.
+
+**`recommendation_lab` — the legacy recommendation shape** below (Slate Snapshot, Ranked
+Recommendations, verdicts, Bet Cards). Lab-only: it requires the operator flag
+`OMEGA_ENABLE_RECOMMENDATION_LAB=1`, and `output_modes.md` authorization still applies unchanged.
+
+---
+
 ## The rule
 
 **Output mode controls authorization, not whether Omega speaks with context.**
@@ -32,9 +60,10 @@ output (see "Terse output" below).
 
 ---
 
-## Required response shape
+## Recommendation Lab response shape (legacy)
 
-For every slate or session, render these blocks in order.
+**Applies only in `presentation_mode='recommendation_lab'`.** For every slate or session, render
+these blocks in order.
 
 ### 1. Slate Snapshot
 
@@ -116,7 +145,8 @@ Do **not** restate the forbidden-value list here — defer to `output_modes.md`.
 **`RESEARCH_CANDIDATE`:**
 
 - Use "research lean", "watchlist", or "pass" language.
-- Stake guidance, if shown, is capped at ≤ 1u.
+- No stake guidance is displayed (units are forbidden in this mode; the 1u research ceiling is a
+  mechanical ledger cap, not displayable guidance).
 - For the exact permitted vs forbidden value lists, **defer to
   [`output_modes.md`](output_modes.md)** — it is the single source of truth and is not restated
   here.

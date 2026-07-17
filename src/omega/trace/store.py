@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from omega.paths import default_trace_db_path
+from omega.trace.autolog_policy import engine_auto_autolog_decision
 from omega.trace.bet_record import BetRecord
 from omega.trace.bet_settlement import compute_pnl, extract_recommended_bet
 from omega.trace.db import resolve_backend
@@ -573,10 +574,18 @@ class TraceStore:
         """
         prev = self._autolog_suppressed
         self._autolog_suppressed = True
+        # Propagate to the Postgres repository: persist() delegates there, so
+        # suppression must be visible on whichever object makes the decision.
+        repo_prev = None
+        if self._repo is not None:
+            repo_prev = self._repo._autolog_suppressed
+            self._repo._autolog_suppressed = True
         try:
             yield self
         finally:
             self._autolog_suppressed = prev
+            if self._repo is not None:
+                self._repo._autolog_suppressed = repo_prev
 
     @property
     def conn(self) -> sqlite3.Connection:
@@ -999,15 +1008,18 @@ class TraceStore:
         """Gated dual-write: log the recommended selection into bet_ledger.
 
         Runs only on a genuine first insert (guarded by the caller's rowcount
-        check, like the other explode helpers). Gated behind
-        OMEGA_BET_LEDGER_AUTOLOG (default on) so the deliberate calibration/bet
-        decouple stays explicit and reversible. Never raises into persist(): a
-        malformed recommendation must not cost us the trace write.
+        check, like the other explode helpers). The decision is owned by
+        omega.trace.autolog_policy (shared with the Postgres backend): default
+        DISABLED; an engine_auto row requires the trace to be stamped
+        engine_auto_ledger_mode='shadow' AND OMEGA_ENABLE_ENGINE_SHADOW=1.
+        Never raises into persist(): a malformed recommendation must not cost
+        us the trace write.
         """
-        # Explicit scoped suppression wins over the env default (used by replay).
-        if self._autolog_suppressed:
-            return
-        if os.environ.get("OMEGA_BET_LEDGER_AUTOLOG", "1") not in ("1", "true", "True"):
+        allowed, reason = engine_auto_autolog_decision(
+            trace, suppressed=self._autolog_suppressed
+        )
+        if not allowed:
+            logger.debug("engine_auto autolog denied for %s: %s", trace_id, reason)
             return
         try:
             result = extract_recommended_bet(trace, provenance=BetProvenance.ENGINE_AUTO)

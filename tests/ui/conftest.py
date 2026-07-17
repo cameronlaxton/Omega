@@ -102,6 +102,15 @@ def write_valid_sidecar(
     return path
 
 
+@pytest.fixture(autouse=True)
+def _recommendation_lab_enabled(monkeypatch):
+    """The pre-Phase-0 console tests exercise recommendation-era surfaces
+    (scanner, raw trace detail, bets, CLV), which are now lab-gated. Run them
+    with the lab enabled; the gate itself is covered explicitly in
+    tests/ui/test_recommendation_lab_gate.py (which deletes this env var)."""
+    monkeypatch.setenv("OMEGA_ENABLE_RECOMMENDATION_LAB", "1")
+
+
 @pytest.fixture
 def sessions_dir(tmp_path: Path) -> Path:
     d = tmp_path / "sessions"

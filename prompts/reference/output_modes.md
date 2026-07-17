@@ -96,6 +96,31 @@ restates the per-market modes in human form.
 
 ---
 
+## `presentation_mode` and `engine_auto_ledger_mode` (Matchup Intelligence, Phase 0)
+
+Two orthogonal per-run controls ride every new trace (schema v2); both **fail closed** when
+missing or unrecognized:
+
+- **`presentation_mode`** — `decision_support` *(default)* | `recommendation_lab`. `output_mode`
+  governs **which** engine values may be disclosed; `presentation_mode` governs **how** authorized
+  values are framed. Effective visibility is the **intersection**: `recommendation_lab` never
+  elevates a restrictive `output_mode`. In `decision_support`, authorized probabilities are shown
+  only as **complete symmetric outcome sets** (all mutually exclusive outcomes together: home/away
+  [/draw]; over **and** under), labeled *"Omega model estimate — engine-generated, not a
+  recommendation"* — never a signed model-vs-market gap, never ranked/styled by favorability, and
+  never converted to a recommended price. Recommendation surfaces (edge scanner, raw trace detail,
+  bet ledger, CLV views) are lab-only: their HTML and JSON routes return 404 unless
+  `OMEGA_ENABLE_RECOMMENDATION_LAB=1`.
+- **`engine_auto_ledger_mode`** — `disabled` *(default)* | `shadow`. `disabled` writes **zero**
+  `engine_auto` bet-ledger rows. `shadow` requires **both** the per-run mode **and** the operator
+  environment gate `OMEGA_ENABLE_ENGINE_SHADOW=1`; either alone writes nothing. The legacy
+  `OMEGA_BET_LEDGER_AUTOLOG` variable is now a **kill switch only** — an explicit falsy value still
+  denies the write, but no value of it can enable one. Explicit `user_confirmed` wager recording is
+  unaffected. Calibration eligibility never depends on a ledger row, so disabling autolog does not
+  starve the calibration loop.
+
+---
+
 ## Graduated evidence application modes
 
 Structured evidence no longer flows through a binary shadow/live switch. The active
@@ -141,7 +166,9 @@ Every recommendation — in **either** output mode — must surface an honesty b
 truth-in-labeling, **not** protected betting numbers, so they are permitted even in
 `RESEARCH_CANDIDATE`:
 
-- confidence tier **and** the cap reason (why it is not higher);
+- the confidence **cap reason** (why confidence is not higher). The tier *label* itself follows
+  the market's output mode: shown in `RESEARCH_PLUS`/`ACTIONABLE`, **withheld** in
+  `RESEARCH_CANDIDATE` (tiers are forbidden there — see below);
 - trace quality score (`aggregate_quality`, 0–100) and band;
 - evidence mode, evidence status, number of evidence signals, applied factor;
 - calibration path, profile id, profile status/maturity, profile sample size, profile ECE/Brier;
@@ -174,8 +201,11 @@ user-facing output is restricted as below, independently of the other market's m
 - Research-only lean / missing-data watchlist labels (no protected numbers).
 - The **honesty block** (trace quality score, confidence cap reason, evidence mode/status,
   calibration path + profile maturity, `static_identity` flag) — truth-in-labeling, not protected
-  numbers.
-- Stake guidance capped at **≤ 1u**.
+  numbers. The tier label itself is **not** part of the block in this mode.
+
+No stake guidance is displayed in `RESEARCH_CANDIDATE` — units are forbidden below. (The 1u
+research ceiling — `cap_stake_for_research` — is the **mechanical cap on any persisted ledger
+row**, not a license to present stake guidance to the user.)
 
 **Forbidden in the user-facing reply** (these stay in the DB trace, not the response):
 

@@ -7,40 +7,22 @@ decisions centralized and out of ad hoc agent logic.
 
 from __future__ import annotations
 
-import re
 from enum import Enum
 
-# Phrases that must not appear in Research Candidate output (numbers fully hidden).
-# Stored lowercase; the matchers casefold the text first so a blocked phrase
-# cannot slip through with different casing (e.g. "BEST BET", "Engine-Confirmed").
-_BLOCKED_FORMAL_PHRASES: frozenset[str] = frozenset(
-    {
-        "best bet",
-        "tier a",
-        "tier b",
-        "engine-confirmed",
-        "actionable bet",
-    }
+# Canonical blocked vocabulary lives in the contracts layer so DTO validators
+# can apply it without importing ops. The private aliases below are kept for
+# backward compatibility with existing imports/tests.
+from omega.core.contracts.language import (
+    BLOCKED_FORMAL_PHRASES as _BLOCKED_FORMAL_PHRASES,
 )
-
-# Phrases that must not appear in Research+ output. Research+ DOES surface the
-# engine numbers and the (<= B) confidence tier, so tier labels are permitted
-# here; only the overclaiming hype phrases stay blocked — a thin/immature profile
-# must never be narrated as a settled, engine-confirmed best bet.
-_BLOCKED_RESEARCH_PLUS_PHRASES: frozenset[str] = frozenset(
-    {
-        "best bet",
-        "engine-confirmed",
-        "actionable bet",
-    }
+from omega.core.contracts.language import (
+    BLOCKED_HYPE_WORDS as _BLOCKED_HYPE_WORDS,
 )
-
-# Single-word hype terms banned by AGENTS.md ("lock", "smash") in ANY output
-# mode. Matched with word boundaries, not substrings, so "blocked" / "unlock" /
-# "locksmith" never false-positive. Applied by both matchers below.
-_BLOCKED_HYPE_WORDS: tuple[str, ...] = ("lock", "smash")
-_BLOCKED_HYPE_WORDS_RE = re.compile(
-    r"\b(" + "|".join(re.escape(w) for w in _BLOCKED_HYPE_WORDS) + r")\b"
+from omega.core.contracts.language import (
+    BLOCKED_HYPE_WORDS_RE as _BLOCKED_HYPE_WORDS_RE,
+)
+from omega.core.contracts.language import (
+    BLOCKED_RESEARCH_PLUS_PHRASES as _BLOCKED_RESEARCH_PLUS_PHRASES,
 )
 
 RESEARCH_CANDIDATE_DISCLAIMER = (

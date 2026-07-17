@@ -15,6 +15,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from omega.core.contracts.evidence import EvidenceSignal
+from omega.core.contracts.language import blocked_language
 
 
 class SoccerDerivativeMarket(str, Enum):
@@ -267,6 +268,137 @@ class ReasoningPresentation(BaseModel):
     verdict: str | None = None
 
 
+# -- Presentation & ledger policy (Matchup Intelligence, Phase 0) -------------
+#
+# ``output_mode`` (omega.ops.output_modes) governs WHICH engine values may be
+# disclosed; ``presentation_mode`` governs HOW authorized values are framed.
+# Effective visibility is the intersection of the two policies. Both new modes
+# fail closed: a missing/unrecognized value is treated as the restrictive
+# default (decision_support / disabled) — recommendation_lab never elevates a
+# restrictive output_mode.
+
+PresentationMode = Literal["decision_support", "recommendation_lab"]
+EngineAutoLedgerMode = Literal["disabled", "shadow"]
+
+PRESENTATION_MODE_DEFAULT: PresentationMode = "decision_support"
+ENGINE_AUTO_LEDGER_MODE_DEFAULT: EngineAutoLedgerMode = "disabled"
+
+_PRESENTATION_MODES: frozenset[str] = frozenset({"decision_support", "recommendation_lab"})
+_ENGINE_AUTO_LEDGER_MODES: frozenset[str] = frozenset({"disabled", "shadow"})
+
+
+def coerce_presentation_mode(value: object) -> PresentationMode:
+    """Fail-closed coercion: anything but a recognized mode is decision_support."""
+    if isinstance(value, str) and value in _PRESENTATION_MODES:
+        return value  # type: ignore[return-value]
+    return PRESENTATION_MODE_DEFAULT
+
+
+def coerce_engine_auto_ledger_mode(value: object) -> EngineAutoLedgerMode:
+    """Fail-closed coercion: anything but a recognized mode is disabled."""
+    if isinstance(value, str) and value in _ENGINE_AUTO_LEDGER_MODES:
+        return value  # type: ignore[return-value]
+    return ENGINE_AUTO_LEDGER_MODE_DEFAULT
+
+
+class EventIdentityV1(BaseModel):
+    """Versioned provider-anchored event identity persisted in the full trace JSON.
+
+    Game and prop traces for the same real-world event must share ``event_key``
+    so read models can group them without heuristics. Legacy traces without a
+    trustworthy provider id stay ungrouped (identity warning) rather than being
+    merged by team-name matching.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1] = 1
+    provider: str = Field(min_length=1, description="Odds/schedule provider, e.g. the-odds-api")
+    provider_event_id: str = Field(min_length=1, description="Provider-native event id")
+    event_key: str = Field(min_length=1, description="Stable cross-market grouping key")
+    league: str = Field(min_length=1)
+    home_team: str = Field(min_length=1)
+    away_team: str = Field(min_length=1)
+    game_date: str = Field(min_length=10, description="ISO date YYYY-MM-DD")
+    commence_time: str | None = Field(
+        default=None, description="ISO 8601 scheduled start, when known"
+    )
+
+    @staticmethod
+    def derive_event_key(league: str, provider: str, provider_event_id: str) -> str:
+        """Canonical event_key derivation shared by every stamping site."""
+        return f"{league.strip().upper()}::{provider.strip()}::{provider_event_id.strip()}"
+
+
+class OutcomeCase(BaseModel):
+    """Balanced case for one outcome of one market (decision-support unit)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    market_key: str = Field(min_length=1, description="Stable market identity, e.g. moneyline")
+    outcome_key: str = Field(min_length=1, description="e.g. home, away, draw, over, under")
+    label: str = Field(min_length=1, description="Human outcome label")
+    supporting: list[str] = Field(default_factory=list)
+    challenging: list[str] = Field(default_factory=list)
+    data_status: Literal["complete", "partial", "insufficient"]
+
+    @model_validator(mode="after")
+    def _validate_case(self) -> OutcomeCase:
+        if self.data_status == "complete" and (not self.supporting or not self.challenging):
+            raise ValueError(
+                "OutcomeCase data_status='complete' requires both supporting and "
+                "challenging evidence; downgrade data_status instead of fabricating a case."
+            )
+        for text in (self.label, *self.supporting, *self.challenging):
+            found = blocked_language(text)
+            if found:
+                raise ValueError(f"OutcomeCase contains blocked language {found}: {text!r}")
+        return self
+
+
+class DecisionSupportPresentationV1(BaseModel):
+    """Primary presentation contract for decision-support briefs.
+
+    A separate typed field from the legacy ``ReasoningPresentation`` — the two
+    contracts never share a schema. Qualitative only; recommendation vocabulary
+    and protected engine values are rejected.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1] = 1
+    matchup_summary: str = Field(min_length=1)
+    market_context: str = Field(min_length=1)
+    outcome_cases: list[OutcomeCase] = Field(default_factory=list)
+    scenario_triggers: list[str] = Field(default_factory=list)
+    uncertainties: list[str] = Field(default_factory=list)
+    decision_conditions: list[str] = Field(default_factory=list)
+    questions: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_presentation(self) -> DecisionSupportPresentationV1:
+        seen: set[tuple[str, str]] = set()
+        for case in self.outcome_cases:
+            key = (case.market_key, case.outcome_key)
+            if key in seen:
+                raise ValueError(f"Duplicate outcome case for {key}")
+            seen.add(key)
+        for text in (
+            self.matchup_summary,
+            self.market_context,
+            *self.scenario_triggers,
+            *self.uncertainties,
+            *self.decision_conditions,
+            *self.questions,
+        ):
+            found = blocked_language(text)
+            if found:
+                raise ValueError(
+                    f"DecisionSupportPresentationV1 contains blocked language {found}: {text!r}"
+                )
+        return self
+
+
 class BatchAnalysisEntry(BaseModel):
     """One entry in an omega_run_batch call — either a game or a player prop.
 
@@ -280,6 +412,15 @@ class BatchAnalysisEntry(BaseModel):
     home_team: str = Field(description="Home team name")
     away_team: str = Field(description="Away team name")
     game_date: str | None = Field(default=None, description="YYYY-MM-DD; defaults to today")
+    event_id: str | None = Field(
+        default=None,
+        description=(
+            "Provider event id for this matchup. Game and prop entries for the same "
+            "real-world event must carry the same id so their traces share an "
+            "EventIdentityV1.event_key. None = legacy/unknown identity (traces stay "
+            "ungrouped with an identity warning)."
+        ),
+    )
     game_context: dict[str, Any] = Field(
         default_factory=dict, description="Calibration context (is_playoff, rest_days, …)"
     )
@@ -296,6 +437,15 @@ class BatchAnalysisEntry(BaseModel):
         description=(
             "Optional analyst-note prose keyed thesis/market_read/why/risks/verdict. "
             "Qualitative only; no protected engine values."
+        ),
+    )
+    decision_support_presentation: DecisionSupportPresentationV1 | None = Field(
+        default=None,
+        description=(
+            "Optional decision-support presentation (matchup summary, symmetric "
+            "outcome cases, uncertainties, decision conditions). The primary "
+            "presentation contract — qualitative only; recommendation vocabulary "
+            "and protected engine values are rejected at validation."
         ),
     )
     reasoning_sources: list[str] = Field(

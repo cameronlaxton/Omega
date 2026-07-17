@@ -34,6 +34,7 @@ from omega.ui.schemas import (
     TraceDetail,
     TraceListResponse,
 )
+from omega.ui.lab import require_recommendation_lab
 from omega.ui.service import ConsoleService, open_service
 
 
@@ -96,7 +97,9 @@ def review(service: ConsoleService = Depends(get_service)) -> ReviewQueueView:
     return service.review_queue()
 
 
-@router.get("/clv", response_model=ClvView)
+@router.get(
+    "/clv", response_model=ClvView, dependencies=[Depends(require_recommendation_lab)]
+)
 def clv(
     service: ConsoleService = Depends(get_service),
     league: str | None = Query(None),
@@ -104,7 +107,11 @@ def clv(
     return service.clv_report(league=league)
 
 
-@router.get("/clv-scatter", response_model=ClvScatter)
+@router.get(
+    "/clv-scatter",
+    response_model=ClvScatter,
+    dependencies=[Depends(require_recommendation_lab)],
+)
 def clv_scatter(
     service: ConsoleService = Depends(get_service),
     league: str | None = Query(None),
@@ -128,7 +135,39 @@ def data_quality(
     return service.data_quality(league=league)
 
 
-@router.get("/scanner", response_model=EdgeScannerView)
+# -- primary decision-support routes (Matchup Intelligence Phase 0) ----------
+
+
+@router.get("/matchups")
+def list_matchups(
+    service: ConsoleService = Depends(get_service),
+    league: str | None = Query(None),
+    limit: int | None = Query(None, ge=1, le=200),
+) -> list[dict]:
+    """Recent events projected through the safe decision-support adapter.
+
+    Ordered by stable event identity (date/league/matchup) — never by edge or
+    recommendation status. No-recommendation traces are included.
+    """
+    return service.list_matchup_briefs(league=league, limit=limit)
+
+
+@router.get("/matchups/{group_key:path}")
+def get_matchup(group_key: str, service: ConsoleService = Depends(get_service)) -> dict:
+    brief = service.matchup_brief(group_key)
+    if brief is None:
+        raise HTTPException(status_code=404, detail=f"matchup {group_key!r} not found")
+    return brief
+
+
+# -- Recommendation Lab routes (404 unless OMEGA_ENABLE_RECOMMENDATION_LAB=1) --
+
+
+@router.get(
+    "/scanner",
+    response_model=EdgeScannerView,
+    dependencies=[Depends(require_recommendation_lab)],
+)
 def scanner(
     service: ConsoleService = Depends(get_service),
     league: str | None = Query(None),
@@ -167,7 +206,11 @@ def list_traces(
     )
 
 
-@router.get("/traces/{trace_id}", response_model=TraceDetail)
+@router.get(
+    "/traces/{trace_id}",
+    response_model=TraceDetail,
+    dependencies=[Depends(require_recommendation_lab)],
+)
 def get_trace(trace_id: str, service: ConsoleService = Depends(get_service)) -> TraceDetail:
     detail = service.get_trace_detail(trace_id)
     if detail is None:
@@ -175,7 +218,11 @@ def get_trace(trace_id: str, service: ConsoleService = Depends(get_service)) -> 
     return detail
 
 
-@router.get("/traces/{trace_id}/similar", response_model=SimilarSpotsView)
+@router.get(
+    "/traces/{trace_id}/similar",
+    response_model=SimilarSpotsView,
+    dependencies=[Depends(require_recommendation_lab)],
+)
 def get_similar_spots(
     trace_id: str, service: ConsoleService = Depends(get_service)
 ) -> SimilarSpotsView:
@@ -185,7 +232,11 @@ def get_similar_spots(
     return view
 
 
-@router.get("/bets", response_model=BetListResponse)
+@router.get(
+    "/bets",
+    response_model=BetListResponse,
+    dependencies=[Depends(require_recommendation_lab)],
+)
 def list_bets(
     service: ConsoleService = Depends(get_service),
     page: int = Query(1, ge=1),
@@ -213,7 +264,11 @@ def list_bets(
     )
 
 
-@router.get("/bets/{ledger_id}", response_model=BetDetail)
+@router.get(
+    "/bets/{ledger_id}",
+    response_model=BetDetail,
+    dependencies=[Depends(require_recommendation_lab)],
+)
 def get_bet(ledger_id: str, service: ConsoleService = Depends(get_service)) -> BetDetail:
     detail = service.get_bet_detail(ledger_id)
     if detail is None:
