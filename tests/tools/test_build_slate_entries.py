@@ -133,6 +133,48 @@ def test_build_allows_same_matchup_summary_inheritance(tmp_path):
     )
 
 
+def test_prop_inherits_event_id_from_its_game(tmp_path):
+    """Phase 1: a prop without an event_id inherits its game's provider event id
+    (same matchup), so both traces share one EventIdentityV1.event_key."""
+    game = _game_item("Team A", "Team B", "A/B specific lineup notes.")
+    game["event_id"] = "prov-ev-9"
+    slate = {
+        "league": "MLB",
+        "game_date": "2026-07-04",
+        "games": [game],
+        "props": [
+            {
+                "player_name": "Player One",
+                "prop_type": "hits",
+                "home_team": "Team A",
+                "away_team": "Team B",
+                "player_context": {"hits_mean": 1.1, "hits_std": 0.7},
+                "game_context": {"is_playoff": False, "rest_days": 1},
+            },
+            {
+                "player_name": "Player Two",
+                "prop_type": "hits",
+                "home_team": "Team X",
+                "away_team": "Team Y",
+                "player_context": {"hits_mean": 0.9, "hits_std": 0.6},
+                "game_context": {"is_playoff": False, "rest_days": 1},
+                "roster_context": _roster_context("Team X", "Team Y", "X/Y notes."),
+            },
+        ],
+    }
+    slate_file = tmp_path / "slate.json"
+    slate_file.write_text(json.dumps(slate))
+
+    out_file = tmp_path / "out.json"
+    assert main(["--slate", str(slate_file), "--output", str(out_file)]) == 0
+    entries = json.loads(out_file.read_text())
+    by_kind = {(e["kind"], e.get("player_name")): e for e in entries}
+    assert by_kind[("game", None)]["event_id"] == "prov-ev-9"
+    # Same-matchup prop inherits; different-matchup prop does not.
+    assert by_kind[("prop", "Player One")]["event_id"] == "prov-ev-9"
+    assert "event_id" not in by_kind[("prop", "Player Two")]
+
+
 def test_build_fails_on_distinct_matchup_summaries_ok(tmp_path):
     """Distinct per-matchup summaries build cleanly (control case)."""
     slate = {

@@ -788,6 +788,12 @@ def _is_better_price(quote: dict[str, Any], payout: float, current: dict[str, An
     return str(quote.get("bookmaker") or "") < str(current.get("bookmaker") or "")
 
 
+# Provider namespace for event identity (EventIdentityV1.provider). Both the
+# resolver's event ids and omega_list_events ids live in this namespace, so
+# game and prop traces stamped from either source share one event_key.
+EVENT_PROVIDER = "the-odds-api"
+
+
 def resolve_odds(
     *,
     kind: str,

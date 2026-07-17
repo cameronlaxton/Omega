@@ -415,9 +415,12 @@ class BatchAnalysisEntry(BaseModel):
     event_id: str | None = Field(
         default=None,
         description=(
-            "Provider event id for this matchup. Game and prop entries for the same "
-            "real-world event must carry the same id so their traces share an "
-            "EventIdentityV1.event_key. None = legacy/unknown identity (traces stay "
+            "Odds-provider (the-odds-api) event id for this matchup, e.g. from "
+            "omega_list_events. Game and prop entries for the same real-world event "
+            "must carry the same id so their traces share an EventIdentityV1.event_key. "
+            "When the batch tool resolves odds live it confirms this id against the "
+            "resolver's match and errors the entry on disagreement. None = identity "
+            "resolved from odds resolution alone, or legacy/unknown (trace stays "
             "ungrouped with an identity warning)."
         ),
     )

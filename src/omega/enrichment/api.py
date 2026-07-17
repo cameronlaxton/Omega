@@ -12,7 +12,7 @@ from typing import Annotated, Any
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 
-from omega.enrichment.schemas import EnrichmentFeedback
+from omega.enrichment.schemas import MATCHUP_FOCUS_VALUES, EnrichmentFeedback
 from omega.enrichment.store import EnrichmentStore
 from omega.enrichment.worker import run_enrichment
 
@@ -52,13 +52,23 @@ def build_enrichment_app(
     def enqueue(
         trace_id: str,
         background_tasks: BackgroundTasks,
+        focus: str | None = None,
         write_intent: Annotated[str | None, Header(alias=_WRITE_INTENT_HEADER)] = None,
     ) -> dict[str, str]:
         _require_write_intent(write_intent)
+        if focus is not None and focus not in MATCHUP_FOCUS_VALUES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"focus must be one of {sorted(MATCHUP_FOCUS_VALUES)}",
+            )
         store = _store()
         try:
             eid = store.create(
-                trace_id=trace_id, trace_type=None, league=None, market=None, depth="deep"
+                trace_id=trace_id,
+                trace_type=None,
+                league=None,
+                market=None,
+                depth=f"focus:{focus}" if focus else "deep",
             )
         finally:
             store.close()
@@ -70,6 +80,7 @@ def build_enrichment_app(
             sessions_dir=sessions_dir,
             provider_name=provider_name,
             model=model,
+            focus=focus,
         )
         return {"enrichment_id": eid, "status": "queued"}
 

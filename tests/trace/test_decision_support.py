@@ -314,11 +314,15 @@ class TestPersistableV2:
 # -- adapter: probability symmetry + output-mode intersection --------------------
 
 
+def _set_by_market(view) -> dict[str, Any]:
+    return {s.market_key: s for s in view.probability_sets}
+
+
 class TestSymmetricProbabilities:
     def test_authorized_game_set_is_complete_and_identity_ordered(self):
         view = build_market_view(_game_trace())
-        probs = view.probabilities
-        assert probs is not None and probs.disclosure == "shown"
+        probs = _set_by_market(view)["moneyline"]
+        assert probs.disclosure == "shown"
         assert [o.outcome_key for o in probs.outcomes] == ["home", "away"]
         assert probs.outcomes[0].model_estimate == 0.58
         assert probs.outcomes[1].model_estimate == 0.42
@@ -328,7 +332,7 @@ class TestSymmetricProbabilities:
     def test_incomplete_game_set_is_withheld_entirely(self):
         trace = _game_trace()
         trace["result"]["edges"] = trace["result"]["edges"][:1]  # home side only
-        probs = build_market_view(trace).probabilities
+        probs = _set_by_market(build_market_view(trace))["moneyline"]
         assert probs.disclosure == "withheld"
         assert probs.withheld_reason == "incomplete_outcome_set"
         assert probs.outcomes == []
@@ -336,7 +340,7 @@ class TestSymmetricProbabilities:
     def test_three_way_market_requires_draw(self):
         trace = _game_trace()
         trace["result"]["simulation"]["draw_prob"] = 22.0  # 3-way market
-        probs = build_market_view(trace).probabilities
+        probs = _set_by_market(build_market_view(trace))["moneyline"]
         assert probs.disclosure == "withheld"  # no draw edge present
         trace["result"]["edges"].append(
             {
@@ -348,18 +352,67 @@ class TestSymmetricProbabilities:
                 "market_odds": 310,
             }
         )
-        probs = build_market_view(trace).probabilities
+        probs = _set_by_market(build_market_view(trace))["moneyline"]
         assert probs.disclosure == "shown"
         assert [o.outcome_key for o in probs.outcomes] == ["home", "away", "draw"]
 
+    def test_spread_and_total_sets_render_symmetrically(self):
+        trace = _game_trace()
+        trace["result"]["edges"].extend(
+            [
+                {
+                    "side": "home", "team": "Yankees", "market": "spread", "line": -1.5,
+                    "calibrated_prob": 0.44, "market_implied": 0.48, "market_odds": 130,
+                },
+                {
+                    "side": "away", "team": "Red Sox", "market": "spread", "line": 1.5,
+                    "calibrated_prob": 0.56, "market_implied": 0.55, "market_odds": -155,
+                },
+                {
+                    "side": "over", "team": "Over 8.5", "market": "total", "line": 8.5,
+                    "calibrated_prob": 0.52, "market_implied": 0.5, "market_odds": -110,
+                },
+                {
+                    "side": "under", "team": "Under 8.5", "market": "total", "line": 8.5,
+                    "calibrated_prob": 0.48, "market_implied": 0.5, "market_odds": -110,
+                },
+            ]
+        )
+        view = build_market_view(trace)
+        # Stable market-identity order, never edge-ordered.
+        assert [s.market_key for s in view.probability_sets] == [
+            "moneyline", "spread", "total",
+        ]
+        by_market = _set_by_market(view)
+        spread = by_market["spread"]
+        assert spread.disclosure == "shown"
+        assert [o.outcome_key for o in spread.outcomes] == ["home", "away"]
+        assert spread.outcomes[0].label == "Yankees -1.5"
+        assert spread.outcomes[1].label == "Red Sox +1.5"
+        total = by_market["total"]
+        assert [o.outcome_key for o in total.outcomes] == ["over", "under"]
+        assert total.outcomes[0].model_estimate == 0.52
+
+    def test_partial_spread_market_is_withheld(self):
+        trace = _game_trace()
+        trace["result"]["edges"].append(
+            {
+                "side": "home", "team": "Yankees", "market": "spread", "line": -1.5,
+                "calibrated_prob": 0.44, "market_implied": 0.48, "market_odds": 130,
+            }
+        )
+        spread = _set_by_market(build_market_view(trace))["spread"]
+        assert spread.disclosure == "withheld"
+        assert spread.withheld_reason == "incomplete_outcome_set"
+
     def test_prop_set_requires_both_sides(self):
         view = build_market_view(_prop_trace())
-        probs = view.probabilities
+        probs = view.probability_sets[0]
         assert probs.disclosure == "shown"
         assert [o.outcome_key for o in probs.outcomes] == ["over", "under"]
         trace = _prop_trace()
         trace["result"].pop("under_prob")
-        probs = build_market_view(trace).probabilities
+        probs = build_market_view(trace).probability_sets[0]
         assert probs.disclosure == "withheld"
         assert probs.withheld_reason == "incomplete_outcome_set"
 
@@ -367,8 +420,9 @@ class TestSymmetricProbabilities:
         trace = _game_trace(calibration_audit=[])  # no profile -> research_candidate
         view = build_market_view(trace)
         assert view.output_mode == "research_candidate"
-        assert view.probabilities.disclosure == "withheld"
-        assert view.probabilities.withheld_reason == "research_candidate_output_mode"
+        for probs in view.probability_sets:
+            assert probs.disclosure == "withheld"
+            assert probs.withheld_reason == "research_candidate_output_mode"
         # Raw simulation summaries stay visible with the simulation label.
         assert len(view.distributions) == 1
         assert "not a recommendation" in view.distributions[0].simulation_label
@@ -388,7 +442,22 @@ class TestSymmetricProbabilities:
         )
         view = build_market_view(trace)
         assert view.output_mode == "research_candidate"
-        assert view.probabilities.disclosure == "withheld"
+        assert view.probability_sets[0].disclosure == "withheld"
+
+    def test_sensitivity_is_explicitly_unavailable(self):
+        view = build_market_view(_game_trace())
+        assert view.sensitivity.status == "unavailable"
+        assert "not available" in (view.sensitivity.reason or "")
+        assert view.sensitivity.scenarios == []
+
+    def test_engine_persisted_sensitivity_is_rendered_not_computed(self):
+        trace = _game_trace()
+        trace["result"]["sensitivity"] = [
+            {"input": "home_off_rating", "range": [4.5, 5.5], "seed": 123}
+        ]
+        view = build_market_view(trace)
+        assert view.sensitivity.status == "available"
+        assert view.sensitivity.scenarios[0]["input"] == "home_off_rating"
 
 
 # -- adapter: legacy compatibility ------------------------------------------------
@@ -426,6 +495,49 @@ class TestLegacyCompatibility:
         assert view.legacy_presentation.summary is None
         assert view.legacy_presentation.uncertainties == ["Bullpen fatigue"]
         assert any("blocked language" in n for n in view.data_quality)
+
+
+class TestSourceProvenance:
+    def test_rsvg_summaries_carry_provenance_status(self):
+        trace = _game_trace(
+            trace_quality={
+                "rsvg": {
+                    "status": "pass",
+                    "source_summaries": [
+                        {
+                            "source": "mlb.com",
+                            "summary": "Lineups confirmed.",
+                            "source_title": "Yankees lineup notes",
+                            "source_url": "https://mlb.com/x",
+                            "retrieved_at": "2026-07-16T15:00:00Z",
+                        },
+                        {
+                            "source": "beat-writer",
+                            "summary": "Bullpen usage note.",
+                            "source_url": "https://x.com/y",
+                        },
+                        {"source": "clubhouse rumor", "summary": "Vague chatter."},
+                    ],
+                }
+            },
+            reasoning_inputs={"sources": ["mlb.com", "espn.com"]},
+        )
+        views = build_market_view(trace).sources
+        by_source = {v.source: v for v in views}
+        assert by_source["mlb.com"].provenance_status == "ok"
+        assert by_source["mlb.com"].source_title == "Yankees lineup notes"
+        assert by_source["beat-writer"].provenance_status == "partial"
+        assert by_source["clubhouse rumor"].provenance_status == "missing_provenance"
+        # Flat reasoning source not already covered by an RSVG summary appears
+        # once, labeled missing provenance; the duplicate label is not repeated.
+        assert by_source["espn.com"].provenance_status == "missing_provenance"
+        assert len(views) == 4
+
+    def test_legacy_flat_sources_still_render(self):
+        trace = _game_trace(reasoning_inputs={"sources": ["https://espn.com/recap"]})
+        views = build_market_view(trace).sources
+        assert views[0].source_url == "https://espn.com/recap"
+        assert views[0].provenance_status == "partial"
 
 
 # -- adapter: grouping, ordering, denial sweep ------------------------------------
@@ -477,7 +589,7 @@ class TestGroupingAndSafety:
         trace["result"]["edges"] = []
         briefs = group_traces_into_briefs([trace])
         assert len(briefs) == 1
-        assert briefs[0].markets[0].probabilities.disclosure == "withheld"
+        assert briefs[0].markets[0].probability_sets[0].disclosure == "withheld"
 
     def test_serialized_brief_contains_no_denied_keys_or_phrases(self):
         brief = build_matchup_brief([_game_trace(), _prop_trace()])

@@ -101,3 +101,78 @@ def _v(field: Any) -> Any:
     if isinstance(field, dict):
         return field.get("value")
     return field
+
+
+# -- decision-support matchup packs (Phase 1) ---------------------------------
+
+# What each focus asks the provider to do. The provider may only filter,
+# compare, and explain the brief — the guidance never authorizes recomputing
+# engine values or recommending action.
+FOCUS_GUIDANCE: dict[str, str] = {
+    "breakdown": (
+        "Walk through this matchup's verified context, each market's outcome "
+        "cases, and the data-quality warnings. Neutral framing; no side is "
+        "preferred."
+    ),
+    "compare_markets": (
+        "Compare the markets within this one event on information quality, "
+        "disagreement between context and listed lines, and uncertainty. Do "
+        "not rank by attractiveness or imply one should be bet."
+    ),
+    "stress_test": (
+        "Only render the engine-persisted deterministic sensitivity artifact. "
+        "If none is present, state that a stress test is not available for "
+        "this analysis — never approximate one."
+    ),
+    "decision_changes": (
+        "Identify the concrete conditions (lineup news, line moves, weather, "
+        "role changes) that would materially change this assessment, from the "
+        "brief's scenario triggers, uncertainties, and decision conditions."
+    ),
+    "counter_case": (
+        "Lay out the strongest case AGAINST each outcome's supporting "
+        "evidence, using only recorded challenging evidence and data-quality "
+        "warnings. Never fabricate counterarguments that are not grounded in "
+        "the brief."
+    ),
+    "source_check": (
+        "Audit the brief's sources: which facts carry a URL and retrieval "
+        "timestamp, which are missing provenance, which are stale, and what "
+        "should be re-verified before relying on this brief."
+    ),
+}
+
+
+def build_matchup_context_pack(
+    trace_id: str, service: Any, focus: str = "breakdown"
+) -> dict[str, Any]:
+    """Decision-support follow-up pack: the safe matchup brief plus focus.
+
+    Reads ONLY the allowlisted ``MatchupBriefV1`` projection (every market on
+    the trace's event) — no raw trace payload, no recommendation view, and no
+    quarantined similar-spots cohorts. Raises ``ValueError`` for an unknown
+    focus or a missing trace.
+    """
+    from omega.enrichment.schemas import MATCHUP_FOCUS_VALUES
+    from omega.trace.decision_support import group_key_for_trace
+
+    if focus not in MATCHUP_FOCUS_VALUES:
+        raise ValueError(f"focus {focus!r} not in {MATCHUP_FOCUS_VALUES}")
+    trace = service.store.get_trace(trace_id)
+    if trace is None:
+        raise ValueError(f"trace {trace_id!r} not found")
+    group_key, _, _ = group_key_for_trace(trace)
+    brief = service.matchup_brief(group_key)
+    if brief is None:
+        raise ValueError(f"matchup brief unavailable for {group_key!r}")
+    return {
+        "mode": "decision_support",
+        "focus": focus,
+        "focus_guidance": FOCUS_GUIDANCE[focus],
+        "trace_id": trace_id,
+        "group_key": group_key,
+        "league": brief.get("league"),
+        "matchup": brief.get("matchup"),
+        "presentation_mode": brief.get("presentation_mode"),
+        "brief": brief,
+    }

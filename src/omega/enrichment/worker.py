@@ -10,10 +10,40 @@ enrichment sidecar DB, never the canonical trace store.
 from __future__ import annotations
 
 from omega.enrichment import PROMPT_VERSION
-from omega.enrichment.context_pack import build_context_pack
+from omega.enrichment.context_pack import build_context_pack, build_matchup_context_pack
 from omega.enrichment.providers import get_provider
 from omega.enrichment.schemas import EnrichmentResult
 from omega.enrichment.store import EnrichmentStore
+
+STRESS_TEST_UNAVAILABLE = "not available for this analysis"
+
+
+def _stress_test_unavailable_result(pack: dict) -> EnrichmentResult:
+    """Deterministic stress_test refusal until an engine sensitivity artifact
+    exists — presentation code never approximates sensitivity."""
+    return EnrichmentResult(
+        headline=f"Stress test {STRESS_TEST_UNAVAILABLE}",
+        summary=(
+            "No deterministic sensitivity artifact is persisted for this "
+            "analysis, so a stress test is "
+            f"{STRESS_TEST_UNAVAILABLE}. Sensitivity is computed only by the "
+            "deterministic engine; this layer never approximates it."
+        ),
+        missing_context=["engine-owned deterministic sensitivity artifact"],
+        operator_notes=[
+            "Re-run once the simulation contract persists a sensitivity artifact "
+            "(Phase 3)."
+        ],
+        risk_rating="medium",
+        recommendation_type="monitor",
+    )
+
+
+def _brief_has_sensitivity(pack: dict) -> bool:
+    markets = (pack.get("brief") or {}).get("markets") or []
+    return any(
+        (m.get("sensitivity") or {}).get("status") == "available" for m in markets
+    )
 
 
 def render_narrative_md(result: EnrichmentResult) -> str:
@@ -50,8 +80,14 @@ def run_enrichment(
     sessions_dir: str | None = None,
     provider_name: str | None = None,
     model: str | None = None,
+    focus: str | None = None,
 ) -> None:
     """Build the context pack, call the provider, and persist the artifact.
+
+    ``focus`` selects the decision-support follow-up mode (Phase 1): the pack is
+    then the safe matchup brief, and ``stress_test`` completes deterministically
+    with an explicit not-available artifact unless the engine persisted a
+    sensitivity artifact. ``focus=None`` keeps the legacy Deep Dive behavior.
 
     Never raises: any failure is captured on the enrichment row as ``failed`` so
     the polling UI can surface it honestly.
@@ -68,9 +104,24 @@ def run_enrichment(
 
         service = open_service(db_path=console_db, sessions_dir=sessions_dir)
         try:
-            pack = build_context_pack(trace_id, service)
+            if focus is not None:
+                pack = build_matchup_context_pack(trace_id, service, focus)
+            else:
+                pack = build_context_pack(trace_id, service)
         finally:
             service.close()
+
+        if focus == "stress_test" and not _brief_has_sensitivity(pack):
+            store.set_completed(
+                enrichment_id,
+                provider="deterministic",
+                model=None,
+                prompt_version=PROMPT_VERSION,
+                context_pack=pack,
+                result=_stress_test_unavailable_result(pack),
+                narrative_md=render_narrative_md(_stress_test_unavailable_result(pack)),
+            )
+            return
 
         provider = get_provider(provider_name, model)
         result = provider.generate_enrichment(pack)

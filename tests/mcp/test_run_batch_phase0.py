@@ -89,9 +89,9 @@ class TestBatchStamping:
     def test_event_id_builds_shared_event_identity(self, tmp_path: Path):
         block = self._run(tmp_path, _prop_entry(event_id="ev-42"))
         identity = block["trace"]["event_identity"]
-        assert identity["provider"] == "caller_supplied"
+        assert identity["provider"] == "the-odds-api"
         assert identity["provider_event_id"] == "ev-42"
-        assert identity["event_key"] == "MLB::caller_supplied::ev-42"
+        assert identity["event_key"] == "MLB::the-odds-api::ev-42"
         assert identity["home_team"] == "Seattle Mariners"
         assert identity["game_date"] == "2026-06-03"
 
@@ -152,6 +152,73 @@ class TestBatchStamping:
             )
         assert result["entries_error"] == 1
         assert "blocked language" in result["errors"][0]["error"]
+
+
+def _mock_resolver(event_id: str = "prov-ev-1", commence: str = "2026-06-03T23:10:00Z"):
+    def _resolve(kind: str, **kwargs: Any) -> dict[str, Any]:
+        patch_payload = (
+            {"line": 0.5, "odds_over": -115, "odds_under": -105}
+            if kind == "prop"
+            else {"odds": {"moneyline_home": -180, "moneyline_away": 150}}
+        )
+        return {
+            "status": "success",
+            "event_id": event_id,
+            "commence_time": commence,
+            "request_patch": patch_payload,
+        }
+
+    return _resolve
+
+
+class TestResolverEventIdentity:
+    """Phase 1: live odds resolution anchors the provider event identity."""
+
+    def _run(self, tmp_path: Path, entry: dict[str, Any]) -> dict[str, Any]:
+        with (
+            patch("omega.mcp.server._formal_output_gate_failures", return_value=[]),
+            patch(
+                "omega.integrations.odds_resolver.resolve_odds",
+                side_effect=_mock_resolver(),
+            ),
+            patch("omega.core.contracts.service.analyze", return_value=_make_trace()),
+            patch("omega.paths.repo_root", return_value=tmp_path),
+        ):
+            return omega_run_batch(
+                entries=[entry], bankroll=1000.0, session_id="sess-test"
+            )
+
+    def _entry_needing_resolution(self, **kwargs: Any) -> dict[str, Any]:
+        entry = _prop_entry(**kwargs)
+        # Strip pre-supplied odds so the batch tool resolves them live.
+        for key in ("line", "odds_over", "odds_under"):
+            entry.pop(key, None)
+        return entry
+
+    def test_resolved_identity_is_provider_anchored(self, tmp_path: Path):
+        result = self._run(tmp_path, self._entry_needing_resolution())
+        assert result["status"] == "ok", result
+        block = json.loads(Path(result["export_paths"][0]).read_text())
+        identity = block["trace"]["event_identity"]
+        assert identity["provider"] == "the-odds-api"
+        assert identity["provider_event_id"] == "prov-ev-1"
+        assert identity["event_key"] == "MLB::the-odds-api::prov-ev-1"
+        assert identity["commence_time"] == "2026-06-03T23:10:00Z"
+
+    def test_matching_caller_id_confirmed_by_resolver(self, tmp_path: Path):
+        result = self._run(
+            tmp_path, self._entry_needing_resolution(event_id="prov-ev-1")
+        )
+        assert result["status"] == "ok", result
+        block = json.loads(Path(result["export_paths"][0]).read_text())
+        assert block["trace"]["event_identity"]["provider_event_id"] == "prov-ev-1"
+
+    def test_conflicting_caller_id_errors_the_entry(self, tmp_path: Path):
+        result = self._run(
+            tmp_path, self._entry_needing_resolution(event_id="some-other-event")
+        )
+        assert result["entries_error"] == 1
+        assert "event_identity_mismatch" in result["errors"][0]["error"]
 
 
 class TestRsvgIdentityAgreement:

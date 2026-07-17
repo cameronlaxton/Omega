@@ -38,6 +38,13 @@ Your job: synthesize the model case, surface counterarguments, name the missing
 context and weak/stale evidence, and give a measured operator recommendation. If
 the context is insufficient, say so plainly rather than inventing confidence.
 
+For decision-support packs (``mode: decision_support``) answer strictly within
+the requested ``focus`` per its ``focus_guidance``, treating every outcome
+symmetrically. Never name a pick, rank markets by attractiveness, or size a
+stake; if asked anyway, state that the primary product does not provide them. A
+stress test without an engine-persisted sensitivity artifact is "not available
+for this analysis" — never approximate one.
+
 Return JSON matching the requested schema. ``recommendation_type`` must be one of
 monitor | lean | avoid_due_to_data_quality | supports_model_position — never a
 "bet now" directive. Keep each list item to one sentence."""
@@ -79,6 +86,8 @@ class StubProvider:
 
     def generate_enrichment(self, context_pack: dict[str, Any]) -> EnrichmentResult:
         pack = context_pack or {}
+        if pack.get("mode") == "decision_support":
+            return self._decision_support_result(pack)
         trust = pack.get("trust") or {}
         gr = pack.get("guardrails") or {}
         mm = pack.get("market_movement") or {}
@@ -127,6 +136,78 @@ class StubProvider:
                 "missing_context": list(pack.get("missing_context") or []),
                 "operator_notes": operator_notes,
                 "recommendation_type": _recommendation_from_pack(pack),
+            }
+        )
+        return EnrichmentResult.model_validate(raw)
+
+
+    def _decision_support_result(self, pack: dict[str, Any]) -> EnrichmentResult:
+        """Deterministic focus-scoped composition from the safe matchup brief.
+
+        Symmetric by construction: it reports per-market data quality,
+        uncertainties, and provenance without preferring an outcome, naming a
+        pick, or restating engine numbers.
+        """
+        focus = str(pack.get("focus") or "breakdown")
+        brief = pack.get("brief") or {}
+        markets = brief.get("markets") or []
+        matchup = pack.get("matchup") or brief.get("matchup") or "matchup"
+        league = pack.get("league") or brief.get("league") or "?"
+
+        quality_notes: list[str] = []
+        uncertainties: list[str] = []
+        missing_sources: list[str] = []
+        market_lines_notes: list[str] = []
+        for m in markets:
+            group = m.get("market_group") or m.get("kind") or "market"
+            for note in m.get("data_quality") or []:
+                quality_notes.append(f"{group}: {note}")
+            ds = m.get("decision_support") or {}
+            for u in ds.get("uncertainties") or []:
+                uncertainties.append(f"{group}: {u}")
+            legacy = m.get("legacy_presentation") or {}
+            for u in legacy.get("uncertainties") or []:
+                uncertainties.append(f"{group}: {u}")
+            for s in m.get("sources") or []:
+                if s.get("provenance_status") != "ok":
+                    missing_sources.append(
+                        f"{group}: {s.get('source')} ({s.get('provenance_status')})"
+                    )
+            market_lines_notes.append(
+                f"{group}: output mode {m.get('output_mode')}, "
+                f"{len(m.get('probability_sets') or [])} market set(s), "
+                f"{len(m.get('distributions') or [])} distribution summar(y/ies)"
+            )
+
+        guidance = str(pack.get("focus_guidance") or "")
+        raw = sanitize_raw_result(
+            {
+                "headline": f"{league} {matchup} — {focus.replace('_', ' ')}",
+                "summary": (
+                    f"Decision-support {focus.replace('_', ' ')} for {matchup}: "
+                    f"{len(markets)} market group(s) reviewed symmetrically. {guidance}"
+                ).strip(),
+                "model_case": market_lines_notes
+                or ["No market groups present in the brief."],
+                "market_context": {
+                    "line_movement": "unknown",
+                    "interpretation": (
+                        "Listed lines are context, not targets; see the brief's "
+                        "market_lines per group."
+                    ),
+                },
+                "counter_case": uncertainties
+                or ["No recorded uncertainties; treat absence as a data gap, not safety."],
+                "risk_rating": "high" if quality_notes else "medium",
+                "confidence_explanation": (
+                    "Symmetric decision-support review; no outcome is preferred and "
+                    "no engine numbers are restated."
+                ),
+                "missing_context": (missing_sources + quality_notes)[:12],
+                "operator_notes": [
+                    "Primary product provides no picks, rankings, or stake sizing."
+                ],
+                "recommendation_type": "monitor",
             }
         )
         return EnrichmentResult.model_validate(raw)

@@ -132,6 +132,21 @@ class SourceNoteView(BaseModel):
     provenance_status: Literal["ok", "partial", "missing_provenance"] = "missing_provenance"
 
 
+class SensitivityView(BaseModel):
+    """Deterministic sensitivity state — rendered, never computed, here.
+
+    Until the Phase 3 engine-owned artifact exists this is explicitly
+    unavailable; presentation code must never approximate a sensitivity
+    analysis on its own.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["available", "unavailable"] = "unavailable"
+    reason: str | None = "not available for this analysis"
+    scenarios: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class LegacyPresentationCompat(BaseModel):
     """Labeled compatibility mapping of the legacy reasoning_presentation.
 
@@ -163,7 +178,10 @@ class MarketBriefView(BaseModel):
     game_date: str | None = None
     output_mode: str
     output_mode_reasons: list[str] = Field(default_factory=list)
-    probabilities: MarketProbabilitySet | None = None
+    # One complete symmetric set per quoted market (moneyline/spread/total for
+    # games; the over/under pair for props), in stable market-identity order.
+    probability_sets: list[MarketProbabilitySet] = Field(default_factory=list)
+    sensitivity: SensitivityView = Field(default_factory=SensitivityView)
     distributions: list[DistributionSummaryView] = Field(default_factory=list)
     market_lines: dict[str, Any] = Field(default_factory=dict)
     data_quality: list[str] = Field(default_factory=list)
@@ -238,46 +256,108 @@ def market_output_mode_for_trace(trace: dict[str, Any]) -> tuple[OutputMode, lis
     return mode, reasons
 
 
-def _game_probability_set(trace: dict[str, Any], authorized: bool) -> MarketProbabilitySet:
-    """Moneyline outcome set: complete home/away(/draw) or withheld."""
+def _symmetric_set(
+    market_key: str,
+    required: tuple[str, ...],
+    by_side: dict[str, dict[str, Any]],
+    *,
+    authorized: bool,
+    label_for: Any,
+) -> MarketProbabilitySet:
+    """One complete symmetric outcome set for one market, or a withheld marker."""
     if not authorized:
         return MarketProbabilitySet(
-            market_key="moneyline",
+            market_key=market_key,
             disclosure="withheld",
             withheld_reason="research_candidate_output_mode",
         )
-    result = trace.get("result") or {}
-    simulation = result.get("simulation") or {}
-    three_way = simulation.get("draw_prob") is not None
-    required = ("home", "away", "draw") if three_way else ("home", "away")
-
-    by_side: dict[str, dict[str, Any]] = {}
-    for edge in result.get("edges") or []:
-        if not isinstance(edge, dict):
-            continue
-        if (edge.get("market") or "moneyline") not in ("moneyline", "draw"):
-            continue
-        side = str(edge.get("side") or "")
-        if side in required and side not in by_side:
-            by_side[side] = edge
-
     if any(side not in by_side for side in required):
         return MarketProbabilitySet(
-            market_key="moneyline",
+            market_key=market_key,
             disclosure="withheld",
             withheld_reason="incomplete_outcome_set",
         )
-
     outcomes = [
         MarketOutcomeEstimate(
             outcome_key=side,
-            label=str(by_side[side].get("team") or side),
+            label=label_for(side, by_side[side]),
             model_estimate=by_side[side].get("calibrated_prob"),
             market_implied=by_side[side].get("market_implied"),
         )
         for side in required
     ]
-    return MarketProbabilitySet(market_key="moneyline", disclosure="shown", outcomes=outcomes)
+    return MarketProbabilitySet(market_key=market_key, disclosure="shown", outcomes=outcomes)
+
+
+# Stable market-identity order for game probability sets (never edge-ordered).
+_GAME_MARKET_ORDER = ("moneyline", "spread", "total")
+
+
+def _game_probability_sets(
+    trace: dict[str, Any], authorized: bool
+) -> list[MarketProbabilitySet]:
+    """Per-market symmetric sets for a game trace: moneyline, spread, total.
+
+    A market appears when the trace carries edges for it (moneyline always,
+    since it is the base market of every game analysis). Partial sides render
+    as an explicit withheld marker rather than a one-sided number.
+    """
+    result = trace.get("result") or {}
+    simulation = result.get("simulation") or {}
+    three_way = simulation.get("draw_prob") is not None
+
+    edges_by_market: dict[str, dict[str, dict[str, Any]]] = {}
+    for edge in result.get("edges") or []:
+        if not isinstance(edge, dict):
+            continue
+        market = str(edge.get("market") or "moneyline")
+        if market == "draw":
+            market = "moneyline"
+        side = str(edge.get("side") or "")
+        if side:
+            edges_by_market.setdefault(market, {}).setdefault(side, edge)
+
+    def _team_label(side: str, edge: dict[str, Any]) -> str:
+        return str(edge.get("team") or side)
+
+    def _spread_label(side: str, edge: dict[str, Any]) -> str:
+        team = str(edge.get("team") or side)
+        line = edge.get("line")
+        return f"{team} {line:+g}" if isinstance(line, (int, float)) else team
+
+    sets: list[MarketProbabilitySet] = []
+    ml_required = ("home", "away", "draw") if three_way else ("home", "away")
+    sets.append(
+        _symmetric_set(
+            "moneyline",
+            ml_required,
+            edges_by_market.get("moneyline", {}),
+            authorized=authorized,
+            label_for=_team_label,
+        )
+    )
+    if "spread" in edges_by_market:
+        sets.append(
+            _symmetric_set(
+                "spread",
+                ("home", "away"),
+                edges_by_market["spread"],
+                authorized=authorized,
+                label_for=_spread_label,
+            )
+        )
+    if "total" in edges_by_market:
+        sets.append(
+            _symmetric_set(
+                "total",
+                ("over", "under"),
+                edges_by_market["total"],
+                authorized=authorized,
+                label_for=_team_label,
+            )
+        )
+    sets.sort(key=lambda s: _GAME_MARKET_ORDER.index(s.market_key))
+    return sets
 
 
 def _prop_probability_set(trace: dict[str, Any], authorized: bool) -> MarketProbabilitySet:
@@ -312,6 +392,18 @@ def _prop_probability_set(trace: dict[str, Any], authorized: bool) -> MarketProb
     return MarketProbabilitySet(market_key=market_key, disclosure="shown", outcomes=outcomes)
 
 
+def _sensitivity_view(trace: dict[str, Any]) -> SensitivityView:
+    """Render engine-persisted sensitivity when it exists; else explicitly
+    unavailable. Presentation never computes or approximates sensitivity."""
+    result = trace.get("result") or {}
+    persisted = result.get("sensitivity")
+    if isinstance(persisted, list) and persisted:
+        scenarios = [s for s in persisted if isinstance(s, dict)]
+        if scenarios:
+            return SensitivityView(status="available", reason=None, scenarios=scenarios)
+    return SensitivityView()
+
+
 def _distribution_views(trace: dict[str, Any]) -> list[DistributionSummaryView]:
     rows = trace.get("simulation_distributions")
     if not isinstance(rows, list) or not rows:
@@ -342,20 +434,51 @@ def _distribution_views(trace: dict[str, Any]) -> list[DistributionSummaryView]:
     return views
 
 
+def _provenance_status(
+    url: str | None, retrieved_at: str | None
+) -> Literal["ok", "partial", "missing_provenance"]:
+    if url and retrieved_at:
+        return "ok"
+    if url or retrieved_at:
+        return "partial"
+    return "missing_provenance"
+
+
 def _source_views(trace: dict[str, Any]) -> list[SourceNoteView]:
-    reasoning_inputs = trace.get("reasoning_inputs") or {}
-    sources = reasoning_inputs.get("sources") or []
+    # Prefer the provenance-rich RSVG source summaries (gate audit v2); fall
+    # back to the flat reasoning_inputs source labels for older traces.
+    tq = trace.get("trace_quality") or {}
+    rsvg = tq.get("rsvg") if isinstance(tq.get("rsvg"), dict) else {}
+    summaries = rsvg.get("source_summaries") or []
     views: list[SourceNoteView] = []
-    for src in sources:
+    seen: set[str] = set()
+    for item in summaries:
+        if not isinstance(item, dict) or not item.get("source"):
+            continue
+        url = item.get("source_url")
+        retrieved = item.get("retrieved_at")
+        views.append(
+            SourceNoteView(
+                source=str(item["source"]),
+                source_title=item.get("source_title"),
+                source_url=url,
+                retrieved_at=retrieved,
+                provenance_status=_provenance_status(url, retrieved),
+            )
+        )
+        seen.add(str(item["source"]))
+
+    reasoning_inputs = trace.get("reasoning_inputs") or {}
+    for src in reasoning_inputs.get("sources") or []:
         text = str(src)
+        if text in seen:
+            continue
         is_url = text.startswith(("http://", "https://"))
         views.append(
             SourceNoteView(
                 source=text,
                 source_url=text if is_url else None,
-                # Legacy sources carry no retrieval timestamp: partial when at
-                # least the URL is usable, missing_provenance otherwise.
-                provenance_status="partial" if is_url else "missing_provenance",
+                provenance_status=_provenance_status(text if is_url else None, None),
             )
         )
     return views
@@ -420,13 +543,13 @@ def build_market_view(trace: dict[str, Any]) -> MarketBriefView:
         player = str(input_snap.get("player_name") or "")
         prop_type = str(input_snap.get("prop_type") or "prop")
         market_group = f"{player} {prop_type}".strip()
-        probabilities = _prop_probability_set(trace, authorized)
+        probability_sets = [_prop_probability_set(trace, authorized)]
     elif kind == "game":
         market_group = "game"
-        probabilities = _game_probability_set(trace, authorized)
+        probability_sets = _game_probability_sets(trace, authorized)
     else:
         market_group = kind
-        probabilities = None
+        probability_sets = []
 
     identity = trace.get("event_identity")
     identity_date = identity.get("game_date") if isinstance(identity, dict) else None
@@ -439,7 +562,8 @@ def build_market_view(trace: dict[str, Any]) -> MarketBriefView:
         game_date=input_snap.get("game_date") or identity_date,
         output_mode=mode.value,
         output_mode_reasons=reasons,
-        probabilities=probabilities,
+        probability_sets=probability_sets,
+        sensitivity=_sensitivity_view(trace),
         distributions=_distribution_views(trace),
         market_lines=dict(trace.get("odds_snapshot") or {}),
         aggregate_quality=trace.get("aggregate_quality"),

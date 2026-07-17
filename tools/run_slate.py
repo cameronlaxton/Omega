@@ -80,6 +80,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Proceed without a session sidecar (audit events are then not recorded)",
     )
+    parser.add_argument(
+        "--presentation-mode",
+        choices=("decision_support", "recommendation_lab"),
+        default="decision_support",
+        help="How authorized values are framed downstream (default: decision_support)",
+    )
+    parser.add_argument(
+        "--engine-auto-ledger-mode",
+        choices=("disabled", "shadow"),
+        default="disabled",
+        help=(
+            "engine_auto wager autolog authority (default: disabled — no engine_auto "
+            "ledger rows; 'shadow' additionally requires OMEGA_ENABLE_ENGINE_SHADOW=1)"
+        ),
+    )
     args = parser.parse_args(argv)
 
     entries_path = Path(args.entries)
@@ -117,7 +132,13 @@ def main(argv: list[str] | None = None) -> int:
         [],
     )
 
-    result = omega_run_batch(entries=entries, bankroll=args.bankroll, session_id=args.session_id)
+    result = omega_run_batch(
+        entries=entries,
+        bankroll=args.bankroll,
+        session_id=args.session_id,
+        presentation_mode=args.presentation_mode,
+        engine_auto_ledger_mode=args.engine_auto_ledger_mode,
+    )
 
     print("\n=== BATCH RESULT ===")
     print(

@@ -187,15 +187,17 @@ class TestMatchupApi:
         brief = matchup_client.get(f"/api/matchups/{EVENT_IDENTITY['event_key']}").json()
         assert brief["event_key"] == EVENT_IDENTITY["event_key"]
         market = brief["markets"][0]
-        probs = market["probabilities"]
+        probs = market["probability_sets"][0]
+        assert probs["market_key"] == "moneyline"
         assert probs["disclosure"] == "shown"
         assert [o["outcome_key"] for o in probs["outcomes"]] == ["home", "away"]
         assert "not a recommendation" in probs["estimate_label"]
+        assert market["sensitivity"]["status"] == "unavailable"
 
     def test_brief_detail_legacy_trace_key(self, matchup_client, lab_off):
         brief = matchup_client.get("/api/matchups/trace:sandbox-norec-1").json()
         assert brief["identity_warning"] is True
-        assert brief["markets"][0]["probabilities"]["disclosure"] == "withheld"
+        assert brief["markets"][0]["probability_sets"][0]["disclosure"] == "withheld"
 
     def test_unknown_matchup_404(self, matchup_client, lab_off):
         assert matchup_client.get("/api/matchups/trace:nope").status_code == 404

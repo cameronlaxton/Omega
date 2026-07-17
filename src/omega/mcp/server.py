@@ -529,7 +529,7 @@ def omega_run_batch(
     )
     from omega.core.contracts.seeding import derive_seed_from_request
     from omega.core.contracts.service import analyze
-    from omega.integrations.odds_resolver import resolve_odds
+    from omega.integrations.odds_resolver import EVENT_PROVIDER, resolve_odds
     from omega.paths import repo_root
 
     # Explicit API parameters are validated, not silently coerced — a caller
@@ -707,6 +707,11 @@ def omega_run_batch(
             entry_evidence.extend(rsvg.evidence_dicts())
 
         # --- Odds resolution ---
+        # Provider event identity captured from the resolver result (Phase 1):
+        # the same the-odds-api event id groups this entry's trace with every
+        # other market on the same real-world event.
+        resolved_event_id: str | None = None
+        resolved_commence_time: str | None = None
         if entry.kind == "prop":
             prop_types = (
                 entry.prop_type
@@ -748,11 +753,15 @@ def omega_run_batch(
                         if res.get("status") == "success" and res.get("request_patch"):
                             odds_patch = res["request_patch"]
                             resolved_prop_type = pt
+                            resolved_event_id = res.get("event_id") or None
+                            resolved_commence_time = res.get("commence_time") or None
                             break
                     if odds_patch is not None and "odds_over" in odds_patch and "odds_under" in odds_patch:
                         break
                     else:
                         odds_patch = None
+                        resolved_event_id = None
+                        resolved_commence_time = None
             if odds_patch is None or "odds_over" not in odds_patch or "odds_under" not in odds_patch:
                 results.append(
                     {
@@ -797,6 +806,8 @@ def omega_run_batch(
                         )
                         if res.get("status") == "success" and res.get("request_patch"):
                             game_odds = res["request_patch"].get("odds") or res["request_patch"]
+                            resolved_event_id = res.get("event_id") or None
+                            resolved_commence_time = res.get("commence_time") or None
                             break
                     except Exception:  # noqa: BLE001
                         continue
@@ -822,6 +833,26 @@ def omega_run_batch(
                 "n_iterations": entry.n_iterations,
                 "evidence": entry_evidence,
             }
+
+        # --- Event identity agreement (Phase 1) ---
+        # A caller-supplied event id that disagrees with the id the resolver
+        # matched means the odds belong to a different event than the caller
+        # believes — never analyze under a wrong identity.
+        if (
+            entry.event_id
+            and resolved_event_id
+            and entry.event_id != resolved_event_id
+        ):
+            msg = (
+                f"event_identity_mismatch: entry event_id={entry.event_id!r} but odds "
+                f"resolved to event_id={resolved_event_id!r}"
+            )
+            errors.append({"index": idx, "identifier": identifier, "error": msg})
+            results.append(
+                {"index": idx, "status": "error", "identifier": identifier, "error": msg}
+            )
+            continue
+        provider_event_id = resolved_event_id or entry.event_id or None
 
         # --- Seed derivation ---
         if entry.seed is not None:
@@ -881,21 +912,26 @@ def omega_run_batch(
         trace = dict(trace)
         trace_id = trace["trace_id"]
 
-        # --- Matchup Intelligence Phase 0 stamps (trace schema v2) ---
+        # --- Matchup Intelligence stamps (trace schema v2) ---
+        # Identity is provider-anchored: the resolver-confirmed the-odds-api
+        # event id when odds were resolved live, else the caller-supplied id
+        # (same namespace, e.g. from omega_list_events). Game and prop traces
+        # for the same event therefore share one event_key.
         trace["schema_version"] = 2
         trace["presentation_mode"] = presentation_mode
         trace["engine_auto_ledger_mode"] = engine_auto_ledger_mode
-        if entry.event_id:
+        if provider_event_id:
             trace["event_identity"] = EventIdentityV1(
-                provider="caller_supplied",
-                provider_event_id=entry.event_id,
+                provider=EVENT_PROVIDER,
+                provider_event_id=provider_event_id,
                 event_key=EventIdentityV1.derive_event_key(
-                    entry.league, "caller_supplied", entry.event_id
+                    entry.league, EVENT_PROVIDER, provider_event_id
                 ),
                 league=entry.league,
                 home_team=entry.home_team,
                 away_team=entry.away_team,
                 game_date=game_date,
+                commence_time=resolved_commence_time,
             ).model_dump(mode="json")
         else:
             trace["event_identity"] = None

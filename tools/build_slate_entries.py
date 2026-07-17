@@ -62,15 +62,20 @@ except ImportError:  # running outside an installed env — fall back to src lay
 NEUTRAL_GAME_CONTEXT = {"is_playoff": False, "rest_days": 1}
 
 # Slate-item keys copied through to the entry verbatim when present.
+# ``event_id`` is the odds-provider (the-odds-api) event id, e.g. from
+# omega_list_events; a prop without one inherits its game's id by matchup so
+# every market on an event shares one EventIdentityV1.event_key.
 COMMON_KEYS = (
     "game_context",
     "n_iterations",
     "seed",
     "evidence",
+    "event_id",
     "reasoning_narrative",
     "reasoning_presentation",
     "reasoning_sources",
     "roster_context",
+    "decision_support_presentation",
 )
 GAME_KEYS = COMMON_KEYS + ("home_context", "away_context", "odds")
 PROP_KEYS = COMMON_KEYS + (
@@ -187,9 +192,11 @@ class SlateBuilder:
         self.team_pack = _load_pack(args.team_contexts, "team")
         player_pack = _load_pack(args.player_contexts, "player")
         self.player_pack_folded = {_fold_name(k): v for k, v in player_pack.items()}
-        # Final game_context / roster_context per matchup, for prop inheritance.
+        # Final game_context / roster_context / event_id per matchup, for prop
+        # inheritance.
         self.game_ctx_by_matchup: dict[str, dict[str, Any]] = {}
         self.roster_ctx_by_matchup: dict[str, dict[str, Any]] = {}
+        self.event_id_by_matchup: dict[str, str] = {}
         self.errors: list[str] = []
         self.skipped: list[str] = []
         self.notes: list[str] = []
@@ -295,6 +302,8 @@ class SlateBuilder:
                     self.game_ctx_by_matchup[_matchup(item)] = game_ctx
                     if entry.get("roster_context"):
                         self.roster_ctx_by_matchup[_matchup(item)] = entry["roster_context"]
+                    if entry.get("event_id"):
+                        self.event_id_by_matchup[_matchup(item)] = entry["event_id"]
                     entries.append(entry)
                     continue
             if self.args.skip_missing:
@@ -317,6 +326,11 @@ class SlateBuilder:
                     if inherited:
                         entry["roster_context"] = inherited
                         self.notes.append(f"{where}: roster_context inherited from game entry")
+                if "event_id" not in entry:
+                    inherited_event = self.event_id_by_matchup.get(_matchup(item))
+                    if inherited_event:
+                        entry["event_id"] = inherited_event
+                        self.notes.append(f"{where}: event_id inherited from game entry")
                 if len(self.errors) == errs_before:
                     entry.update(player_context=player_ctx, game_context=game_ctx)
                     entries.append(entry)
