@@ -37,6 +37,7 @@ from fastapi.templating import Jinja2Templates
 import omega.ui as _ui_pkg
 from omega.ui.api import get_service
 from omega.ui.api import router as api_router
+from omega.ui.lab import recommendation_lab_enabled, require_recommendation_lab
 
 logger = logging.getLogger("omega.ops.console_server")
 
@@ -67,6 +68,10 @@ NAV_ENABLED = (
 )
 # All placeholder pages are implemented as of Milestone B.3.
 NAV_PLACEHOLDERS: tuple[dict[str, str], ...] = ()
+
+# Recommendation-era destinations hidden from the primary nav unless the
+# Recommendation Lab flag is on (their routes 404 without it regardless).
+LAB_NAV_KEYS: frozenset[str] = frozenset({"scanner", "bets", "clv"})
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +120,7 @@ def resolve_bind_policy(host: str, *, allow_remote: bool, token: str | None) -> 
             f"127.0.0.1, or set OMEGA_CONSOLE_ALLOW_REMOTE=1 and "
             f"OMEGA_CONSOLE_TOKEN=<shared-secret> to opt in."
         )
+    token = (token or "").strip()
     if not token:
         raise RuntimeError(
             f"OMEGA_CONSOLE_ALLOW_REMOTE is set but OMEGA_CONSOLE_TOKEN is empty. A "
@@ -234,9 +240,15 @@ def build_console_app(
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     def _ctx(request: Request, **extra: Any) -> dict[str, Any]:
+        # Lab flag is read per request so toggling it does not need a restart.
+        nav = (
+            NAV_ENABLED
+            if recommendation_lab_enabled()
+            else tuple(item for item in NAV_ENABLED if item["key"] not in LAB_NAV_KEYS)
+        )
         base = {
             "request": request,
-            "nav_enabled": NAV_ENABLED,
+            "nav_enabled": nav,
             "nav_placeholders": NAV_PLACEHOLDERS,
             "enrichment_enabled": enrichment_enabled,
         }
@@ -260,7 +272,11 @@ def build_console_app(
             ),
         )
 
-    @app.get("/scanner", response_class=HTMLResponse)
+    @app.get(
+        "/scanner",
+        response_class=HTMLResponse,
+        dependencies=[Depends(require_recommendation_lab)],
+    )
     def page_scanner(
         request: Request,
         service=Depends(get_service),
@@ -305,7 +321,11 @@ def build_console_app(
             request, "traces.html", _ctx(request, data=data.model_dump(), active="traces")
         )
 
-    @app.get("/traces/{trace_id}", response_class=HTMLResponse)
+    @app.get(
+        "/traces/{trace_id}",
+        response_class=HTMLResponse,
+        dependencies=[Depends(require_recommendation_lab)],
+    )
     def page_trace_detail(request: Request, trace_id: str, service=Depends(get_service)):
         detail = service.get_trace_detail(trace_id)
         if detail is None:
@@ -319,7 +339,11 @@ def build_console_app(
             request, "trace_detail.html", _ctx(request, detail=detail.model_dump(), active="traces")
         )
 
-    @app.get("/traces/{trace_id}/similar", response_class=HTMLResponse)
+    @app.get(
+        "/traces/{trace_id}/similar",
+        response_class=HTMLResponse,
+        dependencies=[Depends(require_recommendation_lab)],
+    )
     def page_trace_similar(request: Request, trace_id: str, service=Depends(get_service)):
         view = service.similar_spots(trace_id)
         if view is None:
@@ -333,7 +357,11 @@ def build_console_app(
             request, "similar.html", _ctx(request, view=view.model_dump(), active="traces")
         )
 
-    @app.get("/bets", response_class=HTMLResponse)
+    @app.get(
+        "/bets",
+        response_class=HTMLResponse,
+        dependencies=[Depends(require_recommendation_lab)],
+    )
     def page_bets(
         request: Request,
         service=Depends(get_service),
@@ -364,7 +392,11 @@ def build_console_app(
             request, "bets.html", _ctx(request, data=data.model_dump(), active="bets")
         )
 
-    @app.get("/bets/{ledger_id}", response_class=HTMLResponse)
+    @app.get(
+        "/bets/{ledger_id}",
+        response_class=HTMLResponse,
+        dependencies=[Depends(require_recommendation_lab)],
+    )
     def page_bet_detail(request: Request, ledger_id: str, service=Depends(get_service)):
         detail = service.get_bet_detail(ledger_id)
         if detail is None:
@@ -481,7 +513,11 @@ def build_console_app(
             _ctx(request, data=data, active="review", severity=severity),
         )
 
-    @app.get("/clv", response_class=HTMLResponse)
+    @app.get(
+        "/clv",
+        response_class=HTMLResponse,
+        dependencies=[Depends(require_recommendation_lab)],
+    )
     def page_clv(
         request: Request,
         service=Depends(get_service),

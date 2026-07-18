@@ -41,7 +41,8 @@ from omega.core.contracts.evidence import EvidenceSignal
 from omega.core.contracts.protected_fields import PROTECTED_QUANT_FIELDS, find_protected_key
 from omega.core.contracts.schemas import ReasoningPresentation
 
-RSVG_GATE_SCHEMA_VERSION = 1
+# v2: audit carries the full provenance-rich source_summaries (additive).
+RSVG_GATE_SCHEMA_VERSION = 2
 
 # Policy knobs (overridable per-call; recorded in the audit so every verdict is
 # reproducible from its own metadata).
@@ -103,6 +104,13 @@ class SourceSummary(BaseModel):
     retrieved_at: str | None = Field(
         default=None, description="ISO-8601 timestamp the source was consulted."
     )
+    # Phase 1 provenance (additive; existing source strings remain valid): a
+    # displayed external fact needs a URL + retrieval timestamp, or the brief
+    # labels it as lacking usable provenance.
+    source_title: str | None = Field(
+        default=None, description="Human title of the consulted page/article."
+    )
+    source_url: str | None = Field(default=None, description="URL of the consulted source.")
 
 
 class PlayerAbsence(BaseModel):
@@ -192,6 +200,9 @@ class RsvgGateAudit(BaseModel):
     uncertain_key_players: dict[str, list[str]]
     roster_context_complete: bool
     sources: list[str]
+    # Full provenance-rich summaries (v2, additive): the decision-support brief
+    # renders these with per-source ok/partial/missing_provenance labels.
+    source_summaries: list[SourceSummary] = Field(default_factory=list)
     stale_sources: list[str]
     context_age_hours: float | None
     missing_context: list[str]
@@ -493,6 +504,7 @@ def evaluate_roster_context(
         uncertain_key_players=uncertain_key_players,
         roster_context_complete=payload.roster_context_complete,
         sources=sources,
+        source_summaries=list(payload.source_summaries),
         stale_sources=stale_sources,
         context_age_hours=context_age_hours,
         missing_context=missing_context,

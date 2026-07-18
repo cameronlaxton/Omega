@@ -16,6 +16,7 @@ depend on it without cycles.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 # The canonical engine-owned quant fields. Keep in lock-step with
@@ -58,3 +59,22 @@ def find_protected_key(value: Any, *, fields: frozenset[str] = PROTECTED_QUANT_F
             if found:
                 return found
     return None
+
+
+# Free-text (prose) can smuggle a protected value as ``field_name=1.2`` /
+# ``field_name: -110`` even where structural key scanning (above) never sees a
+# dict key. Deliberately narrow — matched against the field name immediately
+# followed by ``=``/``:`` and a number — so ordinary qualitative prose that
+# merely *discusses* probability/edge/EV/stake concepts (with no attached
+# engine value) never false-positives. Mirrors
+# ``omega.trace.session_sidecar._PROTECTED_VALUE_LEAK_RE`` (kept in lock-step
+# by test; trace must not be imported from core).
+_PROTECTED_VALUE_LEAK_RE = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in sorted(PROTECTED_QUANT_FIELDS)) + r")\s*[:=]\s*[+-]?\d"
+)
+
+
+def find_protected_value_leak(text: str) -> str | None:
+    """Return the matched span if prose embeds a ``field_name=value`` leak."""
+    match = _PROTECTED_VALUE_LEAK_RE.search(text)
+    return match.group(0) if match else None

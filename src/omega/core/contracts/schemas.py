@@ -15,6 +15,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from omega.core.contracts.evidence import EvidenceSignal
+from omega.core.contracts.language import blocked_language
+from omega.core.contracts.protected_fields import find_protected_value_leak
 
 
 class SoccerDerivativeMarket(str, Enum):
@@ -267,6 +269,215 @@ class ReasoningPresentation(BaseModel):
     verdict: str | None = None
 
 
+# -- Presentation & ledger policy (Matchup Intelligence, Phase 0) -------------
+#
+# ``output_mode`` (omega.ops.output_modes) governs WHICH engine values may be
+# disclosed; ``presentation_mode`` governs HOW authorized values are framed.
+# Effective visibility is the intersection of the two policies. Both new modes
+# fail closed: a missing/unrecognized value is treated as the restrictive
+# default (decision_support / disabled) — recommendation_lab never elevates a
+# restrictive output_mode.
+
+PresentationMode = Literal["decision_support", "recommendation_lab"]
+EngineAutoLedgerMode = Literal["disabled", "shadow"]
+
+PRESENTATION_MODE_DEFAULT: PresentationMode = "decision_support"
+ENGINE_AUTO_LEDGER_MODE_DEFAULT: EngineAutoLedgerMode = "disabled"
+
+_PRESENTATION_MODES: frozenset[str] = frozenset({"decision_support", "recommendation_lab"})
+_ENGINE_AUTO_LEDGER_MODES: frozenset[str] = frozenset({"disabled", "shadow"})
+
+
+def coerce_presentation_mode(value: object) -> PresentationMode:
+    """Fail-closed coercion: anything but a recognized mode is decision_support."""
+    if isinstance(value, str) and value in _PRESENTATION_MODES:
+        return value  # type: ignore[return-value]
+    return PRESENTATION_MODE_DEFAULT
+
+
+def coerce_engine_auto_ledger_mode(value: object) -> EngineAutoLedgerMode:
+    """Fail-closed coercion: anything but a recognized mode is disabled."""
+    if isinstance(value, str) and value in _ENGINE_AUTO_LEDGER_MODES:
+        return value  # type: ignore[return-value]
+    return ENGINE_AUTO_LEDGER_MODE_DEFAULT
+
+
+class EventIdentityV1(BaseModel):
+    """Versioned provider-anchored event identity persisted in the full trace JSON.
+
+    Game and prop traces for the same real-world event must share ``event_key``
+    so read models can group them without heuristics. Legacy traces without a
+    trustworthy provider id stay ungrouped (identity warning) rather than being
+    merged by team-name matching.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1] = 1
+    provider: str = Field(min_length=1, description="Odds/schedule provider, e.g. the-odds-api")
+    provider_event_id: str = Field(min_length=1, description="Provider-native event id")
+    event_key: str = Field(min_length=1, description="Stable cross-market grouping key")
+    league: str = Field(min_length=1)
+    home_team: str = Field(min_length=1)
+    away_team: str = Field(min_length=1)
+    game_date: str = Field(min_length=10, description="ISO date YYYY-MM-DD")
+    commence_time: str | None = Field(
+        default=None, description="ISO 8601 scheduled start, when known"
+    )
+
+    @staticmethod
+    def derive_event_key(league: str, provider: str, provider_event_id: str) -> str:
+        """Canonical event_key derivation shared by every stamping site."""
+        return f"{league.strip().upper()}::{provider.strip()}::{provider_event_id.strip()}"
+
+    @model_validator(mode="after")
+    def _validate_identity(self) -> EventIdentityV1:
+        for field_name in (
+            "provider",
+            "provider_event_id",
+            "event_key",
+            "league",
+            "home_team",
+            "away_team",
+        ):
+            if not getattr(self, field_name).strip():
+                raise ValueError(f"EventIdentityV1.{field_name} must not be blank")
+        expected_key = self.derive_event_key(self.league, self.provider, self.provider_event_id)
+        if self.event_key != expected_key:
+            raise ValueError(
+                f"EventIdentityV1.event_key {self.event_key!r} does not match the canonical "
+                f"derivation {expected_key!r} for league/provider/provider_event_id — every "
+                "stamping site must derive event_key via derive_event_key(), never construct it "
+                "independently."
+            )
+        return self
+
+
+def _normalize_outcome_component(value: str) -> str:
+    """Case/whitespace-fold a market_key or outcome_key before comparison so
+    " Home " and "home" are recognized as the same side."""
+    return value.strip().casefold()
+
+
+# Known symmetric outcome_key vocabularies (per OutcomeCase's own doc: "e.g.
+# home, away, draw, over, under"). A market whose observed outcome_keys
+# intersect one of these families must report the corresponding complete set;
+# unrecognized vocabulary falls back to a minimum-cardinality check.
+_TOTAL_STYLE_OUTCOMES = frozenset({"over", "under"})
+_MONEYLINE_STYLE_OUTCOMES = frozenset({"home", "away", "draw"})
+
+
+def _expected_complete_outcome_set(observed: frozenset[str]) -> frozenset[str] | None:
+    """Canonical complete outcome set implied by ``observed`` vocabulary, or
+    None when the vocabulary isn't a recognized symmetric family."""
+    if observed & _TOTAL_STYLE_OUTCOMES:
+        return _TOTAL_STYLE_OUTCOMES
+    if observed & _MONEYLINE_STYLE_OUTCOMES:
+        return (
+            frozenset({"home", "away", "draw"})
+            if "draw" in observed
+            else frozenset({"home", "away"})
+        )
+    return None
+
+
+class OutcomeCase(BaseModel):
+    """Balanced case for one outcome of one market (decision-support unit)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    market_key: str = Field(min_length=1, description="Stable market identity, e.g. moneyline")
+    outcome_key: str = Field(min_length=1, description="e.g. home, away, draw, over, under")
+    label: str = Field(min_length=1, description="Human outcome label")
+    supporting: list[str] = Field(default_factory=list)
+    challenging: list[str] = Field(default_factory=list)
+    data_status: Literal["complete", "partial", "insufficient"]
+
+    @model_validator(mode="after")
+    def _validate_case(self) -> OutcomeCase:
+        if self.data_status == "complete" and (not self.supporting or not self.challenging):
+            raise ValueError(
+                "OutcomeCase data_status='complete' requires both supporting and "
+                "challenging evidence; downgrade data_status instead of fabricating a case."
+            )
+        for text in (self.label, *self.supporting, *self.challenging):
+            found = blocked_language(text)
+            if found:
+                raise ValueError(f"OutcomeCase contains blocked language {found}: {text!r}")
+            leak = find_protected_value_leak(text)
+            if leak:
+                raise ValueError(f"OutcomeCase contains a protected engine value {leak!r}: {text!r}")
+        return self
+
+
+class DecisionSupportPresentationV1(BaseModel):
+    """Primary presentation contract for decision-support briefs.
+
+    A separate typed field from the legacy ``ReasoningPresentation`` — the two
+    contracts never share a schema. Qualitative only; recommendation vocabulary
+    and protected engine values are rejected.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1] = 1
+    matchup_summary: str = Field(min_length=1)
+    market_context: str = Field(min_length=1)
+    outcome_cases: list[OutcomeCase] = Field(default_factory=list)
+    scenario_triggers: list[str] = Field(default_factory=list)
+    uncertainties: list[str] = Field(default_factory=list)
+    decision_conditions: list[str] = Field(default_factory=list)
+    questions: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_presentation(self) -> DecisionSupportPresentationV1:
+        seen: set[tuple[str, str]] = set()
+        by_market: dict[str, set[str]] = {}
+        for case in self.outcome_cases:
+            market_key = _normalize_outcome_component(case.market_key)
+            outcome_key = _normalize_outcome_component(case.outcome_key)
+            key = (market_key, outcome_key)
+            if key in seen:
+                raise ValueError(f"Duplicate outcome case for {key}")
+            seen.add(key)
+            by_market.setdefault(market_key, set()).add(outcome_key)
+        for market_key, observed in by_market.items():
+            expected = _expected_complete_outcome_set(frozenset(observed))
+            if expected is not None:
+                if observed != expected:
+                    raise ValueError(
+                        f"decision-support market {market_key!r} has an incomplete outcome "
+                        f"set {sorted(observed)!r}; expected the complete symmetric set "
+                        f"{sorted(expected)!r} (mark a missing side data_status="
+                        "'insufficient' rather than omitting its OutcomeCase)."
+                    )
+            elif len(observed) < 2:
+                raise ValueError(
+                    f"decision-support market {market_key!r} has a single-sided outcome "
+                    f"set {sorted(observed)!r}; every quoted market must report the "
+                    "complete symmetric outcome set."
+                )
+        for text in (
+            self.matchup_summary,
+            self.market_context,
+            *self.scenario_triggers,
+            *self.uncertainties,
+            *self.decision_conditions,
+            *self.questions,
+        ):
+            found = blocked_language(text)
+            if found:
+                raise ValueError(
+                    f"DecisionSupportPresentationV1 contains blocked language {found}: {text!r}"
+                )
+            leak = find_protected_value_leak(text)
+            if leak:
+                raise ValueError(
+                    f"DecisionSupportPresentationV1 contains a protected engine value {leak!r}: {text!r}"
+                )
+        return self
+
+
 class BatchAnalysisEntry(BaseModel):
     """One entry in an omega_run_batch call — either a game or a player prop.
 
@@ -280,6 +491,18 @@ class BatchAnalysisEntry(BaseModel):
     home_team: str = Field(description="Home team name")
     away_team: str = Field(description="Away team name")
     game_date: str | None = Field(default=None, description="YYYY-MM-DD; defaults to today")
+    event_id: str | None = Field(
+        default=None,
+        description=(
+            "Odds-provider (the-odds-api) event id for this matchup, e.g. from "
+            "omega_list_events. Game and prop entries for the same real-world event "
+            "must carry the same id so their traces share an EventIdentityV1.event_key. "
+            "When the batch tool resolves odds live it confirms this id against the "
+            "resolver's match and errors the entry on disagreement. None = identity "
+            "resolved from odds resolution alone, or legacy/unknown (trace stays "
+            "ungrouped with an identity warning)."
+        ),
+    )
     game_context: dict[str, Any] = Field(
         default_factory=dict, description="Calibration context (is_playoff, rest_days, …)"
     )
@@ -296,6 +519,15 @@ class BatchAnalysisEntry(BaseModel):
         description=(
             "Optional analyst-note prose keyed thesis/market_read/why/risks/verdict. "
             "Qualitative only; no protected engine values."
+        ),
+    )
+    decision_support_presentation: DecisionSupportPresentationV1 | None = Field(
+        default=None,
+        description=(
+            "Optional decision-support presentation (matchup summary, symmetric "
+            "outcome cases, uncertainties, decision conditions). The primary "
+            "presentation contract — qualitative only; recommendation vocabulary "
+            "and protected engine values are rejected at validation."
         ),
     )
     reasoning_sources: list[str] = Field(

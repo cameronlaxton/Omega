@@ -354,29 +354,44 @@ def _section_distribution_crps(
     }
 
 
+def _clv_aggregate(samples: list[tuple[float, bool]]) -> dict[str, Any]:
+    if not samples:
+        return {"n": 0, "mean_clv_cents": None, "beat_close_pct": None}
+    cents = [c for c, _ in samples]
+    beat_count = sum(1 for _, beat in samples if beat)
+    return {
+        "n": len(cents),
+        "mean_clv_cents": sum(cents) / len(cents),
+        "beat_close_pct": 100.0 * beat_count / len(cents),
+    }
+
+
 def _section_clv(store: TraceStore, league: str | None, cutoff: str) -> dict[str, Any]:
-    """Mean CLV cents and beat-close rate across bets with attached closes in the window."""
+    """Mean CLV cents and beat-close rate across bets with attached closes in the window.
+
+    Split by ledger provenance (``by_provenance``): user_confirmed, engine_auto,
+    and backfill rows measure different processes and must never be blended into
+    one undifferentiated number. The top-level aggregate is kept for
+    backward-compatible consumers and labeled as mixed by the renderer.
+    """
     conn = store.conn
     t_league_filter, t_league_params = _league_filter("t", league)
     rows = conn.execute(
-        """SELECT b.market, b.selection, b.line AS line_taken, b.odds AS odds_taken,
-                  c.closing_line, c.closing_odds
+        """SELECT b.trace_id, b.market, b.selection, b.line AS line_taken,
+                  b.odds AS odds_taken, b.provenance, c.closing_line, c.closing_odds
            FROM bet_ledger b
            JOIN closing_lines c ON b.trace_id = c.trace_id
               AND b.market = c.market
               AND b.selection_descriptor = c.selection_descriptor
            JOIN traces t ON b.trace_id = t.trace_id
-           WHERE b.provenance IN ('user_confirmed', 'engine_auto')
+           WHERE b.provenance IN ('user_confirmed', 'engine_auto', 'backfill')
              AND t.timestamp >= ?"""
         + t_league_filter,
         (cutoff, *t_league_params),
     ).fetchall()
 
-    if not rows:
-        return {"n": 0, "mean_clv_cents": None, "beat_close_pct": None}
-
-    clv_cents: list[float] = []
-    beat_count = 0
+    samples: list[tuple[float, bool]] = []
+    by_provenance: dict[str, list[tuple[float, bool]]] = {}
     for row in rows:
         try:
             r = compute_clv(
@@ -389,25 +404,38 @@ def _section_clv(store: TraceStore, league: str | None, cutoff: str) -> dict[str
                 side=str(row["selection"]).split()[0].lower() if row["selection"] else None,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("CLV computation failed for trace %s: %s", row.get("trace_id", "?"), exc)
+            logger.warning("CLV computation failed for trace %s: %s", row["trace_id"], exc)
             continue
-        clv_cents.append(r.clv_cents)
-        if r.beat_close:
-            beat_count += 1
+        sample = (r.clv_cents, bool(r.beat_close))
+        samples.append(sample)
+        by_provenance.setdefault(str(row["provenance"] or "unknown"), []).append(sample)
 
-    if not clv_cents:
-        return {"n": 0, "mean_clv_cents": None, "beat_close_pct": None}
-
-    return {
-        "n": len(clv_cents),
-        "mean_clv_cents": sum(clv_cents) / len(clv_cents),
-        "beat_close_pct": 100.0 * beat_count / len(clv_cents),
+    out = _clv_aggregate(samples)
+    out["by_provenance"] = {
+        prov: _clv_aggregate(prov_samples)
+        for prov, prov_samples in sorted(by_provenance.items())
     }
+    return out
 
 
-def _section_portfolio(store: TraceStore, cutoff: str) -> dict[str, Any]:
-    rows = store.query_ledger(start=cutoff, limit=100_000)
-    return summarize_ledger(rows)
+def _section_portfolio(
+    store: TraceStore, cutoff: str, league: str | None = None
+) -> dict[str, Any]:
+    """Financial snapshot, split by ledger provenance.
+
+    ``by_provenance`` keeps user_confirmed, engine_auto, and backfill money
+    separate — mixing them was one of the named reporting defects. The top-level
+    summary spans all rows for backward compatibility.
+    """
+    rows = store.query_ledger(start=cutoff, league=league, limit=100_000)
+    summary = summarize_ledger(rows)
+    by_prov: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        by_prov.setdefault(str(row.get("provenance") or "unknown"), []).append(row)
+    summary["by_provenance"] = {
+        prov: summarize_ledger(prov_rows) for prov, prov_rows in sorted(by_prov.items())
+    }
+    return summary
 
 
 def _session_leagues(store: TraceStore, session_id: str) -> str:
@@ -756,6 +784,101 @@ def _resolve_output_modes(
     return modes, reasons
 
 
+# Conservatism order for aggregating per-league modes: any research_candidate
+# league keeps the overall market research_candidate; any research_plus keeps it
+# below actionable.
+_MODE_CONSERVATISM = {
+    OutputMode.RESEARCH_CANDIDATE: 0,
+    OutputMode.RESEARCH_PLUS: 1,
+    OutputMode.ACTIONABLE: 2,
+}
+
+
+def _league_market_coverage(store: TraceStore, cutoff: str) -> dict[str, dict[str, int]]:
+    """Per-league, per-market calibration-eligible coverage in the window.
+
+    Includes every in-window (league, kind) pair — even one whose eligible
+    count is zero. A league with in-window games but zero eligible coverage
+    must still be considered (and conservatively downgrade the aggregate to
+    RESEARCH_CANDIDATE), not silently vanish because the old eligible-only
+    filter excluded it from the GROUP BY entirely.
+    """
+    rows = store.conn.execute(
+        f"""SELECT t.league, json_extract(t.full_trace, '$.kind') AS kind,
+                   SUM(CASE WHEN {_CALIBRATION_ELIGIBLE_SQL} THEN 1 ELSE 0 END) AS n
+            FROM traces t
+            WHERE t.timestamp >= ?
+              AND t.league IS NOT NULL
+            GROUP BY t.league, kind""",
+        (cutoff,),
+    ).fetchall()
+    coverage: dict[str, dict[str, int]] = {}
+    for row in rows:
+        kind = str(row["kind"] or "")
+        if kind not in _OUTPUT_MODE_MARKETS:
+            continue
+        coverage.setdefault(str(row["league"]), {})[kind] = int(row["n"] or 0)
+    return coverage
+
+
+def _resolve_output_modes_league_scoped(
+    registry: CalibrationRegistry,
+    store: TraceStore,
+    cutoff: str,
+    *,
+    sidecar_valid: bool = True,
+) -> tuple[dict[str, OutputMode], dict[str, list[str]]]:
+    """Overall-report output modes without cross-league profile inheritance.
+
+    The overall (cross-league) report previously classified each market from the
+    most conservative production profile across ALL leagues — so a fitted
+    profile in one league could authorize output for a different league's
+    traces. Here each league with in-window coverage is classified against its
+    OWN league-scoped profile, and the market's overall mode is the most
+    conservative across those leagues (reasons are league-prefixed).
+    """
+    coverage = _league_market_coverage(store, cutoff)
+    modes: dict[str, OutputMode] = {}
+    reasons: dict[str, list[str]] = {}
+    for market in _OUTPUT_MODE_MARKETS:
+        # Any league with an in-window trace for this market — including zero
+        # eligible coverage — must be classified (and conservatively fold into
+        # the aggregate), not just leagues whose eligible count is positive.
+        leagues = sorted(lg for lg, per in coverage.items() if market in per)
+        if not leagues:
+            mode, why = classify_market_output_mode(
+                profile_id=None,
+                sample_size=None,
+                calibration_error=None,
+                trace_count=0,
+                sidecar_valid=sidecar_valid,
+                maturity=None,
+            )
+            modes[market] = mode
+            reasons[market] = why
+            continue
+        worst: OutputMode | None = None
+        whys: list[str] = []
+        for lg in leagues:
+            prod = registry.list_profiles(league=lg, status=ProfileStatus.PRODUCTION.value)
+            prof = _select_market_profiles(prod).get(market)
+            metrics = prof.metrics if prof else {}
+            mode, why = classify_market_output_mode(
+                profile_id=prof.profile_id if prof else None,
+                sample_size=prof.sample_size if prof else None,
+                calibration_error=metrics.get("calibration_error"),
+                trace_count=coverage[lg].get(market, 0),
+                sidecar_valid=sidecar_valid,
+                maturity=prof.effective_maturity().value if prof else None,
+            )
+            whys.extend(f"{lg}: {w}" for w in why)
+            if worst is None or _MODE_CONSERVATISM[mode] < _MODE_CONSERVATISM[worst]:
+                worst = mode
+        modes[market] = worst if worst is not None else OutputMode.RESEARCH_CANDIDATE
+        reasons[market] = whys
+    return modes, reasons
+
+
 def _aggregate_scalar_mode(output_modes: dict[str, OutputMode]) -> OutputMode:
     """Conservative backward-compat scalar: ACTIONABLE only when every market is.
 
@@ -957,6 +1080,21 @@ def _render(
     lines.append(f"| Open positions | {portfolio['open_positions_count']} |")
     lines.append(f"| Pending exposure | ${portfolio['pending_exposure']:.2f} |")
     lines.append("")
+    by_prov = portfolio.get("by_provenance") or {}
+    if by_prov:
+        lines.append(
+            "The table above mixes provenances; the split below is authoritative "
+            "(user_confirmed rows are the only real wagers)."
+        )
+        lines.append("")
+        lines.append("| Provenance | Bets | Decided | Win rate | Realized PnL | ROI |")
+        lines.append("|---|---:|---:|---:|---:|---:|")
+        for prov, s in by_prov.items():
+            lines.append(
+                f"| {prov} | {s['total_bets']} | {s['decided']} | {s['win_pct']:.2f}% | "
+                f"${s['realized_pnl']:+.2f} | {s['roi_pct']:.2f}% |"
+            )
+        lines.append("")
     if portfolio["active_ledgers"]:
         lines.append(
             "| ledger_id | league | market | status | stake | potential_payout | last_updated |"
@@ -1063,9 +1201,15 @@ def _render(
     if clv["n"] == 0:
         lines.append("_No CLV-resolvable bets in window._")
     else:
-        lines.append(f"- n: {clv['n']}")
+        lines.append(f"- n: {clv['n']} (all provenances mixed — see split below)")
         lines.append(f"- Mean CLV: {clv['mean_clv_cents']:+.2f} cents")
         lines.append(f"- Beat-close rate: {clv['beat_close_pct']:.1f}%")
+        for prov, s in (clv.get("by_provenance") or {}).items():
+            if s["n"]:
+                lines.append(
+                    f"- {prov}: n={s['n']}, mean {s['mean_clv_cents']:+.2f} cents, "
+                    f"beat-close {s['beat_close_pct']:.1f}%"
+                )
         if clv["mean_clv_cents"] is not None and clv["mean_clv_cents"] < -0.5:
             lines.append("")
             lines.append(
@@ -1175,7 +1319,9 @@ def main() -> int:
         "--league",
         default=None,
         help=(
-            "Deprecated compatibility argument. latest.md is always an overall cross-league report."
+            "Scope every section (counts, metrics, profiles, portfolio, CLV) to one "
+            "league. Writes var/reports/latest_<LEAGUE>.md unless --out is given; "
+            "latest.md itself always remains the overall cross-league report."
         ),
     )
     parser.add_argument("--window-days", type=int, default=30)
@@ -1198,7 +1344,16 @@ def main() -> int:
     )
     require_sqlite_backend("report_calibration.py")
 
-    out_path: Path = args.out or latest_report_path()
+    report_league: str | None = (args.league or "").strip().upper() or None
+
+    if args.out:
+        out_path: Path = args.out
+    elif report_league:
+        # latest.md stays the overall cross-league artifact; league-scoped runs
+        # get their own file so they can never masquerade as the overall report.
+        out_path = latest_report_path().with_name(f"latest_{report_league}.md")
+    else:
+        out_path = latest_report_path()
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -1211,9 +1366,8 @@ def main() -> int:
     sidecars = _load_session_sidecars(args.sessions_inbox)
     cutoff = _window_cutoff(args.window_days)
 
-    report_league: str | None = None
     counts = _section_counts(store, report_league, cutoff)
-    portfolio = _section_portfolio(store, cutoff)
+    portfolio = _section_portfolio(store, cutoff, report_league)
     # Fetch the eligible+graded rowset ONCE and share it between the game and prop
     # realized-metrics sections (was fetched + JSON-parsed twice).
     _graded_rows = store.query_traces(
@@ -1249,9 +1403,18 @@ def main() -> int:
         "game": counts["with_predictions_game"],
         "prop": counts["with_predictions_prop"],
     }
-    output_modes, output_mode_reasons = _resolve_output_modes(
-        prod_by_market, coverage_by_market, sidecar_valid=True
-    )
+    if report_league:
+        # League-scoped run: profiles above are already league-filtered.
+        output_modes, output_mode_reasons = _resolve_output_modes(
+            prod_by_market, coverage_by_market, sidecar_valid=True
+        )
+    else:
+        # Overall run: classify each in-window league against its OWN profiles
+        # and aggregate conservatively, so authorization can never be inherited
+        # from a different league's fitted profile.
+        output_modes, output_mode_reasons = _resolve_output_modes_league_scoped(
+            registry, store, cutoff, sidecar_valid=True
+        )
     # Backward-compat scalar for un-updated consumers: most conservative across
     # markets (ACTIONABLE only when every market is ACTIONABLE). Updated consumers
     # read the per-market `output_modes` map instead.
@@ -1272,7 +1435,7 @@ def main() -> int:
     store.close()
 
     rendered = header + _render(
-        scope_label="Overall",
+        scope_label=report_league or "Overall",
         window_days=args.window_days,
         counts=counts,
         portfolio=portfolio,

@@ -573,14 +573,18 @@ class TestSchemaV4SessionId:
         The prop's applied profile is provisional maturity + above the ECE
         floor, so the autologged ledger row must carry the 0.5u ceiling
         ($5 on the $1000 default bankroll), never the flat $25 default.
+
+        Phase 0: engine_auto autolog is opt-in — the trace must be stamped
+        engine_auto_ledger_mode='shadow' AND the operator env gate must be on.
         """
         import json as _json
 
-        monkeypatch.setenv("OMEGA_BET_LEDGER_AUTOLOG", "1")
+        monkeypatch.setenv("OMEGA_ENABLE_ENGINE_SHADOW", "1")
         store = _tmp_store()
         trace = _make_trace(
             trace_id="t-rp-cap",
             kind="prop",
+            engine_auto_ledger_mode="shadow",
             input_snapshot={
                 "league": "MLB",
                 "player_name": "Cal Raleigh",

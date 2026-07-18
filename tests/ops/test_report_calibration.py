@@ -321,7 +321,12 @@ def test_report_frontmatter_emits_per_market_map(tmp_path, monkeypatch):
     assert "ACTIONABLE" in text
 
 
-def test_report_main_is_overall_even_when_league_arg_is_passed(tmp_path, monkeypatch):
+def test_report_main_scopes_to_league_arg(tmp_path, monkeypatch):
+    """Phase 0: --league is functional again — every section is league-scoped.
+
+    (Reverses the earlier deprecation where --league was accepted but ignored;
+    latest.md remains overall only when --league is omitted.)
+    """
     db = tmp_path / "omega.db"
     out = tmp_path / "latest.md"
     sessions = tmp_path / "sessions"
@@ -377,10 +382,12 @@ def test_report_main_is_overall_even_when_league_arg_is_passed(tmp_path, monkeyp
     assert report_calibration.main() == 0
     text = out.read_text(encoding="utf-8")
 
-    assert "# Omega Health Report - Overall" in text
-    assert "| Traces (all) | 2 |" in text
+    assert "# Omega Health Report - NBA" in text
+    # Only the NBA trace is counted; the MLB trace is out of scope.
+    assert "| Traces (all) | 1 |" in text
     assert "| NBA | game | base | `iso_nba_game` | isotonic | legacy |" in text
-    assert "| MLB | game | `iso_mlb_game_candidate` | isotonic | legacy |" in text
+    # The MLB candidate must not leak into an NBA-scoped report.
+    assert "iso_mlb_game_candidate" not in text
 
 
 class TestClvSignalVerdict:

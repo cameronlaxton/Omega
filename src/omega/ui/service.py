@@ -1676,6 +1676,46 @@ class ConsoleService:
             warnings=warnings,
         )
 
+    # -- matchup briefs (decision-support primary surface, Phase 0) ---------
+
+    def list_matchup_briefs(
+        self, *, league: str | None = None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Recent traces grouped by event identity, projected through the safe
+        decision-support adapter. Ordered by stable event identity, never by
+        edge or recommendation status; no-recommendation traces are included.
+        """
+        from omega.trace.decision_support import group_traces_into_briefs
+
+        league = _clean(league)
+        n = max(1, int(limit or DEFAULT_SCANNER_LIMIT))
+        # Bounded scan (Phase 2 may add a DB-native event index if benchmarks
+        # demand one); grouping happens in memory on the scanned window. A
+        # single event can span more than 4 traces (one game + many props), so
+        # a fixed trace-to-event multiplier can under-scan; widen the window
+        # until enough distinct event groups are found or the scan cap (
+        # self.max_scan) is reached.
+        scan_limit = min(self.max_scan, n * 4)
+        briefs: list[Any] = []
+        while True:
+            traces = self.store.query_traces(league=league, limit=scan_limit)
+            briefs = group_traces_into_briefs(traces)
+            if len(briefs) >= n or scan_limit >= self.max_scan:
+                break
+            scan_limit = min(self.max_scan, scan_limit * 2)
+        # query_traces() scans newest-first, but group_traces_into_briefs()
+        # sorts ascending by date for stable presentation; reverse before
+        # slicing so briefs[:n] keeps the newest n groups, not the oldest.
+        briefs.reverse()
+        return [b.model_dump(mode="json") for b in briefs[:n]]
+
+    def matchup_brief(self, group_key: str) -> dict[str, Any] | None:
+        """The safe brief for one event group (or one legacy ``trace:<id>`` key)."""
+        from omega.trace.decision_support import brief_for_group_key
+
+        brief = brief_for_group_key(self.store, group_key, max_scan=self.max_scan)
+        return brief.model_dump(mode="json") if brief is not None else None
+
     # -- calibration chart (V2) ------------------------------------------
 
     def calibration_chart(

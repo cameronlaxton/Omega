@@ -7,10 +7,30 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from omega.core.contracts.schemas import (
+    EventIdentityV1,
+    coerce_engine_auto_ledger_mode,
+    coerce_presentation_mode,
+)
 from omega.trace.eligibility import (
     evidence_learning_eligibility,
     probability_calibration_eligibility,
 )
+
+
+def _validated_event_identity(value: Any) -> dict[str, Any] | None:
+    """Fail-closed event identity: anything that doesn't validate becomes None.
+
+    A malformed identity must not merge unrelated traces, so it is dropped (the
+    trace stays separately visible with an identity warning) rather than kept
+    as unvalidated payload.
+    """
+    if not isinstance(value, dict):
+        return None
+    try:
+        return EventIdentityV1(**value).model_dump(mode="json")
+    except Exception:  # noqa: BLE001 - fail closed on any validation error
+        return None
 
 
 class PersistableTrace(BaseModel):
@@ -23,7 +43,12 @@ class PersistableTrace(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    schema_version: int = 1
+    # v2 (Matchup Intelligence Phase 0): additive presentation_mode /
+    # engine_auto_ledger_mode / event_identity / decision_support_presentation
+    # fields. v1 payloads remain readable — every new field has a fail-closed
+    # default, so a v1 dict validates as the restrictive decision_support /
+    # disabled configuration.
+    schema_version: int = 2
     trace_id: str
     run_id: str
     timestamp: str
@@ -69,6 +94,17 @@ class PersistableTrace(BaseModel):
     # Analyst-note prose (thesis/market_read/why/risks/verdict) — qualitative only, no
     # protected values. Rides the full_trace JSON blob; surfaced into the saved session card.
     reasoning_presentation: dict[str, Any] | None = None
+
+    # Matchup Intelligence Phase 0 (schema v2, all additive; ride full_trace JSON).
+    # presentation_mode frames how authorized values are shown; it never widens
+    # what output_mode authorizes. engine_auto_ledger_mode is the per-run
+    # autolog authority consumed by omega.trace.autolog_policy.
+    presentation_mode: str = "decision_support"
+    engine_auto_ledger_mode: str = "disabled"
+    # EventIdentityV1 dict (provider-anchored); None for legacy/unknown identity.
+    event_identity: dict[str, Any] | None = None
+    # DecisionSupportPresentationV1 dict — the primary presentation contract.
+    decision_support_presentation: dict[str, Any] | None = None
 
     @classmethod
     def from_analyze_output(cls, analyze_out: dict[str, Any]) -> PersistableTrace:
@@ -128,6 +164,12 @@ class PersistableTrace(BaseModel):
             reasoning_inputs=analyze_out.get("reasoning_inputs"),
             reasoning_downgrade_rationale=analyze_out.get("reasoning_downgrade_rationale"),
             reasoning_presentation=analyze_out.get("reasoning_presentation"),
+            presentation_mode=coerce_presentation_mode(analyze_out.get("presentation_mode")),
+            engine_auto_ledger_mode=coerce_engine_auto_ledger_mode(
+                analyze_out.get("engine_auto_ledger_mode")
+            ),
+            event_identity=_validated_event_identity(analyze_out.get("event_identity")),
+            decision_support_presentation=analyze_out.get("decision_support_presentation"),
         )
 
     def calibration_eligibility(self) -> dict[str, bool]:

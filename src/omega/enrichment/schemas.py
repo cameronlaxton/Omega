@@ -23,6 +23,19 @@ RECOMMENDATION_TYPES = (
 RISK_RATINGS = ("low", "medium", "high")
 ENRICHMENT_STATUSES = ("queued", "running", "completed", "failed")
 
+# Decision-support follow-up focus values (Matchup Intelligence Phase 1). A
+# focused request reads the persisted safe matchup brief — never the raw trace —
+# and may summarize, compare, and identify missing inputs; it can never
+# recompute engine probabilities, edge, staking, or sensitivity.
+MATCHUP_FOCUS_VALUES = (
+    "breakdown",
+    "compare_markets",
+    "stress_test",
+    "decision_changes",
+    "counter_case",
+    "source_check",
+)
+
 
 class MarketContext(BaseModel):
     """The narrative's market read (qualitative; no protected numbers)."""

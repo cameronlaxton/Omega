@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
@@ -12,6 +13,11 @@ from sqlalchemy import and_, exists, func, select, text, update
 from sqlalchemy import insert as sa_insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from omega.trace.autolog_policy import (
+    engine_auto_autolog_decision,
+    is_autolog_suppressed,
+    suppress_autolog,
+)
 from omega.trace.bet_record import BetRecord
 from omega.trace.bet_settlement import extract_recommended_bet
 from omega.trace.db import create_postgres_engine, create_session_factory
@@ -94,6 +100,18 @@ class PostgresRepository:
         self.engine = create_postgres_engine(url)
         self.Session = create_session_factory(self.engine)
 
+    @contextmanager
+    def autolog_suppressed(self):
+        """Disable the bet_ledger dual-write for the duration of the block.
+
+        Backed by the shared context-local flag in ``autolog_policy`` (not an
+        instance attribute), so suppression is visible to whichever backend
+        actually makes the decision and nested/interleaved blocks each restore
+        their own prior state instead of clobbering a shared boolean.
+        """
+        with suppress_autolog():
+            yield self
+
     def _ensure_writeable(self) -> None:
         if self.read_only:
             raise RuntimeError("TraceStore opened read_only=True; writes are disabled")
@@ -158,9 +176,14 @@ class PostgresRepository:
         return trace_id
 
     def _maybe_autolog_ledger_bet(self, session, trace_id: str, trace: dict[str, Any]) -> None:
-        import os
-
-        if os.environ.get("OMEGA_BET_LEDGER_AUTOLOG", "1") not in ("1", "true", "True"):
+        # Shared policy with the SQLite backend (omega.trace.autolog_policy):
+        # default DISABLED; requires trace engine_auto_ledger_mode='shadow' AND
+        # OMEGA_ENABLE_ENGINE_SHADOW=1. Parity is enforced by test.
+        allowed, reason = engine_auto_autolog_decision(
+            trace, suppressed=is_autolog_suppressed()
+        )
+        if not allowed:
+            logger.debug("engine_auto autolog denied for %s: %s", trace_id, reason)
             return
         try:
             result = extract_recommended_bet(trace, provenance=BetProvenance.ENGINE_AUTO)

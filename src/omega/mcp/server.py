@@ -46,6 +46,7 @@ TOOL_NAMES = (
     "omega_chat_orchestrate",
     "omega_replay_bundle",
     "omega_trace_get",
+    "omega_get_matchup_brief",
     "omega_trace_query",
     "omega_trace_attach_outcome",
     "omega_trace_void_prop",
@@ -482,12 +483,22 @@ def omega_run_batch(
     entries: list[dict[str, Any]],
     bankroll: float,
     session_id: str,
+    presentation_mode: str = "decision_support",
+    engine_auto_ledger_mode: str = "disabled",
 ) -> dict[str, Any]:
     """Run N game/prop analyses in one call: resolve odds, analyze, write export blocks.
 
     Each entry is a BatchAnalysisEntry dict.  If odds fields are absent the tool
     resolves them via omega_resolve_odds before calling analyze().  For props,
     prop_type may be a list — the first market that resolves successfully is used.
+
+    ``presentation_mode`` ('decision_support' default | 'recommendation_lab')
+    frames how authorized values are presented downstream; it never widens what
+    ``output_mode`` authorizes. ``engine_auto_ledger_mode`` ('disabled' default |
+    'shadow') is the per-run wager-autolog authority: 'disabled' writes NO
+    engine_auto bet-ledger rows; 'shadow' additionally requires the operator
+    env gate OMEGA_ENABLE_ENGINE_SHADOW=1 at persist time. Both are stamped
+    onto every trace (schema v2). Invalid values are rejected, not coerced.
 
     Per entry, supply the structured reasoning fields rather than prose-only output:
 
@@ -510,11 +521,34 @@ def omega_run_batch(
     import json as _json
     from datetime import datetime, timezone
 
-    from omega.core.contracts.schemas import BatchAnalysisEntry
+    from omega.core.contracts.schemas import (
+        BatchAnalysisEntry,
+        EventIdentityV1,
+        coerce_engine_auto_ledger_mode,
+        coerce_presentation_mode,
+    )
     from omega.core.contracts.seeding import derive_seed_from_request
     from omega.core.contracts.service import analyze
-    from omega.integrations.odds_resolver import resolve_odds
+    from omega.integrations.odds_resolver import EVENT_PROVIDER, resolve_odds
     from omega.paths import repo_root
+
+    # Explicit API parameters are validated, not silently coerced — a caller
+    # that names a mode must name a real one. (Persist-time reads of missing/
+    # malformed values still fail closed via the coerce_* helpers.)
+    if coerce_presentation_mode(presentation_mode) != presentation_mode:
+        return _error(
+            "omega_run_batch",
+            "INVALID_INPUT",
+            f"invalid presentation_mode {presentation_mode!r}; "
+            "expected 'decision_support' or 'recommendation_lab'",
+        )
+    if coerce_engine_auto_ledger_mode(engine_auto_ledger_mode) != engine_auto_ledger_mode:
+        return _error(
+            "omega_run_batch",
+            "INVALID_INPUT",
+            f"invalid engine_auto_ledger_mode {engine_auto_ledger_mode!r}; "
+            "expected 'disabled' or 'shadow'",
+        )
 
     # Gate check runs once for the entire batch.
     gate_failures = _formal_output_gate_failures()
@@ -544,6 +578,12 @@ def omega_run_batch(
     _seen_rsvg_summary_signatures: dict[
         tuple[tuple[str, str], ...], tuple[str, str, str]
     ] = {}
+    # Event identity binding: the first entry in this batch to use a given
+    # provider_event_id fixes that id's (league, home_team, away_team,
+    # game_date). A later entry reusing the same id for a different normalized
+    # matchup/date would silently merge two unrelated events under one
+    # event_key — reject it instead of stamping a wrong identity.
+    _seen_provider_event_identities: dict[str, tuple[str, str, str, str]] = {}
 
     for idx, raw in enumerate(entries):
         try:
@@ -588,6 +628,37 @@ def omega_run_batch(
             from omega.core.gates.rsvg import RosterContextPayload, evaluate_roster_context
 
             try:
+                payload = RosterContextPayload(**entry.roster_context)
+                # Identity agreement (Phase 0): the RSVG payload must describe
+                # THIS entry's matchup. A verified-looking context for a
+                # different league/game must never validate an analysis — this
+                # is the cross-event/cross-league contamination boundary.
+                mismatches = [
+                    f"{field}: entry={entry_val!r} rsvg={payload_val!r}"
+                    for field, entry_val, payload_val in (
+                        ("league", entry.league, payload.league),
+                        ("home_team", entry.home_team, payload.home_team),
+                        ("away_team", entry.away_team, payload.away_team),
+                    )
+                    if str(entry_val or "").casefold().strip()
+                    != str(payload_val or "").casefold().strip()
+                ]
+                if payload.game_date and payload.game_date != game_date:
+                    mismatches.append(
+                        f"game_date: entry={game_date!r} rsvg={payload.game_date!r}"
+                    )
+                if mismatches:
+                    msg = "rsvg_identity_mismatch: " + "; ".join(mismatches)
+                    errors.append({"index": idx, "identifier": identifier, "error": msg})
+                    results.append(
+                        {
+                            "index": idx,
+                            "status": "error",
+                            "identifier": identifier,
+                            "error": msg,
+                        }
+                    )
+                    continue
                 summaries = entry.roster_context.get("source_summaries") or []
                 signature = tuple(
                     sorted(
@@ -607,7 +678,7 @@ def omega_run_batch(
                     elif first_matchup != matchup_key:
                         is_duplicate = True
                 rsvg = evaluate_roster_context(
-                    RosterContextPayload(**entry.roster_context),
+                    payload,
                     duplicate_summary_detected=is_duplicate,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -642,6 +713,11 @@ def omega_run_batch(
             entry_evidence.extend(rsvg.evidence_dicts())
 
         # --- Odds resolution ---
+        # Provider event identity captured from the resolver result (Phase 1):
+        # the same the-odds-api event id groups this entry's trace with every
+        # other market on the same real-world event.
+        resolved_event_id: str | None = None
+        resolved_commence_time: str | None = None
         if entry.kind == "prop":
             prop_types = (
                 entry.prop_type
@@ -683,11 +759,15 @@ def omega_run_batch(
                         if res.get("status") == "success" and res.get("request_patch"):
                             odds_patch = res["request_patch"]
                             resolved_prop_type = pt
+                            resolved_event_id = res.get("event_id") or None
+                            resolved_commence_time = res.get("commence_time") or None
                             break
                     if odds_patch is not None and "odds_over" in odds_patch and "odds_under" in odds_patch:
                         break
                     else:
                         odds_patch = None
+                        resolved_event_id = None
+                        resolved_commence_time = None
             if odds_patch is None or "odds_over" not in odds_patch or "odds_under" not in odds_patch:
                 results.append(
                     {
@@ -732,6 +812,8 @@ def omega_run_batch(
                         )
                         if res.get("status") == "success" and res.get("request_patch"):
                             game_odds = res["request_patch"].get("odds") or res["request_patch"]
+                            resolved_event_id = res.get("event_id") or None
+                            resolved_commence_time = res.get("commence_time") or None
                             break
                     except Exception:  # noqa: BLE001
                         continue
@@ -757,6 +839,49 @@ def omega_run_batch(
                 "n_iterations": entry.n_iterations,
                 "evidence": entry_evidence,
             }
+
+        # --- Event identity agreement (Phase 1) ---
+        # A caller-supplied event id that disagrees with the id the resolver
+        # matched means the odds belong to a different event than the caller
+        # believes — never analyze under a wrong identity.
+        if (
+            entry.event_id
+            and resolved_event_id
+            and entry.event_id != resolved_event_id
+        ):
+            msg = (
+                f"event_identity_mismatch: entry event_id={entry.event_id!r} but odds "
+                f"resolved to event_id={resolved_event_id!r}"
+            )
+            errors.append({"index": idx, "identifier": identifier, "error": msg})
+            results.append(
+                {"index": idx, "status": "error", "identifier": identifier, "error": msg}
+            )
+            continue
+        provider_event_id = resolved_event_id or entry.event_id or None
+
+        if provider_event_id:
+            normalized_identity = (
+                entry.league.strip().upper(),
+                entry.home_team.strip().upper(),
+                entry.away_team.strip().upper(),
+                (game_date or "").strip(),
+            )
+            existing_identity = _seen_provider_event_identities.get(provider_event_id)
+            if existing_identity is None:
+                _seen_provider_event_identities[provider_event_id] = normalized_identity
+            elif existing_identity != normalized_identity:
+                msg = (
+                    f"event_identity_mismatch: provider_event_id={provider_event_id!r} is "
+                    f"already bound to {existing_identity!r} in this batch, but this entry "
+                    f"resolves to {normalized_identity!r} — refusing to stamp a conflicting "
+                    "event identity."
+                )
+                errors.append({"index": idx, "identifier": identifier, "error": msg})
+                results.append(
+                    {"index": idx, "status": "error", "identifier": identifier, "error": msg}
+                )
+                continue
 
         # --- Seed derivation ---
         if entry.seed is not None:
@@ -815,6 +940,34 @@ def omega_run_batch(
 
         trace = dict(trace)
         trace_id = trace["trace_id"]
+
+        # --- Matchup Intelligence stamps (trace schema v2) ---
+        # Identity is provider-anchored: the resolver-confirmed the-odds-api
+        # event id when odds were resolved live, else the caller-supplied id
+        # (same namespace, e.g. from omega_list_events). Game and prop traces
+        # for the same event therefore share one event_key.
+        trace["schema_version"] = 2
+        trace["presentation_mode"] = presentation_mode
+        trace["engine_auto_ledger_mode"] = engine_auto_ledger_mode
+        if provider_event_id:
+            trace["event_identity"] = EventIdentityV1(
+                provider=EVENT_PROVIDER,
+                provider_event_id=provider_event_id,
+                event_key=EventIdentityV1.derive_event_key(
+                    entry.league, EVENT_PROVIDER, provider_event_id
+                ),
+                league=entry.league,
+                home_team=entry.home_team,
+                away_team=entry.away_team,
+                game_date=game_date,
+                commence_time=resolved_commence_time,
+            ).model_dump(mode="json")
+        else:
+            trace["event_identity"] = None
+        if entry.decision_support_presentation is not None:
+            trace["decision_support_presentation"] = (
+                entry.decision_support_presentation.model_dump(mode="json")
+            )
 
         # --- Build export block in the current nested trace-export shape. ---
         trace["reasoning_inputs"] = reasoning_inputs
@@ -993,6 +1146,34 @@ def omega_trace_get(trace_id: str, db_path: str | None = None) -> dict[str, Any]
         return _ok("omega_trace_get", trace=trace)
     except Exception as exc:
         return _error("omega_trace_get", "trace_get_failed", str(exc))
+    finally:
+        store.close()
+
+
+def omega_get_matchup_brief(event_key: str, db_path: str | None = None) -> dict[str, Any]:
+    """Safe decision-support brief for one event — the primary matchup view.
+
+    ``event_key`` is either an ``EventIdentityV1.event_key`` (groups every game
+    and prop trace stamped with it) or ``trace:<trace_id>`` for a legacy trace
+    without provider identity (rendered as a singleton group with an identity
+    warning). The response contains only the allowlisted decision-support DTO:
+    listed lines, simulation distribution summaries, symmetric outcome
+    probability sets where the market's own output_mode authorizes them, data
+    quality and provenance notes. It never contains edge/EV/Kelly/stake/tier or
+    any recommendation framing.
+    """
+    from omega.trace.decision_support import brief_for_group_key
+    from omega.trace.store import TraceStore, log_effective_db
+
+    store = TraceStore(db_path=db_path, read_only=True)
+    log_effective_db(store, logger)
+    try:
+        brief = brief_for_group_key(store, event_key)
+        if brief is None:
+            return _error("omega_get_matchup_brief", "matchup_not_found", event_key)
+        return _ok("omega_get_matchup_brief", brief=brief.model_dump(mode="json"))
+    except Exception as exc:  # noqa: BLE001
+        return _error("omega_get_matchup_brief", "matchup_brief_failed", str(exc))
     finally:
         store.close()
 
@@ -1742,6 +1923,7 @@ def build_server():
         omega_chat_orchestrate,
         omega_replay_bundle,
         omega_trace_get,
+        omega_get_matchup_brief,
         omega_trace_query,
         omega_trace_attach_outcome,
         omega_trace_void_prop,

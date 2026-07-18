@@ -167,6 +167,10 @@ APPROVED_OMEGA_IMPORTS = {
     "omega.ui.normalizers",
     "omega.ui.insights",
     "omega.ui.clv",
+    # Recommendation Lab feature gate (env read + HTTPException only).
+    "omega.ui.lab",
+    # Pure trace-dict -> safe-DTO projection (no store access, no writes).
+    "omega.trace.decision_support",
     "omega.core.config.leagues",
     # Read-only calibration registry access (list_profiles/get_production only).
     "omega.core.calibration.registry",

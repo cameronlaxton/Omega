@@ -52,10 +52,16 @@ Output mode vs engine execution (canonical: `prompts/reference/output_modes.md`)
   - Engine AVAILABLE but `RESEARCH_CANDIDATE` / quality < 0.7 / no fitted profile: the engine STILL runs, a `sandbox-` trace_id is STILL minted, and the trace STILL persists to var/omega_traces.db. Only the user-facing betting numbers are withheld. Never skip `analyze()` just because output is research-only — that starves the calibration loop.
 
 Presentation contract (canonical: `prompts/reference/presentation_contract.md`):
-- Every user-facing betting response is narrative-first in both ACTIONABLE and RESEARCH_CANDIDATE modes: slate snapshot, ranked recommendations/watchlist, per-matchup narrative (match context, market read, Omega read, risks, verdict), and an honesty block per item.
-- A formal Bet Card is a supplement to the analysis, not a replacement for matchup context, and only appears when authorized by `output_modes.<market>` with engine-owned values.
-- Do not collapse actionable output into a terse table unless the user explicitly asks for terse output.
+- `presentation_mode` defaults to `decision_support` (fails closed): the primary response is a narrative-first Matchup Brief organized around the event and its markets — verified context, symmetric outcome cases (for and against every mutually exclusive outcome), distributions/uncertainty, decision-changing conditions, and an honesty block. No picks, no ranked-by-edge ordering, no verdict, no stake sizing; engine probabilities appear only as complete symmetric sets when `output_modes.<market>` authorizes them, labeled as engine-generated estimates, never as recommendations.
+- The legacy recommendation shape (slate snapshot, ranked recommendations/watchlist, per-matchup narrative with verdict, Bet Cards) applies only in `presentation_mode='recommendation_lab'` with `OMEGA_ENABLE_RECOMMENDATION_LAB=1`, still bounded by `output_modes.<market>`.
+- A formal Bet Card is lab-only, a supplement to the analysis, and only appears when authorized by `output_modes.<market>` with engine-owned values.
+- Do not collapse output into a terse table unless the user explicitly asks for terse output.
 - `output_modes.md` stays the single source of truth for which values may be shown; `presentation_contract.md` owns only the response shape.
+
+Engine-auto wager ledger (Phase 0 default: OFF):
+- `engine_auto_ledger_mode` defaults to `disabled`: persisting a trace writes NO engine_auto bet-ledger row. Shadow logging requires BOTH `engine_auto_ledger_mode='shadow'` on the run and `OMEGA_ENABLE_ENGINE_SHADOW=1` in the environment. `OMEGA_BET_LEDGER_AUTOLOG` is a kill switch only — it can deny, never enable.
+- User-confirmed wagers are still recorded explicitly (bet_record / omega_record_flat_bet) and are the only rows described to the user as wagers.
+- Calibration eligibility never depends on a ledger row; disabling autolog does not starve the calibration loop.
 
 Downgrade discipline:
 - No Bet Card if any critical input is missing.
