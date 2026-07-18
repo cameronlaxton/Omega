@@ -235,17 +235,9 @@ def _scrub_prose(texts: list[str], warnings: list[str]) -> list[str]:
     return clean
 
 
-def market_output_mode_for_trace(trace: dict[str, Any]) -> tuple[OutputMode, list[str]]:
-    """Per-trace market disclosure authorization from its own calibration audit.
-
-    Reuses the canonical classifier with this trace's applied-profile facts.
-    A trace with no calibration audit (no profile) classifies RESEARCH_CANDIDATE.
-    Sidecar validity is a session-level concern; at the single-trace level it is
-    treated as valid, matching the aggregate report's convention.
-    """
-    audits = trace.get("calibration_audit") or []
-    audit = audits[0] if audits and isinstance(audits[0], dict) else {}
-    mode, reasons = classify_market_output_mode(
+def _classify_from_audit(audit: dict[str, Any]) -> tuple[OutputMode, list[str]]:
+    """Shared classifier call for one calibration audit dict (possibly empty)."""
+    return classify_market_output_mode(
         profile_id=audit.get("profile_id"),
         sample_size=audit.get("sample_size"),
         calibration_error=audit.get("ece"),
@@ -253,7 +245,42 @@ def market_output_mode_for_trace(trace: dict[str, Any]) -> tuple[OutputMode, lis
         sidecar_valid=True,
         maturity=audit.get("profile_maturity"),
     )
-    return mode, reasons
+
+
+def market_output_mode_for_trace(trace: dict[str, Any]) -> tuple[OutputMode, list[str]]:
+    """Per-trace market disclosure authorization from its own calibration audit.
+
+    Reuses the canonical classifier with this trace's applied-profile facts.
+    A trace with no calibration audit (no profile) classifies RESEARCH_CANDIDATE.
+    Sidecar validity is a session-level concern; at the single-trace level it is
+    treated as valid, matching the aggregate report's convention. This uses the
+    first available audit (the base/moneyline market for a game trace, the only
+    market for a prop trace); ``_game_probability_sets`` resolves spread/total
+    authorization independently from each market's own edges.
+    """
+    audits = trace.get("calibration_audit") or []
+    audit = audits[0] if audits and isinstance(audits[0], dict) else {}
+    return _classify_from_audit(audit)
+
+
+def _market_authorized(market_edges: dict[str, dict[str, Any]]) -> bool:
+    """Authorize one game market from its own edges' calibration audits.
+
+    Each edge in ``result.edges`` carries its own per-side ``calibration_audit``
+    (home/away/cover/over/under/draw). Fail closed: every side present must
+    independently qualify, or the whole market withholds — reusing another
+    market's (or another side's) audit would let an actionable moneyline leak
+    an unaudited spread/total.
+    """
+    if not market_edges:
+        return False
+    for edge in market_edges.values():
+        candidate = edge.get("calibration_audit")
+        audit = candidate if isinstance(candidate, dict) else {}
+        mode, _reasons = _classify_from_audit(audit)
+        if mode == OutputMode.RESEARCH_CANDIDATE:
+            return False
+    return True
 
 
 def _symmetric_set(
@@ -271,7 +298,10 @@ def _symmetric_set(
             disclosure="withheld",
             withheld_reason="research_candidate_output_mode",
         )
-    if any(side not in by_side for side in required):
+    if any(
+        side not in by_side or by_side[side].get("calibrated_prob") is None
+        for side in required
+    ):
         return MarketProbabilitySet(
             market_key=market_key,
             disclosure="withheld",
@@ -293,14 +323,14 @@ def _symmetric_set(
 _GAME_MARKET_ORDER = ("moneyline", "spread", "total")
 
 
-def _game_probability_sets(
-    trace: dict[str, Any], authorized: bool
-) -> list[MarketProbabilitySet]:
+def _game_probability_sets(trace: dict[str, Any]) -> list[MarketProbabilitySet]:
     """Per-market symmetric sets for a game trace: moneyline, spread, total.
 
     A market appears when the trace carries edges for it (moneyline always,
     since it is the base market of every game analysis). Partial sides render
-    as an explicit withheld marker rather than a one-sided number.
+    as an explicit withheld marker rather than a one-sided number. Each market
+    is authorized independently from its own calibration audit — an actionable
+    moneyline must never leak an unaudited spread/total.
     """
     result = trace.get("result") or {}
     simulation = result.get("simulation") or {}
@@ -327,12 +357,13 @@ def _game_probability_sets(
 
     sets: list[MarketProbabilitySet] = []
     ml_required = ("home", "away", "draw") if three_way else ("home", "away")
+    ml_edges = edges_by_market.get("moneyline", {})
     sets.append(
         _symmetric_set(
             "moneyline",
             ml_required,
-            edges_by_market.get("moneyline", {}),
-            authorized=authorized,
+            ml_edges,
+            authorized=_market_authorized(ml_edges),
             label_for=_team_label,
         )
     )
@@ -342,7 +373,7 @@ def _game_probability_sets(
                 "spread",
                 ("home", "away"),
                 edges_by_market["spread"],
-                authorized=authorized,
+                authorized=_market_authorized(edges_by_market["spread"]),
                 label_for=_spread_label,
             )
         )
@@ -352,7 +383,7 @@ def _game_probability_sets(
                 "total",
                 ("over", "under"),
                 edges_by_market["total"],
-                authorized=authorized,
+                authorized=_market_authorized(edges_by_market["total"]),
                 label_for=_team_label,
             )
         )
@@ -405,7 +436,9 @@ def _sensitivity_view(trace: dict[str, Any]) -> SensitivityView:
 
 
 def _distribution_views(trace: dict[str, Any]) -> list[DistributionSummaryView]:
-    rows = trace.get("simulation_distributions")
+    rows = trace.get("_simulation_distributions")
+    if not isinstance(rows, list) or not rows:
+        rows = trace.get("simulation_distributions")
     if not isinstance(rows, list) or not rows:
         result = trace.get("result") or {}
         rows = result.get("simulation_distributions") or []
@@ -536,6 +569,9 @@ def build_market_view(trace: dict[str, Any]) -> MarketBriefView:
     warnings: list[str] = []
     kind = str(trace.get("kind") or "unknown")
     input_snap = trace.get("input_snapshot") or {}
+    # The group-level mode/reasons summarize the base market (moneyline for
+    # games, the single over/under market for props); each individual game
+    # market is authorized independently inside _game_probability_sets.
     mode, reasons = market_output_mode_for_trace(trace)
     authorized = mode != OutputMode.RESEARCH_CANDIDATE
 
@@ -546,7 +582,7 @@ def build_market_view(trace: dict[str, Any]) -> MarketBriefView:
         probability_sets = [_prop_probability_set(trace, authorized)]
     elif kind == "game":
         market_group = "game"
-        probability_sets = _game_probability_sets(trace, authorized)
+        probability_sets = _game_probability_sets(trace)
     else:
         market_group = kind
         probability_sets = []

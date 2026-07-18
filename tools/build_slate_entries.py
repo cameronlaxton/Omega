@@ -326,11 +326,16 @@ class SlateBuilder:
                     if inherited:
                         entry["roster_context"] = inherited
                         self.notes.append(f"{where}: roster_context inherited from game entry")
-                if "event_id" not in entry:
-                    inherited_event = self.event_id_by_matchup.get(_matchup(item))
-                    if inherited_event:
-                        entry["event_id"] = inherited_event
-                        self.notes.append(f"{where}: event_id inherited from game entry")
+                game_event_id = self.event_id_by_matchup.get(_matchup(item))
+                prop_event_id = entry.get("event_id")
+                if game_event_id and prop_event_id and prop_event_id != game_event_id:
+                    self.errors.append(
+                        f"{where}: event_id {prop_event_id!r} conflicts with "
+                        f"game event_id {game_event_id!r}"
+                    )
+                elif game_event_id and not prop_event_id:
+                    entry["event_id"] = game_event_id
+                    self.notes.append(f"{where}: event_id inherited from game entry")
                 if len(self.errors) == errs_before:
                     entry.update(player_context=player_ctx, game_context=game_ctx)
                     entries.append(entry)

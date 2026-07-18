@@ -24,7 +24,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from omega.paths import default_trace_db_path
-from omega.trace.autolog_policy import engine_auto_autolog_decision
+from omega.trace.autolog_policy import (
+    engine_auto_autolog_decision,
+    is_autolog_suppressed,
+    suppress_autolog,
+)
 from omega.trace.bet_record import BetRecord
 from omega.trace.bet_settlement import compute_pnl, extract_recommended_bet
 from omega.trace.db import resolve_backend
@@ -497,9 +501,9 @@ class TraceStore:
         # Explicit, scoped suppression of the bet_ledger dual-write. Replay sets
         # this via autolog_suppressed() so historical traces never auto-log an
         # engine_auto bet into the (backtest) ledger; staking entries are written
-        # explicitly with provenance=historical_replay instead. Falls back to the
-        # OMEGA_BET_LEDGER_AUTOLOG env var when unset (legacy behavior preserved).
-        self._autolog_suppressed = False
+        # explicitly with provenance=historical_replay instead. Backed by the
+        # context-local flag in autolog_policy (shared with PostgresRepository),
+        # not an instance attribute.
         backend = resolve_backend(db_path)
         if backend.backend == "postgres":
             if journal_mode is not None:
@@ -569,23 +573,16 @@ class TraceStore:
         Deterministic and scoped — unlike toggling OMEGA_BET_LEDGER_AUTOLOG, this
         cannot leak across processes or outlive the ``with`` block. Used by
         historical replay so persisted replay traces never auto-log an
-        ``engine_auto`` ledger row. Re-entrant: a prior suppression is restored
-        on exit rather than force-cleared.
+        ``engine_auto`` ledger row. Backed by the shared context-local flag in
+        ``autolog_policy`` (a ContextVar, not an instance attribute) — the same
+        flag ``PostgresRepository.autolog_suppressed()`` uses, so suppression is
+        visible to whichever backend actually makes the decision without
+        reaching into the repository's internals. Nested or concurrent blocks
+        each restore their own prior state via their own reset token rather
+        than clobbering a shared boolean.
         """
-        prev = self._autolog_suppressed
-        self._autolog_suppressed = True
-        # Propagate to the Postgres repository: persist() delegates there, so
-        # suppression must be visible on whichever object makes the decision.
-        repo_prev = None
-        if self._repo is not None:
-            repo_prev = self._repo._autolog_suppressed
-            self._repo._autolog_suppressed = True
-        try:
+        with suppress_autolog():
             yield self
-        finally:
-            self._autolog_suppressed = prev
-            if self._repo is not None:
-                self._repo._autolog_suppressed = repo_prev
 
     @property
     def conn(self) -> sqlite3.Connection:
@@ -1016,7 +1013,7 @@ class TraceStore:
         us the trace write.
         """
         allowed, reason = engine_auto_autolog_decision(
-            trace, suppressed=self._autolog_suppressed
+            trace, suppressed=is_autolog_suppressed()
         )
         if not allowed:
             logger.debug("engine_auto autolog denied for %s: %s", trace_id, reason)

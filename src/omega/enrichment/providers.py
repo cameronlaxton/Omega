@@ -65,6 +65,15 @@ def _risk_from_guardrails(worst_severity: str | None) -> str:
     )
 
 
+_INFORMATIONAL_DATA_QUALITY_NOTES = frozenset({"rsvg_status:pass"})
+
+
+def _is_degradation_note(note: str) -> bool:
+    """True unless ``note`` is a known-healthy informational status (e.g. an
+    RSVG gate that passed cleanly), which must not inflate risk_rating."""
+    return note not in _INFORMATIONAL_DATA_QUALITY_NOTES
+
+
 def _recommendation_from_pack(pack: dict[str, Any]) -> str:
     """Deterministic, conservative operator recommendation from the pack."""
     gr = pack.get("guardrails") or {}
@@ -155,13 +164,18 @@ class StubProvider:
         league = pack.get("league") or brief.get("league") or "?"
 
         quality_notes: list[str] = []
+        degradation_notes: list[str] = []
         uncertainties: list[str] = []
         missing_sources: list[str] = []
         market_lines_notes: list[str] = []
+        scenario_notes: list[str] = []
         for m in markets:
             group = m.get("market_group") or m.get("kind") or "market"
             for note in m.get("data_quality") or []:
-                quality_notes.append(f"{group}: {note}")
+                tagged = f"{group}: {note}"
+                quality_notes.append(tagged)
+                if _is_degradation_note(note):
+                    degradation_notes.append(tagged)
             ds = m.get("decision_support") or {}
             for u in ds.get("uncertainties") or []:
                 uncertainties.append(f"{group}: {u}")
@@ -178,6 +192,13 @@ class StubProvider:
                 f"{len(m.get('probability_sets') or [])} market set(s), "
                 f"{len(m.get('distributions') or [])} distribution summar(y/ies)"
             )
+            if focus == "stress_test":
+                sensitivity = m.get("sensitivity") or {}
+                if sensitivity.get("status") == "available":
+                    for scenario in sensitivity.get("scenarios") or []:
+                        if isinstance(scenario, dict) and scenario:
+                            detail = ", ".join(f"{k}={v}" for k, v in scenario.items())
+                            scenario_notes.append(f"{group}: {detail}")
 
         guidance = str(pack.get("focus_guidance") or "")
         raw = sanitize_raw_result(
@@ -187,7 +208,7 @@ class StubProvider:
                     f"Decision-support {focus.replace('_', ' ')} for {matchup}: "
                     f"{len(markets)} market group(s) reviewed symmetrically. {guidance}"
                 ).strip(),
-                "model_case": market_lines_notes
+                "model_case": market_lines_notes + scenario_notes
                 or ["No market groups present in the brief."],
                 "market_context": {
                     "line_movement": "unknown",
@@ -198,7 +219,7 @@ class StubProvider:
                 },
                 "counter_case": uncertainties
                 or ["No recorded uncertainties; treat absence as a data gap, not safety."],
-                "risk_rating": "high" if quality_notes else "medium",
+                "risk_rating": "high" if degradation_notes else "medium",
                 "confidence_explanation": (
                     "Symmetric decision-support review; no outcome is preferred and "
                     "no engine numbers are restated."

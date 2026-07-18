@@ -99,6 +99,12 @@ def _seed_matchup_db(db_path: str) -> None:
                             "confidence_tier": "B",
                             "recommended_units": 1.0,
                             "market_odds": -120,
+                            "calibration_audit": {
+                                "profile_id": "iso_mlb_game_v8",
+                                "profile_maturity": "production",
+                                "sample_size": 400,
+                                "ece": 0.03,
+                            },
                         },
                         {
                             "side": "away",
@@ -111,6 +117,12 @@ def _seed_matchup_db(db_path: str) -> None:
                             "confidence_tier": "Pass",
                             "recommended_units": 0.0,
                             "market_odds": 100,
+                            "calibration_audit": {
+                                "profile_id": "iso_mlb_game_v8",
+                                "profile_maturity": "production",
+                                "sample_size": 400,
+                                "ece": 0.03,
+                            },
                         },
                     ],
                 },

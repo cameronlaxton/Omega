@@ -377,14 +377,14 @@ def _section_clv(store: TraceStore, league: str | None, cutoff: str) -> dict[str
     conn = store.conn
     t_league_filter, t_league_params = _league_filter("t", league)
     rows = conn.execute(
-        """SELECT b.market, b.selection, b.line AS line_taken, b.odds AS odds_taken,
-                  b.provenance, c.closing_line, c.closing_odds
+        """SELECT b.trace_id, b.market, b.selection, b.line AS line_taken,
+                  b.odds AS odds_taken, b.provenance, c.closing_line, c.closing_odds
            FROM bet_ledger b
            JOIN closing_lines c ON b.trace_id = c.trace_id
               AND b.market = c.market
               AND b.selection_descriptor = c.selection_descriptor
            JOIN traces t ON b.trace_id = t.trace_id
-           WHERE b.provenance IN ('user_confirmed', 'engine_auto')
+           WHERE b.provenance IN ('user_confirmed', 'engine_auto', 'backfill')
              AND t.timestamp >= ?"""
         + t_league_filter,
         (cutoff, *t_league_params),
@@ -404,7 +404,7 @@ def _section_clv(store: TraceStore, league: str | None, cutoff: str) -> dict[str
                 side=str(row["selection"]).split()[0].lower() if row["selection"] else None,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("CLV computation failed for trace %s: %s", row.get("trace_id", "?"), exc)
+            logger.warning("CLV computation failed for trace %s: %s", row["trace_id"], exc)
             continue
         sample = (r.clv_cents, bool(r.beat_close))
         samples.append(sample)
@@ -795,12 +795,19 @@ _MODE_CONSERVATISM = {
 
 
 def _league_market_coverage(store: TraceStore, cutoff: str) -> dict[str, dict[str, int]]:
-    """Per-league, per-market calibration-eligible coverage in the window."""
+    """Per-league, per-market calibration-eligible coverage in the window.
+
+    Includes every in-window (league, kind) pair — even one whose eligible
+    count is zero. A league with in-window games but zero eligible coverage
+    must still be considered (and conservatively downgrade the aggregate to
+    RESEARCH_CANDIDATE), not silently vanish because the old eligible-only
+    filter excluded it from the GROUP BY entirely.
+    """
     rows = store.conn.execute(
-        f"""SELECT t.league, json_extract(t.full_trace, '$.kind') AS kind, COUNT(*) AS n
+        f"""SELECT t.league, json_extract(t.full_trace, '$.kind') AS kind,
+                   SUM(CASE WHEN {_CALIBRATION_ELIGIBLE_SQL} THEN 1 ELSE 0 END) AS n
             FROM traces t
             WHERE t.timestamp >= ?
-              AND {_CALIBRATION_ELIGIBLE_SQL}
               AND t.league IS NOT NULL
             GROUP BY t.league, kind""",
         (cutoff,),
@@ -810,7 +817,7 @@ def _league_market_coverage(store: TraceStore, cutoff: str) -> dict[str, dict[st
         kind = str(row["kind"] or "")
         if kind not in _OUTPUT_MODE_MARKETS:
             continue
-        coverage.setdefault(str(row["league"]), {})[kind] = int(row["n"])
+        coverage.setdefault(str(row["league"]), {})[kind] = int(row["n"] or 0)
     return coverage
 
 
@@ -834,7 +841,10 @@ def _resolve_output_modes_league_scoped(
     modes: dict[str, OutputMode] = {}
     reasons: dict[str, list[str]] = {}
     for market in _OUTPUT_MODE_MARKETS:
-        leagues = sorted(lg for lg, per in coverage.items() if per.get(market, 0) > 0)
+        # Any league with an in-window trace for this market — including zero
+        # eligible coverage — must be classified (and conservatively fold into
+        # the aggregate), not just leagues whose eligible count is positive.
+        leagues = sorted(lg for lg, per in coverage.items() if market in per)
         if not leagues:
             mode, why = classify_market_output_mode(
                 profile_id=None,

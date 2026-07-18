@@ -578,6 +578,12 @@ def omega_run_batch(
     _seen_rsvg_summary_signatures: dict[
         tuple[tuple[str, str], ...], tuple[str, str, str]
     ] = {}
+    # Event identity binding: the first entry in this batch to use a given
+    # provider_event_id fixes that id's (league, home_team, away_team,
+    # game_date). A later entry reusing the same id for a different normalized
+    # matchup/date would silently merge two unrelated events under one
+    # event_key — reject it instead of stamping a wrong identity.
+    _seen_provider_event_identities: dict[str, tuple[str, str, str, str]] = {}
 
     for idx, raw in enumerate(entries):
         try:
@@ -853,6 +859,29 @@ def omega_run_batch(
             )
             continue
         provider_event_id = resolved_event_id or entry.event_id or None
+
+        if provider_event_id:
+            normalized_identity = (
+                entry.league.strip().upper(),
+                entry.home_team.strip().upper(),
+                entry.away_team.strip().upper(),
+                (game_date or "").strip(),
+            )
+            existing_identity = _seen_provider_event_identities.get(provider_event_id)
+            if existing_identity is None:
+                _seen_provider_event_identities[provider_event_id] = normalized_identity
+            elif existing_identity != normalized_identity:
+                msg = (
+                    f"event_identity_mismatch: provider_event_id={provider_event_id!r} is "
+                    f"already bound to {existing_identity!r} in this batch, but this entry "
+                    f"resolves to {normalized_identity!r} — refusing to stamp a conflicting "
+                    "event identity."
+                )
+                errors.append({"index": idx, "identifier": identifier, "error": msg})
+                results.append(
+                    {"index": idx, "status": "error", "identifier": identifier, "error": msg}
+                )
+                continue
 
         # --- Seed derivation ---
         if entry.seed is not None:

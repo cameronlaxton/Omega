@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from omega.core.contracts.evidence import EvidenceSignal
 from omega.core.contracts.language import blocked_language
+from omega.core.contracts.protected_fields import find_protected_value_leak
 
 
 class SoccerDerivativeMarket(str, Enum):
@@ -329,6 +330,56 @@ class EventIdentityV1(BaseModel):
         """Canonical event_key derivation shared by every stamping site."""
         return f"{league.strip().upper()}::{provider.strip()}::{provider_event_id.strip()}"
 
+    @model_validator(mode="after")
+    def _validate_identity(self) -> EventIdentityV1:
+        for field_name in (
+            "provider",
+            "provider_event_id",
+            "event_key",
+            "league",
+            "home_team",
+            "away_team",
+        ):
+            if not getattr(self, field_name).strip():
+                raise ValueError(f"EventIdentityV1.{field_name} must not be blank")
+        expected_key = self.derive_event_key(self.league, self.provider, self.provider_event_id)
+        if self.event_key != expected_key:
+            raise ValueError(
+                f"EventIdentityV1.event_key {self.event_key!r} does not match the canonical "
+                f"derivation {expected_key!r} for league/provider/provider_event_id — every "
+                "stamping site must derive event_key via derive_event_key(), never construct it "
+                "independently."
+            )
+        return self
+
+
+def _normalize_outcome_component(value: str) -> str:
+    """Case/whitespace-fold a market_key or outcome_key before comparison so
+    " Home " and "home" are recognized as the same side."""
+    return value.strip().casefold()
+
+
+# Known symmetric outcome_key vocabularies (per OutcomeCase's own doc: "e.g.
+# home, away, draw, over, under"). A market whose observed outcome_keys
+# intersect one of these families must report the corresponding complete set;
+# unrecognized vocabulary falls back to a minimum-cardinality check.
+_TOTAL_STYLE_OUTCOMES = frozenset({"over", "under"})
+_MONEYLINE_STYLE_OUTCOMES = frozenset({"home", "away", "draw"})
+
+
+def _expected_complete_outcome_set(observed: frozenset[str]) -> frozenset[str] | None:
+    """Canonical complete outcome set implied by ``observed`` vocabulary, or
+    None when the vocabulary isn't a recognized symmetric family."""
+    if observed & _TOTAL_STYLE_OUTCOMES:
+        return _TOTAL_STYLE_OUTCOMES
+    if observed & _MONEYLINE_STYLE_OUTCOMES:
+        return (
+            frozenset({"home", "away", "draw"})
+            if "draw" in observed
+            else frozenset({"home", "away"})
+        )
+    return None
+
 
 class OutcomeCase(BaseModel):
     """Balanced case for one outcome of one market (decision-support unit)."""
@@ -353,6 +404,9 @@ class OutcomeCase(BaseModel):
             found = blocked_language(text)
             if found:
                 raise ValueError(f"OutcomeCase contains blocked language {found}: {text!r}")
+            leak = find_protected_value_leak(text)
+            if leak:
+                raise ValueError(f"OutcomeCase contains a protected engine value {leak!r}: {text!r}")
         return self
 
 
@@ -378,11 +432,31 @@ class DecisionSupportPresentationV1(BaseModel):
     @model_validator(mode="after")
     def _validate_presentation(self) -> DecisionSupportPresentationV1:
         seen: set[tuple[str, str]] = set()
+        by_market: dict[str, set[str]] = {}
         for case in self.outcome_cases:
-            key = (case.market_key, case.outcome_key)
+            market_key = _normalize_outcome_component(case.market_key)
+            outcome_key = _normalize_outcome_component(case.outcome_key)
+            key = (market_key, outcome_key)
             if key in seen:
                 raise ValueError(f"Duplicate outcome case for {key}")
             seen.add(key)
+            by_market.setdefault(market_key, set()).add(outcome_key)
+        for market_key, observed in by_market.items():
+            expected = _expected_complete_outcome_set(frozenset(observed))
+            if expected is not None:
+                if observed != expected:
+                    raise ValueError(
+                        f"decision-support market {market_key!r} has an incomplete outcome "
+                        f"set {sorted(observed)!r}; expected the complete symmetric set "
+                        f"{sorted(expected)!r} (mark a missing side data_status="
+                        "'insufficient' rather than omitting its OutcomeCase)."
+                    )
+            elif len(observed) < 2:
+                raise ValueError(
+                    f"decision-support market {market_key!r} has a single-sided outcome "
+                    f"set {sorted(observed)!r}; every quoted market must report the "
+                    "complete symmetric outcome set."
+                )
         for text in (
             self.matchup_summary,
             self.market_context,
@@ -395,6 +469,11 @@ class DecisionSupportPresentationV1(BaseModel):
             if found:
                 raise ValueError(
                     f"DecisionSupportPresentationV1 contains blocked language {found}: {text!r}"
+                )
+            leak = find_protected_value_leak(text)
+            if leak:
+                raise ValueError(
+                    f"DecisionSupportPresentationV1 contains a protected engine value {leak!r}: {text!r}"
                 )
         return self
 

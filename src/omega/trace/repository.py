@@ -13,7 +13,11 @@ from sqlalchemy import and_, exists, func, select, text, update
 from sqlalchemy import insert as sa_insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from omega.trace.autolog_policy import engine_auto_autolog_decision
+from omega.trace.autolog_policy import (
+    engine_auto_autolog_decision,
+    is_autolog_suppressed,
+    suppress_autolog,
+)
 from omega.trace.bet_record import BetRecord
 from omega.trace.bet_settlement import extract_recommended_bet
 from omega.trace.db import create_postgres_engine, create_session_factory
@@ -95,19 +99,18 @@ class PostgresRepository:
         self.read_only = bool(read_only)
         self.engine = create_postgres_engine(url)
         self.Session = create_session_factory(self.engine)
-        # Scoped autolog suppression, mirroring TraceStore.autolog_suppressed()
-        # so the shared autolog policy sees identical inputs on both backends.
-        self._autolog_suppressed = False
 
     @contextmanager
     def autolog_suppressed(self):
-        """Disable the bet_ledger dual-write for the duration of the block."""
-        prev = self._autolog_suppressed
-        self._autolog_suppressed = True
-        try:
+        """Disable the bet_ledger dual-write for the duration of the block.
+
+        Backed by the shared context-local flag in ``autolog_policy`` (not an
+        instance attribute), so suppression is visible to whichever backend
+        actually makes the decision and nested/interleaved blocks each restore
+        their own prior state instead of clobbering a shared boolean.
+        """
+        with suppress_autolog():
             yield self
-        finally:
-            self._autolog_suppressed = prev
 
     def _ensure_writeable(self) -> None:
         if self.read_only:
@@ -177,7 +180,7 @@ class PostgresRepository:
         # default DISABLED; requires trace engine_auto_ledger_mode='shadow' AND
         # OMEGA_ENABLE_ENGINE_SHADOW=1. Parity is enforced by test.
         allowed, reason = engine_auto_autolog_decision(
-            trace, suppressed=self._autolog_suppressed
+            trace, suppressed=is_autolog_suppressed()
         )
         if not allowed:
             logger.debug("engine_auto autolog denied for %s: %s", trace_id, reason)

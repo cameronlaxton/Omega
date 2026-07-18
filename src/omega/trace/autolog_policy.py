@@ -25,6 +25,9 @@ unaffected.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 from omega.core.contracts.schemas import coerce_engine_auto_ledger_mode
@@ -32,7 +35,36 @@ from omega.core.contracts.schemas import coerce_engine_auto_ledger_mode
 ENV_ENGINE_SHADOW = "OMEGA_ENABLE_ENGINE_SHADOW"
 ENV_LEGACY_AUTOLOG_KILL_SWITCH = "OMEGA_BET_LEDGER_AUTOLOG"
 
-_FALSY = {"0", "false", "False", "no", "off"}
+_FALSY = {"0", "false", "no", "off"}
+
+# Scoped suppression shared by both persistence backends. A ContextVar (not a
+# plain instance attribute) so nested/interleaved suppression blocks — even
+# across concurrent async tasks or threads touching the same TraceStore /
+# PostgresRepository instance — each restore exactly their own prior state via
+# their own reset token, rather than one shared mutable boolean that an
+# interleaved sibling could clobber.
+_autolog_suppressed: ContextVar[bool] = ContextVar("omega_autolog_suppressed", default=False)
+
+
+def is_autolog_suppressed() -> bool:
+    """Current scoped suppression state (see :func:`suppress_autolog`)."""
+    return _autolog_suppressed.get()
+
+
+@contextmanager
+def suppress_autolog() -> Iterator[None]:
+    """Disable the engine_auto bet-ledger dual-write for the duration of the block.
+
+    The single mechanism behind both ``TraceStore.autolog_suppressed()`` and
+    ``PostgresRepository.autolog_suppressed()`` — one ContextVar, so suppression
+    set through either backend's context manager is visible to whichever
+    backend actually makes the autolog decision.
+    """
+    token = _autolog_suppressed.set(True)
+    try:
+        yield
+    finally:
+        _autolog_suppressed.reset(token)
 
 
 def engine_auto_autolog_decision(
@@ -48,7 +80,7 @@ def engine_auto_autolog_decision(
     if suppressed:
         return False, "scoped_suppression"
     legacy = os.environ.get(ENV_LEGACY_AUTOLOG_KILL_SWITCH)
-    if legacy is not None and legacy in _FALSY:
+    if legacy is not None and legacy.strip().casefold() in _FALSY:
         return False, "legacy_kill_switch"
     mode = coerce_engine_auto_ledger_mode(trace.get("engine_auto_ledger_mode"))
     if mode != "shadow":

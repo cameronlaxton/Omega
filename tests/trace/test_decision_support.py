@@ -54,6 +54,11 @@ PRODUCTION_AUDIT = [
     }
 ]
 
+# A production-quality calibration_audit dict to attach directly onto an edge
+# (the real shape: each engine edge carries its own per-side CalibrationAudit,
+# see omega.core.contracts.service._build_edge / _calibrate_audited).
+_EDGE_AUDIT = PRODUCTION_AUDIT[0]
+
 
 def _game_trace(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
@@ -81,6 +86,7 @@ def _game_trace(**overrides: Any) -> dict[str, Any]:
                     "confidence_tier": "B",
                     "recommended_units": 1.0,
                     "market_odds": -120,
+                    "calibration_audit": dict(_EDGE_AUDIT),
                 },
                 {
                     "side": "away",
@@ -93,6 +99,7 @@ def _game_trace(**overrides: Any) -> dict[str, Any]:
                     "confidence_tier": "Pass",
                     "recommended_units": 0.0,
                     "market_odds": 100,
+                    "calibration_audit": dict(_EDGE_AUDIT),
                 },
             ],
             "best_bet": {
@@ -350,6 +357,7 @@ class TestSymmetricProbabilities:
                 "calibrated_prob": 0.22,
                 "market_implied": 0.24,
                 "market_odds": 310,
+                "calibration_audit": dict(_EDGE_AUDIT),
             }
         )
         probs = _set_by_market(build_market_view(trace))["moneyline"]
@@ -363,18 +371,22 @@ class TestSymmetricProbabilities:
                 {
                     "side": "home", "team": "Yankees", "market": "spread", "line": -1.5,
                     "calibrated_prob": 0.44, "market_implied": 0.48, "market_odds": 130,
+                    "calibration_audit": dict(_EDGE_AUDIT),
                 },
                 {
                     "side": "away", "team": "Red Sox", "market": "spread", "line": 1.5,
                     "calibrated_prob": 0.56, "market_implied": 0.55, "market_odds": -155,
+                    "calibration_audit": dict(_EDGE_AUDIT),
                 },
                 {
                     "side": "over", "team": "Over 8.5", "market": "total", "line": 8.5,
                     "calibrated_prob": 0.52, "market_implied": 0.5, "market_odds": -110,
+                    "calibration_audit": dict(_EDGE_AUDIT),
                 },
                 {
                     "side": "under", "team": "Under 8.5", "market": "total", "line": 8.5,
                     "calibrated_prob": 0.48, "market_implied": 0.5, "market_odds": -110,
+                    "calibration_audit": dict(_EDGE_AUDIT),
                 },
             ]
         )
@@ -399,6 +411,7 @@ class TestSymmetricProbabilities:
             {
                 "side": "home", "team": "Yankees", "market": "spread", "line": -1.5,
                 "calibrated_prob": 0.44, "market_implied": 0.48, "market_odds": 130,
+                "calibration_audit": dict(_EDGE_AUDIT),
             }
         )
         spread = _set_by_market(build_market_view(trace))["spread"]
@@ -418,6 +431,8 @@ class TestSymmetricProbabilities:
 
     def test_research_candidate_withholds_probabilities_keeps_distributions(self):
         trace = _game_trace(calibration_audit=[])  # no profile -> research_candidate
+        for edge in trace["result"]["edges"]:
+            edge.pop("calibration_audit", None)
         view = build_market_view(trace)
         assert view.output_mode == "research_candidate"
         for probs in view.probability_sets:
@@ -430,16 +445,15 @@ class TestSymmetricProbabilities:
         assert view.market_lines == {"moneyline_home": -120, "moneyline_away": 100}
 
     def test_retired_maturity_withholds(self):
-        trace = _game_trace(
-            calibration_audit=[
-                {
-                    "profile_id": "iso_x",
-                    "profile_maturity": "retired",
-                    "sample_size": 400,
-                    "ece": 0.03,
-                }
-            ]
-        )
+        retired_audit = {
+            "profile_id": "iso_x",
+            "profile_maturity": "retired",
+            "sample_size": 400,
+            "ece": 0.03,
+        }
+        trace = _game_trace(calibration_audit=[retired_audit])
+        for edge in trace["result"]["edges"]:
+            edge["calibration_audit"] = dict(retired_audit)
         view = build_market_view(trace)
         assert view.output_mode == "research_candidate"
         assert view.probability_sets[0].disclosure == "withheld"

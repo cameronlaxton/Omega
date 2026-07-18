@@ -230,6 +230,14 @@ class TestRsvgIdentityAgreement:
             "away_team": "New York Mets",
             "league": "MLB",
             "game_date": "2026-06-03",
+            "home_status": {
+                "lineup_status": "confirmed",
+                "injury_report_checked": True,
+            },
+            "away_status": {
+                "lineup_status": "confirmed",
+                "injury_report_checked": True,
+            },
             "source_summaries": [
                 {"source": "mlb.com", "summary": "Both lineups confirmed for tonight."}
             ],
@@ -273,9 +281,8 @@ class TestRsvgIdentityAgreement:
 
     def test_matching_identity_passes_the_check(self):
         result = self._run(self._roster_context())
-        assert not any(
-            "rsvg_identity_mismatch" in (e.get("error") or "") for e in result["errors"]
-        )
+        assert result["status"] == "ok", result
+        assert result["entries_ok"] == 1
 
 
 class TestMatchupBriefTool:

@@ -9,6 +9,7 @@ enrichment sidecar DB, never the canonical trace store.
 
 from __future__ import annotations
 
+from omega.core.contracts.language import blocked_language
 from omega.enrichment import PROMPT_VERSION
 from omega.enrichment.context_pack import build_context_pack, build_matchup_context_pack
 from omega.enrichment.providers import get_provider
@@ -72,6 +73,55 @@ def render_narrative_md(result: EnrichmentResult) -> str:
     return "\n".join(lines)
 
 
+def render_decision_support_md(result: EnrichmentResult) -> str:
+    """Render an :class:`EnrichmentResult` for a decision-support focus.
+
+    Neutral section names and no recommendation-era framing (no "Why Omega
+    likes it", no "Recommendation:" label) — this artifact reviews every
+    outcome symmetrically and names no pick.
+    """
+    lines: list[str] = [f"## {result.headline}", "", result.summary, ""]
+
+    def _section(title: str, items: list[str]) -> None:
+        if items:
+            lines.append(f"### {title}")
+            lines.extend(f"- {it}" for it in items)
+            lines.append("")
+
+    _section("Market groups reviewed", result.model_case)
+    lines.append("### Market read")
+    lines.append(
+        f"- Movement: **{result.market_context.line_movement}** — "
+        f"{result.market_context.interpretation}"
+    )
+    lines.append("")
+    _section("Uncertainties", result.counter_case)
+    _section("Missing context", result.missing_context)
+    _section("Notes", result.operator_notes)
+    lines.append(f"**Risk:** {result.risk_rating}")
+    lines.append("")
+    lines.append(
+        "_Symmetric decision-support review — the deterministic engine owns "
+        "probability, edge, EV, and stake; no pick is made here._"
+    )
+    return "\n".join(lines)
+
+
+def _blocked_language_in_result(result: EnrichmentResult) -> list[str]:
+    """Scan every prose field of a provider result for blocked vocabulary."""
+    parts = [
+        result.headline,
+        result.summary,
+        result.confidence_explanation,
+        result.market_context.interpretation,
+        *result.model_case,
+        *result.counter_case,
+        *result.missing_context,
+        *result.operator_notes,
+    ]
+    return blocked_language("\n".join(p for p in parts if p))
+
+
 def run_enrichment(
     *,
     enrichment_id: str,
@@ -112,19 +162,35 @@ def run_enrichment(
             service.close()
 
         if focus == "stress_test" and not _brief_has_sensitivity(pack):
+            unavailable = _stress_test_unavailable_result(pack)
             store.set_completed(
                 enrichment_id,
                 provider="deterministic",
                 model=None,
                 prompt_version=PROMPT_VERSION,
                 context_pack=pack,
-                result=_stress_test_unavailable_result(pack),
-                narrative_md=render_narrative_md(_stress_test_unavailable_result(pack)),
+                result=unavailable,
+                narrative_md=render_decision_support_md(unavailable),
             )
             return
 
         provider = get_provider(provider_name, model)
         result = provider.generate_enrichment(pack)
+
+        if focus is not None:
+            found = _blocked_language_in_result(result)
+            if found:
+                store.set_failed(
+                    enrichment_id,
+                    f"blocked_language_detected: provider output contained {found!r}; "
+                    "refusing to persist a decision-support artifact with recommendation "
+                    "vocabulary",
+                )
+                return
+            narrative_md = render_decision_support_md(result)
+        else:
+            narrative_md = render_narrative_md(result)
+
         store.set_completed(
             enrichment_id,
             provider=provider.name,
@@ -132,7 +198,7 @@ def run_enrichment(
             prompt_version=PROMPT_VERSION,
             context_pack=pack,
             result=result,
-            narrative_md=render_narrative_md(result),
+            narrative_md=narrative_md,
         )
     except Exception as exc:  # noqa: BLE001 — a worker failure must be recorded, not raised
         store.set_failed(enrichment_id, f"{type(exc).__name__}: {exc}")
@@ -140,4 +206,4 @@ def run_enrichment(
         store.close()
 
 
-__all__ = ["render_narrative_md", "run_enrichment"]
+__all__ = ["render_narrative_md", "render_decision_support_md", "run_enrichment"]

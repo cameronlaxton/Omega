@@ -1690,9 +1690,23 @@ class ConsoleService:
         league = _clean(league)
         n = max(1, int(limit or DEFAULT_SCANNER_LIMIT))
         # Bounded scan (Phase 2 may add a DB-native event index if benchmarks
-        # demand one); grouping happens in memory on the scanned window.
-        traces = self.store.query_traces(league=league, limit=min(self.max_scan, n * 4))
-        briefs = group_traces_into_briefs(traces)
+        # demand one); grouping happens in memory on the scanned window. A
+        # single event can span more than 4 traces (one game + many props), so
+        # a fixed trace-to-event multiplier can under-scan; widen the window
+        # until enough distinct event groups are found or the scan cap (
+        # self.max_scan) is reached.
+        scan_limit = min(self.max_scan, n * 4)
+        briefs: list[Any] = []
+        while True:
+            traces = self.store.query_traces(league=league, limit=scan_limit)
+            briefs = group_traces_into_briefs(traces)
+            if len(briefs) >= n or scan_limit >= self.max_scan:
+                break
+            scan_limit = min(self.max_scan, scan_limit * 2)
+        # query_traces() scans newest-first, but group_traces_into_briefs()
+        # sorts ascending by date for stable presentation; reverse before
+        # slicing so briefs[:n] keeps the newest n groups, not the oldest.
+        briefs.reverse()
         return [b.model_dump(mode="json") for b in briefs[:n]]
 
     def matchup_brief(self, group_key: str) -> dict[str, Any] | None:

@@ -46,6 +46,12 @@ BLOCKED_HYPE_WORDS_RE = re.compile(
 )
 
 
+def _contains_phrase(text: str, phrase: str) -> bool:
+    """Word-bounded phrase match so substrings like "tier a" inside "frontier
+    analysis" or "best bet" inside "best beta" don't false-positive."""
+    return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", text) is not None
+
+
 def blocked_language(text: str) -> list[str]:
     """Return blocked formal phrases / hype words found in ``text`` (strict set).
 
@@ -54,7 +60,7 @@ def blocked_language(text: str) -> list[str]:
     rejected. Matching is case-insensitive; hype words are word-bounded.
     """
     normalized = text.casefold()
-    found = [phrase for phrase in BLOCKED_FORMAL_PHRASES if phrase in normalized]
+    found = [phrase for phrase in BLOCKED_FORMAL_PHRASES if _contains_phrase(normalized, phrase)]
     found.extend(set(BLOCKED_HYPE_WORDS_RE.findall(normalized)))
     return sorted(found)
 
@@ -62,6 +68,8 @@ def blocked_language(text: str) -> list[str]:
 def blocked_research_plus_language(text: str) -> list[str]:
     """Return blocked hype phrases found in Research+ text (tier labels allowed)."""
     normalized = text.casefold()
-    found = [phrase for phrase in BLOCKED_RESEARCH_PLUS_PHRASES if phrase in normalized]
+    found = [
+        phrase for phrase in BLOCKED_RESEARCH_PLUS_PHRASES if _contains_phrase(normalized, phrase)
+    ]
     found.extend(set(BLOCKED_HYPE_WORDS_RE.findall(normalized)))
     return sorted(found)

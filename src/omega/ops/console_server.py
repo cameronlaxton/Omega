@@ -120,6 +120,7 @@ def resolve_bind_policy(host: str, *, allow_remote: bool, token: str | None) -> 
             f"127.0.0.1, or set OMEGA_CONSOLE_ALLOW_REMOTE=1 and "
             f"OMEGA_CONSOLE_TOKEN=<shared-secret> to opt in."
         )
+    token = (token or "").strip()
     if not token:
         raise RuntimeError(
             f"OMEGA_CONSOLE_ALLOW_REMOTE is set but OMEGA_CONSOLE_TOKEN is empty. A "
