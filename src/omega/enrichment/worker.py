@@ -113,6 +113,7 @@ def _blocked_language_in_result(result: EnrichmentResult) -> list[str]:
         result.headline,
         result.summary,
         result.confidence_explanation,
+        result.market_context.line_movement,
         result.market_context.interpretation,
         *result.model_case,
         *result.counter_case,
